@@ -8,7 +8,7 @@
   :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#238636; --red:#da3633; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.5;padding:20px}
-  .container{max-width:800px;margin:0 auto}
+  .container{max-width:850px;margin:0 auto}
   h1{text-align:center;color:var(--accent);font-size:1.6rem;margin-bottom:20px}
   
   /* Tabs */
@@ -49,6 +49,18 @@
   .field-filled{border-color:var(--green)!important}
   .parsed-badge{background:var(--green);color:#fff;font-size:.7rem;padding:2px 8px;border-radius:4px}
   #mihomoOutput{min-height:300px;font-size:.8rem}
+
+  /* File upload */
+  .file-upload-wrapper{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .file-upload{position:relative;overflow:hidden;display:inline-block}
+  .file-upload input[type=file]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
+  .wg-status{font-size:.8rem;color:var(--muted)}
+  .wg-status.loaded{color:var(--green)}
+
+  /* Checkbox grid */
+  .checkbox-grid{display:flex;flex-wrap:wrap;gap:12px 20px;margin-top:8px}
+  .checkbox-grid label{display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;font-size:.85rem;color:var(--text)}
+  .checkbox-grid input[type="checkbox"]{width:auto;accent-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -128,25 +140,43 @@
     <div class="card">
       <div class="card-title">📋 Входные данные (ссылки / подписки)</div>
       <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
-      <div class="hint">Поддерживает: vless, vmess, trojan, ss, hy2, tuic, masque, mieru, WG (.conf), HTTP(S) подписки</div>
+      <div class="hint">Поддерживает: vless, vmess, trojan, ss, hy2, tuic, masque, mieru, tt, WG (.conf/.awg), HTTP(S) подписки</div>
     </div>
 
     <div class="card">
-      <div class="card-title">⚙️ Настройки Mihomo</div>
-      <div class="row">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
-          <input type="checkbox" id="cfgLan" checked style="width:auto"> 🌐 Allow LAN (0.0.0.0)
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
-          <input type="checkbox" id="cfgSocks" checked style="width:auto"> 🔌 Mixed Port 7890
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
-          <input type="checkbox" id="cfgWebUI" checked style="width:auto"> 🖥️ Web UI
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
-          <input type="checkbox" id="cfgSubMode" checked style="width:auto"> 📡 Sub Mode
-        </label>
+      <div class="card-title">📂 WireGuard / AmneziaWG</div>
+      <div class="file-upload-wrapper">
+        <div class="file-upload">
+          <button class="btn btn-gray" id="btnWg">📂 Загрузить .conf / .awg</button>
+          <input type="file" id="wgFile" accept=".conf,.wg,.awg,text/plain" multiple>
+        </div>
+        <span class="wg-status" id="wgStatus"></span>
       </div>
+    </div>
+
+    <div class="card">
+          <div class="card">
+      <div class="card-title">⚙️ Настройки Mihomo</div>
+      
+      <!-- Основные настройки -->
+      <div class="checkbox-grid">
+        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
+        <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
+        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Sub Mode</label>
+      </div>
+
+      <!-- Продвинутые настройки (все выключены по умолчанию) -->
+      <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label><input type="checkbox" id="cfgTun"> 🛡️ TUN Interface</label>
+        <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 Per-Proxy TUN</label>
+        <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 Per-Proxy SOCKS</label>
+      </div>
+      <div class="hint">TUN и Per-Proxy опции отключены по умолчанию. Включайте только при необходимости.</div>
+
+      <label style="margin-top:16px">🏓 Ping server (health-check)</label>
+      <select id="pingSelect"></select>
+
       <div class="btn-group">
         <button class="btn" onclick="buildMihomo()">⚡ Build Config</button>
         <button class="btn btn-gray" onclick="copyMihomo()">📋 Copy YAML</button>
@@ -190,12 +220,10 @@ function parseYaml() {
   const r = {};
   const map = {'private-key':'privateKey','public-key':'publicKey','ip':'ip','ipv6':'ipv6','sni':'sni','dns':'dns','port':'port'};
   
-  // Простой regex-парсер для формата бота
   for (const [k, v] of Object.entries(map)) {
     const m = raw.match(new RegExp(`^\\s*${k}:\\s*(.+?)\\s*$`, 'mi'));
     if (m) r[v] = m[1].replace(/^["']|["']$/g, '');
   }
-  // DNS array
   const dnsM = raw.match(/^\s*dns:\s*\[([^\]]+)\]/m);
   if (dnsM) r.dns = dnsM[1].split(',').map(s=>s.trim().replace(/["']/g,'')).join(',');
 
@@ -203,13 +231,11 @@ function parseYaml() {
   
   ['privateKey','publicKey','ip','ipv6','sni','dns'].forEach(k => {
     const el = document.getElementById(k);
-    // Заполняем только если значение есть в конфиге, иначе оставляем как есть (или пустым для ipv6)
     if (r[k]) {
       el.value = r[k];
       el.classList.add('field-filled');
       setTimeout(() => el.classList.remove('field-filled'), 2000);
     } else if (k === 'ipv6') {
-      // Если в конфиге нет IPv6, очищаем поле, чтобы не подставлять дефолт
       el.value = '';
     }
   });
@@ -237,8 +263,6 @@ let lastGeneratedLinks = [];
 function generateWarp() {
   const baseProfile = document.getElementById('profileName').value.trim() || 'WARP-MASQUE';
   const port = document.getElementById('port').value;
-  
-  // Формируем имя профиля с портом: WARP-MASQUE-443
   const profile = `${baseProfile}-${port}`;
   
   const pk = document.getElementById('privateKey').value.trim();
@@ -265,7 +289,6 @@ function generateWarp() {
     if (ipv6) base += `&ipv6=${ipv6}`;
     if (dns) base += `&dns=${dns}`;
     
-    // Имя теперь включает порт: WARP-MASQUE-443-QUIC или WARP-MASQUE-443-1-QUIC
     const quic = base.replace('IP', ip1) + `#${profile}${suffix}-QUIC`;
     const h2 = base.replace('IP', ip2) + `&network=h2#${profile}${suffix}-H2`;
     
@@ -280,29 +303,95 @@ function sendToMihomo() {
   if (!lastGeneratedLinks.length) return showToast('Сначала сгенерируй ссылки', true);
   document.getElementById('mihomoInput').value = lastGeneratedLinks.join('\n');
   switchTab('mihomo');
-  // Auto-click build
   setTimeout(buildMihomo, 100);
+}
+
+// === PING SELECTOR ===
+function initPingSelector() {
+  const choices = (globalThis.web4core?.URLTEST_CHOICES || []);
+  const sel = document.getElementById('pingSelect');
+  if (!choices.length) {
+    sel.innerHTML = '<option value="https://google.com/generate_204">Google (default)</option>';
+    return;
+  }
+  choices.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.url;
+    opt.textContent = c.label || c.url;
+    sel.appendChild(opt);
+  });
+}
+
+// === WIREGUARD UPLOAD ===
+let wgBeans = [];
+
+function initWgUpload() {
+  const fileInput = document.getElementById('wgFile');
+  const statusEl = document.getElementById('wgStatus');
+  const btnEl = document.getElementById('btnWg');
+
+  fileInput.addEventListener('change', async () => {
+    const files = Array.from(fileInput.files || []);
+    if (!files.length) { wgBeans = []; updateWgStatus(); return; }
+    
+    const api = globalThis.web4core;
+    if (!api?.parseWireGuardConf) {
+      showToast('web4core.runtime не загружен!', true);
+      return;
+    }
+
+    wgBeans = [];
+    for (const file of files) {
+      try {
+        const text = await file.text();
+        const bean = api.parseWireGuardConf(text, file.name);
+        if (bean) wgBeans.push(bean);
+      } catch (e) {
+        showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true);
+      }
+    }
+    updateWgStatus();
+  });
+
+  function updateWgStatus() {
+    if (wgBeans.length > 0) {
+      statusEl.textContent = `✅ Загружено: ${wgBeans.length} конфиг(ов)`;
+      statusEl.classList.add('loaded');
+      btnEl.textContent = `📂 WG/AWG (${wgBeans.length})`;
+    } else {
+      statusEl.textContent = '';
+      statusEl.classList.remove('loaded');
+      btnEl.textContent = '📂 Загрузить .conf / .awg';
+    }
+  }
 }
 
 // === MIHOMO BUILDER (via web4core) ===
 function buildMihomo() {
   const raw = document.getElementById('mihomoInput').value.trim();
-  if (!raw) return showToast('Вставь ссылки или подписки', true);
+  if (!raw && wgBeans.length === 0) return showToast('Вставь ссылки или загрузи WG конфиг', true);
   
   const api = globalThis.web4core;
   if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
+
+  const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
+  const addTun = document.getElementById('cfgTun').checked;
+  const perProxyTun = document.getElementById('cfgPerProxyTun').checked;
+  const perProxySocks = document.getElementById('cfgPerProxySocks').checked;
 
   try {
     const result = api.buildFromRequest({
       core: 'mihomo',
       input: raw,
-      wgBeans: [],
+      wgBeans: wgBeans,
       options: {
         addSocks: document.getElementById('cfgSocks').checked,
-        addTun: false,
+        addTun: addTun, // Теперь зависит от чекбокса, по умолчанию false
         webUI: document.getElementById('cfgWebUI').checked,
-        urlTest: 'https://google.com/generate_204',
-        mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked
+        urlTest: urlTest,
+        mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
+        mihomoPerProxyTun: perProxyTun,
+        perProxyPort: perProxySocks
       }
     });
 
@@ -332,6 +421,10 @@ function copyMihomo() {
 function copyText(text) {
   navigator.clipboard.writeText(text).then(() => showToast('Скопировано!'));
 }
+
+// === INIT ===
+initPingSelector();
+initWgUpload();
 </script>
 </body>
 </html>
