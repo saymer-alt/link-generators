@@ -81,7 +81,7 @@
       </div>
       <div class="row">
         <div><label>IP (int)</label><input type="text" id="ip" value="172.16.0.2"></div>
-        <div><label>IPv6 (int)</label><input type="text" id="ipv6" value="2606:4700:110:85e1:4e2a:ae6:77dd:ca2a"></div>
+        <div><label>IPv6 (int)</label><input type="text" id="ipv6" placeholder="Заполняется из конфига"></div>
       </div>
       <div class="row">
         <div><label>SNI</label><input type="text" id="sni" value="4pda.to"></div>
@@ -144,7 +144,7 @@
           <input type="checkbox" id="cfgWebUI" checked style="width:auto"> 🖥️ Web UI
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
-          <input type="checkbox" id="cfgSubMode" style="width:auto"> 📡 Sub Mode
+          <input type="checkbox" id="cfgSubMode" checked style="width:auto"> 📡 Sub Mode
         </label>
       </div>
       <div class="btn-group">
@@ -202,11 +202,15 @@ function parseYaml() {
   if (!r.privateKey) return showToast('Не найдены ключи в YAML', true);
   
   ['privateKey','publicKey','ip','ipv6','sni','dns'].forEach(k => {
+    const el = document.getElementById(k);
+    // Заполняем только если значение есть в конфиге, иначе оставляем как есть (или пустым для ipv6)
     if (r[k]) {
-      const el = document.getElementById(k);
       el.value = r[k];
       el.classList.add('field-filled');
       setTimeout(() => el.classList.remove('field-filled'), 2000);
+    } else if (k === 'ipv6') {
+      // Если в конфиге нет IPv6, очищаем поле, чтобы не подставлять дефолт
+      el.value = '';
     }
   });
   if (r.port) document.getElementById('port').value = r.port;
@@ -253,7 +257,10 @@ function generateWarp() {
     const ip2 = `162.159.${s}.${randomOctet()}`;
     const suffix = count > 1 ? `-${i+1}` : '';
     
-    const base = `masque://IP:${port}?sni=${sni}&private-key=${urlEncodeKey(pk)}&public-key=${urlEncodeKey(pub)}&ip=${ip}&udp=true&remote-dns-resolve=true${ipv6?'&ipv6='+ipv6:''}${dns?'&dns='+dns:''}`;
+    let base = `masque://IP:${port}?sni=${sni}&private-key=${urlEncodeKey(pk)}&public-key=${urlEncodeKey(pub)}&ip=${ip}&udp=true&remote-dns-resolve=true`;
+    if (ipv6) base += `&ipv6=${ipv6}`;
+    if (dns) base += `&dns=${dns}`;
+    
     const quic = base.replace('IP', ip1) + `#${profile}${suffix}-QUIC`;
     const h2 = base.replace('IP', ip2) + `&network=h2#${profile}${suffix}-H2`;
     
