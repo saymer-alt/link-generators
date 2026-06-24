@@ -235,14 +235,18 @@ function randomPort() {
 let lastGeneratedLinks = [];
 
 function generateWarp() {
-  const profile = document.getElementById('profileName').value.trim() || 'WARP-MASQUE';
+  const baseProfile = document.getElementById('profileName').value.trim() || 'WARP-MASQUE';
+  const port = document.getElementById('port').value;
+  
+  // Формируем имя профиля с портом: WARP-MASQUE-443
+  const profile = `${baseProfile}-${port}`;
+  
   const pk = document.getElementById('privateKey').value.trim();
   const pub = document.getElementById('publicKey').value.trim();
   const ip = document.getElementById('ip').value.trim();
   const ipv6 = document.getElementById('ipv6').value.trim();
   const sni = document.getElementById('sni').value.trim();
   const dns = document.getElementById('dns').value.trim();
-  const port = document.getElementById('port').value;
   const count = parseInt(document.getElementById('pairCount').value) || 1;
 
   if (!pk || !pub) return showToast('Нужны ключи!', true);
@@ -261,6 +265,7 @@ function generateWarp() {
     if (ipv6) base += `&ipv6=${ipv6}`;
     if (dns) base += `&dns=${dns}`;
     
+    // Имя теперь включает порт: WARP-MASQUE-443-QUIC или WARP-MASQUE-443-1-QUIC
     const quic = base.replace('IP', ip1) + `#${profile}${suffix}-QUIC`;
     const h2 = base.replace('IP', ip2) + `&network=h2#${profile}${suffix}-H2`;
     
@@ -268,7 +273,7 @@ function generateWarp() {
     out.innerHTML += `<div class="link-block"><div class="link-label">🔷 QUIC ${suffix}</div><div class="link-text">${quic}</div><button class="copy-btn" onclick="copyText('${quic.replace(/'/g,"\\'")}')">Copy</button></div>`;
     out.innerHTML += `<div class="link-block"><div class="link-label">🟢 H2 ${suffix}</div><div class="link-text">${h2}</div><button class="copy-btn" onclick="copyText('${h2.replace(/'/g,"\\'")}')">Copy</button></div>`;
   }
-  showToast(`✅ Сгенерировано ${count * 2} ссылок`);
+  showToast(`✅ Сгенерировано ${count * 2} ссылок (${profile})`);
 }
 
 function sendToMihomo() {
