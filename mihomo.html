@@ -4,21 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WARP & Mihomo Unified Generator</title>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 <style>
   :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#238636; --red:#da3633; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.5;padding:20px}
-  .container{max-width:800px;margin:0 auto}
+  .container{max-width:850px;margin:0 auto}
   h1{text-align:center;color:var(--accent);font-size:1.6rem;margin-bottom:20px}
-  
-  /* Tabs */
   .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px}
   .tab{flex:1;padding:12px;text-align:center;cursor:pointer;background:transparent;border:none;color:var(--muted);font-size:0.95rem;font-weight:600;transition:all .2s}
   .tab.active{color:var(--accent);border-bottom:2px solid var(--accent);background:rgba(88,166,255,0.05)}
   .tab:hover:not(.active){color:var(--text)}
   .tab-content{display:none}.tab-content.active{display:block}
-
-  /* Cards & Inputs */
   .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
   .card-title{font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:12px;font-weight:600;display:flex;align-items:center;gap:8px}
   label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 4px}
@@ -26,29 +23,31 @@
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
   textarea{resize:vertical;min-height:120px}
   .row{display:flex;gap:12px;flex-wrap:wrap}.row>*{flex:1;min-width:140px}
-  
-  /* Buttons */
   .btn-group{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
   .btn{padding:10px 18px;border:none;border-radius:8px;font-size:.9rem;font-weight:500;cursor:pointer;color:#fff;background:var(--green);transition:opacity .2s}
   .btn:hover{opacity:.85}
   .btn-blue{background:#1f6feb}.btn-gray{background:var(--border)}.btn-red{background:var(--red)}.btn-purple{background:#8957e5}
-  
-  /* Output */
   .link-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;position:relative}
   .link-label{font-size:.8rem;color:var(--accent);font-weight:600;margin-bottom:6px}
   .link-text{font-family:monospace;font-size:.8rem;color:#a5d6ff;word-break:break-all;line-height:1.6}
   .copy-btn{position:absolute;top:10px;right:10px;padding:4px 10px;font-size:.75rem;background:var(--border);border:none;border-radius:6px;color:var(--text);cursor:pointer}
   .copy-btn:hover{background:#484f58}
-  
-  /* Toast & Utils */
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--green);color:#fff;padding:10px 20px;border-radius:8px;opacity:0;transition:all .3s;z-index:1000;pointer-events:none}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
-  .subnet-group{display:flex;gap:16px;align-items:center;margin-top:8px}
-  .subnet-group label{display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;color:var(--text)}
   .hint{font-size:.75rem;color:#484f58;margin-top:4px}
   .field-filled{border-color:var(--green)!important}
   .parsed-badge{background:var(--green);color:#fff;font-size:.7rem;padding:2px 8px;border-radius:4px}
   #mihomoOutput{min-height:300px;font-size:.8rem}
+  .file-upload-wrapper{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .file-upload{position:relative;overflow:hidden;display:inline-block}
+  .file-upload input[type=file]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
+  .wg-status{font-size:.8rem;color:var(--muted)}
+  .wg-status.loaded{color:var(--green)}
+  .checkbox-grid{display:flex;flex-wrap:wrap;gap:12px 20px;margin-top:8px}
+  .checkbox-grid label{display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;font-size:.85rem;color:var(--text)}
+  .checkbox-grid input[type="checkbox"]{width:auto;accent-color:var(--accent)}
+  .toggle-row{display:flex;align-items:center;gap:10px;margin-top:12px}
+  .toggle-row label{margin:0;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text)}
 </style>
 </head>
 <body>
@@ -56,8 +55,8 @@
   <h1>🔗 WARP & Mihomo Unified</h1>
 
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('warp')">⚡ WARP MASQUE Links</button>
-    <button class="tab" onclick="switchTab('mihomo')">⚙️ Mihomo Config Builder</button>
+    <button class="tab active" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
+    <button class="tab" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
   </div>
 
   <!-- TAB 1: WARP GENERATOR -->
@@ -73,45 +72,48 @@
 
     <div class="card">
       <div class="card-title">🔑 Параметры</div>
-      <label>Имя профиля</label>
+      <label>Имя профиля (база)</label>
       <input type="text" id="profileName" value="WARP-MASQUE">
+      
       <div class="row">
         <div><label>Private Key</label><input type="text" id="privateKey"></div>
         <div><label>Public Key</label><input type="text" id="publicKey"></div>
       </div>
       <div class="row">
-        <div><label>IP (int)</label><input type="text" id="ip" value="172.16.0.2"></div>
-        <div><label>IPv6 (int)</label><input type="text" id="ipv6" placeholder="Заполняется из конфига"></div>
+        <div><label>IP (внутренний туннеля)</label><input type="text" id="ip" value="172.16.0.2"></div>
+        <div><label>IPv6 (внутренний)</label><input type="text" id="ipv6" placeholder="Заполняется из конфига"></div>
       </div>
       <div class="row">
         <div><label>SNI</label><input type="text" id="sni" value="4pda.to"></div>
-        <div><label>DNS</label><input type="text" id="dns" value="1.1.1.1"></div>
+        <div><label>DNS</label><input type="text" id="dns" value="1.1.1.1,1.0.0.1"></div>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">🎲 Генерация</div>
-      <label>Подсеть</label>
-      <div class="subnet-group">
-        <label><input type="radio" name="subnet" value="198" checked> 198.*</label>
-        <label><input type="radio" name="subnet" value="199"> 199.*</label>
-        <label><input type="radio" name="subnet" value="auto"> Авто</label>
+      <div class="card-title">🎲 Стратегия генерации</div>
+      
+      <div class="toggle-row">
+        <label>
+          <input type="checkbox" id="safePortsOnly" checked> 
+          🛡️ Safe Ports Only (только 443, 8443, 4443, 8095)
+        </label>
       </div>
+      <div class="hint">Исключает VPN-порты (500, 1701, 4500), которые могут вызывать семантический конфликт у DPI.</div>
+
       <div class="row" style="margin-top:12px">
         <div>
-          <label>Порт</label>
-          <select id="port">
-            <option>443</option><option>500</option><option>1701</option>
-            <option>4500</option><option>4443</option><option>8443</option><option>8095</option>
-          </select>
-        </div>
-        <div>
-          <label>Пар (QUIC+H2)</label>
+          <label>Количество пар</label>
           <input type="number" id="pairCount" value="1" min="1" max="20">
         </div>
       </div>
+      
+      <div class="hint" style="margin-top:12px">
+        ℹ️ <b>QUIC:</b> Фиксированный пул (198.2, 198.1, 199.2) :443<br>
+        ℹ️ <b>H2:</b> Взвешенный рандом портов (443≈70%, 8443≈20%, остальные≈10%)<br>
+        ℹ️ <b>Анти-корреляция:</b> При совпадении портов H2 IP ≠ QUIC IP
+      </div>
+
       <div class="btn-group">
-        <button class="btn btn-blue" onclick="randomPort()">🎲 Порт</button>
         <button class="btn" onclick="generateWarp()">⚡ Сгенерировать ссылки</button>
         <button class="btn btn-gray" onclick="sendToMihomo()">🚀 В Mihomo Builder</button>
       </div>
@@ -128,25 +130,38 @@
     <div class="card">
       <div class="card-title">📋 Входные данные (ссылки / подписки)</div>
       <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
-      <div class="hint">Поддерживает: vless, vmess, trojan, ss, hy2, tuic, masque, mieru, WG (.conf), HTTP(S) подписки</div>
+      <div class="hint">Поддерживает: vless, vmess, trojan, ss, hy2, tuic, masque, mieru, tt, WG (.conf/.awg), HTTP(S) подписки</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📂 WireGuard / AmneziaWG</div>
+      <div class="file-upload-wrapper">
+        <div class="file-upload">
+          <button class="btn btn-gray" id="btnWg">📂 Загрузить .conf / .awg</button>
+          <input type="file" id="wgFile" accept=".conf,.wg,.awg,text/plain" multiple>
+        </div>
+        <span class="wg-status" id="wgStatus"></span>
+      </div>
     </div>
 
     <div class="card">
       <div class="card-title">⚙️ Настройки Mihomo</div>
-      <div class="row">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
-          <input type="checkbox" id="cfgLan" checked style="width:auto"> 🌐 Allow LAN (0.0.0.0)
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
-          <input type="checkbox" id="cfgSocks" checked style="width:auto"> 🔌 Mixed Port 7890
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
-          <input type="checkbox" id="cfgWebUI" checked style="width:auto"> 🖥️ Web UI
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
-          <input type="checkbox" id="cfgSubMode" checked style="width:auto"> 📡 Sub Mode
-        </label>
+      <div class="checkbox-grid">
+        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
+        <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
+        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Sub Mode</label>
       </div>
+      <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label><input type="checkbox" id="cfgTun"> 🛡️ TUN Interface</label>
+        <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 Per-Proxy TUN</label>
+        <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 Per-Proxy SOCKS</label>
+      </div>
+      <div class="hint">TUN и Per-Proxy опции отключены по умолчанию.</div>
+
+      <label style="margin-top:16px">🏓 Ping server (health-check)</label>
+      <select id="pingSelect"></select>
+
       <div class="btn-group">
         <button class="btn" onclick="buildMihomo()">⚡ Build Config</button>
         <button class="btn btn-gray" onclick="copyMihomo()">📋 Copy YAML</button>
@@ -167,10 +182,12 @@
 
 <script>
 // === TABS ===
-function switchTab(name) {
+function switchTab(e, name) {
+  if (e) e.preventDefault();
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  event.target.classList.add('active');
+  if (e && e.currentTarget) e.currentTarget.classList.add('active');
+  else document.querySelector(`.tab[onclick*="'${name}'"]`)?.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
 }
 
@@ -183,63 +200,134 @@ function showToast(msg, err) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-// === YAML PARSER (WARP) ===
+// === YAML PARSER ===
 function parseYaml() {
   const raw = document.getElementById('yamlInput').value.trim();
   if (!raw) return showToast('Вставь YAML', true);
-  const r = {};
-  const map = {'private-key':'privateKey','public-key':'publicKey','ip':'ip','ipv6':'ipv6','sni':'sni','dns':'dns','port':'port'};
   
-  // Простой regex-парсер для формата бота
-  for (const [k, v] of Object.entries(map)) {
-    const m = raw.match(new RegExp(`^\\s*${k}:\\s*(.+?)\\s*$`, 'mi'));
-    if (m) r[v] = m[1].replace(/^["']|["']$/g, '');
-  }
-  // DNS array
-  const dnsM = raw.match(/^\s*dns:\s*\[([^\]]+)\]/m);
-  if (dnsM) r.dns = dnsM[1].split(',').map(s=>s.trim().replace(/["']/g,'')).join(',');
-
-  if (!r.privateKey) return showToast('Не найдены ключи в YAML', true);
-  
-  ['privateKey','publicKey','ip','ipv6','sni','dns'].forEach(k => {
-    const el = document.getElementById(k);
-    // Заполняем только если значение есть в конфиге, иначе оставляем как есть (или пустым для ipv6)
-    if (r[k]) {
-      el.value = r[k];
-      el.classList.add('field-filled');
-      setTimeout(() => el.classList.remove('field-filled'), 2000);
-    } else if (k === 'ipv6') {
-      // Если в конфиге нет IPv6, очищаем поле, чтобы не подставлять дефолт
-      el.value = '';
+  try {
+    const docs = jsyaml.loadAll(raw);
+    let proxyData = null;
+    
+    for (const doc of docs) {
+      if (!doc) continue;
+      if (doc.proxies && Array.isArray(doc.proxies) && doc.proxies.length > 0) {
+        proxyData = doc.proxies[0];
+        break;
+      }
+      if (doc['private-key'] || doc.privateKey) {
+        proxyData = doc;
+        break;
+      }
+      for (const key of Object.keys(doc)) {
+        const val = doc[key];
+        if (val && typeof val === 'object' && (val['private-key'] || val.privateKey)) {
+          proxyData = val;
+          break;
+        }
+      }
+      if (proxyData) break;
     }
-  });
-  if (r.port) document.getElementById('port').value = r.port;
-  
-  document.getElementById('parsedBadge').style.display = 'inline-block';
-  showToast('✅ YAML распарсен');
+    
+    if (!proxyData) return showToast('Не найдены данные прокси в YAML', true);
+    
+    const r = {
+      privateKey: proxyData['private-key'] || proxyData.privateKey || '',
+      publicKey: proxyData['public-key'] || proxyData.publicKey || '',
+      ip: proxyData.ip || '',
+      ipv6: proxyData.ipv6 || '',
+      sni: proxyData.sni || '',
+      port: proxyData.port || ''
+    };
+    
+    if (Array.isArray(proxyData.dns)) {
+      r.dns = proxyData.dns.join(',');
+    } else {
+      r.dns = proxyData.dns || '';
+    }
+    
+    if (!r.privateKey) return showToast('Не найден private-key в YAML', true);
+    
+    ['privateKey','publicKey','ip','ipv6','sni','dns'].forEach(k => {
+      const el = document.getElementById(k);
+      if (el && r[k]) {
+        el.value = r[k];
+        el.classList.add('field-filled');
+        setTimeout(() => el.classList.remove('field-filled'), 2000);
+      } else if (k === 'ipv6' && el) {
+        el.value = '';
+      }
+    });
+    
+    document.getElementById('parsedBadge').style.display = 'inline-block';
+    showToast('✅ YAML распарсен');
+  } catch (e) {
+    showToast('❌ Ошибка парсинга YAML: ' + e.message, true);
+  }
 }
 
-// === WARP LINK GENERATOR ===
-function urlEncodeKey(k) { return k.replace(/\+/g,'%2B').replace(/\//g,'%2F').replace(/=/g,'%3D'); }
-function randomOctet() { return Math.floor(Math.random()*256); }
-function getSubnet() {
-  const c = document.querySelector('input[name="subnet"]:checked');
-  const v = c ? c.value : 'auto';
-  return v === 'auto' ? (Math.random()<0.5?'198':'199') : v;
+// === WARP LINK GENERATOR (ENGINEERED STRATEGY) ===
+function urlEncodeKey(key) {
+  return key.replace(/\+/g, '%2B').replace(/\//g, '%2F').replace(/=/g, '%3D');
 }
-function randomPort() {
-  const ports = [443,500,1701,4500,4443,8443,8095];
-  document.getElementById('port').value = ports[Math.floor(Math.random()*ports.length)];
+
+// П.2: Фиксированный пул стабильных QUIC endpoint'ов
+const QUIC_ENDPOINTS = [
+  { ip: '162.159.198.2', port: 443 },
+  { ip: '162.159.198.1', port: 443 },
+  { ip: '162.159.199.2', port: 443 }
+];
+
+// П.2: H2 IP — только подсети 198 и 199
+const H2_SUBNETS = [198, 199];
+
+// П.1: Взвешенные порты для H2
+const SAFE_PORTS_WEIGHTED = [
+  { port: 443, weight: 70 },
+  { port: 8443, weight: 20 },
+  { port: 4443, weight: 5 },
+  { port: 8095, weight: 5 }
+];
+
+const ALL_PORTS_WEIGHTED = [
+  { port: 443, weight: 50 },
+  { port: 8443, weight: 15 },
+  { port: 4443, weight: 7 },
+  { port: 8095, weight: 5 },
+  { port: 500, weight: 5 },
+  { port: 1701, weight: 5 },
+  { port: 4500, weight: 5 },
+  { port: 8443, weight: 8 }  // доп. вес для 8443 в полном режиме
+];
+
+function weightedRandom(items) {
+  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+  let random = Math.random() * totalWeight;
+  for (const item of items) {
+    random -= item.weight;
+    if (random <= 0) return item.port;
+  }
+  return items[0].port;
+}
+
+function getRandomH2Ip(excludeIp) {
+  // Генерируем IP из 198/199, избегая совпадения с excludeIp
+  let attempts = 0;
+  while (attempts < 20) {
+    const subnet = H2_SUBNETS[Math.floor(Math.random() * H2_SUBNETS.length)];
+    const octet = Math.floor(Math.random() * 254) + 1; // 1-254, избегаем .0 и .255
+    const ip = `162.159.${subnet}.${octet}`;
+    if (ip !== excludeIp || attempts > 18) return ip;
+    attempts++;
+  }
+  return `162.159.198.${Math.floor(Math.random() * 254) + 1}`;
 }
 
 let lastGeneratedLinks = [];
 
 function generateWarp() {
   const baseProfile = document.getElementById('profileName').value.trim() || 'WARP-MASQUE';
-  const port = document.getElementById('port').value;
-  
-  // Формируем имя профиля с портом: WARP-MASQUE-443
-  const profile = `${baseProfile}-${port}`;
+  const safePortsOnly = document.getElementById('safePortsOnly').checked;
   
   const pk = document.getElementById('privateKey').value.trim();
   const pub = document.getElementById('publicKey').value.trim();
@@ -255,54 +343,146 @@ function generateWarp() {
   out.innerHTML = '';
   lastGeneratedLinks = [];
 
+  const portWeights = safePortsOnly ? SAFE_PORTS_WEIGHTED : ALL_PORTS_WEIGHTED;
+
   for (let i = 0; i < count; i++) {
-    const s = getSubnet();
-    const ip1 = `162.159.${s}.${randomOctet()}`;
-    const ip2 = `162.159.${s}.${randomOctet()}`;
-    const suffix = count > 1 ? `-${i+1}` : '';
+    // П.2: QUIC — случайный из фиксированного пула, всегда порт 443
+    const quicEndpoint = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
     
-    let base = `masque://IP:${port}?sni=${sni}&private-key=${urlEncodeKey(pk)}&public-key=${urlEncodeKey(pub)}&ip=${ip}&udp=true&remote-dns-resolve=true`;
-    if (ipv6) base += `&ipv6=${ipv6}`;
-    if (dns) base += `&dns=${dns}`;
+    // П.1: H2 порт — взвешенный рандом
+    const h2Port = weightedRandom(portWeights);
     
-    // Имя теперь включает порт: WARP-MASQUE-443-QUIC или WARP-MASQUE-443-1-QUIC
-    const quic = base.replace('IP', ip1) + `#${profile}${suffix}-QUIC`;
-    const h2 = base.replace('IP', ip2) + `&network=h2#${profile}${suffix}-H2`;
+    // П.3: Анти-корреляция — если порты совпали, H2 IP ОБЯЗАТЕЛЬНО отличается
+    let h2Ip;
+    if (h2Port === quicEndpoint.port) {
+      h2Ip = getRandomH2Ip(quicEndpoint.ip);
+    } else {
+      h2Ip = getRandomH2Ip(null);
+    }
+    
+    const suffix = count > 1 ? `-${i + 1}` : '';
+    
+    const buildLink = (serverAddr, port, isH2) => {
+      const pkEnc = urlEncodeKey(pk);
+      const pubEnc = urlEncodeKey(pub);
+      // Имя профиля: QUIC без порта, H2 с портом
+      const name = isH2 
+        ? `${baseProfile}-H2-${port}${suffix}` 
+        : `${baseProfile}-QUIC${suffix}`;
+      
+      let url = `masque://${serverAddr}:${port}?sni=${sni}&private-key=${pkEnc}&public-key=${pubEnc}&ip=${ip}&udp=true&remote-dns-resolve=true`;
+      if (ipv6 && ipv6.trim()) url += `&ipv6=${ipv6}`;
+      if (dns && dns.trim()) url += `&dns=${dns}`;
+      if (isH2) url += '&network=h2';
+      url += `#${name}`;
+      return url;
+    };
+    
+    const quic = buildLink(quicEndpoint.ip, quicEndpoint.port, false);
+    const h2 = buildLink(h2Ip, h2Port, true);
     
     lastGeneratedLinks.push(quic, h2);
-    out.innerHTML += `<div class="link-block"><div class="link-label">🔷 QUIC ${suffix}</div><div class="link-text">${quic}</div><button class="copy-btn" onclick="copyText('${quic.replace(/'/g,"\\'")}')">Copy</button></div>`;
-    out.innerHTML += `<div class="link-block"><div class="link-label">🟢 H2 ${suffix}</div><div class="link-text">${h2}</div><button class="copy-btn" onclick="copyText('${h2.replace(/'/g,"\\'")}')">Copy</button></div>`;
+    out.innerHTML += `<div class="link-block"><div class="link-label">🔷 ${quic.split('#')[1]} (${quicEndpoint.ip})</div><div class="link-text">${quic}</div><button class="copy-btn" onclick="copyText('${quic.replace(/'/g, "\\'")}')">Copy</button></div>`;
+    out.innerHTML += `<div class="link-block"><div class="link-label">🟢 ${h2.split('#')[1]} (${h2Ip})</div><div class="link-text">${h2}</div><button class="copy-btn" onclick="copyText('${h2.replace(/'/g, "\\'")}')">Copy</button></div>`;
   }
-  showToast(`✅ Сгенерировано ${count * 2} ссылок (${profile})`);
+  
+  const modeStr = safePortsOnly ? 'Safe Ports' : 'All Ports';
+  showToast(`✅ ${count * 2} ссылок (${modeStr})`);
 }
 
 function sendToMihomo() {
   if (!lastGeneratedLinks.length) return showToast('Сначала сгенерируй ссылки', true);
   document.getElementById('mihomoInput').value = lastGeneratedLinks.join('\n');
-  switchTab('mihomo');
-  // Auto-click build
+  switchTab(null, 'mihomo');
   setTimeout(buildMihomo, 100);
+}
+
+// === PING SELECTOR ===
+function initPingSelector() {
+  const choices = (globalThis.web4core?.URLTEST_CHOICES || []);
+  const sel = document.getElementById('pingSelect');
+  if (!choices.length) {
+    sel.innerHTML = '<option value="https://google.com/generate_204">Google (default)</option>';
+    return;
+  }
+  choices.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.url;
+    opt.textContent = c.label || c.url;
+    sel.appendChild(opt);
+  });
+}
+
+// === WIREGUARD UPLOAD ===
+let wgBeans = [];
+
+function initWgUpload() {
+  const fileInput = document.getElementById('wgFile');
+  const statusEl = document.getElementById('wgStatus');
+  const btnEl = document.getElementById('btnWg');
+
+  fileInput.addEventListener('change', async () => {
+    const files = Array.from(fileInput.files || []);
+    if (!files.length) { wgBeans = []; updateWgStatus(); return; }
+    
+    const api = globalThis.web4core;
+    if (!api?.parseWireGuardConf) {
+      showToast('web4core.runtime не загружен!', true);
+      return;
+    }
+
+    wgBeans = [];
+    for (const file of files) {
+      try {
+        const text = await file.text();
+        const bean = api.parseWireGuardConf(text, file.name);
+        if (bean) wgBeans.push(bean);
+      } catch (e) {
+        showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true);
+      }
+    }
+    updateWgStatus();
+  });
+
+  function updateWgStatus() {
+    if (wgBeans.length > 0) {
+      statusEl.textContent = `✅ Загружено: ${wgBeans.length} конфиг(ов)`;
+      statusEl.classList.add('loaded');
+      btnEl.textContent = `📂 WG/AWG (${wgBeans.length})`;
+    } else {
+      statusEl.textContent = '';
+      statusEl.classList.remove('loaded');
+      btnEl.textContent = '📂 Загрузить .conf / .awg';
+    }
+  }
 }
 
 // === MIHOMO BUILDER (via web4core) ===
 function buildMihomo() {
   const raw = document.getElementById('mihomoInput').value.trim();
-  if (!raw) return showToast('Вставь ссылки или подписки', true);
+  if (!raw && wgBeans.length === 0) return showToast('Вставь ссылки или загрузи WG конфиг', true);
   
   const api = globalThis.web4core;
   if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
+
+  const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
+  const addTun = document.getElementById('cfgTun').checked;
+  const perProxyTun = document.getElementById('cfgPerProxyTun').checked;
+  const perProxySocks = document.getElementById('cfgPerProxySocks').checked;
 
   try {
     const result = api.buildFromRequest({
       core: 'mihomo',
       input: raw,
-      wgBeans: [],
+      wgBeans: wgBeans,
       options: {
         addSocks: document.getElementById('cfgSocks').checked,
-        addTun: false,
+        addTun: addTun, 
         webUI: document.getElementById('cfgWebUI').checked,
-        urlTest: 'https://google.com/generate_204',
-        mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked
+        urlTest: urlTest,
+        mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
+        mihomoPerProxyTun: perProxyTun,
+        perProxyPort: perProxySocks
       }
     });
 
@@ -332,6 +512,10 @@ function copyMihomo() {
 function copyText(text) {
   navigator.clipboard.writeText(text).then(() => showToast('Скопировано!'));
 }
+
+// === INIT ===
+initPingSelector();
+initWgUpload();
 </script>
 </body>
 </html>
