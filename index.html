@@ -158,7 +158,7 @@
         <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 Per-Proxy TUN</label>
         <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 Per-Proxy SOCKS</label>
       </div>
-      <div class="hint">RU-фильтр автоматически добавляет exclude-filter в подписки proxy-providers.</div>
+      <div class="hint">RU-фильтр добавляет exclude-filter в proxy-providers.</div>
 
       <label style="margin-top:16px">🏓 Ping server (health-check)</label>
       <select id="pingSelect"></select>
@@ -458,9 +458,6 @@ function buildMihomo() {
   if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
 
   const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
-  const addTun = document.getElementById('cfgTun').checked;
-  const perProxyTun = document.getElementById('cfgPerProxyTun').checked;
-  const perProxySocks = document.getElementById('cfgPerProxySocks').checked;
   const excludeRU = document.getElementById('cfgExcludeRU').checked;
 
   try {
@@ -470,44 +467,39 @@ function buildMihomo() {
       wgBeans: wgBeans,
       options: {
         addSocks: document.getElementById('cfgSocks').checked,
-        addTun: addTun, 
+        addTun: document.getElementById('cfgTun').checked, 
         webUI: document.getElementById('cfgWebUI').checked,
         urlTest: urlTest,
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
-        mihomoPerProxyTun: perProxyTun,
-        perProxyPort: perProxySocks
+        mihomoPerProxyTun: document.getElementById('cfgPerProxyTun').checked,
+        perProxyPort: document.getElementById('cfgPerProxySocks').checked
       }
     });
 
     let doc = typeof result.data === 'string' ? jsyaml.load(result.data) : result.data;
     if (!doc || typeof doc !== 'object') doc = {};
 
-    // Чистая латинская строка для exclude-filter без кириллицы (безопасно для nano)
-    const ruFilterString = "(?i)RU|Russia";
-
-    if (excludeRU) {
-      if (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object') {
-        for (const key of Object.keys(doc['proxy-providers'])) {
-          doc['proxy-providers'][key]['exclude-filter'] = ruFilterString;
-        }
-      }
-
-      const ruRegexJS = /RU|Russia/i;
-      if (Array.isArray(doc.proxies)) {
-        doc.proxies = doc.proxies.filter(p => p && p.name && !ruRegexJS.test(p.name));
-      }
-    }
-
+    // 1. Корректная подстановка Allow LAN в структуру объекта
     if (document.getElementById('cfgLan').checked) {
       doc['allow-lan'] = true;
       doc['bind-address'] = "*";
+    } else {
+      doc['allow-lan'] = false;
+      delete doc['bind-address'];
     }
 
-    // Дамп с форсированием кавычек для строковых значений с пайпами
-    let finalYaml = jsyaml.dump(doc, { 
+    // 2. Исключение РФ нод из провайдеров
+    if (excludeRU && doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object') {
+      for (const key of Object.keys(doc['proxy-providers'])) {
+        doc['proxy-providers'][key]['exclude-filter'] = "(?i)RU|Russia";
+      }
+    }
+
+    // 3. Сериализация готового YAML объекта без строковых подмен
+    const finalYaml = jsyaml.dump(doc, { 
       indent: 2, 
       lineWidth: -1, 
-      noRefs: true
+      noRefs: true 
     });
 
     document.getElementById('mihomoOutput').value = finalYaml;
