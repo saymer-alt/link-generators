@@ -153,12 +153,10 @@
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Sub Mode</label>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label><input type="checkbox" id="cfgExcludeRU" checked> 🚫 Исключить РФ-серверы (RU filter)</label>
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
         <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 Per-Proxy TUN</label>
         <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 Per-Proxy SOCKS</label>
-      </div>
-      <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label><input type="checkbox" id="cfgExcludeRU" checked> 🚫 Исключить РФ-серверы (RU filter)</label>
       </div>
       <div class="hint">TUN и Per-Proxy опции отключены по умолчанию. RU-фильтр работает через exclude-filter в proxy-providers.</div>
 
@@ -274,17 +272,14 @@ function urlEncodeKey(key) {
   return key.replace(/\+/g, '%2B').replace(/\//g, '%2F').replace(/=/g, '%3D');
 }
 
-// П.2: Фиксированный пул стабильных QUIC endpoint'ов
 const QUIC_ENDPOINTS = [
   { ip: '162.159.198.2', port: 443 },
   { ip: '162.159.198.1', port: 443 },
   { ip: '162.159.199.2', port: 443 }
 ];
 
-// П.2: H2 IP — только подсети 198 и 199
 const H2_SUBNETS = [198, 199];
 
-// П.1: Взвешенные порты для H2
 const SAFE_PORTS_WEIGHTED = [
   { port: 443, weight: 70 },
   { port: 8443, weight: 20 },
@@ -300,7 +295,7 @@ const ALL_PORTS_WEIGHTED = [
   { port: 500, weight: 5 },
   { port: 1701, weight: 5 },
   { port: 4500, weight: 5 },
-  { port: 8443, weight: 8 }  // доп. вес для 8443 в полном режиме
+  { port: 8443, weight: 8 }
 ];
 
 function weightedRandom(items) {
@@ -314,11 +309,10 @@ function weightedRandom(items) {
 }
 
 function getRandomH2Ip(excludeIp) {
-  // Генерируем IP из 198/199, избегая совпадения с excludeIp
   let attempts = 0;
   while (attempts < 20) {
     const subnet = H2_SUBNETS[Math.floor(Math.random() * H2_SUBNETS.length)];
-    const octet = Math.floor(Math.random() * 254) + 1; // 1-254, избегаем .0 и .255
+    const octet = Math.floor(Math.random() * 254) + 1;
     const ip = `162.159.${subnet}.${octet}`;
     if (ip !== excludeIp || attempts > 18) return ip;
     attempts++;
@@ -349,13 +343,9 @@ function generateWarp() {
   const portWeights = safePortsOnly ? SAFE_PORTS_WEIGHTED : ALL_PORTS_WEIGHTED;
 
   for (let i = 0; i < count; i++) {
-    // П.2: QUIC — случайный из фиксированного пула, всегда порт 443
     const quicEndpoint = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
-    
-    // П.1: H2 порт — взвешенный рандом
     const h2Port = weightedRandom(portWeights);
     
-    // П.3: Анти-корреляция — если порты совпали, H2 IP ОБЯЗАТЕЛЬНО отличается
     let h2Ip;
     if (h2Port === quicEndpoint.port) {
       h2Ip = getRandomH2Ip(quicEndpoint.ip);
@@ -368,7 +358,6 @@ function generateWarp() {
     const buildLink = (serverAddr, port, isH2) => {
       const pkEnc = urlEncodeKey(pk);
       const pubEnc = urlEncodeKey(pub);
-      // Имя профиля: QUIC без порта, H2 с портом
       const name = isH2 
         ? `${baseProfile}-H2-${port}${suffix}` 
         : `${baseProfile}-QUIC${suffix}`;
@@ -472,6 +461,7 @@ function buildMihomo() {
   const addTun = document.getElementById('cfgTun').checked;
   const perProxyTun = document.getElementById('cfgPerProxyTun').checked;
   const perProxySocks = document.getElementById('cfgPerProxySocks').checked;
+  const excludeRU = document.getElementById('cfgExcludeRU').checked;
 
   try {
     const result = api.buildFromRequest({
@@ -489,25 +479,40 @@ function buildMihomo() {
       }
     });
 
-    let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
-    
-    // PATCH: Allow LAN
-    if (document.getElementById('cfgLan').checked) {
-      yaml = yaml.replace(/^allow-lan:\s*false\s*$/m, 'allow-lan: true');
-      if (!yaml.includes('bind-address')) {
-        yaml = yaml.replace(/^(allow-lan:\s*true\s*)$/m, '$1\nbind-address: "*"');
+    // 1. Парсим выданный результат в JS-объект
+    let doc = typeof result.data === 'string' ? jsyaml.load(result.data) : result.data;
+
+    if (!doc || typeof doc !== 'object') {
+      doc = {};
+    }
+
+    // 2. Безопасный патч: Исключение РФ-серверов через структуру объектов
+    if (excludeRU) {
+      const ruRegexJS = /RU|Russia|Россия|🇷🇺/i;
+
+      // 2.1 Вставляем exclude-filter во все провайдеры подписок
+      if (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object') {
+        for (const key of Object.keys(doc['proxy-providers'])) {
+          doc['proxy-providers'][key]['exclude-filter'] = "(?i)RU|Russia|Россия|🇷🇺";
+        }
+      }
+
+      // 2.2 Если в конфиге были встроенные прямые серверы, убираем из них РФ
+      if (Array.isArray(doc.proxies)) {
+        doc.proxies = doc.proxies.filter(p => p && p.name && !ruRegexJS.test(p.name));
       }
     }
 
-    // PATCH: Exclude RU servers from proxy-providers
-    if (document.getElementById('cfgExcludeRU').checked) {
-      yaml = yaml.replace(
-        /^(proxy-providers:[\s\S]*?)(?=\n\w+:|$)/m,
-        (match) => match.replace(/(\n    interval: \d+.*)/g, '$1\n    exclude-filter: "(?i)RU|Russia|Россия|🇷🇺"')
-      );
+    // 3. Безопасный патч: Allow LAN
+    if (document.getElementById('cfgLan').checked) {
+      doc['allow-lan'] = true;
+      doc['bind-address'] = "*";
     }
 
-    document.getElementById('mihomoOutput').value = yaml;
+    // 4. Сериализуем итоговый JS-объект в чистый YAML
+    const finalYaml = jsyaml.dump(doc, { indent: 2, lineWidth: -1, noRefs: true });
+
+    document.getElementById('mihomoOutput').value = finalYaml;
     showToast('✅ Mihomo config built!');
   } catch (e) {
     showToast('❌ ' + (e.message || e), true);
