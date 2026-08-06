@@ -482,17 +482,17 @@ function buildMihomo() {
     let doc = typeof result.data === 'string' ? jsyaml.load(result.data) : result.data;
     if (!doc || typeof doc !== 'object') doc = {};
 
-    const ruFilterString = "(?i)RU|Russia|Россия";
+    // Чистая латинская строка для exclude-filter без кириллицы (безопасно для nano)
+    const ruFilterString = "(?i)RU|Russia";
 
     if (excludeRU) {
-      // Подставляем чистую строку без специальных Unicode эмодзи во избежание сбоя кодировки
       if (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object') {
         for (const key of Object.keys(doc['proxy-providers'])) {
           doc['proxy-providers'][key]['exclude-filter'] = ruFilterString;
         }
       }
 
-      const ruRegexJS = /RU|Russia|Россия/i;
+      const ruRegexJS = /RU|Russia/i;
       if (Array.isArray(doc.proxies)) {
         doc.proxies = doc.proxies.filter(p => p && p.name && !ruRegexJS.test(p.name));
       }
@@ -503,13 +503,11 @@ function buildMihomo() {
       doc['bind-address'] = "*";
     }
 
-    // Дамп с сохранением экранирования кавычек и чистой UTF-8
+    // Дамп с форсированием кавычек для строковых значений с пайпами
     let finalYaml = jsyaml.dump(doc, { 
       indent: 2, 
       lineWidth: -1, 
-      noRefs: true,
-      quotingType: '"',
-      forceQuotes: false
+      noRefs: true
     });
 
     document.getElementById('mihomoOutput').value = finalYaml;
