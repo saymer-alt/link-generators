@@ -267,7 +267,7 @@ function parseYaml() {
   }
 }
 
-// === WARP LINK GENERATOR (ENGINEERED STRATEGY) ===
+// === WARP LINK GENERATOR ===
 function urlEncodeKey(key) {
   return key.replace(/\+/g, '%2B').replace(/\//g, '%2F').replace(/=/g, '%3D');
 }
@@ -449,7 +449,7 @@ function initWgUpload() {
   }
 }
 
-// === MIHOMO BUILDER (via web4core) ===
+// === MIHOMO BUILDER ===
 function buildMihomo() {
   const raw = document.getElementById('mihomoInput').value.trim();
   if (!raw && wgBeans.length === 0) return showToast('Вставь ссылки или загрузи WG конфиг', true);
@@ -482,18 +482,17 @@ function buildMihomo() {
     let doc = typeof result.data === 'string' ? jsyaml.load(result.data) : result.data;
     if (!doc || typeof doc !== 'object') doc = {};
 
-    // Валидная JS регулярка для локальной фильтрации
-    const ruRegexJS = /RU|Russia|Россия|🇷🇺/i;
+    const ruFilterString = "(?i)RU|Russia|Россия";
 
     if (excludeRU) {
-      // Исключаем РФ из провайдеров (подписок)
+      // Подставляем чистую строку без специальных Unicode эмодзи во избежание сбоя кодировки
       if (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object') {
         for (const key of Object.keys(doc['proxy-providers'])) {
-          doc['proxy-providers'][key]['exclude-filter'] = "(?i)RU|Russia|Россия|🇷🇺";
+          doc['proxy-providers'][key]['exclude-filter'] = ruFilterString;
         }
       }
 
-      // Исключаем РФ из обычных прокси
+      const ruRegexJS = /RU|Russia|Россия/i;
       if (Array.isArray(doc.proxies)) {
         doc.proxies = doc.proxies.filter(p => p && p.name && !ruRegexJS.test(p.name));
       }
@@ -504,7 +503,14 @@ function buildMihomo() {
       doc['bind-address'] = "*";
     }
 
-    const finalYaml = jsyaml.dump(doc, { indent: 2, lineWidth: -1, noRefs: true });
+    // Дамп с сохранением экранирования кавычек и чистой UTF-8
+    let finalYaml = jsyaml.dump(doc, { 
+      indent: 2, 
+      lineWidth: -1, 
+      noRefs: true,
+      quotingType: '"',
+      forceQuotes: false
+    });
 
     document.getElementById('mihomoOutput').value = finalYaml;
     showToast('✅ Mihomo config built!');
