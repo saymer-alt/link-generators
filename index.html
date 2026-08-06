@@ -49,6 +49,7 @@
   .toggle-row{display:flex;align-items:center;gap:10px;margin-top:12px}
   .toggle-row label{margin:0;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text)}
 </style>
+<base target="_blank">
 </head>
 <body>
 <div class="container">
@@ -153,12 +154,11 @@
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Sub Mode</label>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label><input type="checkbox" id="cfgExcludeRU" checked> 🚫 Исключить РФ-серверы (RU filter)</label>
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
         <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 Per-Proxy TUN</label>
         <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 Per-Proxy SOCKS</label>
       </div>
-      <div class="hint">RU-фильтр добавляет exclude-filter в proxy-providers.</div>
+      <div class="hint">TUN и Per-Proxy опции отключены по умолчанию.</div>
 
       <label style="margin-top:16px">🏓 Ping server (health-check)</label>
       <select id="pingSelect"></select>
@@ -179,7 +179,7 @@
 <div class="toast" id="toast">Done!</div>
 
 <!-- WEB4CORE RUNTIME -->
-<script src="./web4core.runtime.js"></script>
+<script src="./web4core.runtime-bcaf347.js"></script>
 
 <script>
 // === TABS ===
@@ -267,19 +267,22 @@ function parseYaml() {
   }
 }
 
-// === WARP LINK GENERATOR ===
+// === WARP LINK GENERATOR (ENGINEERED STRATEGY) ===
 function urlEncodeKey(key) {
   return key.replace(/\+/g, '%2B').replace(/\//g, '%2F').replace(/=/g, '%3D');
 }
 
+// П.2: Фиксированный пул стабильных QUIC endpoint'ов
 const QUIC_ENDPOINTS = [
   { ip: '162.159.198.2', port: 443 },
   { ip: '162.159.198.1', port: 443 },
   { ip: '162.159.199.2', port: 443 }
 ];
 
+// П.2: H2 IP — только подсети 198 и 199
 const H2_SUBNETS = [198, 199];
 
+// П.1: Взвешенные порты для H2
 const SAFE_PORTS_WEIGHTED = [
   { port: 443, weight: 70 },
   { port: 8443, weight: 20 },
@@ -295,7 +298,7 @@ const ALL_PORTS_WEIGHTED = [
   { port: 500, weight: 5 },
   { port: 1701, weight: 5 },
   { port: 4500, weight: 5 },
-  { port: 8443, weight: 8 }
+  { port: 8443, weight: 8 }  // доп. вес для 8443 в полном режиме
 ];
 
 function weightedRandom(items) {
@@ -309,10 +312,11 @@ function weightedRandom(items) {
 }
 
 function getRandomH2Ip(excludeIp) {
+  // Генерируем IP из 198/199, избегая совпадения с excludeIp
   let attempts = 0;
   while (attempts < 20) {
     const subnet = H2_SUBNETS[Math.floor(Math.random() * H2_SUBNETS.length)];
-    const octet = Math.floor(Math.random() * 254) + 1;
+    const octet = Math.floor(Math.random() * 254) + 1; // 1-254, избегаем .0 и .255
     const ip = `162.159.${subnet}.${octet}`;
     if (ip !== excludeIp || attempts > 18) return ip;
     attempts++;
@@ -343,9 +347,13 @@ function generateWarp() {
   const portWeights = safePortsOnly ? SAFE_PORTS_WEIGHTED : ALL_PORTS_WEIGHTED;
 
   for (let i = 0; i < count; i++) {
+    // П.2: QUIC — случайный из фиксированного пула, всегда порт 443
     const quicEndpoint = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
+    
+    // П.1: H2 порт — взвешенный рандом
     const h2Port = weightedRandom(portWeights);
     
+    // П.3: Анти-корреляция — если порты совпали, H2 IP ОБЯЗАТЕЛЬНО отличается
     let h2Ip;
     if (h2Port === quicEndpoint.port) {
       h2Ip = getRandomH2Ip(quicEndpoint.ip);
@@ -358,6 +366,7 @@ function generateWarp() {
     const buildLink = (serverAddr, port, isH2) => {
       const pkEnc = urlEncodeKey(pk);
       const pubEnc = urlEncodeKey(pub);
+      // Имя профиля: QUIC без порта, H2 с портом
       const name = isH2 
         ? `${baseProfile}-H2-${port}${suffix}` 
         : `${baseProfile}-QUIC${suffix}`;
@@ -449,7 +458,7 @@ function initWgUpload() {
   }
 }
 
-// === MIHOMO BUILDER ===
+// === MIHOMO BUILDER (via web4core) ===
 function buildMihomo() {
   const raw = document.getElementById('mihomoInput').value.trim();
   if (!raw && wgBeans.length === 0) return showToast('Вставь ссылки или загрузи WG конфиг', true);
@@ -458,7 +467,9 @@ function buildMihomo() {
   if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
 
   const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
-  const excludeRU = document.getElementById('cfgExcludeRU').checked;
+  const addTun = document.getElementById('cfgTun').checked;
+  const perProxyTun = document.getElementById('cfgPerProxyTun').checked;
+  const perProxySocks = document.getElementById('cfgPerProxySocks').checked;
 
   try {
     const result = api.buildFromRequest({
@@ -467,42 +478,26 @@ function buildMihomo() {
       wgBeans: wgBeans,
       options: {
         addSocks: document.getElementById('cfgSocks').checked,
-        addTun: document.getElementById('cfgTun').checked, 
+        addTun: addTun, 
         webUI: document.getElementById('cfgWebUI').checked,
         urlTest: urlTest,
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
-        mihomoPerProxyTun: document.getElementById('cfgPerProxyTun').checked,
-        perProxyPort: document.getElementById('cfgPerProxySocks').checked
+        mihomoPerProxyTun: perProxyTun,
+        perProxyPort: perProxySocks
       }
     });
 
-    let doc = typeof result.data === 'string' ? jsyaml.load(result.data) : result.data;
-    if (!doc || typeof doc !== 'object') doc = {};
-
-    // 1. Корректная подстановка Allow LAN в структуру объекта
+    let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
+    
+    // PATCH: Allow LAN
     if (document.getElementById('cfgLan').checked) {
-      doc['allow-lan'] = true;
-      doc['bind-address'] = "*";
-    } else {
-      doc['allow-lan'] = false;
-      delete doc['bind-address'];
-    }
-
-    // 2. Исключение РФ нод из провайдеров
-    if (excludeRU && doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object') {
-      for (const key of Object.keys(doc['proxy-providers'])) {
-        doc['proxy-providers'][key]['exclude-filter'] = "(?i)RU|Russia";
+      yaml = yaml.replace(/^allow-lan:\s*false\s*$/m, 'allow-lan: true');
+      if (!yaml.includes('bind-address')) {
+        yaml = yaml.replace(/^(allow-lan:\s*true\s*)$/m, '$1\nbind-address: "*"');
       }
     }
 
-    // 3. Сериализация готового YAML объекта без строковых подмен
-    const finalYaml = jsyaml.dump(doc, { 
-      indent: 2, 
-      lineWidth: -1, 
-      noRefs: true 
-    });
-
-    document.getElementById('mihomoOutput').value = finalYaml;
+    document.getElementById('mihomoOutput').value = yaml;
     showToast('✅ Mihomo config built!');
   } catch (e) {
     showToast('❌ ' + (e.message || e), true);
