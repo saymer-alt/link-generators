@@ -158,7 +158,7 @@
         <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 Per-Proxy TUN</label>
         <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 Per-Proxy SOCKS</label>
       </div>
-      <div class="hint">TUN и Per-Proxy опции отключены по умолчанию. RU-фильтр работает через exclude-filter в proxy-providers.</div>
+      <div class="hint">RU-фильтр автоматически добавляет exclude-filter в подписки proxy-providers.</div>
 
       <label style="margin-top:16px">🏓 Ping server (health-check)</label>
       <select id="pingSelect"></select>
@@ -479,37 +479,31 @@ function buildMihomo() {
       }
     });
 
-    // 1. Парсим выданный результат в JS-объект
     let doc = typeof result.data === 'string' ? jsyaml.load(result.data) : result.data;
+    if (!doc || typeof doc !== 'object') doc = {};
 
-    if (!doc || typeof doc !== 'object') {
-      doc = {};
-    }
+    // Валидная JS регулярка для локальной фильтрации
+    const ruRegexJS = /RU|Russia|Россия|🇷🇺/i;
 
-    // 2. Безопасный патч: Исключение РФ-серверов через структуру объектов
     if (excludeRU) {
-      const ruRegexJS = /RU|Russia|Россия|🇷🇺/i;
-
-      // 2.1 Вставляем exclude-filter во все провайдеры подписок
+      // Исключаем РФ из провайдеров (подписок)
       if (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object') {
         for (const key of Object.keys(doc['proxy-providers'])) {
           doc['proxy-providers'][key]['exclude-filter'] = "(?i)RU|Russia|Россия|🇷🇺";
         }
       }
 
-      // 2.2 Если в конфиге были встроенные прямые серверы, убираем из них РФ
+      // Исключаем РФ из обычных прокси
       if (Array.isArray(doc.proxies)) {
         doc.proxies = doc.proxies.filter(p => p && p.name && !ruRegexJS.test(p.name));
       }
     }
 
-    // 3. Безопасный патч: Allow LAN
     if (document.getElementById('cfgLan').checked) {
       doc['allow-lan'] = true;
       doc['bind-address'] = "*";
     }
 
-    // 4. Сериализуем итоговый JS-объект в чистый YAML
     const finalYaml = jsyaml.dump(doc, { indent: 2, lineWidth: -1, noRefs: true });
 
     document.getElementById('mihomoOutput').value = finalYaml;
