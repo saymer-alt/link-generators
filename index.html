@@ -62,11 +62,11 @@
   <!-- TAB 1: WARP GENERATOR -->
   <div id="tab-warp" class="tab-content active">
     <div class="card">
-      <div class="card-title">📥 Импорт из Telegram <span id="parsedBadge" class="parsed-badge" style="display:none">Заполнено</span></div>
-      <textarea id="yamlInput" placeholder="Вставь YAML-конфиг от бота..."></textarea>
+      <div class="card-title">📥 Импорт (YAML / JSON / Отчет) <span id="parsedBadge" class="parsed-badge" style="display:none">Заполнено</span></div>
+      <textarea id="yamlInput" placeholder="Вставь YAML-конфиг, warpscout-account.json или текст отчета..."></textarea>
       <div class="btn-group">
-        <button class="btn btn-purple" onclick="parseYaml()">🔍 Распарсить</button>
-        <button class="btn btn-gray" onclick="document.getElementById('yamlInput').value=''">Очистить</button>
+        <button class="btn btn-purple" onclick="parseInput()">🔍 Распарсить</button>
+        <button class="btn btn-gray" onclick="document.getElementById('yamlInput').value=''; customEndpoints=[]; document.getElementById('parsedBadge').style.display='none';">Очистить</button>
       </div>
     </div>
 
@@ -151,6 +151,7 @@
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Sub Mode</label>
+        <label><input type="checkbox" id="cfgChain"> 🔗 WARP-in-WARP</label>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
@@ -200,69 +201,84 @@ function showToast(msg, err) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-// === YAML PARSER ===
-function parseYaml() {
+// === YAML / JSON / REPORT PARSER ===
+let customEndpoints = [];
+
+function parseInput() {
   const raw = document.getElementById('yamlInput').value.trim();
-  if (!raw) return showToast('Вставь YAML', true);
-  
+  if (!raw) return showToast('Вставь данные', true);
+
+  // 1. Попытка распарсить JSON (warpscout-account.json)
+  try {
+    const jsonObj = JSON.parse(raw);
+    if (jsonObj.private_key || jsonObj.masque) {
+      const target = jsonObj.masque || jsonObj;
+      const pk = target.private_key || '';
+      let pub = target.peer_public_key || jsonObj.peer_public_key || '';
+      
+      // Очистка PEM-заголовков для публичного ключа
+      pub = pub.replace(/-----BEGIN PUBLIC KEY-----/g, '')
+               .replace(/-----END PUBLIC KEY-----/g, '')
+               .replace(/[\n\r]/g, '');
+
+      const ip = target.ipv4 || jsonObj.ipv4 || '172.16.0.2';
+      const ipv6 = target.ipv6 || jsonObj.ipv6 || '';
+
+      if (pk) document.getElementById('privateKey').value = pk;
+      if (pub) document.getElementById('publicKey').value = pub;
+      document.getElementById('ip').value = ip;
+      document.getElementById('ipv6').value = ipv6;
+
+      ['privateKey','publicKey','ip','ipv6'].forEach(k => {
+        const el = document.getElementById(k);
+        if (el && el.value) {
+          el.classList.add('field-filled');
+          setTimeout(() => el.classList.remove('field-filled'), 2000);
+        }
+      });
+      
+      document.getElementById('parsedBadge').style.display = 'inline-block';
+      document.getElementById('parsedBadge').textContent = 'JSON Аккаунт';
+      return showToast('✅ Аккаунт warpscout загружен');
+    }
+  } catch (e) {}
+
+  // 2. Попытка распарсить отчет warpscout (warpscout-report.txt)
+  const reportMatches = [...raw.matchAll(/^([0-9a-f:.]+):(\d+)\s+\d+ms/gim)];
+  if (reportMatches.length > 0) {
+    customEndpoints = reportMatches.map(m => ({ ip: m[1], port: parseInt(m[2]) }));
+    document.getElementById('parsedBadge').style.display = 'inline-block';
+    document.getElementById('parsedBadge').textContent = `Отчет (${customEndpoints.length} ep)`;
+    return showToast(`✅ Найдено ${customEndpoints.length} эндпоинтов из отчета`);
+  }
+
+  // 3. Попытка распарсить YAML (fallback)
   try {
     const docs = jsyaml.loadAll(raw);
     let proxyData = null;
-    
     for (const doc of docs) {
       if (!doc) continue;
-      if (doc.proxies && Array.isArray(doc.proxies) && doc.proxies.length > 0) {
-        proxyData = doc.proxies[0];
-        break;
-      }
-      if (doc['private-key'] || doc.privateKey) {
-        proxyData = doc;
-        break;
-      }
+      if (doc.proxies && Array.isArray(doc.proxies) && doc.proxies.length > 0) { proxyData = doc.proxies[0]; break; }
+      if (doc['private-key'] || doc.privateKey) { proxyData = doc; break; }
       for (const key of Object.keys(doc)) {
         const val = doc[key];
-        if (val && typeof val === 'object' && (val['private-key'] || val.privateKey)) {
-          proxyData = val;
-          break;
-        }
+        if (val && typeof val === 'object' && (val['private-key'] || val.privateKey)) { proxyData = val; break; }
       }
       if (proxyData) break;
     }
+    if (!proxyData) return showToast('Формат не распознан (нужен JSON, Отчет или YAML)', true);
     
-    if (!proxyData) return showToast('Не найдены данные прокси в YAML', true);
-    
-    const r = {
-      privateKey: proxyData['private-key'] || proxyData.privateKey || '',
-      publicKey: proxyData['public-key'] || proxyData.publicKey || '',
-      ip: proxyData.ip || '',
-      ipv6: proxyData.ipv6 || '',
-      sni: proxyData.sni || '',
-      port: proxyData.port || ''
-    };
-    
-    if (Array.isArray(proxyData.dns)) {
-      r.dns = proxyData.dns.join(',');
-    } else {
-      r.dns = proxyData.dns || '';
-    }
-    
-    if (!r.privateKey) return showToast('Не найден private-key в YAML', true);
-    
-    ['privateKey','publicKey','ip','ipv6','sni','dns'].forEach(k => {
-      const el = document.getElementById(k);
-      if (el && r[k]) {
-        el.value = r[k];
-        el.classList.add('field-filled');
-        setTimeout(() => el.classList.remove('field-filled'), 2000);
-      } else if (k === 'ipv6' && el) {
-        el.value = '';
-      }
-    });
+    document.getElementById('privateKey').value = proxyData['private-key'] || proxyData.privateKey || '';
+    document.getElementById('publicKey').value = proxyData['public-key'] || proxyData.publicKey || '';
+    document.getElementById('ip').value = proxyData.ip || '172.16.0.2';
+    document.getElementById('ipv6').value = proxyData.ipv6 || '';
+    document.getElementById('sni').value = proxyData.sni || '';
     
     document.getElementById('parsedBadge').style.display = 'inline-block';
+    document.getElementById('parsedBadge').textContent = 'YAML Конфиг';
     showToast('✅ YAML распарсен');
   } catch (e) {
-    showToast('❌ Ошибка парсинга YAML: ' + e.message, true);
+    showToast('❌ Ошибка парсинга: ' + e.message, true);
   }
 }
 
@@ -271,54 +287,21 @@ function urlEncodeKey(key) {
   return key.replace(/\+/g, '%2B').replace(/\//g, '%2F').replace(/=/g, '%3D');
 }
 
-// П.2: Фиксированный пул стабильных QUIC endpoint'ов
-const QUIC_ENDPOINTS = [
-  { ip: '162.159.198.2', port: 443 },
-  { ip: '162.159.198.1', port: 443 },
-  { ip: '162.159.199.2', port: 443 }
-];
-
-// П.2: H2 IP — только подсети 198 и 199
+const QUIC_ENDPOINTS = [{ ip: '162.159.198.2', port: 443 }, { ip: '162.159.198.1', port: 443 }, { ip: '162.159.199.2', port: 443 }];
 const H2_SUBNETS = [198, 199];
-
-// П.1: Взвешенные порты для H2
-const SAFE_PORTS_WEIGHTED = [
-  { port: 443, weight: 70 },
-  { port: 8443, weight: 20 },
-  { port: 4443, weight: 5 },
-  { port: 8095, weight: 5 }
-];
-
-const ALL_PORTS_WEIGHTED = [
-  { port: 443, weight: 50 },
-  { port: 8443, weight: 15 },
-  { port: 4443, weight: 7 },
-  { port: 8095, weight: 5 },
-  { port: 500, weight: 5 },
-  { port: 1701, weight: 5 },
-  { port: 4500, weight: 5 },
-  { port: 8443, weight: 8 }  // доп. вес для 8443 в полном режиме
-];
+const SAFE_PORTS_WEIGHTED = [{ port: 443, weight: 70 }, { port: 8443, weight: 20 }, { port: 4443, weight: 5 }, { port: 8095, weight: 5 }];
+const ALL_PORTS_WEIGHTED = [{ port: 443, weight: 50 }, { port: 8443, weight: 15 }, { port: 4443, weight: 7 }, { port: 8095, weight: 5 }, { port: 500, weight: 5 }, { port: 1701, weight: 5 }, { port: 4500, weight: 5 }];
 
 function weightedRandom(items) {
-  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
-  let random = Math.random() * totalWeight;
-  for (const item of items) {
-    random -= item.weight;
-    if (random <= 0) return item.port;
-  }
+  let random = Math.random() * items.reduce((sum, item) => sum + item.weight, 0);
+  for (const item of items) if ((random -= item.weight) <= 0) return item.port;
   return items[0].port;
 }
 
 function getRandomH2Ip(excludeIp) {
-  // Генерируем IP из 198/199, избегая совпадения с excludeIp
-  let attempts = 0;
-  while (attempts < 20) {
-    const subnet = H2_SUBNETS[Math.floor(Math.random() * H2_SUBNETS.length)];
-    const octet = Math.floor(Math.random() * 254) + 1; // 1-254, избегаем .0 и .255
-    const ip = `162.159.${subnet}.${octet}`;
-    if (ip !== excludeIp || attempts > 18) return ip;
-    attempts++;
+  for (let attempts = 0; attempts < 20; attempts++) {
+    const ip = `162.159.${H2_SUBNETS[Math.floor(Math.random() * H2_SUBNETS.length)]}.${Math.floor(Math.random() * 254) + 1}`;
+    if (ip !== excludeIp) return ip;
   }
   return `162.159.198.${Math.floor(Math.random() * 254) + 1}`;
 }
@@ -328,66 +311,57 @@ let lastGeneratedLinks = [];
 function generateWarp() {
   const baseProfile = document.getElementById('profileName').value.trim() || 'WARP-MASQUE';
   const safePortsOnly = document.getElementById('safePortsOnly').checked;
-  
   const pk = document.getElementById('privateKey').value.trim();
   const pub = document.getElementById('publicKey').value.trim();
   const ip = document.getElementById('ip').value.trim();
   const ipv6 = document.getElementById('ipv6').value.trim();
   const sni = document.getElementById('sni').value.trim();
   const dns = document.getElementById('dns').value.trim();
-  const count = parseInt(document.getElementById('pairCount').value) || 1;
-
+  
   if (!pk || !pub) return showToast('Нужны ключи!', true);
 
   const out = document.getElementById('warpOutput');
   out.innerHTML = '';
   lastGeneratedLinks = [];
 
+  const buildLink = (serverAddr, port, isH2, nameSuffix) => {
+    let url = `masque://${serverAddr}:${port}?sni=${sni}&private-key=${urlEncodeKey(pk)}&public-key=${urlEncodeKey(pub)}&ip=${ip}&udp=true&remote-dns-resolve=true`;
+    if (ipv6) url += `&ipv6=${ipv6}`;
+    if (dns) url += `&dns=${dns}`;
+    if (isH2) url += '&network=h2';
+    return url + `#${baseProfile}-${isH2 ? 'H2' : 'QUIC'}${nameSuffix}`;
+  };
+
+  // Режим генерации из отчета warpscout
+  if (customEndpoints.length > 0) {
+    customEndpoints.forEach((ep, i) => {
+      const isH2 = [1701, 8095, 4500].includes(ep.port);
+      const link = buildLink(ep.ip, ep.port, isH2, `-${i + 1}`);
+      lastGeneratedLinks.push(link);
+      out.innerHTML += `<div class="link-block"><div class="link-label">${isH2 ? '🟢' : '🔷'} ${link.split('#')[1]} (${ep.ip})</div><div class="link-text">${link}</div><button class="copy-btn" onclick="copyText('${link.replace(/'/g, "\\'")}')">Copy</button></div>`;
+    });
+    return showToast(`✅ Сгенерировано ${customEndpoints.length} ссылок из отчета`);
+  }
+
+  // Стандартный режим рандомизации
+  const count = parseInt(document.getElementById('pairCount').value) || 1;
   const portWeights = safePortsOnly ? SAFE_PORTS_WEIGHTED : ALL_PORTS_WEIGHTED;
 
   for (let i = 0; i < count; i++) {
-    // П.2: QUIC — случайный из фиксированного пула, всегда порт 443
-    const quicEndpoint = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
-    
-    // П.1: H2 порт — взвешенный рандом
+    const quicEP = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
     const h2Port = weightedRandom(portWeights);
+    const h2Ip = getRandomH2Ip(h2Port === quicEP.port ? quicEP.ip : null);
     
-    // П.3: Анти-корреляция — если порты совпали, H2 IP ОБЯЗАТЕЛЬНО отличается
-    let h2Ip;
-    if (h2Port === quicEndpoint.port) {
-      h2Ip = getRandomH2Ip(quicEndpoint.ip);
-    } else {
-      h2Ip = getRandomH2Ip(null);
-    }
-    
-    const suffix = count > 1 ? `-${i + 1}` : '';
-    
-    const buildLink = (serverAddr, port, isH2) => {
-      const pkEnc = urlEncodeKey(pk);
-      const pubEnc = urlEncodeKey(pub);
-      // Имя профиля: QUIC без порта, H2 с портом
-      const name = isH2 
-        ? `${baseProfile}-H2-${port}${suffix}` 
-        : `${baseProfile}-QUIC${suffix}`;
-      
-      let url = `masque://${serverAddr}:${port}?sni=${sni}&private-key=${pkEnc}&public-key=${pubEnc}&ip=${ip}&udp=true&remote-dns-resolve=true`;
-      if (ipv6 && ipv6.trim()) url += `&ipv6=${ipv6}`;
-      if (dns && dns.trim()) url += `&dns=${dns}`;
-      if (isH2) url += '&network=h2';
-      url += `#${name}`;
-      return url;
-    };
-    
-    const quic = buildLink(quicEndpoint.ip, quicEndpoint.port, false);
-    const h2 = buildLink(h2Ip, h2Port, true);
+    const suffix = count > 1 ? `-${i + 1}-${h2Port}` : `-${h2Port}`;
+    const quic = buildLink(quicEP.ip, quicEP.port, false, count > 1 ? `-${i + 1}` : '');
+    const h2 = buildLink(h2Ip, h2Port, true, suffix);
     
     lastGeneratedLinks.push(quic, h2);
-    out.innerHTML += `<div class="link-block"><div class="link-label">🔷 ${quic.split('#')[1]} (${quicEndpoint.ip})</div><div class="link-text">${quic}</div><button class="copy-btn" onclick="copyText('${quic.replace(/'/g, "\\'")}')">Copy</button></div>`;
+    out.innerHTML += `<div class="link-block"><div class="link-label">🔷 ${quic.split('#')[1]} (${quicEP.ip})</div><div class="link-text">${quic}</div><button class="copy-btn" onclick="copyText('${quic.replace(/'/g, "\\'")}')">Copy</button></div>`;
     out.innerHTML += `<div class="link-block"><div class="link-label">🟢 ${h2.split('#')[1]} (${h2Ip})</div><div class="link-text">${h2}</div><button class="copy-btn" onclick="copyText('${h2.replace(/'/g, "\\'")}')">Copy</button></div>`;
   }
   
-  const modeStr = safePortsOnly ? 'Safe Ports' : 'All Ports';
-  showToast(`✅ ${count * 2} ссылок (${modeStr})`);
+  showToast(`✅ ${count * 2} ссылок сгенерировано`);
 }
 
 function sendToMihomo() {
@@ -469,6 +443,7 @@ function buildMihomo() {
   const addTun = document.getElementById('cfgTun').checked;
   const perProxyTun = document.getElementById('cfgPerProxyTun').checked;
   const perProxySocks = document.getElementById('cfgPerProxySocks').checked;
+  const useChain = document.getElementById('cfgChain').checked;
 
   try {
     const result = api.buildFromRequest({
@@ -486,18 +461,43 @@ function buildMihomo() {
       }
     });
 
-    let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
+    let yamlRaw = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
     
+    // Парсим YAML в JS-объект для безопасных модификаций
+    let configObj = jsyaml.load(yamlRaw);
+
     // PATCH: Allow LAN
     if (document.getElementById('cfgLan').checked) {
-      yaml = yaml.replace(/^allow-lan:\s*false\s*$/m, 'allow-lan: true');
-      if (!yaml.includes('bind-address')) {
-        yaml = yaml.replace(/^(allow-lan:\s*true\s*)$/m, '$1\nbind-address: "*"');
+      configObj['allow-lan'] = true;
+      configObj['bind-address'] = "*";
+    }
+
+    // PATCH: WARP-in-WARP (Цепочки)
+    if (useChain && configObj.proxies && configObj.proxies.length > 0) {
+      const outerWg = configObj.proxies.find(p => p.type === 'wireguard');
+      
+      if (outerWg) {
+        let chainedCount = 0;
+        configObj.proxies.forEach(p => {
+          if (p.type === 'masque') {
+            p['dialer-proxy'] = outerWg.name;
+            chainedCount++;
+          }
+        });
+        
+        if (chainedCount === 0) {
+          showToast('⚠️ MASQUE туннели для цепочки не найдены', true);
+        }
+      } else {
+        showToast('⚠️ Загрузите WG конфиг для создания цепочки', true);
       }
     }
 
-    document.getElementById('mihomoOutput').value = yaml;
-    showToast('✅ Mihomo config built!');
+    // Собираем обратно в строку YAML
+    const finalYaml = jsyaml.dump(configObj, { lineWidth: -1 });
+
+    document.getElementById('mihomoOutput').value = finalYaml;
+    showToast(useChain ? '✅ WARP-in-WARP конфиг собран!' : '✅ Mihomo config built!');
   } catch (e) {
     showToast('❌ ' + (e.message || e), true);
   }
