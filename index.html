@@ -9,10 +9,10 @@
   :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#238636; --red:#da3633; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.5;padding:20px}
-  .container{max-width:850px;margin:0 auto}
+  .container{max-width:900px;margin:0 auto}
   h1{text-align:center;color:var(--accent);font-size:1.6rem;margin-bottom:20px}
-  .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px}
-  .tab{flex:1;padding:12px;text-align:center;cursor:pointer;background:transparent;border:none;color:var(--muted);font-size:0.95rem;font-weight:600;transition:all .2s}
+  .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px; flex-wrap: wrap;}
+  .tab{flex:1;padding:12px;text-align:center;cursor:pointer;background:transparent;border:none;color:var(--muted);font-size:0.95rem;font-weight:600;transition:all .2s; min-width: 200px;}
   .tab.active{color:var(--accent);border-bottom:2px solid var(--accent);background:rgba(88,166,255,0.05)}
   .tab:hover:not(.active){color:var(--text)}
   .tab-content{display:none}.tab-content.active{display:block}
@@ -37,7 +37,7 @@
   .hint{font-size:.75rem;color:#484f58;margin-top:4px}
   .field-filled{border-color:var(--green)!important}
   .parsed-badge{background:var(--green);color:#fff;font-size:.7rem;padding:2px 8px;border-radius:4px}
-  #mihomoOutput{min-height:300px;font-size:.8rem}
+  #mihomoOutput, #wsOutput{min-height:300px;font-size:.8rem}
   .file-upload-wrapper{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .file-upload{position:relative;overflow:hidden;display:inline-block}
   .file-upload input[type=file]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
@@ -57,21 +57,22 @@
   <div class="tabs">
     <button class="tab active" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
     <button class="tab" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
+    <button class="tab" onclick="switchTab(event, 'warpscout')">📝 Warpscout Parser</button>
   </div>
 
   <!-- TAB 1: WARP GENERATOR -->
   <div id="tab-warp" class="tab-content active">
     <div class="card">
-      <div class="card-title">📥 Импорт (YAML / JSON / Отчет) <span id="parsedBadge" class="parsed-badge" style="display:none">Заполнено</span></div>
-      <textarea id="yamlInput" placeholder="Вставь YAML-конфиг, warpscout-account.json или текст отчета..."></textarea>
+      <div class="card-title">📥 Импорт ключей <span id="parsedBadge" class="parsed-badge" style="display:none">Заполнено</span></div>
+      <textarea id="yamlInput" placeholder="Вставь YAML-конфиг от бота или warpscout-account.json..."></textarea>
       <div class="btn-group">
-        <button class="btn btn-purple" onclick="parseInput()">🔍 Распарсить</button>
-        <button class="btn btn-gray" onclick="document.getElementById('yamlInput').value=''; customEndpoints=[]; document.getElementById('parsedBadge').style.display='none';">Очистить</button>
+        <button class="btn btn-purple" onclick="parseYamlOrJson()">🔍 Распарсить</button>
+        <button class="btn btn-gray" onclick="document.getElementById('yamlInput').value=''; document.getElementById('parsedBadge').style.display='none';">Очистить</button>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">🔑 Параметры</div>
+      <div class="card-title">🔑 Параметры (MASQUE)</div>
       <label>Имя профиля (база)</label>
       <input type="text" id="profileName" value="WARP-MASQUE">
       
@@ -98,7 +99,6 @@
           🛡️ Safe Ports Only (только 443, 8443, 4443, 8095)
         </label>
       </div>
-      <div class="hint">Исключает VPN-порты (500, 1701, 4500), которые могут вызывать семантический конфликт у DPI.</div>
 
       <div class="row" style="margin-top:12px">
         <div>
@@ -107,12 +107,6 @@
         </div>
       </div>
       
-      <div class="hint" style="margin-top:12px">
-        ℹ️ <b>QUIC:</b> Фиксированный пул (198.2, 198.1, 199.2) :443<br>
-        ℹ️ <b>H2:</b> Взвешенный рандом портов (443≈70%, 8443≈20%, остальные≈10%)<br>
-        ℹ️ <b>Анти-корреляция:</b> При совпадении портов H2 IP ≠ QUIC IP
-      </div>
-
       <div class="btn-group">
         <button class="btn" onclick="generateWarp()">⚡ Сгенерировать ссылки</button>
         <button class="btn btn-gray" onclick="sendToMihomo()">🚀 В Mihomo Builder</button>
@@ -129,8 +123,8 @@
   <div id="tab-mihomo" class="tab-content">
     <div class="card">
       <div class="card-title">📋 Входные данные (ссылки / подписки)</div>
-      <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
-      <div class="hint">Поддерживает: vless, vmess, trojan, ss, hy2, tuic, masque, mieru, tt, WG (.conf/.awg), HTTP(S) подписки</div>
+      <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
+      <div class="hint">Поддерживает: vless, vmess, trojan, ss, hy2, tuic, masque, mieru, tt, HTTP(S) подписки</div>
     </div>
 
     <div class="card">
@@ -147,8 +141,8 @@
     <div class="card">
       <div class="card-title">⚙️ Настройки Mihomo</div>
       <div class="checkbox-grid">
-        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
-        <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
+        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN</label>
+        <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port</label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Sub Mode</label>
         <label><input type="checkbox" id="cfgChain"> 🔗 WARP-in-WARP</label>
@@ -158,14 +152,13 @@
         <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 Per-Proxy TUN</label>
         <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 Per-Proxy SOCKS</label>
       </div>
-      <div class="hint">TUN и Per-Proxy опции отключены по умолчанию.</div>
 
       <label style="margin-top:16px">🏓 Ping server (health-check)</label>
       <select id="pingSelect"></select>
 
       <div class="btn-group">
         <button class="btn" onclick="buildMihomo()">⚡ Build Config</button>
-        <button class="btn btn-gray" onclick="copyMihomo()">📋 Copy YAML</button>
+        <button class="btn btn-gray" onclick="copyText('mihomoOutput')">📋 Copy YAML</button>
       </div>
     </div>
 
@@ -174,6 +167,47 @@
       <textarea id="mihomoOutput" readonly></textarea>
     </div>
   </div>
+
+  <!-- TAB 3: WARPSCOUT PARSER -->
+  <div id="tab-warpscout" class="tab-content">
+    <div class="card">
+      <div class="card-title">📝 Конвертер отчетов Warpscout</div>
+      <div class="hint" style="margin-bottom: 12px;">Вставь аккаунт и лог сканирования, чтобы получить готовые прокси для Mihomo.</div>
+      
+      <label>1. Содержимое warpscout-account.json</label>
+      <textarea id="wsAccountInput" placeholder='{"id": "...", "private_key": "..."}' style="min-height: 80px;"></textarea>
+      
+      <label>2. Содержимое отчета (warpscout-report...txt)</label>
+      <textarea id="wsReportInput" placeholder="ENDPOINT               ENDPOINT PING SEEN AS...&#10;162.159.195.77:500     12ms          DE..."></textarea>
+      
+      <div class="row">
+        <div>
+          <label>Определять протокол</label>
+          <select id="wsProtocolMode">
+            <option value="auto">Автоматически (по порту)</option>
+            <option value="awg">Принудительно: AmneziaWG</option>
+            <option value="masque">Принудительно: MASQUE (QUIC)</option>
+            <option value="masque-h2">Принудительно: MASQUE (HTTP/2)</option>
+          </select>
+        </div>
+        <div>
+          <label>SNI для MASQUE</label>
+          <input type="text" id="wsSni" value="4pda.to">
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn" onclick="parseWarpscout()">🛠️ Сгенерировать Proxies</button>
+        <button class="btn btn-gray" onclick="copyText('wsOutput')">📋 Копировать YAML</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📦 Результат (Mihomo Proxies)</div>
+      <textarea id="wsOutput" readonly placeholder="Здесь появится массив proxies:"></textarea>
+    </div>
+  </div>
+
 </div>
 
 <div class="toast" id="toast">Done!</div>
@@ -201,26 +235,30 @@ function showToast(msg, err) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-// === YAML / JSON / REPORT PARSER ===
-let customEndpoints = [];
+function copyText(elementId) {
+  let text = '';
+  if (document.getElementById(elementId)) {
+    text = document.getElementById(elementId).value;
+  } else {
+    text = elementId; // fallback
+  }
+  if (!text) return showToast('Нет данных для копирования', true);
+  navigator.clipboard.writeText(text).then(() => showToast('Скопировано!'));
+}
 
-function parseInput() {
+// === TAB 1: YAML/JSON PARSER ===
+function parseYamlOrJson() {
   const raw = document.getElementById('yamlInput').value.trim();
   if (!raw) return showToast('Вставь данные', true);
 
-  // 1. Попытка распарсить JSON (warpscout-account.json)
+  // Пробуем JSON
   try {
     const jsonObj = JSON.parse(raw);
     if (jsonObj.private_key || jsonObj.masque) {
       const target = jsonObj.masque || jsonObj;
       const pk = target.private_key || '';
       let pub = target.peer_public_key || jsonObj.peer_public_key || '';
-      
-      // Очистка PEM-заголовков для публичного ключа
-      pub = pub.replace(/-----BEGIN PUBLIC KEY-----/g, '')
-               .replace(/-----END PUBLIC KEY-----/g, '')
-               .replace(/[\n\r]/g, '');
-
+      pub = pub.replace(/-----BEGIN PUBLIC KEY-----/g, '').replace(/-----END PUBLIC KEY-----/g, '').replace(/[\n\r]/g, '');
       const ip = target.ipv4 || jsonObj.ipv4 || '172.16.0.2';
       const ipv6 = target.ipv6 || jsonObj.ipv6 || '';
 
@@ -228,31 +266,14 @@ function parseInput() {
       if (pub) document.getElementById('publicKey').value = pub;
       document.getElementById('ip').value = ip;
       document.getElementById('ipv6').value = ipv6;
-
-      ['privateKey','publicKey','ip','ipv6'].forEach(k => {
-        const el = document.getElementById(k);
-        if (el && el.value) {
-          el.classList.add('field-filled');
-          setTimeout(() => el.classList.remove('field-filled'), 2000);
-        }
-      });
       
       document.getElementById('parsedBadge').style.display = 'inline-block';
       document.getElementById('parsedBadge').textContent = 'JSON Аккаунт';
-      return showToast('✅ Аккаунт warpscout загружен');
+      return showToast('✅ Ключи из JSON загружены');
     }
   } catch (e) {}
 
-  // 2. Попытка распарсить отчет warpscout (warpscout-report.txt)
-  const reportMatches = [...raw.matchAll(/^([0-9a-f:.]+):(\d+)\s+\d+ms/gim)];
-  if (reportMatches.length > 0) {
-    customEndpoints = reportMatches.map(m => ({ ip: m[1], port: parseInt(m[2]) }));
-    document.getElementById('parsedBadge').style.display = 'inline-block';
-    document.getElementById('parsedBadge').textContent = `Отчет (${customEndpoints.length} ep)`;
-    return showToast(`✅ Найдено ${customEndpoints.length} эндпоинтов из отчета`);
-  }
-
-  // 3. Попытка распарсить YAML (fallback)
+  // Пробуем YAML
   try {
     const docs = jsyaml.loadAll(raw);
     let proxyData = null;
@@ -266,7 +287,7 @@ function parseInput() {
       }
       if (proxyData) break;
     }
-    if (!proxyData) return showToast('Формат не распознан (нужен JSON, Отчет или YAML)', true);
+    if (!proxyData) return showToast('Формат не распознан', true);
     
     document.getElementById('privateKey').value = proxyData['private-key'] || proxyData.privateKey || '';
     document.getElementById('publicKey').value = proxyData['public-key'] || proxyData.publicKey || '';
@@ -282,7 +303,7 @@ function parseInput() {
   }
 }
 
-// === WARP LINK GENERATOR (ENGINEERED STRATEGY) ===
+// === TAB 1: WARP LINK GENERATOR ===
 function urlEncodeKey(key) {
   return key.replace(/\+/g, '%2B').replace(/\//g, '%2F').replace(/=/g, '%3D');
 }
@@ -324,6 +345,9 @@ function generateWarp() {
   out.innerHTML = '';
   lastGeneratedLinks = [];
 
+  const count = parseInt(document.getElementById('pairCount').value) || 1;
+  const portWeights = safePortsOnly ? SAFE_PORTS_WEIGHTED : ALL_PORTS_WEIGHTED;
+
   const buildLink = (serverAddr, port, isH2, nameSuffix) => {
     let url = `masque://${serverAddr}:${port}?sni=${sni}&private-key=${urlEncodeKey(pk)}&public-key=${urlEncodeKey(pub)}&ip=${ip}&udp=true&remote-dns-resolve=true`;
     if (ipv6) url += `&ipv6=${ipv6}`;
@@ -331,21 +355,6 @@ function generateWarp() {
     if (isH2) url += '&network=h2';
     return url + `#${baseProfile}-${isH2 ? 'H2' : 'QUIC'}${nameSuffix}`;
   };
-
-  // Режим генерации из отчета warpscout
-  if (customEndpoints.length > 0) {
-    customEndpoints.forEach((ep, i) => {
-      const isH2 = [1701, 8095, 4500].includes(ep.port);
-      const link = buildLink(ep.ip, ep.port, isH2, `-${i + 1}`);
-      lastGeneratedLinks.push(link);
-      out.innerHTML += `<div class="link-block"><div class="link-label">${isH2 ? '🟢' : '🔷'} ${link.split('#')[1]} (${ep.ip})</div><div class="link-text">${link}</div><button class="copy-btn" onclick="copyText('${link.replace(/'/g, "\\'")}')">Copy</button></div>`;
-    });
-    return showToast(`✅ Сгенерировано ${customEndpoints.length} ссылок из отчета`);
-  }
-
-  // Стандартный режим рандомизации
-  const count = parseInt(document.getElementById('pairCount').value) || 1;
-  const portWeights = safePortsOnly ? SAFE_PORTS_WEIGHTED : ALL_PORTS_WEIGHTED;
 
   for (let i = 0; i < count; i++) {
     const quicEP = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
@@ -360,7 +369,6 @@ function generateWarp() {
     out.innerHTML += `<div class="link-block"><div class="link-label">🔷 ${quic.split('#')[1]} (${quicEP.ip})</div><div class="link-text">${quic}</div><button class="copy-btn" onclick="copyText('${quic.replace(/'/g, "\\'")}')">Copy</button></div>`;
     out.innerHTML += `<div class="link-block"><div class="link-label">🟢 ${h2.split('#')[1]} (${h2Ip})</div><div class="link-text">${h2}</div><button class="copy-btn" onclick="copyText('${h2.replace(/'/g, "\\'")}')">Copy</button></div>`;
   }
-  
   showToast(`✅ ${count * 2} ссылок сгенерировано`);
 }
 
@@ -371,63 +379,139 @@ function sendToMihomo() {
   setTimeout(buildMihomo, 100);
 }
 
-// === PING SELECTOR ===
+// === TAB 3: WARPSCOUT PARSER ===
+const AWG_DEFAULT_JUNK = { jc: 4, jmin: 40, jmax: 70, s1: 0, s2: 0, h1: 1, h2: 2, h3: 3, h4: 4, i1: "<b 0xc10000000114367096bb0fb3f58f3a3fb8aaacd61d63a1c8a40e14f7374b8a62dccba6431716c3abf6f5afbcfb39bd008000047c32e268567c652e6f4db58bff759bc8c5aaca183b87cb4d22938fe7d8dca22a679a79e4d9ee62e4bbb3a380dd78d4e8e48f26b38a1d42d76b371a5a9a0444827a69d1ab5872a85749f65a4104e931740b4dc1e2dd77733fc7fac4f93011cd622f2bb47e85f71992e2d585f8dc765a7a12ddeb879746a267393ad023d267c4bd79f258703e27345155268bd3cc0506ebd72e2e3c6b5b0f005299cd94b67ddabe30389c4f9b5c2d512dcc298c14f14e9b7f931e1dc397926c31fbb7cebfc668349c218672501031ecce151d4cb03c4c660b6c6fe7754e75446cd7de09a8c81030c5f6fb377203f551864f3d83e27de7b86499736cbbb549b2f37f436db1cae0a4ea39930f0534aacdd1e3534bc87877e2afabe959ced261f228d6362e6fd277c88c312d966c8b9f67e4a92e757773db0b0862fb8108d1d8fa262a40a1b4171961f0704c8ba314da2482ac8ed9bd28d4b50f7432d89fd800c25a50c5e2f5c0710544fef5273401116aa0572366d8e49ad758fcb29e6a92912e644dbe227c247cb3417eabfab2db16796b2fba420de3b1dc94e8361f1f324a331ddaf1e626553138860757fd0bf687566108b77b70fb9f8f8962eca599c4a70ed373666961a8cb506b96756d9e28b94122b20f16b54f118c0e603ce0b831efea614ad836df6cf9affbdd09596412547496967da758cec9080295d853b0861670b71d9abde0d562b1a6de82782a5b0c14d297f27283a895abc889a5f6703f0e6eb95f67b2da45f150d0d8ab805612d570c2d5cb6997ac3a7756226c2f5c8982ffbd480c5004b0660a3c9468945efde90864019a2b519458724b55d766e16b0da25c0557c01f3c11ddeb024b62e303640e17fdd57dedb3aeb4a2c1b7c93059f9c1d7118d77caac1cd0f6556e46cbc991c1bb16970273dea833d01e5090d061a0c6d25af2415cd2878af97f6d0e7f1f936247b394ecb9bd484da6be936dee9b0b92dc90101a1b4295e97a9772f2263eb09431995aa173df4ca2abd687d87706f0f93eaa5e13cbe3b574fa3cfe94502ace25265778da6960d561381769c24e0cbd7aac73c16f95ae74ff7ec38124f7c722b9cb151d4b6841343f29be8f35145e1b27021056820fed77003df8554b4155716c8cf6049ef5e318481460a8ce3be7c7bfac695255be84dc491c19e9dedc449dd3471728cd2a3ee51324ccb3eef121e3e08f8e18f0006ea8957371d9f2f739f0b89e4db11e5c6430ada61572e589519fbad4498b460ce6e4407fc2d8f2dd4293a50a0cb8fcaaf35cd9a8cc097e3603fbfa08d9036f52b3e7fcce11b83ad28a4ac12dba0395a0cc871cefd1a2856fffb3f28d82ce35cf80579974778bab13d9b3578d8c75a2d196087a2cd439aff2bb33f2db24ac175fff4ed91d36a4cdbfaf3f83074f03894ea40f17034629890da3efdbb41141b38368ab532209b69f057ddc559c19bc8ae62bf3fd564c9a35d9a83d14a95834a92bae6d9a29ae5e8ece07910d16433e4c6230c9bd7d68b47de0de9843988af6dc88b5301820443bd4d0537778bf6b4c1dd067fcf14b81015f2a67c7f2a28f9cb7e0684d3cb4b1c24d9b343122a086611b489532f1c3a26779da1706c6759d96d8ab>"}
+
+function parseWarpscout() {
+  const accRaw = document.getElementById('wsAccountInput').value.trim();
+  const repRaw = document.getElementById('wsReportInput').value.trim();
+  const mode = document.getElementById('wsProtocolMode').value;
+  const sni = document.getElementById('wsSni').value.trim() || '4pda.to';
+
+  if (!accRaw || !repRaw) return showToast('Нужен и аккаунт, и лог отчета!', true);
+
+  let acc = {};
+  try {
+    acc = JSON.parse(accRaw);
+  } catch (e) {
+    return showToast('Ошибка: warpscout-account.json не является валидным JSON', true);
+  }
+
+  // Извлечение ключей AWG (корень)
+  const awgPriv = acc.private_key || '';
+  const awgPub = acc.peer_public_key || '';
+  const awgIpv4 = acc.ipv4 || '172.16.0.2';
+  const awgIpv6 = acc.ipv6 || '';
+
+  // Извлечение ключей MASQUE (вложенный объект)
+  const mq = acc.masque || {};
+  const mqPriv = mq.private_key || '';
+  let mqPub = mq.peer_public_key || '';
+  mqPub = mqPub.replace(/-----BEGIN PUBLIC KEY-----/g, '').replace(/-----END PUBLIC KEY-----/g, '').replace(/[\n\r]/g, '');
+  const mqIpv4 = mq.ipv4 || '172.16.0.2';
+
+  if (!awgPriv) return showToast('Не найден private_key в аккаунте', true);
+
+  // Парсинг отчета
+  const regex = /^([0-9a-f:.]+):(\d+)\s+([0-9]+ms|\?)\s+(\w+)\s+(\w+)/gmi;
+  const endpoints = [];
+  let match;
+  while ((match = regex.exec(repRaw)) !== null) {
+    endpoints.push({
+      ip: match[1],
+      port: parseInt(match[2]),
+      ping: match[3],
+      seenAs: match[4],
+      node: match[5]
+    });
+  }
+
+  if (endpoints.length === 0) return showToast('В отчете не найдено ни одного рабочего эндпоинта', true);
+
+  const proxies = [];
+  endpoints.forEach((ep, i) => {
+    // Определение протокола
+    let proto = mode;
+    if (proto === 'auto') {
+      if ([2408, 500, 4500].includes(ep.port)) proto = 'awg';
+      else if ([1701].includes(ep.port)) proto = 'masque-h2';
+      else proto = 'masque'; // 443, 8443, 4443, 8095 etc
+    }
+
+    const namePrefix = proto === 'awg' ? 'AWG' : proto === 'masque-h2' ? 'MQ-H2' : 'MQ-QUIC';
+    const profileName = `${namePrefix}-${ep.node}-${ep.ping}-${i+1}`;
+
+    if (proto === 'awg') {
+      proxies.push({
+        name: profileName,
+        type: 'wireguard',
+        server: ep.ip,
+        port: ep.port,
+        'private-key': awgPriv,
+        udp: true,
+        ip: awgIpv4,
+        ipv6: awgIpv6,
+        'public-key': awgPub,
+        'allowed-ips': ["0.0.0.0/0", "::/0"],
+        mtu: 1280,
+        'amnezia-wg-option': AWG_DEFAULT_JUNK
+      });
+    } else {
+      // Masque QUIC или H2
+      const proxy = {
+        name: profileName,
+        type: 'masque',
+        server: ep.ip,
+        port: ep.port,
+        sni: sni,
+        'private-key': mqPriv,
+        'public-key': mqPub,
+        ip: mqIpv4,
+        udp: true,
+        'remote-dns-resolve': true,
+        dns: ["1.1.1.1", "1.0.0.1"]
+      };
+      if (proto === 'masque-h2') proxy.network = 'h2';
+      proxies.push(proxy);
+    }
+  });
+
+  const finalYaml = jsyaml.dump({ proxies }, { lineWidth: -1 });
+  document.getElementById('wsOutput').value = finalYaml;
+  showToast(`✅ Сгенерировано ${proxies.length} прокси`);
+}
+
+// === PING SELECTOR & FILE UPLOAD ===
 function initPingSelector() {
   const choices = (globalThis.web4core?.URLTEST_CHOICES || []);
   const sel = document.getElementById('pingSelect');
-  if (!choices.length) {
-    sel.innerHTML = '<option value="https://google.com/generate_204">Google (default)</option>';
-    return;
-  }
-  choices.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.url;
-    opt.textContent = c.label || c.url;
-    sel.appendChild(opt);
-  });
+  if (!choices.length) { sel.innerHTML = '<option value="https://google.com/generate_204">Google (default)</option>'; return; }
+  choices.forEach(c => { const opt = document.createElement('option'); opt.value = c.url; opt.textContent = c.label || c.url; sel.appendChild(opt); });
 }
 
-// === WIREGUARD UPLOAD ===
 let wgBeans = [];
-
 function initWgUpload() {
   const fileInput = document.getElementById('wgFile');
   const statusEl = document.getElementById('wgStatus');
   const btnEl = document.getElementById('btnWg');
-
   fileInput.addEventListener('change', async () => {
     const files = Array.from(fileInput.files || []);
     if (!files.length) { wgBeans = []; updateWgStatus(); return; }
-    
     const api = globalThis.web4core;
-    if (!api?.parseWireGuardConf) {
-      showToast('web4core.runtime не загружен!', true);
-      return;
-    }
-
+    if (!api?.parseWireGuardConf) return showToast('web4core.runtime не загружен!', true);
     wgBeans = [];
     for (const file of files) {
       try {
         const text = await file.text();
         const bean = api.parseWireGuardConf(text, file.name);
         if (bean) wgBeans.push(bean);
-      } catch (e) {
-        showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true);
-      }
+      } catch (e) { showToast(`Ошибка: ${e.message}`, true); }
     }
     updateWgStatus();
   });
-
   function updateWgStatus() {
-    if (wgBeans.length > 0) {
-      statusEl.textContent = `✅ Загружено: ${wgBeans.length} конфиг(ов)`;
-      statusEl.classList.add('loaded');
-      btnEl.textContent = `📂 WG/AWG (${wgBeans.length})`;
-    } else {
-      statusEl.textContent = '';
-      statusEl.classList.remove('loaded');
-      btnEl.textContent = '📂 Загрузить .conf / .awg';
-    }
+    if (wgBeans.length > 0) { statusEl.textContent = `✅ Загружено: ${wgBeans.length}`; statusEl.classList.add('loaded'); btnEl.textContent = `📂 WG/AWG (${wgBeans.length})`; } 
+    else { statusEl.textContent = ''; statusEl.classList.remove('loaded'); btnEl.textContent = '📂 Загрузить .conf / .awg'; }
   }
 }
 
@@ -435,7 +519,6 @@ function initWgUpload() {
 function buildMihomo() {
   const raw = document.getElementById('mihomoInput').value.trim();
   if (!raw && wgBeans.length === 0) return showToast('Вставь ссылки или загрузи WG конфиг', true);
-  
   const api = globalThis.web4core;
   if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
 
@@ -447,73 +530,34 @@ function buildMihomo() {
 
   try {
     const result = api.buildFromRequest({
-      core: 'mihomo',
-      input: raw,
-      wgBeans: wgBeans,
-      options: {
-        addSocks: document.getElementById('cfgSocks').checked,
-        addTun: addTun, 
-        webUI: document.getElementById('cfgWebUI').checked,
-        urlTest: urlTest,
-        mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
-        mihomoPerProxyTun: perProxyTun,
-        perProxyPort: perProxySocks
-      }
+      core: 'mihomo', input: raw, wgBeans: wgBeans,
+      options: { addSocks: document.getElementById('cfgSocks').checked, addTun: addTun, webUI: document.getElementById('cfgWebUI').checked, urlTest: urlTest, mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked, mihomoPerProxyTun: perProxyTun, perProxyPort: perProxySocks }
     });
 
     let yamlRaw = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
-    
-    // Парсим YAML в JS-объект для безопасных модификаций
     let configObj = jsyaml.load(yamlRaw);
 
     // PATCH: Allow LAN
-    if (document.getElementById('cfgLan').checked) {
-      configObj['allow-lan'] = true;
-      configObj['bind-address'] = "*";
-    }
+    if (document.getElementById('cfgLan').checked) { configObj['allow-lan'] = true; configObj['bind-address'] = "*"; }
 
     // PATCH: WARP-in-WARP (Цепочки)
     if (useChain && configObj.proxies && configObj.proxies.length > 0) {
       const outerWg = configObj.proxies.find(p => p.type === 'wireguard');
-      
       if (outerWg) {
         let chainedCount = 0;
         configObj.proxies.forEach(p => {
-          if (p.type === 'masque') {
-            p['dialer-proxy'] = outerWg.name;
-            chainedCount++;
-          }
+          if (p.type === 'masque') { p['dialer-proxy'] = outerWg.name; chainedCount++; }
         });
-        
-        if (chainedCount === 0) {
-          showToast('⚠️ MASQUE туннели для цепочки не найдены', true);
-        }
-      } else {
-        showToast('⚠️ Загрузите WG конфиг для создания цепочки', true);
-      }
+        if (chainedCount === 0) showToast('⚠️ MASQUE туннели для цепочки не найдены', true);
+      } else { showToast('⚠️ Загрузите WG конфиг для создания цепочки', true); }
     }
 
-    // Собираем обратно в строку YAML
     const finalYaml = jsyaml.dump(configObj, { lineWidth: -1 });
-
     document.getElementById('mihomoOutput').value = finalYaml;
     showToast(useChain ? '✅ WARP-in-WARP конфиг собран!' : '✅ Mihomo config built!');
-  } catch (e) {
-    showToast('❌ ' + (e.message || e), true);
-  }
+  } catch (e) { showToast('❌ ' + (e.message || e), true); }
 }
 
-function copyMihomo() {
-  const text = document.getElementById('mihomoOutput').value;
-  if (!text) return showToast('Нет конфига', true);
-  navigator.clipboard.writeText(text).then(() => showToast('YAML скопирован!'));
-}
-
-function copyText(text) {
-  navigator.clipboard.writeText(text).then(() => showToast('Скопировано!'));
-}
-
-// === INIT ===
 initPingSelector();
 initWgUpload();
 </script>
