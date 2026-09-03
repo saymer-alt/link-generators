@@ -2,6 +2,9 @@ name: Update web4core runtime
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
   schedule:
     - cron: '17 4 * * 1'
 
@@ -14,6 +17,8 @@ jobs:
     steps:
       - name: Checkout link-generators
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Checkout upstream web4core
         uses: actions/checkout@v4
@@ -35,6 +40,7 @@ jobs:
         run: |
           npm ci
           npm run build:web:runtime
+          test -s src/web4core.runtime.js
 
       - name: Compare and update runtime
         run: |
@@ -42,7 +48,10 @@ jobs:
             echo "Runtime is already up to date."
             exit 0
           fi
+
+          echo "Upstream runtime differs; updating local runtime."
           cp web4core-upstream/src/web4core.runtime.js web4core.runtime.js
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add web4core.runtime.js
