@@ -173,7 +173,7 @@
       base: ["vmess", "vless", "trojan", "ss", "socks", "http", "hy2"]
     },
     mihomo: {
-      base: ["vmess", "vless", "trojan", "ss", "socks", "http", "hy2", "tuic", "wireguard", "masque", "mieru", "trusttunnel"]
+      base: ["vmess", "vless", "trojan", "anytls", "ss", "socks", "http", "hy2", "tuic", "wireguard", "masque", "mieru", "trusttunnel"]
     }
   };
   function getAllowedCoreProtocols(core, options) {
@@ -540,6 +540,11 @@
     };
     const dnsRaw = q.get("dns") || "";
     const dns = dnsRaw ? dnsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const ipStack = {};
+    const ipStackMode = (q.get("ip-stack") || q.get("ip_stack") || q.get("ip-stack-mode") || q.get("ip_stack_mode") || "").trim();
+    const ipStackCongestionController = (q.get("ip-stack-congestion-controller") || q.get("ip_stack_congestion_controller") || "").trim();
+    if (ipStackMode) ipStack.mode = ipStackMode;
+    if (ipStackCongestionController) ipStack["congestion-controller"] = ipStackCongestionController;
     return {
       proto: "masque",
       host: u.hostname,
@@ -558,6 +563,10 @@
         congestionController: (q.get("congestion-controller") || "").trim(),
         bbrProfile: (q.get("bbr-profile") || q.get("bbr_profile") || "").trim(),
         cwnd: asInt(q.get("cwnd"), 0),
+        handshakeTimeout: asInt(q.get("handshake-timeout") || q.get("handshake_timeout"), 0),
+        allowInsecure: getBool("allow-insecure") || getBool("allowInsecure") || getBool("insecure"),
+        nameCertVerify: (q.get("name-cert-verify") || q.get("nameCertVerify") || "").trim(),
+        ipStack,
         remoteDnsResolve: getBool("remote-dns-resolve"),
         dns
       }
@@ -637,6 +646,13 @@
       name: safeDecodeURIComponent(u.hash.replace("#", "")),
       auth: { password: pwd },
       stream: buildStreamFromQuery(q, false),
+      anytls: {
+        clientMetadata: (q.get("client-metadata") || q.get("client_metadata") || "").trim(),
+        idleSessionCheckInterval: asInt(q.get("idle-session-check-interval") || q.get("idle_session_check_interval"), 0),
+        idleSessionTimeout: asInt(q.get("idle-session-timeout") || q.get("idle_session_timeout"), 0),
+        minIdleSession: asInt(q.get("min-idle-session") || q.get("min_idle_session"), 0),
+        disableReuse: ["1", "true", "yes"].includes((q.get("disable-reuse") || q.get("disable_reuse") || "").toLowerCase())
+      },
       udp: q.get("udp") === "1" || q.get("udp") === "true",
       udpOverTcp: q.get("udp-over-tcp") === "1" || q.get("udp-over-tcp") === "true",
       ipVersion: q.get("ip-version") || ""
@@ -935,10 +951,15 @@
       name: safeDecodeURIComponent(u.hash.replace("#", "")),
       auth: { password: pwd },
       hysteria2: {
+        obfs: q.get("obfs") || "",
         obfsPassword: q.get("obfs-password") || "",
         hopPort: q.get("mport") || "",
         hopInterval: q.get("hop_interval") || "",
         bbrProfile: q.get("bbr-profile") || q.get("bbr_profile") || "",
+        obfsMinPacketSize: asInt(q.get("obfs-min-packet-size") || q.get("obfs_min_packet_size"), 0),
+        obfsMaxPacketSize: asInt(q.get("obfs-max-packet-size") || q.get("obfs_max_packet_size"), 0),
+        udpMtu: asInt(q.get("udp-mtu") || q.get("udp_mtu"), 0),
+        handshakeTimeout: asInt(q.get("handshake-timeout") || q.get("handshake_timeout"), 0),
         alpn: q.get("alpn") || "h3",
         sni: q.get("sni") || "",
         allowInsecure: ["1", "true", "yes"].includes((q.get("allowInsecure") || q.get("insecure") || "").toLowerCase()),
@@ -1425,10 +1446,14 @@
         if (xPaddingMethod) stream.xhttpXPaddingMethod = xPaddingMethod;
         const uplinkHttpMethod = toStringValue(xhttpExtra.uplinkHttpMethod);
         if (uplinkHttpMethod) stream.xhttpUplinkHttpMethod = uplinkHttpMethod;
-        const sessionPlacement = toStringValue(xhttpExtra.sessionPlacement);
+        const sessionPlacement = toStringValue(xhttpExtra.sessionPlacement || xhttpExtra.sessionIDPlacement);
         if (sessionPlacement) stream.xhttpSessionPlacement = sessionPlacement;
-        const sessionKey = toStringValue(xhttpExtra.sessionKey);
+        const sessionKey = toStringValue(xhttpExtra.sessionKey || xhttpExtra.sessionIDKey);
         if (sessionKey) stream.xhttpSessionKey = sessionKey;
+        const sessionTable = toStringValue(xhttpExtra.sessionTable || xhttpExtra.sessionIDTable);
+        if (sessionTable) stream.xhttpSessionTable = sessionTable;
+        const sessionLength = toIntValue(xhttpExtra.sessionLength || xhttpExtra.sessionIDLength);
+        if (sessionLength > 0) stream.xhttpSessionLength = sessionLength;
         const seqPlacement = toStringValue(xhttpExtra.seqPlacement);
         if (seqPlacement) stream.xhttpSeqPlacement = seqPlacement;
         const seqKey = toStringValue(xhttpExtra.seqKey);
@@ -1467,9 +1492,10 @@
           if (downloadAddress && !stream.xhttpDownload.server) stream.xhttpDownload.server = downloadAddress;
           const downloadPort = toIntValue(downloadSettings.port);
           if (downloadPort > 0 && !stream.xhttpDownload.server_port) stream.xhttpDownload.server_port = downloadPort;
-          const downloadSecurity = toStringValue(downloadSettings.security).toLowerCase();
+          const downloadStreamSettings = toObject(downloadSettings.streamSettings) || {};
+          const downloadSecurity = toStringValue(downloadSettings.security || downloadStreamSettings.security).toLowerCase();
           if (downloadSecurity && !stream.xhttpDownload.security) stream.xhttpDownload.security = downloadSecurity;
-          const tlsSettings = toObject(downloadSettings.tlsSettings);
+          const tlsSettings = toObject(downloadSettings.tlsSettings) || toObject(downloadStreamSettings.tlsSettings);
           if (tlsSettings) {
             const downloadServerName = toStringValue(tlsSettings.serverName);
             if (downloadServerName && !stream.xhttpDownload.servername) stream.xhttpDownload.servername = downloadServerName;
@@ -1480,14 +1506,14 @@
               stream.xhttpDownload.alpn = tlsSettings.alpn.filter((v) => typeof v === "string" && v.trim());
             }
           }
-          const realitySettings = toObject(downloadSettings.realitySettings);
+          const realitySettings = toObject(downloadSettings.realitySettings) || toObject(downloadStreamSettings.realitySettings);
           if (realitySettings) {
             const downloadRealityPublicKey = toStringValue(realitySettings.publicKey);
             if (downloadRealityPublicKey) stream.xhttpDownload.reality.public_key = downloadRealityPublicKey;
             const downloadRealityShortID = toStringValue(realitySettings.shortId);
             if (downloadRealityShortID) stream.xhttpDownload.reality.short_id = downloadRealityShortID;
           }
-          const xhttpSettings = toObject(downloadSettings.xhttpSettings);
+          const xhttpSettings = toObject(downloadSettings.xhttpSettings) || toObject(downloadStreamSettings.xhttpSettings);
           if (xhttpSettings) {
             const downloadHost = toStringValue(xhttpSettings.host);
             if (downloadHost && !stream.xhttpDownload.host) stream.xhttpDownload.host = downloadHost;
@@ -1636,25 +1662,65 @@
           if (stream.path) t.path = stream.path;
           if (stream.host) t.host = stream.host;
           if (stream.xhttpMode) t.mode = stream.xhttpMode;
-          t.x_padding_bytes = "100-1000";
+          t.x_padding_bytes = stream.xhttpXPaddingBytes || "100-1000";
+          if (stream.xhttpNoGrpcHeader === true) t.no_grpc_header = true;
+          if (typeof stream.xhttpXPaddingObfsMode === "boolean") t.x_padding_obfs_mode = stream.xhttpXPaddingObfsMode;
+          [
+            ["x_padding_key", "xhttpXPaddingKey"],
+            ["x_padding_header", "xhttpXPaddingHeader"],
+            ["x_padding_placement", "xhttpXPaddingPlacement"],
+            ["x_padding_method", "xhttpXPaddingMethod"],
+            ["uplink_http_method", "xhttpUplinkHttpMethod"],
+            ["session_placement", "xhttpSessionPlacement"],
+            ["session_key", "xhttpSessionKey"],
+            ["seq_placement", "xhttpSeqPlacement"],
+            ["seq_key", "xhttpSeqKey"],
+            ["uplink_data_placement", "xhttpUplinkDataPlacement"],
+            ["uplink_data_key", "xhttpUplinkDataKey"],
+            ["uplink_chunk_size", "xhttpUplinkChunkSize"],
+            ["sc_max_each_post_bytes", "xhttpScMaxEachPostBytes"],
+            ["sc_min_posts_interval_ms", "xhttpScMinPostsIntervalMs"]
+          ].forEach(([key, field]) => {
+            if (stream[field] !== "" && stream[field] !== void 0 && stream[field] !== null) t[key] = stream[field];
+          });
           const xmux = stream.xhttpXmux || {};
           const resolvedXmux = buildExtendedXhttpXmux(xmux);
           if (resolvedXmux) t.xmux = resolvedXmux;
           const download = stream.xhttpDownload || {};
-          const hasDownload = Object.values(download).some((v) => v !== "" && v !== 0);
+          const downloadXmux = buildExtendedXhttpXmux(download.xmux || {});
+          const hasDownload = [
+            download.mode,
+            download.host,
+            download.path,
+            download.x_padding_bytes,
+            download.headers,
+            download.sc_max_each_post_bytes,
+            download.sc_min_posts_interval_ms,
+            download.sc_stream_up_server_secs,
+            download.sc_max_buffered_posts,
+            download.server_max_header_bytes,
+            download.server,
+            download.server_port,
+            download.detour,
+            downloadXmux
+          ].some((v) => v !== "" && v !== 0 && v !== void 0 && v !== null);
           if (hasDownload) {
             t.download = {};
+            if (download.mode) t.download.mode = download.mode;
             if (download.host) t.download.host = download.host;
             if (download.path) t.download.path = download.path;
-            if (download.x_padding_bytes) t.download.x_padding_bytes = download.x_padding_bytes;
+            if (download.headers && typeof download.headers === "object" && Object.keys(download.headers).length) {
+              t.download.headers = download.headers;
+            }
+            t.download.x_padding_bytes = download.x_padding_bytes || "100-1000";
             if (download.sc_max_each_post_bytes) t.download.sc_max_each_post_bytes = download.sc_max_each_post_bytes;
             if (download.sc_min_posts_interval_ms) t.download.sc_min_posts_interval_ms = download.sc_min_posts_interval_ms;
             if (download.sc_stream_up_server_secs) t.download.sc_stream_up_server_secs = download.sc_stream_up_server_secs;
             if (download.server) t.download.server = download.server;
             if (download.server_port) t.download.server_port = download.server_port;
             if (download.detour) t.download.detour = download.detour;
-            if (resolvedXmux) {
-              t.download.xmux = resolvedXmux;
+            if (downloadXmux) {
+              t.download.xmux = downloadXmux;
             }
           }
         } else if (stream.network === "grpc") {
@@ -2178,8 +2244,11 @@
     const buildXmuxSettings = (xmux) => {
       if (!xmux || typeof xmux !== "object") return null;
       const out = {};
-      put(out, "maxConcurrency", xmux.max_concurrency);
-      put(out, "maxConnections", xmux.max_connections);
+      if (xmux.max_concurrency !== "" && xmux.max_concurrency !== void 0 && xmux.max_concurrency !== null) {
+        put(out, "maxConcurrency", xmux.max_concurrency);
+      } else {
+        put(out, "maxConnections", xmux.max_connections);
+      }
       put(out, "cMaxReuseTimes", xmux.c_max_reuse_times);
       put(out, "hMaxRequestTimes", xmux.h_max_request_times);
       put(out, "hMaxReusableSecs", xmux.h_max_reusable_secs);
@@ -2655,7 +2724,6 @@
         obj.network = "grpc";
         obj["grpc-opts"] = {};
         if (s.path) obj["grpc-opts"]["grpc-service-name"] = s.path;
-        if (s.authority) obj["grpc-opts"].authority = s.authority;
         if (s.grpcUserAgent) obj["grpc-opts"]["grpc-user-agent"] = s.grpcUserAgent;
         if (Number.isFinite(s.grpcPingInterval) && s.grpcPingInterval > 0) {
           obj["grpc-opts"]["ping-interval"] = s.grpcPingInterval;
@@ -2687,6 +2755,10 @@
         if (s.xhttpUplinkHttpMethod) obj["xhttp-opts"]["uplink-http-method"] = s.xhttpUplinkHttpMethod;
         if (s.xhttpSessionPlacement) obj["xhttp-opts"]["session-placement"] = s.xhttpSessionPlacement;
         if (s.xhttpSessionKey) obj["xhttp-opts"]["session-key"] = s.xhttpSessionKey;
+        if (s.xhttpSessionTable) obj["xhttp-opts"]["session-table"] = s.xhttpSessionTable;
+        if (Number.isFinite(s.xhttpSessionLength) && s.xhttpSessionLength > 0) {
+          obj["xhttp-opts"]["session-length"] = s.xhttpSessionLength;
+        }
         if (s.xhttpSeqPlacement) obj["xhttp-opts"]["seq-placement"] = s.xhttpSeqPlacement;
         if (s.xhttpSeqKey) obj["xhttp-opts"]["seq-key"] = s.xhttpSeqKey;
         if (s.xhttpUplinkDataPlacement) obj["xhttp-opts"]["uplink-data-placement"] = s.xhttpUplinkDataPlacement;
@@ -2893,10 +2965,18 @@
       if (bean.hysteria2?.alpn) p.alpn = bean.hysteria2.alpn.split(",").filter(Boolean);
       if (bean.hysteria2?.sni) p.sni = bean.hysteria2.sni;
       if (bean.hysteria2?.allowInsecure) p["skip-cert-verify"] = true;
+      if (bean.hysteria2?.obfs) p.obfs = bean.hysteria2.obfs;
       if (bean.hysteria2?.obfsPassword) {
-        p.obfs = "salamander";
+        if (!p.obfs) p.obfs = "salamander";
         p["obfs-password"] = bean.hysteria2.obfsPassword;
       }
+      if (Number.isFinite(bean.hysteria2?.obfsMinPacketSize) && bean.hysteria2.obfsMinPacketSize > 0) {
+        p["obfs-min-packet-size"] = bean.hysteria2.obfsMinPacketSize;
+      }
+      if (Number.isFinite(bean.hysteria2?.obfsMaxPacketSize) && bean.hysteria2.obfsMaxPacketSize > 0) {
+        p["obfs-max-packet-size"] = bean.hysteria2.obfsMaxPacketSize;
+      }
+      if (bean.hysteria2?.hopPort) p.ports = String(bean.hysteria2.hopPort).trim();
       if (bean.hysteria2?.hopInterval) {
         const hi = String(bean.hysteria2.hopInterval).trim();
         const range = hi.match(/^(\d+)\s*-\s*(\d+)$/);
@@ -2910,6 +2990,10 @@
         }
       }
       if (bean.hysteria2?.bbrProfile) p["bbr-profile"] = bean.hysteria2.bbrProfile;
+      if (Number.isFinite(bean.hysteria2?.udpMtu) && bean.hysteria2.udpMtu > 0) p["udp-mtu"] = bean.hysteria2.udpMtu;
+      if (Number.isFinite(bean.hysteria2?.handshakeTimeout) && bean.hysteria2.handshakeTimeout > 0) {
+        p["handshake-timeout"] = bean.hysteria2.handshakeTimeout;
+      }
       applyCommon(p);
       return p;
     }
@@ -2970,6 +3054,7 @@
       if (Number.isFinite(wg.persistentKeepalive) && wg.persistentKeepalive > 0) p["persistent-keepalive"] = wg.persistentKeepalive;
       if (wg.reserved !== void 0) p.reserved = wg.reserved;
       if (hasPeers) p.peers = peers.map(mapPeer).filter(Boolean);
+      if (wg.ipStack && typeof wg.ipStack === "object" && Object.keys(wg.ipStack).length) p["ip-stack"] = wg.ipStack;
       if (wg["amnezia-wg-option"] && typeof wg["amnezia-wg-option"] === "object") {
         p["amnezia-wg-option"] = wg["amnezia-wg-option"];
       }
@@ -2994,8 +3079,31 @@
       if (mq.congestionController) p["congestion-controller"] = mq.congestionController;
       if (mq.bbrProfile) p["bbr-profile"] = mq.bbrProfile;
       if (Number.isFinite(mq.cwnd) && mq.cwnd > 0) p.cwnd = mq.cwnd;
+      if (Number.isFinite(mq.handshakeTimeout) && mq.handshakeTimeout > 0) p["handshake-timeout"] = mq.handshakeTimeout;
+      if (mq.allowInsecure) p["skip-cert-verify"] = true;
+      if (mq.nameCertVerify) p["name-cert-verify"] = mq.nameCertVerify;
+      if (mq.ipStack && typeof mq.ipStack === "object" && Object.keys(mq.ipStack).length) p["ip-stack"] = mq.ipStack;
       if (mq.remoteDnsResolve) p["remote-dns-resolve"] = true;
       if (Array.isArray(mq.dns) && mq.dns.length) p.dns = mq.dns;
+      applyCommon(p);
+      return p;
+    }
+    if (bean.proto === "anytls") {
+      const anytls = bean.anytls || {};
+      const p = { ...base, type: "anytls", password: bean.auth.password };
+      if (s.sni) p.sni = s.sni;
+      if (s.alpn && s.alpn.length) p.alpn = s.alpn;
+      if (s.allowInsecure) p["skip-cert-verify"] = true;
+      if (s.fp) p["client-fingerprint"] = s.fp;
+      if (anytls.clientMetadata) p["client-metadata"] = anytls.clientMetadata;
+      if (Number.isFinite(anytls.idleSessionCheckInterval) && anytls.idleSessionCheckInterval > 0) {
+        p["idle-session-check-interval"] = anytls.idleSessionCheckInterval;
+      }
+      if (Number.isFinite(anytls.idleSessionTimeout) && anytls.idleSessionTimeout > 0) {
+        p["idle-session-timeout"] = anytls.idleSessionTimeout;
+      }
+      if (Number.isFinite(anytls.minIdleSession) && anytls.minIdleSession > 0) p["min-idle-session"] = anytls.minIdleSession;
+      if (anytls.disableReuse) p["disable-reuse"] = true;
       applyCommon(p);
       return p;
     }
@@ -3092,6 +3200,7 @@
         `udp=${toKeyPart(wg?.udp)}`,
         `remoteDnsResolve=${toKeyPart(wg?.remoteDnsResolve)}`,
         `dns=${dns}`,
+        `ipStack=${stableObjectKey(wg?.ipStack)}`,
         `refreshServerIPInterval=${toKeyPart(wg?.refreshServerIPInterval)}`,
         `workers=${toKeyPart(wg?.workers)}`,
         `awg=${stableObjectKey(wg?.["amnezia-wg-option"])}`,
@@ -3214,6 +3323,7 @@
       const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames);
       providers[providerName] = {
         type: "http",
+        proxy: "DIRECT",
         header: {
           "x-hwid": [generateSecretHex32()]
         },
@@ -3246,6 +3356,7 @@
         interval: PROXY_FETCH_INTERVAL,
         "expected-status": urlTestExpectedStatus,
         tolerance: 50,
+        "empty-fallback": "REJECT",
         __comments: {
           interval: "Latency probe interval (seconds)",
           tolerance: "Switch threshold (ms)"
@@ -3257,7 +3368,8 @@
         groups.push({
           name: `SUB-${providerName}`,
           type: "select",
-          use: [providerName]
+          use: [providerName],
+          "empty-fallback": "REJECT"
         });
       });
     }
@@ -3895,15 +4007,30 @@
         j1: "j1",
         j2: "j2",
         j3: "j3",
-        itime: "itime"
+        itime: "itime",
+        version: "version",
+        headerprotectionkey: "header-protection-key",
+        contentpaddingaddition: "content-padding-addition",
+        rekeyaftertime: "rekey-after-time",
+        rekeytimeout: "rekey-timeout",
+        rejectaftertime: "reject-after-time",
+        keepalivetimeout: "keepalive-timeout",
+        maxhandshakeattempts: "max-handshake-attempts",
+        randomtrailers: "random-trailers",
+        disablecookies: "disable-cookies"
       };
       if (!map[k]) return false;
       if (!target["amnezia-wg-option"]) target["amnezia-wg-option"] = {};
       const outKey = map[k];
       const raw = String(value || "").trim();
-      const numericKeys = /* @__PURE__ */ new Set(["jc", "jmin", "jmax", "s1", "s2", "s3", "s4", "itime"]);
+      const numericKeys = /* @__PURE__ */ new Set(["version", "jc", "jmin", "jmax", "s1", "s2", "s3", "s4", "itime"]);
+      const booleanKeys = /* @__PURE__ */ new Set(["random-trailers", "disable-cookies"]);
       if (numericKeys.has(outKey) && /^-?\d+$/.test(raw)) {
         target["amnezia-wg-option"][outKey] = parseInt(raw, 10);
+      } else if (booleanKeys.has(outKey)) {
+        const boolValue = raw.toLowerCase();
+        if (!["1", "true", "yes", "0", "false", "no"].includes(boolValue)) return false;
+        target["amnezia-wg-option"][outKey] = ["1", "true", "yes"].includes(boolValue);
       } else {
         target["amnezia-wg-option"][outKey] = raw;
       }
@@ -3945,6 +4072,13 @@
         else if (keyLower === "dns") iface.dns = parseCsv(value);
         else if (keyLower === "mtu") iface.mtu = /^\d+$/.test(value) ? parseInt(value, 10) : void 0;
         else if (keyLower === "name") iface.name = value;
+        else if (keyLower === "ipstack" || keyLower === "ipstackmode") {
+          if (!iface.ipStack) iface.ipStack = {};
+          iface.ipStack.mode = value;
+        } else if (keyLower === "ipstackcongestioncontroller") {
+          if (!iface.ipStack) iface.ipStack = {};
+          iface.ipStack["congestion-controller"] = value;
+        }
       } else if (section === "peer" && curPeer) {
         if (keyLower === "publickey") curPeer.publicKey = value;
         else if (keyLower === "presharedkey") curPeer.preSharedKey = value;
@@ -4006,6 +4140,7 @@
         peers: peersFiltered.length >= 2 ? peersFiltered : void 0,
         dns: Array.isArray(iface.dns) && iface.dns.length ? iface.dns : [],
         remoteDnsResolve: Array.isArray(iface.dns) && iface.dns.length ? true : false,
+        ipStack: iface.ipStack && typeof iface.ipStack === "object" ? iface.ipStack : void 0,
         mtu: iface.mtu,
         persistentKeepalive: keepalive
       }
