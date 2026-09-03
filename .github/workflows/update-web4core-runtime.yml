@@ -1,0 +1,50 @@
+name: Update web4core runtime
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: write
+
+jobs:
+  update-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout link-generators
+        uses: actions/checkout@v4
+
+      - name: Checkout upstream web4core
+        uses: actions/checkout@v4
+        with:
+          repository: spatiumstas/web4core
+          ref: main
+          path: web4core-upstream
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web4core-upstream/package-lock.json
+
+      - name: Build upstream runtime
+        working-directory: web4core-upstream
+        run: |
+          npm ci
+          npm run build:web:runtime
+
+      - name: Compare and update runtime
+        run: |
+          if cmp -s web4core-upstream/src/web4core.runtime.js web4core.runtime.js; then
+            echo "Runtime is already up to date."
+            exit 0
+          fi
+          cp web4core-upstream/src/web4core.runtime.js web4core.runtime.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web4core.runtime.js
+          git commit -m "Update web4core runtime from upstream"
+          git push
