@@ -416,6 +416,62 @@ function initPingSelector() {
 // === WIREGUARD UPLOAD ===
 let wgBeans = [];
 
+// AWG-патч 1/3: парсер web4core понимает только скалярный PersistentKeepalive,
+// а Amnezia Premium пишет диапазон (25-35). Оставляем нижнюю границу ДО парсинга.
+function normalizeWgText(text) {
+  return String(text).replace(
+    /^(\s*PersistentKeepalive\s*=\s*)(\d+)\s*-\s*\d+\s*$/gim,
+    '$1$2'
+  );
+}
+
+// AWG-патч 2/3: в .conf нет поля Version, а mihomo активирует движок AWG 3.x
+// только при version: 3. Если видим 3.x-поля — проставляем версию принудительно.
+const AWG_V3_KEYS = [
+  'header-protection-key', 'content-padding-addition', 'rekey-after-time',
+  'rekey-timeout', 'reject-after-time', 'keepalive-timeout',
+  'max-handshake-attempts', 'random-trailers', 'disable-cookies'
+];
+
+function normalizeWgBeans(beans) {
+  for (const bean of (Array.isArray(beans) ? beans : [])) {
+    if (bean?.proto !== 'wireguard') continue;
+    const awg = bean.wireguard?.['amnezia-wg-option'];
+    if (!awg || awg.version !== undefined) continue;
+    if (AWG_V3_KEYS.some(k => awg[k] !== undefined && awg[k] !== null && awg[k] !== '')) {
+      awg.version = 3;
+    }
+  }
+  return beans;
+}
+
+// AWG-патч 3/3: web4core не эмитит dns/remote-dns-resolve для wireguard-outbound.
+// После buildFromRequest возвращаем YAML в объект, инжектируем DNS из bean и
+// сериализуем обратно. lineWidth:-1 обязателен — иначе jsyaml переносит длинные
+// I1-I5/H-строки и портит их содержимое.
+function injectWgDns(result, beans) {
+  if (!result || result.kind !== 'yaml' || !Array.isArray(beans)) return result;
+  const withDns = beans.filter(b =>
+    b?.proto === 'wireguard' &&
+    Array.isArray(b.wireguard?.dns) && b.wireguard.dns.length
+  );
+  if (!withDns.length || typeof result.data !== 'string') return result;
+  const doc = jsyaml.load(result.data);
+  const proxies = Array.isArray(doc?.proxies) ? doc.proxies : [];
+  const wgProxies = proxies.filter(p => p?.type === 'wireguard');
+  const used = new Set();
+  for (const bean of withDns) {
+    let proxy = wgProxies.find(p => p.name === bean.name && !used.has(p));
+    if (!proxy) proxy = wgProxies.find(p => !used.has(p)); // позиционный fallback
+    if (!proxy) continue;
+    used.add(proxy);
+    proxy.dns = bean.wireguard.dns.slice();
+    if (bean.wireguard.remoteDnsResolve) proxy['remote-dns-resolve'] = true;
+  }
+  result.data = jsyaml.dump(doc, { lineWidth: -1 });
+  return result;
+}
+
 function initWgUpload() {
   const fileInput = document.getElementById('wgFile');
   const statusEl = document.getElementById('wgStatus');
@@ -434,7 +490,7 @@ function initWgUpload() {
     wgBeans = [];
     for (const file of files) {
       try {
-        const text = await file.text();
+        const text = normalizeWgText(await file.text());
         const bean = api.parseWireGuardConf(text, file.name);
         if (bean) wgBeans.push(bean);
       } catch (e) {
@@ -474,7 +530,7 @@ function buildMihomo() {
     const result = api.buildFromRequest({
       core: 'mihomo',
       input: raw,
-      wgBeans: wgBeans,
+      wgBeans: normalizeWgBeans(wgBeans),
       options: {
         addSocks: document.getElementById('cfgSocks').checked,
         addTun: addTun, 
@@ -485,6 +541,8 @@ function buildMihomo() {
         perProxyPort: perProxySocks
       }
     });
+
+    injectWgDns(result, wgBeans);
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
     
