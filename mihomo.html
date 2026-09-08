@@ -142,6 +142,11 @@
         </div>
         <span class="wg-status" id="wgStatus"></span>
       </div>
+      <div style="margin-top: 15px;">
+        <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">WireGuard DNS:</label>
+        <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
+        <div id="wgDnsWarning" class="hint" style="color: #d9534f; display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
+      </div>
     </div>
 
     <div class="card">
@@ -446,27 +451,35 @@ function normalizeWgBeans(beans) {
 }
 
 // AWG-патч 3/3: web4core не эмитит dns/remote-dns-resolve для wireguard-outbound.
-// После buildFromRequest возвращаем YAML в объект, инжектируем DNS из bean и
-// сериализуем обратно. lineWidth:-1 обязателен — иначе jsyaml переносит длинные
-// I1-I5/H-строки и портит их содержимое.
+// После buildFromRequest возвращаем YAML в объект и инжектируем DNS из поля
+// wgCustomDns (UI); пустое поле — dns удаляется. lineWidth:-1 обязателен — иначе
+// jsyaml переносит длинные I1-I5/H-строки и портит их содержимое.
 function injectWgDns(result, beans) {
   if (!result || result.kind !== 'yaml' || !Array.isArray(beans)) return result;
-  const withDns = beans.filter(b =>
-    b?.proto === 'wireguard' &&
-    Array.isArray(b.wireguard?.dns) && b.wireguard.dns.length
-  );
+  const customDnsInput = document.getElementById('wgCustomDns');
+  const customDnsStr = customDnsInput ? customDnsInput.value : '';
+  const customDns = customDnsStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+
+  const withDns = beans.filter(b => b?.proto === 'wireguard');
   if (!withDns.length || typeof result.data !== 'string') return result;
+
   const doc = jsyaml.load(result.data);
   const proxies = Array.isArray(doc?.proxies) ? doc.proxies : [];
   const wgProxies = proxies.filter(p => p?.type === 'wireguard');
   const used = new Set();
+
   for (const bean of withDns) {
     let proxy = wgProxies.find(p => p.name === bean.name && !used.has(p));
-    if (!proxy) proxy = wgProxies.find(p => !used.has(p)); // позиционный fallback
+    if (!proxy) proxy = wgProxies.find(p => !used.has(p));
     if (!proxy) continue;
     used.add(proxy);
-    proxy.dns = bean.wireguard.dns.slice();
-    if (bean.wireguard.remoteDnsResolve) proxy['remote-dns-resolve'] = true;
+
+    if (customDns.length > 0) {
+      proxy.dns = customDns;
+      if (bean.wireguard && bean.wireguard.remoteDnsResolve) proxy['remote-dns-resolve'] = true;
+    } else {
+      delete proxy.dns;
+    }
   }
   result.data = jsyaml.dump(doc, { lineWidth: -1 });
   return result;
@@ -479,7 +492,15 @@ function initWgUpload() {
 
   fileInput.addEventListener('change', async () => {
     const files = Array.from(fileInput.files || []);
-    if (!files.length) { wgBeans = []; updateWgStatus(); return; }
+    if (!files.length) {
+      wgBeans = [];
+      const dnsInput = document.getElementById('wgCustomDns');
+      const dnsWarn = document.getElementById('wgDnsWarning');
+      if (dnsInput) dnsInput.value = '';
+      if (dnsWarn) dnsWarn.style.display = 'none';
+      updateWgStatus();
+      return;
+    }
     
     const api = globalThis.web4core;
     if (!api?.parseWireGuardConf) {
@@ -495,6 +516,25 @@ function initWgUpload() {
         if (bean) wgBeans.push(bean);
       } catch (e) {
         showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true);
+      }
+    }
+
+    // Перехват нестабильного DNS
+    const customDnsInput = document.getElementById('wgCustomDns');
+    const dnsWarning = document.getElementById('wgDnsWarning');
+    if (wgBeans && wgBeans.length > 0 && customDnsInput) {
+      const bean = wgBeans[0];
+      if (bean.wireguard && Array.isArray(bean.wireguard.dns)) {
+        if (bean.wireguard.dns.includes('100.64.0.1')) {
+          customDnsInput.value = '1.1.1.1, 8.8.8.8';
+          if (dnsWarning) dnsWarning.style.display = 'block';
+        } else {
+          customDnsInput.value = bean.wireguard.dns.join(', ');
+          if (dnsWarning) dnsWarning.style.display = 'none';
+        }
+      } else {
+        customDnsInput.value = '';
+        if (dnsWarning) dnsWarning.style.display = 'none';
       }
     }
     updateWgStatus();
