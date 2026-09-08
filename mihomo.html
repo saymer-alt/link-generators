@@ -48,6 +48,13 @@
   .checkbox-grid input[type="checkbox"]{width:auto;accent-color:var(--accent)}
   .toggle-row{display:flex;align-items:center;gap:10px;margin-top:12px}
   .toggle-row label{margin:0;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .validation-box{margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;font-size:.85rem;color:var(--muted)}
+  .validation-box.state-validating{color:var(--accent)}
+  .validation-box.state-valid{border-color:var(--green);background:rgba(35,134,54,.08);color:var(--text)}
+  .validation-box.state-invalid{border-color:var(--red);background:rgba(218,54,51,.08);color:var(--text)}
+  .validation-issue{margin-top:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:monospace;font-size:.75rem;white-space:pre-wrap;word-break:break-word}
+  .validation-issue-error{border-color:var(--red)}
 </style>
 </head>
 <body>
@@ -169,13 +176,14 @@
 
       <div class="btn-group">
         <button class="btn" onclick="buildMihomo()">⚡ Build Config</button>
-        <button class="btn btn-gray" onclick="copyMihomo()">📋 Copy YAML</button>
+        <button class="btn btn-gray" id="copyYamlBtn" onclick="copyMihomo()">📋 Copy YAML</button>
       </div>
     </div>
 
     <div class="card">
       <div class="card-title">📦 Mihomo YAML</div>
       <textarea id="mihomoOutput" readonly></textarea>
+      <div id="mihomoValidationBox" class="validation-box state-not-built"></div>
     </div>
   </div>
 </div>
@@ -553,6 +561,244 @@ function initWgUpload() {
   }
 }
 
+// === MIHOMO BASIC VALIDATION ===
+// Структурная проверка ГОТОВОГО YAML на клиенте. Это НЕ эквивалент `mihomo -t`:
+// настоящий запуск Mihomo в браузере невозможен (см. README). Проверяем только то,
+// что Mihomo гарантированно отвергнет (сверено с исходниками v1.19.x), и сознательно
+// НЕ проверяем неизвестные поля — Mihomo их игнорирует, а мы не должны блокировать
+// валидные конфиги. Уверенные ошибки (ERROR) блокируют Copy, предупреждения (WARNING) — нет.
+const MIHOMO_VALIDATION_STATE = { state: 'NOT_BUILT', result: null }; // NOT_BUILT | VALIDATING | VALID | INVALID
+
+// Типы исходящих: точный список case'ов из adapter/parser.go (MetaCubeX/mihomo,
+// линия v1.19.x). Неизвестный тип = уверенная ошибка ("unsupport proxy type").
+const MIHOMO_PROXY_TYPES = new Set([
+  'ss', 'ssr', 'socks5', 'http', 'vmess', 'vless', 'snell', 'trojan', 'hysteria',
+  'hysteria2', 'tuic', 'ssh', 'mieru', 'anytls', 'masque', 'trusttunnel',
+  'shadowquic', 'gost-relay', 'sudoku', 'wireguard',
+  'direct', 'reject', 'dns', 'rematch', 'openvpn', 'tailscale', 'zerotier'
+]);
+// Подмножество, для которого server+port обязательны (у остальных иная адресация —
+// direct/reject/dns не имеют сервера, wireguard/openvpn/tailscale/zerotier адресуются иначе).
+const MIHOMO_SERVER_TYPES = new Set([
+  'ss', 'ssr', 'socks5', 'http', 'vmess', 'vless', 'snell', 'trojan', 'hysteria',
+  'hysteria2', 'tuic', 'ssh', 'mieru', 'anytls', 'masque', 'trusttunnel',
+  'shadowquic', 'gost-relay', 'sudoku'
+]);
+// Типы групп: точный список case'ов из adapter/outboundgroup/parser.go
+const MIHOMO_GROUP_TYPES = new Set(['select', 'url-test', 'fallback', 'load-balance', 'relay']);
+// Встроенные цели, допустимые в ссылках групп (разрешаем с запасом — лишнее не блокируем)
+const MIHOMO_BUILTIN_TARGETS = new Set(['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL']);
+
+function fmtVal(v) {
+  if (v === undefined) return '(отсутствует)';
+  if (v === null) return 'null';
+  if (typeof v === 'string') return v === '' ? '(пустая строка)' : '"' + v + '"';
+  if (Array.isArray(v)) return '[список]';
+  if (typeof v === 'object') return '{словарь}';
+  return String(v);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function validateMihomoYaml(yaml) {
+  const errors = [];
+  const warnings = [];
+  const err = (where, field, value, message) => errors.push({ where, field, value, message });
+  const warn = (where, field, value, message) => warnings.push({ where, field, value, message });
+
+  let doc;
+  try {
+    doc = jsyaml.load(String(yaml));
+  } catch (e) {
+    err('', '', '', 'YAML не парсится: ' + (e.message || e));
+    return { status: 'INVALID', errors, warnings };
+  }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    err('', '', '', 'Корень YAML должен быть словарём, а не ' + (Array.isArray(doc) ? 'списком' : typeof doc));
+    return { status: 'INVALID', errors, warnings };
+  }
+
+  const checkPort = (where, field, v) => {
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 65535) {
+      err(where, field, fmtVal(v), 'порт должен быть целым числом 1–65535');
+    }
+  };
+
+  // --- верхнеуровневые скалярные порты и структура секций ---
+  ['port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port'].forEach(key => {
+    if (doc[key] !== undefined) checkPort('', key, doc[key]);
+  });
+  ['dns', 'tun', 'proxy-providers', 'rule-providers'].forEach(key => {
+    const v = doc[key];
+    if (v !== undefined && (typeof v !== 'object' || v === null || Array.isArray(v))) {
+      err('', key, fmtVal(v), 'поле должно быть словарём');
+    }
+  });
+  ['rules', 'listeners', 'inbounds'].forEach(key => {
+    const v = doc[key];
+    if (v !== undefined && !Array.isArray(v)) err('', key, fmtVal(v), 'поле должно быть списком');
+  });
+  if (Array.isArray(doc.rules)) {
+    doc.rules.forEach((r, i) => {
+      if (typeof r !== 'string' || !r.trim()) err('rules[' + i + ']', '', fmtVal(r), 'правило должно быть непустой строкой');
+    });
+  }
+  // --- listeners / inbounds: только структурные проверки ---
+  const listenerNames = new Set();
+  ['listeners', 'inbounds'].forEach(listName => {
+    if (!Array.isArray(doc[listName])) return;
+    doc[listName].forEach((l, i) => {
+      const at = listName + '[' + i + ']';
+      if (!l || typeof l !== 'object' || Array.isArray(l)) { err(at, '', '', 'должен быть словарём'); return; }
+      if (typeof l.name === 'string' && l.name) {
+        if (listenerNames.has(l.name)) err(at, 'name', l.name, 'дублирующееся имя listener (mihomo отвергает дубликаты)');
+        else listenerNames.add(l.name);
+      }
+      if (l.port !== undefined) checkPort(at, 'port', l.port);
+    });
+  });
+
+  // --- proxies ---
+  const proxyNames = new Set();
+  if (doc.proxies !== undefined && !Array.isArray(doc.proxies)) {
+    err('', 'proxies', '', 'поле proxies должно быть списком');
+  } else if (Array.isArray(doc.proxies)) {
+    doc.proxies.forEach((p, i) => {
+      const at = 'proxies[' + i + ']';
+      if (!p || typeof p !== 'object' || Array.isArray(p)) { err(at, '', '', 'прокси должен быть словарём'); return; }
+      const name = p.name, type = p.type;
+      if (typeof name !== 'string' || !name.trim()) {
+        err(at, 'name', fmtVal(name), 'обязательное поле отсутствует или пустое');
+      } else if (proxyNames.has(name)) {
+        err(name, 'name', name, 'дублирующееся имя прокси (mihomo: "proxy ... is the duplicate name")');
+      } else {
+        proxyNames.add(name);
+      }
+      const where = (typeof name === 'string' && name) ? name : at;
+      if (typeof type !== 'string' || !type.trim()) {
+        err(where, 'type', fmtVal(type), 'обязательное поле отсутствует или пустое');
+      } else if (!MIHOMO_PROXY_TYPES.has(type)) {
+        err(where, 'type', type, 'неизвестный тип — mihomo отвечает "unsupport proxy type"');
+      } else if (MIHOMO_SERVER_TYPES.has(type)) {
+        if (typeof p.server !== 'string' || !p.server.trim()) {
+          err(where, 'server', fmtVal(p.server), 'обязательное поле отсутствует или пустое');
+        }
+        checkPort(where, 'port', p.port);
+      }
+      if (type === 'mieru') {
+        const tr = p.transport;
+        if (tr !== 'TCP' && tr !== 'UDP') {
+          err(where, 'transport', fmtVal(tr), 'mihomo принимает только TCP или UDP ("transport must be TCP or UDP")');
+        }
+      }
+    });
+  }
+
+  // --- proxy-groups ---
+  const groupNames = new Set();
+  if (doc['proxy-groups'] !== undefined && !Array.isArray(doc['proxy-groups'])) {
+    err('', 'proxy-groups', '', 'поле proxy-groups должно быть списком');
+  } else if (Array.isArray(doc['proxy-groups'])) {
+    const groups = doc['proxy-groups'];
+    // проход 1: собираем имена всех групп (ссылки могут быть вперёд)
+    groups.forEach((g) => {
+      if (g && typeof g === 'object' && !Array.isArray(g) && typeof g.name === 'string' && g.name.trim()) {
+        if (groupNames.has(g.name)) err(g.name, 'name', g.name, 'дублирующееся имя группы (mihomo: "the duplicate name")');
+        else groupNames.add(g.name);
+      }
+    });
+    // проход 2: содержимое
+    groups.forEach((g, i) => {
+      const at = 'proxy-groups[' + i + ']';
+      if (!g || typeof g !== 'object' || Array.isArray(g)) { err(at, '', '', 'группа должна быть словарём'); return; }
+      const where = (typeof g.name === 'string' && g.name) ? g.name : at;
+      if (typeof g.name !== 'string' || !g.name.trim()) {
+        err(where, 'name', fmtVal(g.name), 'обязательное поле отсутствует или пустое');
+      }
+      if (typeof g.type !== 'string' || !g.type.trim()) {
+        err(where, 'type', fmtVal(g.type), 'обязательное поле отсутствует или пустое');
+      } else if (!MIHOMO_GROUP_TYPES.has(g.type)) {
+        err(where, 'type', g.type, 'неизвестный тип группы (mihomo: select, url-test, fallback, load-balance, relay)');
+      }
+      if (g.proxies !== undefined && !Array.isArray(g.proxies)) {
+        err(where, 'proxies', fmtVal(g.proxies), 'должно быть списком');
+      } else if (Array.isArray(g.proxies)) {
+        if (!g.proxies.length) warn(where, 'proxies', '', 'список ссылок пуст');
+        g.proxies.forEach((ref, j) => {
+          if (typeof ref !== 'string' || !ref) { err(where, 'proxies[' + j + ']', fmtVal(ref), 'ссылка должна быть непустой строкой'); return; }
+          if (!proxyNames.has(ref) && !groupNames.has(ref) && !MIHOMO_BUILTIN_TARGETS.has(ref)) {
+            err(where, 'proxies[' + j + ']', ref, 'ссылается на несуществующий прокси или группу');
+          }
+        });
+      }
+    });
+    for (const n of groupNames) {
+      if (proxyNames.has(n)) warn(n, 'name', n, 'имя группы совпадает с именем прокси');
+    }
+  }
+
+  return { status: errors.length ? 'INVALID' : 'VALID', errors, warnings };
+}
+
+function renderMihomoValidation() {
+  const box = document.getElementById('mihomoValidationBox');
+  const st = MIHOMO_VALIDATION_STATE;
+  box.className = 'validation-box state-' + st.state.toLowerCase();
+  let html = '';
+  if (st.state === 'NOT_BUILT') {
+    html = '— Базовая проверка ещё не выполнялась. Нажмите ⚡ Build Config — проверка запустится автоматически.';
+  } else if (st.state === 'VALIDATING') {
+    html = '⏳ Базовая проверка конфигурации...';
+  } else if (st.state === 'VALID') {
+    html = '<b>⚠️ Базовая проверка пройдена. Это не эквивалент проверки mihomo -t.</b>';
+  } else if (st.state === 'INVALID') {
+    html = '<b>❌ Ошибка базовой проверки</b>';
+  }
+  const res = st.result;
+  if (res) {
+    for (const e of res.errors) html += validationIssueHtml(e, true);
+    if (res.warnings.length) {
+      html += '<div style="margin-top:8px">' + (res.status === 'VALID' ? 'Предупреждения (Copy доступен):' : 'Предупреждения:') + '</div>';
+      for (const w of res.warnings) html += validationIssueHtml(w, false);
+    }
+  }
+  if (st.state === 'INVALID') html += '<div style="margin-top:8px">Исправьте конфигурацию и выполните ⚡ Build Config снова.</div>';
+  box.innerHTML = html;
+  const btn = document.getElementById('copyYamlBtn');
+  if (btn) btn.disabled = st.state !== 'VALID';
+}
+
+function validationIssueHtml(issue, isError) {
+  const lines = [];
+  if (issue.where) lines.push('Proxy: ' + issue.where);
+  if (issue.field) lines.push('Field: ' + issue.field);
+  if (issue.value !== undefined && issue.value !== '') lines.push('Value: ' + issue.value);
+  lines.push((isError ? 'Ошибка: ' : 'Внимание: ') + issue.message);
+  return '<div class="validation-issue' + (isError ? ' validation-issue-error' : '') + '">' + lines.map(escapeHtml).join('\n') + '</div>';
+}
+
+function setMihomoValidationState(state, result) {
+  MIHOMO_VALIDATION_STATE.state = state;
+  MIHOMO_VALIDATION_STATE.result = result || null;
+  renderMihomoValidation();
+}
+
+// Счётчик поколений: любой сброс статуса инвалидирует незавершённую проверку,
+// чтобы асинхронный VALID не перезаписал сброс, случившийся во время проверки
+let mihomoValidationSeq = 0;
+
+async function runMihomoValidation(yaml) {
+  const seq = ++mihomoValidationSeq;
+  setMihomoValidationState('VALIDATING');
+  await new Promise(r => setTimeout(r, 30)); // даём браузеру отрисовать статус
+  if (seq !== mihomoValidationSeq) return; // входные данные изменились — статус уже NOT_BUILT
+  const res = validateMihomoYaml(yaml);
+  if (seq !== mihomoValidationSeq) return;
+  setMihomoValidationState(res.status, res); // 'VALID' | 'INVALID'
+}
+
 // === MIHOMO BUILDER (via web4core) ===
 function buildMihomo() {
   const raw = document.getElementById('mihomoInput').value.trim();
@@ -596,12 +842,20 @@ function buildMihomo() {
 
     document.getElementById('mihomoOutput').value = yaml;
     showToast('✅ Mihomo config built!');
+    // Автоматическая проверка итогового YAML (после всех патчей), до Copy
+    runMihomoValidation(yaml);
   } catch (e) {
+    setMihomoValidationState('NOT_BUILT');
     showToast('❌ ' + (e.message || e), true);
   }
 }
 
 function copyMihomo() {
+  // Без silently-success: копирование разрешено только после пройденной проверки
+  if (MIHOMO_VALIDATION_STATE.state !== 'VALID') {
+    showToast('Копирование заблокировано: конфигурация не прошла базовую проверку', true);
+    return;
+  }
   const text = document.getElementById('mihomoOutput').value;
   if (!text) return showToast('Нет конфига', true);
   navigator.clipboard.writeText(text).then(() => showToast('YAML скопирован!'));
@@ -614,6 +868,13 @@ function copyText(text) {
 // === INIT ===
 initPingSelector();
 initWgUpload();
+// Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
+// результат проверки недействительным — старый VALID не сохраняется
+['input', 'change'].forEach(ev => document.addEventListener(ev, () => {
+  mihomoValidationSeq++; // инвалидируем незавершённую проверку, если была
+  setMihomoValidationState('NOT_BUILT');
+}, true));
+setMihomoValidationState('NOT_BUILT');
 </script>
 </body>
 </html>
