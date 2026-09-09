@@ -3342,6 +3342,8 @@
           }
         }
       };
+      const excludeFilter = typeof opts?.excludeFilter === "string" ? opts.excludeFilter.trim() : "";
+      if (excludeFilter) providers[providerName]["exclude-filter"] = excludeFilter;
       providerNames.push(providerName);
     });
     const usePerProxyListeners = isPerProxyListenerMode(opts);
@@ -3439,6 +3441,7 @@
     if (typeof value === "boolean") return value ? "true" : "false";
     if (typeof value === "number") return String(value);
     const s = String(value);
+    if (key === "exclude-filter") return JSON.stringify(s);
     if (key === "grpc-service-name") {
       return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
     }
@@ -4293,7 +4296,7 @@
       if (wgBeans.length) extraBeans.push(...wgBeans);
       extraBeans.forEach(validateBean);
       assertCoreSupports(extraBeans, core, "Mihomo", options);
-      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest });
+      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter });
       const yaml2 = buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, cfg2.listeners, {
         addSocks,
         webUI,
