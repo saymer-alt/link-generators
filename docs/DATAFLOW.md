@@ -96,9 +96,13 @@ fetch с CORS-фолбэком через сторонний `sub.web2core.worke
 Локальный конвейер (всё в `index.html`, шаги 1–2 и 4 — собственные патчи этого репо):
 
 ```text
-1. normalizeWgText(text)          Amnezia Premium пишет «PersistentKeepalive = 25-35»,
-                                  парсер рантайма понимает только скаляр → диапазон
-                                  сворачивается к нижней границе ДО парсинга.
+1. normalizeWgText(text)          Реальные AWG-конфиги нескалярны: PersistentKeepalive
+                                  = 25-35 (Premium и self-hosted 3.1) и булевы
+                                  RandomTrailers/DisableCookies = on/off (официальный
+                                  формат литералов AWG 3.1), а парсер рантайма понимает
+                                  только скаляры и 1/true/yes-булевы → диапазон
+                                  сворачивается к нижней границе, on/off → 1/0 ДО
+                                  парсинга; заодно снимается UTF-8 BOM.
 2. web4core.parseWireGuardConf()  [Interface]/[Peer] → bean proto 'wireguard':
                                   privateKey/publicKey/addresses/dns/mtu/persistentKeepalive,
                                   amnezia-wg-option (Jc…H4, I1–I5, version,
@@ -106,11 +110,17 @@ fetch с CORS-фолбэком через сторонний `sub.web2core.worke
                                   peers (endpoint→server:port, allowed-ips, reserved).
                                   IPv6: без IPv6-адреса AllowedIPs с «:» отбрасываются
                                   (ipVersion: 'ipv4') — поведение рантайма, намеренное.
-3. normalizeWgBeans(wgBeans)      ЛОКАЛЬНЫЙ ПАТЧ: если в amnezia-wg-option есть любой
-                                  3.x-ключ (header-protection-key, content-padding-addition,
-                                  rekey-*, random-trailers, …) и нет version → version: 3.
-                                  Без этого mihomo выбирает legacy-движок и 3.x-поля
-                                  молча не работают (Amnezia Premium).
+3. normalizeWgBeans(wgBeans)      ЛОКАЛЬНЫЙ ПАТЧ, два правила:
+                                  а) range-строки («10-20») на int-полях mihomo
+                                     (jc/jmin/jmax/s1-s4/itime — AWG_INT_KEYS)
+                                     сворачиваются к нижней границе: иначе weakly-typed
+                                     декодер mihomo уронил бы декодирование ВСЕГО
+                                     конфига;
+                                  б) если в amnezia-wg-option есть любой 3.x-ключ
+                                     (header-protection-key, content-padding-addition,
+                                     rekey-*, random-trailers, …) и нет version →
+                                     version: 3. Без этого mihomo ≥1.19.30 выбирает
+                                     legacy-движок и 3.x-поля молча не работают.
 4. buildMihomoProxy(wireguard)    type: wireguard + private-key/public-key/ip/ipv6/
                                   allowed-ips/mtu/persistent-keepalive/peers[+reserved]/
                                   amnezia-wg-option (passthrough).

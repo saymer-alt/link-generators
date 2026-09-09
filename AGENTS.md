@@ -65,10 +65,15 @@ HTML-файле, компактный hand-written JS без фреймворк�
   текстовому формату YAML, который генерирует рантайм.
 - Собственный слой страницы (не рантайм), добавлен локально:
   - **AWG-совместимость**: `normalizeWgText` (диапазон `PersistentKeepalive = 25-35` →
-    скаляр ДО парсинга), `normalizeWgBeans` (авто `version: 3` при наличии AWG 3.x-полей —
-    иначе mihomo молча использует legacy-движок и поля не работают), `injectWgDns`
-    (dns/`remote-dns-resolve` для wireguard-прокси из поля «WireGuard DNS»; повторный dump
-    только `jsyaml.dump(..., { lineWidth: -1 })`, иначе рвутся длинные base64-строки).
+    скаляр и булевы `RandomTrailers`/`DisableCookies = on|off` → `1|0` ДО парсинга —
+    официальный формат литералов AWG 3.1; заодно снимается UTF-8 BOM), `normalizeWgBeans`
+    (авто `version: 3` при наличии AWG 3.x-полей — иначе mihomo молча использует
+    legacy-движок; range-строки на int-полях mihomo `jc/jmin/jmax/s1-s4/itime` —
+    `AWG_INT_KEYS` — сворачиваются к нижней границе, иначе декодирование всего конфига
+    падает), `injectWgDns` (dns/`remote-dns-resolve` для wireguard-прокси из поля
+    «WireGuard DNS»; повторный dump только `jsyaml.dump(..., { lineWidth: -1 })`, иначе
+    рвутся длинные base64-строки). Форматы значений AWG и матрица версий mihomo —
+    docs/PROTOCOLS.md.
   - **DNS-защита**: DNS `100.64.0.1` (Amnezia Premium) → автоподстановка `1.1.1.1, 8.8.8.8`
     с предупреждением.
   - **Pre-copy валидатор**: после Build Config финальный YAML проходит
@@ -287,6 +292,17 @@ gateway-конфига). Подробно — docs/VPS-GATEWAY.md. Инвари�
   перезаписывает или не находит).
 - Забыть `lineWidth: -1` в `applyDeploymentProfile()` — jsyaml перенесёт длинные AWG
   base64-строки (I1–I5/H) и молча испортит конфиг.
+- Расширить `AWG_INT_KEYS` в `normalizeWgBeans` на строковые range-поля (`h1-h4`,
+  `content-padding-addition`, rekey-*/keepalive/max-handshake таймеры) — mihomo держит их
+  строками, v3-движок парсит «lo-hi» как UintRange: свёртка к числу сломает легальные
+  диапазоны (Amnezia Premium пишет H1–H4 диапазонами).
+- «Чинить» неработающий AWG 3.1-туннель генератором, когда ядро на устройстве старше
+  mihomo 1.19.30 — все 3.1-ключи в `amnezia-wg-option` ядро молча игнорирует (двусторонние
+  `HeaderProtectionKey`/`RandomTrailers` → туннель не поднимется). Production runtime
+  (официальный релиз, v1.19.30) поддержку имеет; диагностику начинать с `mihomo -v` на
+  устройстве — версия opkg-пакета может не совпадать с реальным бинарником
+  (update-mihomo.sh меняет бинарник напрямую, мимо opkg), а `PKG_VERSION` в Makefile
+  entware-go — версия апстрим-синка, не продакшена.
 - «Восстановить» warpscout / WARP-in-WARP / `dialer-proxy` — они удалены сознательно
   (19.08.2026), см. раздел «README и код».
 - Перевести подключение рантайма на ES-модули — сломается открытие с `file://`.

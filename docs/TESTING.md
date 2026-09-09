@@ -82,7 +82,8 @@ git diff --name-only web4core.runtime.js   # пусто = рантайм не т
 
 1. Обе вкладки: полный сценарий «YAML бота → ссылки → Builder → Build → Copy».
 2. Валидатор: TPC → INVALID + Copy заблокирована; TCP → VALID; изменение input сбрасывает.
-3. AWG 3.1 `.conf` → VALID (`version: 3` в YAML).
+3. AWG 3.1 `.conf` → VALID (`version: 3` в YAML, булевы `random-trailers`/`disable-cookies`
+   из `on`/`off` присутствуют как booleans).
 4. Allow LAN: `allow-lan: true` + `bind-address: "*"` в выводе (регэксп-патч не сломан).
 5. `web4core.runtime.js` не тронут (см. команду выше).
 6. Профиль развёртывания: generic-вывод посимвольно равен эталону; при vps —
@@ -141,7 +142,57 @@ git diff --name-only web4core.runtime.js   # пусто = рантайм не т
 - generic → vps → generic: панель скрывается, `cfgTun` разблокируется и
   восстанавливается в прежнее состояние, вывод чистится от VPS-значений — ✅
 
+## AWG self-hosted 3.1 импорт (добавлен 2026-09-09)
+
+Production-case: реальный self-hosted AWG 3.1 `.conf` (Amnezia, `HeaderProtectionKey` +
+диапазонные таймеры + `RandomTrailers`/`DisableCookies = on|off`) импортировался с потерей
+полей. Прогон фикса (все проверки выполнены в браузере, синтетические fixture с нулевыми
+ключами — реальные ключи в репозиторий не попадают): **все зелёные**.
+
+Baseline ДО фикса (зафиксирован тем же прогоном на неизменённом коде):
+`RandomTrailers/DisableCookies = on|off` молча пропадали из `amnezia-wg-option`
+(официальный формат литералов 3.1 не входил в набор парсера); range-значения int-полей
+(`S1 = 100-200`, `Itime = 10-16`) уходили в YAML строками → mihomo не декодировал бы весь
+конфиг. Range-строки легальных полей (`h1-h4`, шесть таймеров 3.x) и так проходили
+корректно — passthrough не менялся.
+
+### Матрица fixture (после фикса)
+
+- `user31` (форма production-конфига: HP + 6 диапазонов + `RandomTrailers = on`,
+  `DisableCookies = off`, `PersistentKeepalive = 25-35`, `AllowedIPs = 0.0.0.0/0, ::/0`):
+  `random-trailers: true`, `disable-cookies: false` (booleans), `version: 3`,
+  `header-protection-key` на месте, все 6 таймеров — range-строками («3-7», «100-120»,
+  «150-180», «5-15», «15-20», «10-100»), `persistent-keepalive: 25`, `allowed-ips:
+  ['0.0.0.0/0']` + `ip-version: ipv4`, DNS `100.64.0.1` → `1.1.1.1, 8.8.8.8` — ✅
+- `fi31` (та же форма без булевых строк, диапазоны «3-8»/«7-13»): булевы ключи
+  отсутствуют, остальное идентично `user31` — ✅
+- `boolOff` (`RandomTrailers = OFF`): `random-trailers: false` (boolean), `version: 3` — ✅
+- `boolYes0` (`RandomTrailers = yes`, `DisableCookies = 0` — штатный путь парсера):
+  `true`/`false`, регресс не сломан — ✅
+- `intrange` (`S1 = 100-200`, `Itime = 10-16`): свёрнуты к нижней границе — `s1: 100`,
+  `itime: 10` (числа), `jc` не тронут, `version` не появляется (нет 3.x-полей) — ✅
+- `premium` (H1–H4 диапазонами, I1–I5 CPS): без изменений — диапазоны строками, I1/I5
+  целые (148/153 симв., в YAML не перенесены), `version` НЕ проставляется — ✅
+- `plain` (обычный WireGuard без AWG): `amnezia-wg-option` отсутствует целиком — ✅
+- `dual` (`Address` v4+v6, `AllowedIPs = 0.0.0.0/0, ::/0`): `ipv6` сохранён, `::/0` в
+  `allowed-ips`, `ip-version` не проставляется — ✅
+- юнит `normalizeWgText`: `on`→`1`, `OFF`→`0`, `true` не тронут, BOM снят,
+  `PersistentKeepalive = 25-35` → `25` — ✅
+
+### Регрессия прочих слоёв
+
+- валидатор: vless (TCP) → VALID; `mieru … transport=TPC` → INVALID — ✅
+- VPS-профиль × AWG 3.1 (интеграция): `tun.device: tun-mihomo`, `auto-route: false`,
+  `dns.listen: 0.0.0.0:53` + полный `amnezia-wg-option` (`version: 3`,
+  `random-trailers: true`), VALID — ✅
+
 ## Что не тестируется
 
 Ничего не гоняется автоматически: после пуша проверяется живая страница вручную, а после
 бот-коммита рантайма прогон повторяется (см. [UPDATES.md](UPDATES.md), [DEVELOPMENT.md](DEVELOPMENT.md)).
+
+Для AWG-импорта за рамками тестов остаются три уровня, которые страница проверить не может:
+`mihomo -t` (схема YAML глазами реального ядра), фактический AWG-хендшейк против
+self-hosted 3.1 сервера и поведение конкретной сборки ядра (требование mihomo ≥ 1.19.30
+для 3.1-ключей — см. [PROTOCOLS.md](PROTOCOLS.md)). Успешная структурная валидация ≠
+работающий туннель.

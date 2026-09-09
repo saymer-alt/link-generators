@@ -1,6 +1,6 @@
 # PROTOCOLS — протоколы: вход → bean → Mihomo
 
-Актуальная таблица по фактическому коду (commit `f5ea0a3`). Источники: `SUPPORTED_SCHEMES`
+Актуальная таблица по фактическому коду `main` (существенно пересмотрена 2026-09-09: форматы AWG 1.5/2.0/3.1, матрица версий mihomo). Источники: `SUPPORTED_SCHEMES`
 и `CORE_PROTOCOL_SUPPORT.mihomo.base` в `web4core.runtime.js`, парсеры/строители там же,
 проверки живым прогоном (`buildFromRequest`, core mihomo). Различать два уровня
 поддержки:
@@ -46,21 +46,66 @@
 Файлы `.conf`/`.wg`/`.awg` → `parseWireGuardConf()` → bean `wireguard` → `type: wireguard`:
 
 - `[Interface]`: PrivateKey, Address (IPv4/IPv6 разделяются; без IPv6-адреса IPv6-AllowedIPs
-  отбрасываются — поведение рантайма), DNS, MTU;
+  отбрасываются, прокси получает `ip-version: ipv4` — поведение рантайма, намеренное: без
+  IPv6-адреса в туннеле маршрут `::/0` всё равно нерабочий), DNS, MTU; структурные ключи
+  wg-quick (`ListenPort`, `Table`, `PreUp/PostUp`, `SaveConfig`, …) игнорируются сознательно;
 - `[Peer]` (берётся первый): PublicKey, PresharedKey, AllowedIPs, Endpoint → server:port,
   PersistentKeepalive (диапазоны сворачивает локальный `normalizeWgText`), Reserved
   (csv-числа 0–255 или строка);
 - AmneziaWG-параметры → `amnezia-wg-option` (passthrough в YAML): `jc, jmin, jmax, s1–s4,
   h1–h4, i1–i5, j1–j3, itime, version, header-protection-key, content-padding-addition,
   rekey-after-time, rekey-timeout, reject-after-time, keepalive-timeout,
-  max-handshake-attempts, random-trailers, disable-cookies`. Числовые ключи парсятся как
-  int (включая `version`), булевы (`random-trailers`, `disable-cookies`) — только
-  `1/true/yes/0/false/no`: **написание `= on` (его генерирует веб web4core) молча
-  теряется** — известный gap апстрима, чинить только через upstream, не локально;
-- `version` в `.conf` не бывает: локальный `normalizeWgBeans` проставляет `version: 3`,
-  если есть 3.x-поля (иначе mihomo включает legacy-движок и поля молча не работают);
+  max-handshake-attempts, random-trailers, disable-cookies`;
 - `dns`/`remote-dns-resolve` в wireguard-прокси добавляет локальный `injectWgDns` из поля
   «WireGuard DNS» (детали — [DATAFLOW.md](DATAFLOW.md)).
+
+### Форматы значений AWG (1.5 / 2.0 / 3.1)
+
+Актуальная версия протокола — 3.1 (docs.amnezia.org, «AmneziaWG 3.1»); поле `Version` в
+`.conf` не пишется. Реальные self-hosted-конфиги двух семейств: **Amnezia Premium** —
+`H1–H4` диапазонами + `I1–I5` (CPS-теги `<b 0x…><rc n><t><r n>`), без 3.1-полей;
+**Amnezia self-hosted 3.1** — одиночные `H1–H4` + `HeaderProtectionKey` + диапазонные
+таймеры + `RandomTrailers`/`DisableCookies`.
+
+- Диапазоны `lo-hi` легальны для `H1–H4` и шести параметров 3.x: `content-padding-addition`,
+  `rekey-after-time`, `rekey-timeout`, `reject-after-time`, `keepalive-timeout`,
+  `max-handshake-attempts`. Mihomo держит эти ключи строками, v3-движок парсит их как
+  UintRange — passthrough без преобразований;
+- `random-trailers`/`disable-cookies` — булевы. Официальный формат литералов — `on`/`off`,
+  парсер рантайма принимает только `1/true/yes/0/false/no`: локальный `normalizeWgText`
+  сводит `on`/`off` к `1`/`0` до парсинга (до 2026-09-09 поля молча терялись; gap остаётся
+  в апстриме — чистый фикс там);
+- `PersistentKeepalive = 25-35` и range-значения int-полей mihomo (`jc/jmin/jmax/s1–s4/
+  itime`, список `AWG_INT_KEYS`) сворачиваются к нижней границе: keepalive — односторонний
+  тайминг, любая точка диапазона валидна; range-строка в int-поле уронила бы декодирование
+  всего конфига mihomo (weakly-typed парсер читает только числа);
+- `HeaderProtectionKey` (base64-ключ, mihomo сам переводит в hex) и `RandomTrailers` —
+  «двусторонние» параметры: сервер с включённым HP/trailers отклоняет клиентов без них,
+  поэтому потеря этих полей = нерабочий туннель.
+
+### Требования к версии mihomo
+
+| Набор в amnezia-wg-option | mihomo ≤ 1.19.29 | mihomo ≥ 1.19.30 (первая с AWG 3.1) |
+|---|---|---|
+| `jc…h4`, `i1–i5` (1.5/2.0 — Premium) | работает (legacy-движок) | работает: без 3.1-полей `version` не проставляется → legacy-движок |
+| `version: 3` + HP/таймеры/булевы (3.1 self-hosted) | **все 3.1-ключи молча игнорируются** — туннель с HP/trailers не поднимется | работает (v3-движок `amneziav3`) |
+
+Уровень уверенности этой таблицы — **совместимость по исходникам** (wireguard.go
+v1.19.27/v1.19.30/Alpha + uapi.go/amneziawg-go: состав полей, типы, выбор движка), не
+runtime-факт: фактический AWG-хендшейк против реального 3.1-сервера отдельно не
+подтверждён (см. «Что не тестируется» в [TESTING.md](TESTING.md)).
+
+`version: 3` в `.conf` не бывает: локальный `normalizeWgBeans` проставляет его при наличии
+любого 3.x-поля (на mihomo ≤1.19.29 поле игнорируется безвредно). Импорт 3.1-конфига на
+ядро старше 1.19.30 генератором не чинится — это свойство конкретной инсталляции.
+Production runtime (официальный релиз MetaCubeX; на роутерах владельца v1.19.30) 3.1
+поддерживает. Не смешивать три уровня версии: пакетная версия opkg (в entware-go
+закоммичен `PKG_VERSION` последнего апстрим-синка, 1.19.27; CI при сборке подставляет
+актуальную релизную версию эфемерно — релизные `.ipk` уже 1.19.30-1), источник
+`keenetic-auto-setup` (install.sh берёт `.ipk` из релиза entware-go, update-mihomo.sh —
+официальный бинарник MetaCubeX напрямую, мимо opkg) и фактический бинарник на устройстве
+(`mihomo -v`) — после обновления через update-mihomo.sh opkg может показывать старую
+версию пакета.
 
 ## Зазор SUPPORTED ↔ CORE (и UI-хинт)
 
