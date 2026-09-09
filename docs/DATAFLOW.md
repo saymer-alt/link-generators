@@ -132,14 +132,18 @@ DNS Amnezia Premium), поле подставляет `1.1.1.1, 8.8.8.8` и по
 ```text
 1. result = web4core.buildFromRequest({ core:'mihomo', input, wgBeans: normalizeWgBeans(wgBeans), options })
 2. injectWgDns(result, wgBeans)                       # правка YAML (wireguard dns)
-3. allow-lan патч: регэксп allow-lan: false → true
-   + вставка bind-address: "*" сразу после           # привязан к текстовому формату рантайма:
-   allow-lan: true (если bind-address ещё нет)       # смена формата ломает его молча — проверять
-4. #mihomoOutput.value = yaml                          # итог показан
-5. runMihomoValidation(yaml)                           # валидатор, см. VALIDATION.md
+3. applyDeploymentProfile(yaml, profile)              # ТОЛЬКО при профиле «VPS Gateway» (opt-in):
+                                                      #   gateway-постпатч tun/dns/find-process-mode/
+                                                      #   profile; при generic НЕ вызывается —
+                                                      #   см. VPS-GATEWAY.md
+4. allow-lan патч: регэксп allow-lan: false → true
+   + вставка bind-address: "*" сразу после            # привязан к текстовому формату рантайма:
+   allow-lan: true (если bind-address ещё нет)        # смена формата ломает его молча — проверять
+5. #mihomoOutput.value = yaml                          # итог показан
+6. runMihomoValidation(yaml)                           # валидатор, см. VALIDATION.md
 ```
 
-Валидатор работает **только с финальной строкой YAML после шагов 1–3**, а не с beans:
+Валидатор работает **только с финальной строкой YAML после шагов 1–5**, а не с beans:
 ошибка может появиться именно на этапе генерации (реальный кейс — `transport: TPC` у
 Mieru, пришедший из пользовательской ссылки).
 

@@ -15,6 +15,7 @@
 | 🔒 Per-Proxy TUN | `cfgPerProxyTun` | `mihomoPerProxyTun` | ☐ | TUN-листенеры по одному на прокси/группу |
 | 🔌 Per-Proxy SOCKS | `cfgPerProxySocks` | `perProxyPort` | ☐ | `listeners: socks-<имя>` на портах 7890+i, `mixed-port` убирается |
 | 🏓 Ping server | `pingSelect` | `urlTest` | Google | `url`/`expected-status` url-test группы и health-check провайдеров |
+| 🎯 Профиль развёртывания | `cfgProfile` | — (пост-патч страницы) | Универсальный | при «VPS Gateway» — gateway-постпатч YAML; подробно [VPS-GATEWAY.md](VPS-GATEWAY.md) |
 
 Известная несостыковка UI: hint «TUN и Per-Proxy опции отключены по умолчанию» противоречит
 факту — `cfgTun` в HTML стоит `checked`. Это зафиксировано в [AGENTS.md](../AGENTS.md) как
@@ -65,6 +66,11 @@ Sub Mode: вместо `proxies` в группах — `use:` на провай�
   `listeners`: `mihomo-tun-N` (device `mitunN`, gvisor, `auto-route: false`,
   `auto-detect-interface: false`, `inet4-address: 198.19.x.y/30`), каждый с `proxy:` на
   свою `🔒`-группу / `SUB-`-группу.
+- Профиль VPS Gateway (opt-in, селектор «Профиль развёртывания»): пост-патч поверх
+  готового YAML — основная секция `tun:` приводится к gateway-виду (`tun-mihomo`,
+  `inet4-address`, `mtu`, `gso`), добавляются `find-process-mode: off`,
+  `profile.store-*: false` и опциональная секция `dns:` (fake-ip). По умолчанию выключен,
+  на Generic-вывод не влияет; подробно — [VPS-GATEWAY.md](VPS-GATEWAY.md).
 
 ## Health-check endpoints (`web4core.URLTEST_CHOICES`)
 

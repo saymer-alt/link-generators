@@ -87,6 +87,7 @@ mihomo -t -f config.yaml
 - **Health checks** — выбор endpoint'а: Google, Cloudflare, Apple, Microsoft, Ubuntu, Fedora.
 - **📡 Sub Mode** — HTTP(S)-подписки как `proxy-providers`: обновление раз в 12 часов, встроенный health-check. Включён по умолчанию; **для обычных ссылок отключите**.
 - **🛡️ TUN** и **🔒 Per-Proxy TUN** — системный туннель либо отдельный TUN-интерфейс на каждый прокси.
+- **🎯 Профиль VPS Gateway** (опционально, выключен по умолчанию) — Mihomo-конфиг для transparent-gateway-сценария [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway); обычная генерация не меняется. Подробнее — [docs/VPS-GATEWAY.md](docs/VPS-GATEWAY.md).
 - **🔌 Per-Proxy SOCKS** — отдельный SOCKS-порт на каждый прокси.
 - **🌐 Allow LAN** и **Mixed Port 7890**.
 - **🖥️ Web UI** — подключение дашборда metacubexd к `external-controller`.
@@ -111,6 +112,7 @@ mihomo -t -f config.yaml
 | [MIHOMO](docs/MIHOMO.md) | настройки Builder'а и структура YAML |
 | [PROTOCOLS](docs/PROTOCOLS.md) | протоколы: вход → bean → Mihomo |
 | [VALIDATION](docs/VALIDATION.md) | pre-copy валидатор подробно |
+| [VPS-GATEWAY](docs/VPS-GATEWAY.md) | опциональный профиль для amnezia-mihomo-gateway |
 | [UPDATES](docs/UPDATES.md) | жизненный цикл `web4core.runtime.js` |
 | [DEVELOPMENT](docs/DEVELOPMENT.md) | разработка и проверки |
 | [TESTING](docs/TESTING.md) | тестовая стратегия |

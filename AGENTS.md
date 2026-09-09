@@ -185,6 +185,26 @@ CORS-заголовки источники; это ограничение пла
 inbound (TUN или SOCKS), иначе ошибка «Mihomo: enable at least one inbound». Пустой ввод
 при пустых wgBeans → ошибка «No valid links or profiles provided».
 
+### Профиль развёртывания «VPS Gateway» (opt-in, 2026-09-09)
+
+Дополнительный post-processing сценарий для amnezia-mihomo-gateway (Mihomo-половина
+gateway-конфига). Подробно — docs/VPS-GATEWAY.md. Инварианты, которые нельзя нарушать:
+
+- селектор `#cfgProfile` по умолчанию = `generic`; при `generic` функция
+  `applyDeploymentProfile()` НЕ вызывается (guard в `buildMihomo()`) — вывод
+  байт-в-байт прежний, без лишних `jsyaml.load/dump`;
+- `tun.auto-route: false` — жёсткий инвариант, в UI не выставляется;
+- дефолты профиля = переменные текущего `install.sh` amnezia-mihomo-gateway
+  (`PROXY_IF`/`TUN_INET_ADDR`/`FAKE_IP_RANGE`, пакет v2.0); якорь — константа
+  `VPS_GATEWAY_DEFAULTS` в `index.html`; при изменении в gateway-репо — синхронизировать;
+- DNS-блок существует только внутри vps-профиля (sub-toggle `#vpsDnsEnabled`);
+  выключение удаляет `dns` целиком; в generic `dns` не появляется никогда;
+- порядок постобработки: `injectWgDns` → `applyDeploymentProfile` (только vps) →
+  allow-lan регэксп-патч; повторный dump — только
+  `jsyaml.dump(doc, { lineWidth: -1 })`;
+- Linux-часть gateway (policy routing, iptables, Docker, AWG, systemd, watchdog)
+  генератором не создаётся — это зона amnezia-mihomo-gateway.
+
 ## Правила внесения изменений
 
 1. Перед изменением логики генерации (ссылки, YAML, парсинг) — сначала разобраться в
@@ -260,6 +280,13 @@ inbound (TUN или SOCKS), иначе ошибка «Mihomo: enable at least on
   существующая несостыковка: hint говорит «TUN и Per-Proxy опции отключены по умолчанию»,
   но `cfgTun` в HTML стоит `checked` (включён). Это расхождение фиксить только по явному
   решению владельца, не мимоходом.
+- Включить профиль VPS Gateway по умолчанию или выполнять `applyDeploymentProfile()` при
+  `generic` — изменит вывод основного сценария (нарушение главного инварианта профиля).
+- Менять дефолты VPS-профиля без сверки с `install.sh` amnezia-mihomo-gateway — конфиг
+  перестанет совпадать с routing-скриптом (device/fake-ip-range/inet4-address установщик
+  перезаписывает или не находит).
+- Забыть `lineWidth: -1` в `applyDeploymentProfile()` — jsyaml перенесёт длинные AWG
+  base64-строки (I1–I5/H) и молча испортит конфиг.
 - «Восстановить» warpscout / WARP-in-WARP / `dialer-proxy` — они удалены сознательно
   (19.08.2026), см. раздел «README и код».
 - Перевести подключение рантайма на ES-модули — сломается открытие с `file://`.
