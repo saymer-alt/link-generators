@@ -85,6 +85,61 @@ git diff --name-only web4core.runtime.js   # пусто = рантайм не т
 3. AWG 3.1 `.conf` → VALID (`version: 3` в YAML).
 4. Allow LAN: `allow-lan: true` + `bind-address: "*"` в выводе (регэксп-патч не сломан).
 5. `web4core.runtime.js` не тронут (см. команду выше).
+6. Профиль развёртывания: generic-вывод посимвольно равен эталону; при vps —
+   контракт из раздела «Профиль VPS Gateway» (auto-route false, dns-тумблер,
+   find-process-mode, store-*).
+
+## Профиль VPS Gateway (opt-in; добавлен 2026-09-09)
+
+Селектор «Профиль развёртывания» (`#cfgProfile`), дефолт `generic`. Реализация —
+`applyDeploymentProfile()` в `index.html`, вызывается **только** при `vps` (после
+`injectWgDns`, до allow-lan патча). Прогон 2026-09-09 (базовый HEAD `b7af2b1`, до
+коммита): **все проверки зелёные**.
+
+Фикстуры: синтетическая vless-ссылка, trojan-ссылка, URL подписки, синтетический AWG 3.1
+`.conf` (длинные base64 I1/I5/HeaderProtectionKey по 140+ символов, `PersistentKeepalive
+= 25`, `RandomTrailers = 1`). Baseline Generic-вывода снят до правок и сохранён вне
+репозитория.
+
+### Generic-инвариант (byte-for-byte)
+
+- 5 эталонных входов (ссылки+дефолты; Sub Mode URL; Per-Proxy SOCKS ×2 ссылки;
+  allow-lan off; AWG файл) → вывод после добавления профиля **посимвольно равен
+  baseline** — ✅
+- повторная generic-сборка после цикла generic→vps→generic — посимвольно равна
+  baseline (мусор не остаётся) — ✅
+- профильная функция при generic не вызывается (guard `if (deploymentProfile ===
+  'vps')` в `buildMihomo()`; инспекция кода) — ✅
+- AWG DNS injection (`injectWgDns`) и allow-lan патч работают как раньше — входят
+  в эталоны — ✅
+- Sub Mode: сравнение с нормализацией случайного `x-hwid` (генерируется заново на
+  каждую сборку — поведение рантайма, НЕ регресс) — ✅
+
+### VPS-контракт
+
+- все fixed-поля: `tun.{enable, device: tun-mihomo, stack: gvisor, auto-route: false,
+  auto-detect-interface: true, inet4-address: 10.255.255.1/30, mtu: 1420, gso: true}` — ✅
+- `endpoint-independent-nat` отсутствует; при ручной инъекции в YAML удаляется
+  (юнит-прогон `applyDeploymentProfile`) — ✅
+- `find-process-mode: 'off'` в корне (jsyaml квотит строку `off` — YAML 1.1 bool
+  protection; для mihomo/yaml.v3 это строка `"off"`, семантика верна) — ✅
+- `profile.store-selected/store-fake-ip = false`, merge без замены секции — ✅
+- `auto-route: false` в выводе; `auto-route: true` нигде; в DOM нет контрола
+  управления auto-route — ✅
+- passthrough редактируемых полей: device / inet4-address / mtu / fake-ip-range /
+  listen реально пробрасываются в YAML — ✅
+- DNS sub-toggle: off → `dns` отсутствует целиком (без частичных остатков) — ✅
+- пустые поля → боевые дефолты (device=tun-mihomo, nameserver=1.1.1.1/8.8.8.8) — ✅
+- Sub Mode + VPS: `proxy-providers` на месте + gateway-tun — ✅
+- AWG + VPS (двойной jsyaml-roundtrip): `amnezia-wg-option` (включая I1/I5 по 140
+  символов, `version: 3`) идентичен generic-сборке — ✅
+- allow-lan патч на VPS-выводе: `allow-lan: true` + `bind-address: "*"` — ✅
+- валидатор: все VPS-сборки → VALID; регресс `transport: TPC` → INVALID — ✅
+
+### Переключение
+
+- generic → vps → generic: панель скрывается, `cfgTun` разблокируется и
+  восстанавливается в прежнее состояние, вывод чистится от VPS-значений — ✅
 
 ## Что не тестируется
 

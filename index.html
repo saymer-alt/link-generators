@@ -181,6 +181,39 @@
     </div>
 
     <div class="card">
+      <div class="card-title">🎯 Профиль развёртывания</div>
+      <select id="cfgProfile">
+        <option value="generic" selected>Универсальный (по умолчанию — обычная генерация)</option>
+        <option value="vps">VPS Gateway — Mihomo-конфиг для amnezia-mihomo-gateway</option>
+      </select>
+      <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <div class="row">
+          <div><label>TUN device</label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
+          <div><label>TUN inet4-address</label><input type="text" id="vpsInet4" value="10.255.255.1/30"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div><label>MTU</label><input type="text" id="vpsMtu" value="1420"></div>
+          <div><label>fake-ip-range</label><input type="text" id="vpsFakeIp" value="198.18.0.0/16"></div>
+        </div>
+        <div class="toggle-row">
+          <label><input type="checkbox" id="vpsDnsEnabled" checked> 🌐 DNS-перехват (fake-ip) — часть VPS-профиля</label>
+        </div>
+        <div id="vpsDnsFields">
+          <div class="row">
+            <div><label>DNS listen</label><input type="text" id="vpsDnsListen" value="0.0.0.0:53"></div>
+            <div><label>Nameservers (через запятую)</label><input type="text" id="vpsDnsNs" value="1.1.1.1, 8.8.8.8"></div>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <div><label>proxy-server-nameserver</label><input type="text" id="vpsProxyNs" value="1.1.1.1"></div>
+          </div>
+          <div id="vpsDnsWarn" class="hint" style="color:#d9534f;margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
+        </div>
+        <div class="hint" style="margin-top:8px">⚠️ device, inet4-address и fake-ip-range должны соответствовать переменным routing-скрипта amnezia-mihomo-gateway (PROXY_IF / TUN_INET_ADDR / FAKE_IP_RANGE). Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
+      </div>
+      <div class="hint">VPS Gateway выключен по умолчанию и не влияет на обычную генерацию. Подробно — docs/VPS-GATEWAY.md.</div>
+    </div>
+
+    <div class="card">
       <div class="card-title">📦 Mihomo YAML</div>
       <textarea id="mihomoOutput" readonly></textarea>
       <div id="mihomoValidationBox" class="validation-box state-not-built"></div>
@@ -799,6 +832,107 @@ async function runMihomoValidation(yaml) {
   setMihomoValidationState(res.status, res); // 'VALID' | 'INVALID'
 }
 
+// === DEPLOYMENT PROFILE (VPS GATEWAY, opt-in) ===
+// Дефолты — зеркало текущего amnezia-mihomo-gateway/install.sh (источник истины для значений):
+// PROXY_IF (tun-mihomo), TUN_INET_ADDR (10.255.255.1/30), FAKE_IP_RANGE (198.18.0.0/16),
+// пакет v2.0 (mtu 1420, gso, find-process-mode: off, store-*: false).
+// При изменении install.sh — синхронизировать эту константу и value= в полях
+// #vpsDevice/#vpsInet4/#vpsMtu/#vpsFakeIp/#vpsDnsListen/#vpsDnsNs/#vpsProxyNs.
+// Generic-профиль: applyDeploymentProfile() НЕ вызывается (guard в buildMihomo) —
+// вывод байт-в-байт прежний. Подробно — docs/VPS-GATEWAY.md.
+const VPS_GATEWAY_DEFAULTS = {
+  device: 'tun-mihomo',
+  inet4Address: '10.255.255.1/30',
+  mtu: 1420,
+  fakeIpRange: '198.18.0.0/16',
+  dnsListen: '0.0.0.0:53',
+  dnsNameservers: ['1.1.1.1', '8.8.8.8'],
+  dnsProxyServerNameserver: ['1.1.1.1']
+};
+
+function vpsField(id, fallback) {
+  const v = (document.getElementById(id).value || '').trim();
+  return v ? v : fallback;
+}
+
+function vpsCsv(id, fallback) {
+  const arr = (document.getElementById(id).value || '').split(',').map(s => s.trim()).filter(Boolean);
+  return arr.length ? arr : fallback;
+}
+
+// Чистый пост-патч финального YAML. Вызывается ТОЛЬКО при профиле 'vps'
+// (после injectWgDns, до allow-lan патча). lineWidth:-1 обязателен —
+// иначе jsyaml переносит длинные AWG base64-строки и портит их.
+function applyDeploymentProfile(yaml, profile) {
+  if (profile !== 'vps') return yaml;
+  let doc;
+  try {
+    doc = jsyaml.load(String(yaml));
+  } catch (e) {
+    return yaml; // не наш YAML — пусть валидатор покажет ошибку
+  }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return yaml;
+
+  const mtu = parseInt(vpsField('vpsMtu', String(VPS_GATEWAY_DEFAULTS.mtu)), 10) || VPS_GATEWAY_DEFAULTS.mtu;
+
+  doc.tun = Object.assign({}, doc.tun, {
+    'enable': true,
+    'device': vpsField('vpsDevice', VPS_GATEWAY_DEFAULTS.device),
+    'stack': 'gvisor',
+    'auto-route': false, // инвариант: иначе Mihomo перехватит весь трафик VPS (потеря SSH)
+    'auto-detect-interface': true,
+    'inet4-address': vpsField('vpsInet4', VPS_GATEWAY_DEFAULTS.inet4Address),
+    'mtu': mtu,
+    'gso': true
+  });
+  delete doc.tun['endpoint-independent-nat']; // ломает gvisor (см. install.sh §2.7)
+
+  doc['find-process-mode'] = 'off';
+
+  // merge: прочие ключи profile (если появятся) не затирать
+  doc.profile = Object.assign({}, doc.profile, {
+    'store-selected': false,
+    'store-fake-ip': false
+  });
+
+  if (document.getElementById('vpsDnsEnabled').checked) {
+    doc.dns = {
+      'enable': true,
+      'ipv6': false,
+      'enhanced-mode': 'fake-ip',
+      'fake-ip-range': vpsField('vpsFakeIp', VPS_GATEWAY_DEFAULTS.fakeIpRange),
+      'listen': vpsField('vpsDnsListen', VPS_GATEWAY_DEFAULTS.dnsListen),
+      'nameserver': vpsCsv('vpsDnsNs', VPS_GATEWAY_DEFAULTS.dnsNameservers),
+      'proxy-server-nameserver': vpsCsv('vpsProxyNs', VPS_GATEWAY_DEFAULTS.dnsProxyServerNameserver)
+    };
+  } else {
+    delete doc.dns; // выключен целиком, без частичных остатков
+  }
+
+  return jsyaml.dump(doc, { lineWidth: -1 });
+}
+
+function updateVpsDnsFields() {
+  const on = document.getElementById('vpsDnsEnabled').checked;
+  document.getElementById('vpsDnsFields').style.display = on ? 'block' : 'none';
+}
+
+function onProfileChange() {
+  const isVps = document.getElementById('cfgProfile').value === 'vps';
+  const panel = document.getElementById('vpsPanel');
+  const tun = document.getElementById('cfgTun');
+  panel.style.display = isVps ? 'block' : 'none';
+  if (isVps) {
+    panel.dataset.prevTun = tun.checked ? '1' : '0';
+    tun.checked = true; // TUN обязателен для gateway-сценария
+    tun.disabled = true;
+    updateVpsDnsFields();
+  } else {
+    tun.disabled = false;
+    tun.checked = panel.dataset.prevTun !== '0'; // восстановить прежнее состояние
+  }
+}
+
 // === MIHOMO BUILDER (via web4core) ===
 function buildMihomo() {
   const raw = document.getElementById('mihomoInput').value.trim();
@@ -831,7 +965,14 @@ function buildMihomo() {
     injectWgDns(result, wgBeans);
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
-    
+
+    // PATCH: Deployment profile — только при opt-in профиле VPS Gateway.
+    // При 'generic' пост-патч не выполняется вовсе (инвариант byte-for-byte).
+    const deploymentProfile = document.getElementById('cfgProfile').value;
+    if (deploymentProfile === 'vps') {
+      yaml = applyDeploymentProfile(yaml, deploymentProfile);
+    }
+
     // PATCH: Allow LAN
     if (document.getElementById('cfgLan').checked) {
       yaml = yaml.replace(/^allow-lan:\s*false\s*$/m, 'allow-lan: true');
@@ -868,6 +1009,8 @@ function copyText(text) {
 // === INIT ===
 initPingSelector();
 initWgUpload();
+document.getElementById('cfgProfile').addEventListener('change', onProfileChange);
+document.getElementById('vpsDnsEnabled').addEventListener('change', updateVpsDnsFields);
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
 // результат проверки недействительным — старый VALID не сохраняется
 ['input', 'change'].forEach(ev => document.addEventListener(ev, () => {
