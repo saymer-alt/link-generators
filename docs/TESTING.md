@@ -38,6 +38,12 @@ py -m http.server 8017 --bind 127.0.0.1
 
 - **TPC-регресс**: `mieru` c `transport: TPC` → INVALID, ошибка содержит
   Proxy=`Sweden Mieru`, Field=`transport`, Value=`"TPC"`; с `TCP` → VALID (0 ошибок);
+- **mieru port-range (регресс 2026-09-09)**: `mieru` c `port-range: "20000-22000"` без
+  `port` → VALID (ошибка «порт должен быть целым числом» здесь запрещена — mihomo
+  принимает `port-range` вместо `port`, взаимоисключимо); `port` + `port-range`
+  одновременно → INVALID; `port-range: "20000"` (без дефиса) → INVALID;
+  `"70000-80000"` → INVALID; `"22000-20000"` (begin > end) → INVALID;
+  `"20000,21000"` (список — mihomo `Sscanf("%d-%d")` не парсит) → INVALID;
 - неизвестный `type` (`vles`) → INVALID; отсутствующий `server` → INVALID; порты
   `0`, `70000`, `"abc"`, `443.5` → INVALID;
 - битый YAML → INVALID с сообщением о синтаксисе; корень-список → INVALID; `dns` не
@@ -67,6 +73,19 @@ py -m http.server 8017 --bind 127.0.0.1
 | AWG 3.1 `.conf` (фейковые ключи, `PersistentKeepalive = 25-35`, `HeaderProtectionKey`) через DataTransfer → Build | state `VALID`; в YAML `version: 3`, `persistent-keepalive: 25`, `amnezia-wg-option` на месте — AWG-слой не задет | ✅ |
 | захват фактических YAML (links / per-proxy SOCKS / per-proxy TUN / sub-mode / mieru / masque / socks5 / WG) | сверка структуры с документацией (`docs/`) | ✅ |
 | отказы рантайма: `sdns://`, `socks4://`, `hysteria://` | «Mihomo does not support: sdns/socks4», «Unknown link: hysteria» | ✅ |
+
+## Браузерные e2e — mieru port-range (2026-09-09, все зелёные)
+
+Полный round-trip через UI (`#mihomoInput` → Build Config → валидатор), синтетические
+креды (`203.0.113.0/24`, testuser/testpass):
+
+| Сценарий | Ожидание | Статус |
+|---|---|---|
+| `mierus://testuser:testpass@203.0.113.10:20000-22000?protocol=TCP#…` → Build | state `VALID`; в YAML прокси: `port-range: "20000-22000"`, поля `port` нет | ✅ |
+| `mieru://…@203.0.113.11:20000?protocol=TCP` → Build | state `VALID`; в YAML `port: 20000` (обычный одиночный Mieru не сломан) | ✅ |
+| `mieru://…@203.0.113.12:70000-80000?protocol=TCP` → Build | state `INVALID`; ошибка на `port-range` (границы вне 1–65535) | ✅ |
+| регресс `mieru … transport=TPC` → Build | state `INVALID` на `transport` (прежнее поведение сохранено) | ✅ |
+| регресс: `vless` → VALID; `ss` без `port` → INVALID | прежнее поведение сохранено | ✅ |
 
 ## Runtime untouched check
 

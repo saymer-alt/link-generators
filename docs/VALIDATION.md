@@ -124,6 +124,7 @@ validateMihomoYaml(yaml)      [чистая функция: jsyaml.load + стр
 | 8 | Для 19 server-based типов: `server` отсутствует/пустое | обязательное поле (для `direct/reject/dns/rematch/openvpn/tailscale/zerotier/wireguard` не требуется — сознательно не строже ядра) |
 | 9 | `port` — не целое 1–65535 (те же 19 типов) | decode int + диапазон |
 | 10 | `mieru`: `transport ∉ {TCP, UDP}` (в т.ч. кейс `TPC`) | `adapter/outbound/mieru.go`: «transport must be TCP or UDP» |
+| 10a | `mieru` с непустым `port-range`: (а) одновременно задан `port` ≠ 0; (б) `port-range` — не строка вида `N-M`; (в) границы вне 1–65535 или начало > конец. При наличии `port-range` поле `port` НЕ требуется — правило 9 для `mieru` не применяется | `adapter/outbound/mieru.go`: `PortRange string` (`proxy:"port-range,omitempty"`), формат `%d-%d`, взаимоисключимость с `port` («port and port-range cannot be set at the same time»), границы 1–65535, begin <= end; рантайм при заданном `server_ports` пишет `port-range` и НЕ пишет `port` |
 | 11 | `proxy-groups[i]`: `name`/`type` отсутствуют; тип не из `{select, url-test, fallback, load-balance, relay}` | `adapter/outboundgroup/parser.go` |
 | 12 | Дубликат имени группы; имя группы == имени прокси-элемента не блокируется (см. WARNING) | `config.go`: «the duplicate name» |
 | 13 | Ссылка в `group.proxies` не разрешается в прокси/группу/builtin (`DIRECT, REJECT, REJECT-DROP, PASS, COMPATIBLE, GLOBAL`); forward-ссылки на группы разрешены | проверка резолвера групп |

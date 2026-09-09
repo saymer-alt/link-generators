@@ -737,7 +737,25 @@ function validateMihomoYaml(yaml) {
         if (typeof p.server !== 'string' || !p.server.trim()) {
           err(where, 'server', fmtVal(p.server), 'обязательное поле отсутствует или пустое');
         }
-        checkPort(where, 'port', p.port);
+        if (type === 'mieru' && p['port-range'] !== undefined && p['port-range'] !== '') {
+          // mihomo adapter/outbound/mieru.go: port и port-range взаимоисключающие;
+          // port-range — строка строго "%d-%d", границы 1–65535, begin <= end.
+          const pr = p['port-range'];
+          if (p.port !== undefined && p.port !== 0) {
+            err(where, 'port', fmtVal(p.port), 'mihomo: port и port-range нельзя задавать одновременно ("port and port-range cannot be set at the same time")');
+          }
+          const m = typeof pr === 'string' && pr.match(/^(\d+)-(\d+)$/);
+          if (!m) {
+            err(where, 'port-range', fmtVal(pr), 'должен быть строкой вида "начало-конец", например "20000-22000"');
+          } else {
+            const a = Number(m[1]), b = Number(m[2]);
+            if (a < 1 || a > 65535 || b < 1 || b > 65535 || a > b) {
+              err(where, 'port-range', fmtVal(pr), 'границы диапазона должны быть в 1–65535 и начало <= конец');
+            }
+          }
+        } else {
+          checkPort(where, 'port', p.port);
+        }
       }
       if (type === 'mieru') {
         const tr = p.transport;
