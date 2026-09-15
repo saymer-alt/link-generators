@@ -3560,6 +3560,7 @@
     const addSocks = opts.addSocks !== false;
     const webUI = opts.webUI === true;
     const tunOpt = opts.tun;
+    const tunStack = tunOpt?.stack === "mips" ? "mips" : "gvisor";
     const perProxyGroupName = (name) => `\u{1F512} ${name}`;
     let template = MIHOMO_DEFAULT_TEMPLATE;
     if (!addSocks) {
@@ -3594,7 +3595,7 @@
             name: `mihomo-tun-${idx + 1}`,
             type: "tun",
             device: `mitun${idx}`,
-            stack: "gvisor",
+            stack: tunStack,
             "auto-route": false,
             "auto-detect-interface": false,
             "inet4-address": [inet4]
@@ -3640,7 +3641,7 @@
       } else {
         const tun = {
           enable: true,
-          stack: "gvisor",
+          stack: tunStack,
           "auto-route": false,
           "auto-detect-interface": true,
           device: "mitun0"
@@ -4284,7 +4285,7 @@
       throw new Error("Mihomo: enable at least one inbound (TUN or SOCKS5)");
     }
     const perProxyListeners = perProxyPort || !!options.mihomoPerProxyTun;
-    const mihomoTunOpts = addTun ? { mode: options.mihomoPerProxyTun ? "listeners" : "tun" } : null;
+    const mihomoTunOpts = addTun ? { mode: options.mihomoPerProxyTun ? "listeners" : "tun", stack: options.mihomoTunStack === "mips" ? "mips" : "gvisor" } : null;
     const subMode = !!options.mihomoSubscriptionMode;
     if (subMode) {
       const { subUrls, proxyText } = splitMihomoSubscriptionInput(input);

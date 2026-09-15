@@ -1,7 +1,7 @@
 # ARCHITECTURE — link-generators
 
-Внутренняя документация. Описывает фактическое состояние кода (по состоянию на commit
-`f5ea0a3`, 2026-09-08). Источник истины — код; при расхождении чинить документацию или
+Внутренняя документация. Учитывает maintained MIPS patch и regression tests (2026-09-15).
+Источник истины — код; при расхождении чинить документацию или
 код, но не делать вид, что расхождения нет. Полный контракт для агентов — [AGENTS.md](../AGENTS.md)
 в корне репо; здесь — архитектурная картина.
 
@@ -18,13 +18,16 @@ Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки:
 ## Чего в проекте нет (принципиально)
 
 - Бэкенда. Всё исполняется в браузере.
-- npm / package.json / сборки / бандлера в самом репо. Единственный build — у апстрима
-  web4core, его артефакт коммитится готовым файлом (см. [UPDATES.md](UPDATES.md)).
-- Автотестов и CI-проверок кода. Единственный workflow — автообновление рантайма.
-  Тестирование — ручное, см. [TESTING.md](TESTING.md).
+- package.json / npm-зависимостей / build step у приложения. Бандл собирается из
+  upstream web4core, адаптируется maintained MIPS patch и после проверок коммитится
+  готовым файлом (см. [UPDATES.md](UPDATES.md)).
 - ES-модулей. Подключение классическое (`<script src>`), поэтому страница работает и с `file://` — это фича.
 
 Каждый push в `main` немедленно публикуется на Pages: **main = прод**. Язык проекта — русский.
+
+В `tests/` есть Node/browser regression tests и fixtures. Единственный workflow —
+автообновление runtime; он запускает patch-script, `node --check` и runtime test перед
+сравнением/заменой бандла. Browser test использует внешний Playwright, см. [TESTING.md](TESTING.md).
 
 ## Состав репозитория
 
@@ -32,6 +35,8 @@ Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки:
 |---|---|---|
 | `index.html` | **handwritten** | Единственная страница приложения: inline CSS + inline JS (~880 строк) |
 | `web4core.runtime.js` | **generated/vendor** | IIFE-бандл апстрима spatiumstas/web4core (~4380 строк). Руками не редактировать |
+| `scripts/` | handwritten (maintenance) | `patch-mihomo-tun.cjs` — единственная утверждённая maintained runtime adaptation |
+| `tests/` | regression tests | Node runtime tests, внешний Playwright browser test и синтетические fixtures |
 | `.github/workflows/update-web4core-runtime.yml` | handwritten (automation) | Автообновление рантайма из апстрима; имеет право коммитить в `main` |
 | `README.md` | документация | Пользовательская документация (обновляется вручную) |
 | `AGENTS.md` | документация | Контракт для AI-агентов |
@@ -68,6 +73,11 @@ Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки:
 
 Страница использует только три: `buildFromRequest`, `parseWireGuardConf`, `URLTEST_CHOICES`.
 Остальные — публичный API рантайма, зарезервированный для будущих задач.
+
+Узкое исключение из запрета локальных runtime-изменений — maintained MIPS adaptation:
+`scripts/patch-mihomo-tun.cjs` воспроизводимо добавляет `options.mihomoTunStack` и выбор
+стека обычного/Per-Proxy TUN. Runtime остаётся generated/vendor; произвольные ручные
+правки запрещены, при несовпадении upstream-структуры обновление останавливается.
 
 ### Исторический артефакт: `mihomo.html`
 
@@ -128,9 +138,9 @@ Pages теперь 404 — это ожидаемо, redirect не предусм
 
 ## Границы и инварианты, которые нельзя нарушать
 
-- `web4core.runtime.js` — generated/vendor: единственный путь изменения — апстрим
-  (см. [UPDATES.md](UPDATES.md)). Локальные адаптации — только wrapper'ами в `index.html`
-  над входом/выходом рантайма.
+- `web4core.runtime.js` — generated/vendor: общее правило — изменения через апстрим,
+  локальные адаптации через wrapper'ы `index.html`. Единственное утверждённое исключение —
+  воспроизводимый maintained MIPS patch (см. [UPDATES.md](UPDATES.md)); ручные правки запрещены.
 - Никакого backend, npm, ES-модулей, телеметрии: конфиги и ключи не покидают браузер
   (сетевые исключения перечислены в [DATAFLOW.md](DATAFLOW.md)).
 - Формат `masque://`-ссылок и структура выходного YAML — внешние контракты (их парсят

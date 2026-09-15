@@ -42,6 +42,12 @@ jobs:
           npm run build:web:runtime
           test -s src/web4core.runtime.js
 
+      - name: Apply maintained Mihomo TUN patch and check runtime
+        run: |
+          node scripts/patch-mihomo-tun.cjs web4core-upstream/src/web4core.runtime.js
+          node --check web4core-upstream/src/web4core.runtime.js
+          node tests/runtime.cjs web4core-upstream/src/web4core.runtime.js
+
       - name: Compare and update runtime
         run: |
           if cmp -s web4core-upstream/src/web4core.runtime.js web4core.runtime.js; then

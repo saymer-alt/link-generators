@@ -87,6 +87,7 @@ mihomo -t -f config.yaml
 - **Health checks** — выбор endpoint'а: Google, Cloudflare, Apple, Microsoft, Ubuntu, Fedora.
 - **📡 Sub Mode** — HTTP(S)-подписки как `proxy-providers`: обновление раз в 12 часов, встроенный health-check. Включён по умолчанию; **для обычных ссылок отключите**.
 - **🛡️ TUN** и **🔒 Per-Proxy TUN** — системный туннель либо отдельный TUN-интерфейс на каждый прокси.
+- **MIPS stack для TUN** — opt-in для **Mihomo >= 1.19.31**, выключен по умолчанию; стандартом остаётся **gVisor**. MIPS здесь — **TUN stack, не архитектура CPU**. Работает для обычного и Per-Proxy TUN, включая профиль VPS Gateway.
 - **🎯 Профиль VPS Gateway** (опционально, выключен по умолчанию) — Mihomo-конфиг для transparent-gateway-сценария [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway); обычная генерация не меняется. Подробнее — [docs/VPS-GATEWAY.md](docs/VPS-GATEWAY.md).
 - **🔌 Per-Proxy SOCKS** — отдельный SOCKS-порт на каждый прокси.
 - **🌐 Allow LAN** и **Mixed Port 7890**.
@@ -102,6 +103,8 @@ mihomo -t -f config.yaml
 - Старый адрес `/mihomo.html` больше не существует (файл удалён) — используйте главную страницу.
 
 ## Подробная документация
+
+Ревизия **Mihomo v1.19.31**, проверка AWG 3.1 и полная матрица протоколов с предложениями следующего этапа: [отчёт аудита](docs/AUDIT-MIHOMO-1.19.31.md). Pipeline AWG сохраняет все девять 3.1-полей, диапазоны и `on/off` → YAML booleans; AWG 3.1 требует Mihomo >= 1.19.30.
 
 Техническая база знаний — каталог [`docs/`](docs/):
 

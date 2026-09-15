@@ -1,6 +1,6 @@
 # DATAFLOW — прохождение данных
 
-Описывает фактический путь данных через код (commit `f5ea0a3`). Имена функций — из кода;
+Описывает фактический путь данных через код, включая MIPS TUN (2026-09-15). Имена функций — из кода;
 `web4core.*` означает `web4core.runtime.js`, остальное — `index.html`. Схемы входов — в
 [PROTOCOLS.md](PROTOCOLS.md), параметры Builder'а — в [MIHOMO.md](MIHOMO.md).
 
@@ -139,10 +139,23 @@ DNS Amnezia Premium), поле подставляет `1.1.1.1, 8.8.8.8` и по
 
 ## Post-processing: точный порядок в `buildMihomo()`
 
+Выбор TUN stack передаётся до сериализации YAML:
+
+```text
+cfgTunMips → tunStack → options.mihomoTunStack → buildFromRequest
+          → mihomoTunOpts.stack → opts.tun.stack в buildMihomoYaml
+          → normal TUN / Per-Proxy listeners
+```
+
+Checkbox выключен по умолчанию: `tunStack = 'gvisor'`; включён — `'mips'`.
+Runtime принимает только точное `mips`, при отсутствующем/неверном значении fallback
+`gvisor`, в том числе для прямого `buildMihomoYaml`. Выбор стека сам по себе TUN не включает.
+VPS получает тот же `tunStack` третьим аргументом ниже; его default/fallback тоже `gvisor`.
+
 ```text
 1. result = web4core.buildFromRequest({ core:'mihomo', input, wgBeans: normalizeWgBeans(wgBeans), options })
 2. injectWgDns(result, wgBeans)                       # правка YAML (wireguard dns)
-3. applyDeploymentProfile(yaml, profile)              # ТОЛЬКО при профиле «VPS Gateway» (opt-in):
+3. applyDeploymentProfile(yaml, profile, tunStack)    # ТОЛЬКО при профиле «VPS Gateway» (opt-in):
                                                       #   gateway-постпатч tun/dns/find-process-mode/
                                                       #   profile; при generic НЕ вызывается —
                                                       #   см. VPS-GATEWAY.md

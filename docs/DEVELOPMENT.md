@@ -1,8 +1,8 @@
 # DEVELOPMENT — как разрабатывать и проверять
 
 Практическая инструкция для разработчика/агента. Полный контракт — [AGENTS.md](../AGENTS.md);
-здесь — рабочий процесс. Проверено на dev-хосте Windows (Git Bash, Python через `py`,
-Node.js **нет**).
+здесь — рабочий процесс. Команды ниже используют Node.js для проверок и Python через
+`py` для необязательного static server; само приложение не требует npm или сборки.
 
 ## Локальный запуск
 
@@ -20,10 +20,12 @@ py -m http.server 8017 --bind 127.0.0.1     # или любой static server
 
 ## Как менять код
 
-- Правится **только `index.html`** (handwritten, inline JS/CSS, секции `// === … ===`) —
-  это единственная страница приложения.
-- `web4core.runtime.js` не редактируется никогда (см. [UPDATES.md](UPDATES.md)); новый
-  функционал — через публичный API рантайма или wrapper'ы входа/выхода.
+- Основной файл приложения — `index.html` (handwritten, inline JS/CSS, секции
+  `// === … ===`); документация и regression tests обновляются по затронутому контракту.
+- `web4core.runtime.js` — generated/vendor, ручные правки запрещены. Единственное
+  утверждённое исключение — воспроизводимая адаптация через `scripts/patch-mihomo-tun.cjs`
+  над чистым upstream-бандлом (см. [UPDATES.md](UPDATES.md)). Прочий новый функционал —
+  через публичный API рантайма, wrapper'ы входа/выхода или upstream PR.
 - DOM-id (`mihomoInput`, `cfgLan`, `wgFile`, `copyYamlBtn`, …) — стабильный контракт
   между HTML и JS; не переименовывать в одной половине.
 - Стиль: минимальные диффы, не реформатировать чужие участки, русские тексты UI,
@@ -34,13 +36,27 @@ py -m http.server 8017 --bind 127.0.0.1     # или любой static server
 ```bash
 git status --short                 # только задуманные файлы
 git diff --check                   # whitespace чисто
-git diff --name-only web4core.runtime.js   # пусто — рантайм не тронут
+node --check web4core.runtime.js
+node tests/runtime.cjs
 ```
 
-Содержательная проверка — прогон в браузере (см. [TESTING.md](TESTING.md)): обе вкладки,
+Если runtime изменён, его diff должен точно воспроизводиться patch-script'ом над чистым
+upstream-бандлом. Для исходной ревизии этой доработки проверка встроена в тест:
+
+```bash
+BASELINE_REF=fb285850bae09ba2f2336993e6b34fc2318a23af node tests/runtime.cjs
+```
+
+В PowerShell: `$env:BASELINE_REF='fb285850bae09ba2f2336993e6b34fc2318a23af'`, затем
+`node tests/runtime.cjs`. После нового upstream build сравнивать с его чистым бандлом,
+не со старым baseline; команды применения патча — [UPDATES.md](UPDATES.md).
+Inline JS извлечь из последнего `<script>` и проверить `node --check`.
+
+Браузерный regression test — `node tests/browser.cjs` с **внешней** установкой Playwright
+и браузера; переменные окружения и baseline описаны в [TESTING.md](TESTING.md).
+Приложение не получает npm-зависимостей или build step. Доступен и ручной прогон: обе вкладки,
 полный сценарий «YAML → Распарсить → Сгенерировать → В Mihomo Builder → Build Config →
-валидация → Copy», состояние валидатора при изменении входа. На dev-хосте нет Node, поэтому
-`node --check` недоступен — синтаксис проверяется самим фактом загрузки страницы.
+валидация → Copy», состояние валидатора при изменении входа.
 
 ## Deployment
 
@@ -55,7 +71,8 @@ git diff --name-only web4core.runtime.js   # пусто — рантайм не 
 
 ## Safe change rules (кратко; полная версия — AGENTS.md)
 
-- Не редактировать `web4core.runtime.js`; изменения рантайма — через upstream или wrapper.
+- Не редактировать `web4core.runtime.js` вручную; общее правило — upstream или wrapper,
+  единственное утверждённое исключение — maintained MIPS patch с проверкой воспроизводимости.
 - Не добавлять backend, npm/билд-систему, ES-модули, телеметрию/аналитику — это
   архитектурные границы проекта.
 - Не отправлять proxy-ссылки, конфиги, ключи наружу; не вводить сетевые вызовы с

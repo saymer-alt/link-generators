@@ -13,8 +13,9 @@
 на GitHub Pages: https://saymer-alt.github.io/link-generators/ . Всё работает на клиенте:
 две вкладки — генератор `masque://`-ссылок для WARP и сборщик `config.yaml` для Mihomo.
 
-Чего в проекте НЕТ (не придумывать): сборочной системы, package.json, npm-зависимостей,
-тестов, линтера, CI-проверок кода, бэкенда. Единственный workflow — автообновление рантайма.
+Чего в проекте НЕТ (не придумывать): сборочной системы приложения, package.json,
+npm-зависимостей приложения, линтера, бэкенда. С 2026-09-15 есть Node regression tests
+в `tests/`; runtime-тест выполняется также в workflow автообновления.
 Каждый пуш в `main` немедленно публикуется на Pages — «main = прод».
 
 Язык проекта — русский (UI, комментарии, документация). Код-стайл: всё инлайн в одном
@@ -27,6 +28,8 @@ HTML-файле, компактный hand-written JS без фреймворк�
 |---|---|---|
 | `index.html` | Всё приложение: inline CSS + inline JS; единственная страница | Да — основной файл |
 | `web4core.runtime.js` | Вендоренный артефакт сборки апстрим-проекта web4core | НЕТ — см. ниже |
+| `scripts/patch-mihomo-tun.cjs` | Maintained MIPS patch для upstream runtime | Только в согласованном scope; единственное исключение ниже |
+| `tests/` | Node/browser regression tests и fixtures | Да — синхронно с проверяемыми контрактами |
 | `docs/` | Внутренняя база знаний: ARCHITECTURE, DATAFLOW, MIHOMO, PROTOCOLS, VALIDATION, UPDATES, DEVELOPMENT, TESTING | Да — синхронно с изменениями поведения |
 | `.github/workflows/update-web4core-runtime.yml` | Автообновление рантайма | Аккуратно: имеет право писать в `main` |
 | `README.md` | Пользовательская landing page (переписана 2026-09-08) | Да, но не молча переписывать |
@@ -59,7 +62,7 @@ HTML-файле, компактный hand-written JS без фреймворк�
 - Список health-check endpoints → `web4core.URLTEST_CHOICES` (Google/Cloudflare/Apple/Microsoft/Ubuntu/Fedora;
   фолбэк — Google generate_204).
 - Опции страницы → поля `options`: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
-  `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `perProxyPort`.
+  `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`.
 - Чекбокс «Allow LAN» — постобработка: регэксп-патч `allow-lan: false → true` и вставка
   `bind-address: "*"` ПОСЛЕ того, как рантайм вернул YAML-строку. Патч привязан к
   текстовому формату YAML, который генерирует рантайм.
@@ -96,11 +99,22 @@ HTML-файле, компактный hand-written JS без фреймворк�
 
 ## web4core.runtime.js — сгенерированный файл, руками не трогать
 
+**Узкое исключение (контракт v1.19.31):** пользователь явно запросил параметр
+`options.mihomoTunStack` по всей цепочке runtime. Четыре локальные замены выполняет
+`scripts/patch-mihomo-tun.cjs` над чистым upstream-бандлом; этот же скрипт запускает
+workflow до сравнения/копирования. `mips` — opt-in, fallback `gvisor`; обычный TUN и
+listeners используют `opts.tun.stack`. Ручные правки остальных частей запрещены.
+При несовпадении/повторном применении патч аварийно останавливается; обновление
+апстрима требует review. Не отключать guard, не копировать непатченный runtime.
+Подробности и команды — `docs/UPDATES.md`, `docs/TESTING.md`.
+Все нижеследующие запреты на локальные runtime-правки имеют только это исключение.
+
 Это IIFE-бандл (esbuild-стиль, ~4.3 тыс. строк), собранный из апстрима
 https://github.com/spatiumstas/web4core (`npm run build:web:runtime`, Node 22). Локальные
 ручные правки будут молча перезаписаны следующим автообновлением (см. ниже). Нужно менять
-поведение парсинга/сборки — пути два: через обёртку в `index.html` (постобработка строки,
-как это делает allow-lan патч) либо через PR в апстрим web4core и ожидание автообновления.
+поведение парсинга/сборки — общее правило: обёртка в `index.html` (как allow-lan патч)
+либо PR в апстрим web4core и ожидание автообновления. Единственное утверждённое
+исключение — maintained MIPS patch выше; это не разрешение на другие локальные правки.
 
 В конце бандла — единственная точка экспорта: `globalThis.web4core = { … }`.
 
@@ -108,9 +122,10 @@ https://github.com/spatiumstas/web4core (`npm run build:web:runtime`, Node 22). 
 
 `.github/workflows/update-web4core-runtime.yml`, триггеры: push в `main`, еженедельный
 cron `17 4 * * 1`, ручной dispatch. Шаги: чекаут этого репо и апстрима web4core (ветка
-main) → Node 22 → `npm ci && npm run build:web:runtime` → `cmp` свежего
-`src/web4core.runtime.js` с локальным → при отличии коммит «Update web4core runtime from
-upstream» от github-actions[bot] ПРЯМО в `main` и push.
+main) → Node 22 → `npm ci && npm run build:web:runtime` → `scripts/patch-mihomo-tun.cjs`
+→ `node --check` → `tests/runtime.cjs` → `cmp` адаптированного
+`src/web4core.runtime.js` с локальным → при отличии copy и коммит «Update web4core runtime
+from upstream» от github-actions[bot] ПРЯМО в `main` и push.
 
 Следствия для агента:
 - каждый твой пуш в `main` запускает этот workflow (даже если runtime не менялся — тогда
@@ -232,7 +247,8 @@ gateway-конфига). Подробно — docs/VPS-GATEWAY.md. Инвари�
 
 ## Проверки после изменения HTML/JS
 
-Автоматических тестов нет. Реально доступные проверки (подробно — docs/TESTING.md):
+Автоматические регрессии: `node tests/runtime.cjs` и внешний Playwright-прогон
+`tests/browser.cjs` (подробно — docs/TESTING.md). Дополнительные проверки:
 
 1. Синтаксис JS: inline-скрипт `index.html` извлечь (содержимое последнего тега
    `<script>…</script>`) и прогнать через парсер; на хостах с Node — `node --check`

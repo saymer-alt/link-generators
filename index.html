@@ -167,9 +167,11 @@
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
         <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 Per-Proxy TUN</label>
+        <label><input type="checkbox" id="cfgTunMips"> MIPS stack для TUN (Mihomo 1.19.31+)</label>
         <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 Per-Proxy SOCKS</label>
       </div>
       <div class="hint">TUN и Per-Proxy опции отключены по умолчанию.</div>
+      <div class="hint">MIPS — новый TUN-стек Mihomo, не связанный с MIPS-архитектурой процессора. Опция выключена по умолчанию: используется gVisor. Применяется к обычному и Per-Proxy TUN.</div>
 
       <label style="margin-top:16px">🏓 Ping server (health-check)</label>
       <select id="pingSelect"></select>
@@ -900,7 +902,7 @@ function vpsCsv(id, fallback) {
 // Чистый пост-патч финального YAML. Вызывается ТОЛЬКО при профиле 'vps'
 // (после injectWgDns, до allow-lan патча). lineWidth:-1 обязателен —
 // иначе jsyaml переносит длинные AWG base64-строки и портит их.
-function applyDeploymentProfile(yaml, profile) {
+function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') {
   if (profile !== 'vps') return yaml;
   let doc;
   try {
@@ -915,7 +917,7 @@ function applyDeploymentProfile(yaml, profile) {
   doc.tun = Object.assign({}, doc.tun, {
     'enable': true,
     'device': vpsField('vpsDevice', VPS_GATEWAY_DEFAULTS.device),
-    'stack': 'gvisor',
+    'stack': tunStack === 'mips' ? 'mips' : 'gvisor',
     'auto-route': false, // инвариант: иначе Mihomo перехватит весь трафик VPS (потеря SSH)
     'auto-detect-interface': true,
     'inet4-address': vpsField('vpsInet4', VPS_GATEWAY_DEFAULTS.inet4Address),
@@ -981,6 +983,7 @@ function buildMihomo() {
   const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
   const addTun = document.getElementById('cfgTun').checked;
   const perProxyTun = document.getElementById('cfgPerProxyTun').checked;
+  const tunStack = document.getElementById('cfgTunMips').checked ? 'mips' : 'gvisor';
   const perProxySocks = document.getElementById('cfgPerProxySocks').checked;
 
   try {
@@ -995,6 +998,7 @@ function buildMihomo() {
         urlTest: urlTest,
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
         mihomoPerProxyTun: perProxyTun,
+        mihomoTunStack: tunStack,
         perProxyPort: perProxySocks
       }
     });
@@ -1007,7 +1011,7 @@ function buildMihomo() {
     // При 'generic' пост-патч не выполняется вовсе (инвариант byte-for-byte).
     const deploymentProfile = document.getElementById('cfgProfile').value;
     if (deploymentProfile === 'vps') {
-      yaml = applyDeploymentProfile(yaml, deploymentProfile);
+      yaml = applyDeploymentProfile(yaml, deploymentProfile, tunStack);
     }
 
     // PATCH: Allow LAN

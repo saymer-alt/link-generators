@@ -1,11 +1,58 @@
 # TESTING — реальная тестовая стратегия
 
-В проекте **нет** автотестов и CI-проверок кода (единственный workflow — автообновление
-рентайма, он тестов не содержит). Тестирование — ручное: браузерный прогон через локальный
-сервер + юнит-матрица валидатора, выполняемая в консоли/evaluate на живой странице.
-Здесь зафиксированы **фактически выполненные** проверки (последний полный прогон —
-2026-09-08, перед commit `f5ea0a3`) и регрессионный минимум. Придумывать CI не нужно —
-если он появится, этот документ обновляется.
+С 2026-09-15 доступны автоматические регрессии `tests/runtime.cjs` (только Node,
+без npm install) и `tests/browser.cjs` (внешняя установка Playwright и браузер).
+Workflow автообновления запускает runtime-тест до замены бандла.
+Исторические ручные прогоны и матрицы ниже сохранены с их датами.
+
+## Воспроизводимый прогон v1.19.31
+
+```bash
+node --check web4core.runtime.js
+node tests/runtime.cjs
+# Необязательный baseline старого кода и проверка воспроизводимости патча:
+BASELINE_REF=fb285850bae09ba2f2336993e6b34fc2318a23af node tests/runtime.cjs
+# Playwright установлен вне репозитория; его node_modules доступны через NODE_PATH.
+JS_YAML_PATH=/absolute/path/js-yaml.min.js TEST_OUTPUT_DIR=/absolute/path/yaml \
+BASELINE_REF=fb285850bae09ba2f2336993e6b34fc2318a23af node tests/browser.cjs
+```
+
+В PowerShell задавать переменные через `$env:NAME='value'`. `JS_YAML_PATH` — локальная
+копия **js-yaml 4.1.0**, того же файла, который загружает страница; с baseline обязательна,
+без baseline может быть опущена (тогда используется CDN страницы).
+`BROWSER_CHANNEL` по умолчанию `msedge`, можно выбрать установленный `chrome`.
+`TEST_OUTPUT_DIR` опционален, должен находиться вне репозитория.
+Inline JS отдельно извлечь из последнего `<script>` и проверить `node --check`.
+
+Runtime: 43 проверки без baseline / 62 с baseline. Обычный TUN, все Per-Proxy listeners,
+Sub Mode, no-TUN, explicit gvisor, invalid values, прямой buildMihomoYaml, неизменность
+байтов исходного вывода в 16 комбинациях. Случайный subscription x-hwid фиксируется
+только внутри тестового VM. Проверяется точное воспроизведение патча и отказ при дрейфе.
+
+Browser: UI default/off/on, инвалидирование Copy, обычный/Per-Proxy MIPS, VPS с обеими
+формами TUN и DNS toggle, generic→VPS→generic, AWG .conf upload со всеми девятью 3.1
+полями и проверкой промежуточных стадий, on/off и альтернативные booleans, scalar/range,
+false-only auto-version, plain WG, int-range; baseline generic/VPS × links/AWG,
+TPC→INVALID / TCP→VALID и обе вкладки (WARP YAML→MASQUE→Builder→Copy).
+Clipboard в тесте подменён тестовым адаптером; вызов и guard страницы остаются реальными.
+Дополнительно в браузере выполнены 47 структурных cases валидатора: 17 позитивных типов,
+порты, обязательные поля, YAML/секции, listeners, группы/ссылки, Mieru port-range.
+
+### Результат проверки ядром 2026-09-15
+
+Официальный `mihomo-windows-amd64-v1-v1.19.31.zip`, вывод `-v`:
+`Mihomo Meta v1.19.31 windows amd64 with go1.26.8`, build `2026-09-14`, tag `with_gvisor`.
+Команда: `mihomo -t -d <isolated-test-home> -f <generated-file>`.
+Успешно прошли **7 файлов**: default gvisor, MIPS, Per-Proxy MIPS, VPS MIPS,
+VPS + Per-Proxy MIPS, AWG 3.1, AWG 3.1 + VPS MIPS. Никаких пользовательских credentials.
+Это реальная проверка ядром, но не запуск TUN и не handshake AWG-сервера.
+
+### Runtime exception check
+
+Исторические пункты ниже «runtime не тронут» заменены для этой доработки проверкой
+воспроизводимости `scripts/patch-mihomo-tun.cjs` против baseline. Допускаются только
+четыре scoped-замены MIPS; sing-box и AWG-код не меняются. Перед review:
+`git diff --check`, `git status --short`, `git diff -- web4core.runtime.js`.
 
 ## Инфраструктура прогона
 

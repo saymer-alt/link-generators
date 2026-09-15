@@ -1,6 +1,6 @@
 # MIHOMO — Builder, генерируемый YAML, валидация
 
-Факты по коду (commit `f5ea0a3`): настройки UI → опции → секции YAML; в конце — краткое
+Факты по коду, включая MIPS TUN (2026-09-15): настройки UI → опции → секции YAML; в конце — краткое
 описание pre-copy валидатора (полностью — [VALIDATION.md](VALIDATION.md)).
 
 ## Настройки вкладки «⚙️ Mihomo Config Builder»
@@ -11,8 +11,9 @@
 | 🔌 Mixed Port 7890 | `cfgSocks` | `addSocks` | ☑ | `mixed-port: 7890` (или per-proxy listeners) |
 | 🖥️ Web UI | `cfgWebUI` | `webUI` | ☑ | `external-controller: 0.0.0.0:9090`, `external-ui: ui` (+URL metacubexd), `secret:` пустой |
 | 📡 Sub Mode | `cfgSubMode` | `mihomoSubscriptionMode` | ☑ | URL → `proxy-providers`, см. ниже |
-| 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, gvisor, `auto-route: false`) |
+| 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default gvisor / opt-in mips, `auto-route: false`) |
 | 🔒 Per-Proxy TUN | `cfgPerProxyTun` | `mihomoPerProxyTun` | ☐ | TUN-листенеры по одному на прокси/группу |
+| MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☐ | `stack: mips`; иначе `gvisor`; Mihomo >= 1.19.31 |
 | 🔌 Per-Proxy SOCKS | `cfgPerProxySocks` | `perProxyPort` | ☐ | `listeners: socks-<имя>` на портах 7890+i, `mixed-port` убирается |
 | 🏓 Ping server | `pingSelect` | `urlTest` | Google | `url`/`expected-status` url-test группы и health-check провайдеров |
 | 🎯 Профиль развёртывания | `cfgProfile` | — (пост-патч страницы) | Универсальный | при «VPS Gateway» — gateway-постпатч YAML; подробно [VPS-GATEWAY.md](VPS-GATEWAY.md) |
@@ -59,11 +60,19 @@ Sub Mode: вместо `proxies` в группах — `use:` на провай�
 
 ## TUN: два режима
 
-- Обычный (`addTun`): секция `tun: { enable: true, stack: gvisor, auto-route: false,
+С ревизии v1.19.31 добавлен checkbox `cfgTunMips` → `options.mihomoTunStack`.
+Он выключен: по умолчанию `gvisor`. При включении — `mips` в обоих режимах ниже,
+включая VPS Gateway. **MIPS — TUN stack, не CPU architecture; требуется Mihomo >= 1.19.31.**
+Runtime разрешает только `mips`/`gvisor`, неизвестное значение даёт безопасный `gvisor`.
+Новая опция сама по себе TUN не включает. Прямой `buildMihomoYaml` принимает
+`opts.tun.stack` с тем же fallback. Обоснование по исходникам — [аудит](AUDIT-MIHOMO-1.19.31.md).
+
+- Обычный (`addTun`): по умолчанию `tun: { enable: true, stack: gvisor, auto-route: false,
   auto-detect-interface: true, device: mitun0 }`. `auto-route: false` принципиален —
   конфиги вставляются в окружения (роутеры), где захват всех маршрутов недопустим.
+  При opt-in MIPS меняется только стек: `stack: mips`.
 - Per-Proxy TUN (`addTun` + `mihomoPerProxyTun`): отдельные tun-листенеры в секции
-  `listeners`: `mihomo-tun-N` (device `mitunN`, gvisor, `auto-route: false`,
+  `listeners`: `mihomo-tun-N` (device `mitunN`, default gvisor / opt-in mips, `auto-route: false`,
   `auto-detect-interface: false`, `inet4-address: 198.19.x.y/30`), каждый с `proxy:` на
   свою `🔒`-группу / `SUB-`-группу.
 - Профиль VPS Gateway (opt-in, селектор «Профиль развёртывания»): пост-патч поверх
