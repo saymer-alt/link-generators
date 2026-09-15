@@ -1,5 +1,19 @@
 # DEVELOPMENT — как разрабатывать и проверять
 
+## Primary/fallback
+
+Дополнительно к командам ниже запускать
+
+```bash
+node --test tools/tests/mihomo-priority.test.mjs # в fork
+node tests/mihomo-failover.cjs # MIHOMO_BIN + JS_YAML_PATH + TEST_OUTPUT_DIR
+node tests/whitelist.cjs # в consumer, окружение Playwright как для browser.cjs
+```
+
+Контракт — [AUTO-WHITELIST.md](AUTO-WHITELIST.md). Сначала публикуется source fork
+с новым тестом/API, затем consumer; до этого commit/push требует решения владельца.
+
+
 Практическая инструкция для разработчика/агента. Полный контракт — [AGENTS.md](../AGENTS.md);
 здесь — рабочий процесс. Команды ниже используют Node.js для проверок и Python через
 `py` для необязательного static server; само приложение не требует npm или сборки.

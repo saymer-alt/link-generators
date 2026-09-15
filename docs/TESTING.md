@@ -1,5 +1,46 @@
 # TESTING — реальная тестовая стратегия
 
+## Дополнительный runtime review #2588
+
+Подробно: [FALLBACK-REVIEW.md](FALLBACK-REVIEW.md). На v1.19.31 баг воспроизведён
+локальными HTTP-пробами: dead wrapper + alive child → трафик ошибочно уходит на БС.
+После замены nested-групп плоским GLOBAL тест `tests/mihomo-failover.cjs`
+доказывает реальный PRIMARY → FALLBACK → PRIMARY для static/providers/mixed.
+Проверяется полный health-check providers, continued probes без primary-трафика
+и effective порядок узлов. Тестовый interval=1s; generated default=300s.
+`--nested-repro` самодостаточно реконструирует отвергнутую схему.
+
+## Автоматический режим белых списков — 2026-09-15
+
+- Source: 21 тест (9 прежних + 12 primary/fallback); Amnezia: 12 тестов.
+- Runtime: 45 проверок без baseline / 61 с `BASELINE_REF=21c3010`.
+- Существующий browser suite: обе вкладки, AWG, VPS, MIPS, baseline; validator — 47 cases.
+  Тестовый текст AWG нормализуется LF для одинаковой работы regex на Windows/Linux.
+- Новый `tests/whitelist.cjs`: 10 YAML-сценариев (1+1, несколько+несколько,
+  subscription+subscription, mixed+mixed, links с Sub Mode; каждый gVisor/MIPS).
+  Проверены скрытие, восстановление, подмена запрещённых DOM-значений, отсутствие
+  поддержки в старом runtime, пустой резерв и блокировка Copy.
+- 256 сравнений UI-output с исходным `21c3010`: Sub Mode, TUN, Per-Proxy TUN/SOCKS,
+  MIPS, LAN, Web UI, generic/VPS. RNG стабилизирован только в тесте; сравниваются
+  полные строки YAML без нормализации результата. Выключенный режим byte-for-byte.
+- Официальный Mihomo v1.19.31 windows amd64 (Go 1.26.8, with_gvisor): `-t` прошёл
+  для 17 файлов — 10 новых и 7 прежних (обычный TUN/Per-Proxy/VPS/AWG).
+  Это проверка конфигураций, не сетевого failover или handshake.
+
+Новый browser test использует те же `NODE_PATH`, `JS_YAML_PATH`, `BROWSER_CHANNEL`,
+`TEST_OUTPUT_DIR`, `BASELINE_REF`, что и существующий suite:
+
+```bash
+BASELINE_REF=21c3010 JS_YAML_PATH=/absolute/js-yaml.min.js \
+TEST_OUTPUT_DIR=/absolute/yaml node tests/whitelist.cjs
+mihomo -t -d /absolute/isolated-test-home -f /absolute/yaml/whitelist-mixed-mips.yaml
+```
+
+Для каждого YAML использовать отдельный тестовый home; реальные подписки и
+credentials не нужны. Workflow теперь требует source `mihomo-priority.test.mjs`
+и runtime smoke test нового API до копирования артефакта.
+
+
 С 2026-09-15 доступны автоматические регрессии `tests/runtime.cjs` (только Node,
 без npm install) и `tests/browser.cjs` (внешняя установка Playwright и браузер).
 Workflow автообновления запускает runtime-тест до замены бандла.

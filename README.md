@@ -1,5 +1,11 @@
 # WARP & Mihomo Unified Generator
 
+Новый opt-in: **Автоматический режим белых списков** — обычные выходы приоритетны,
+отдельные БС-ссылки/подписки используются как резерв по health-check. Per-Proxy и
+VPS Gateway в этом режиме отключены; обычный TUN и MIPS доступны. По умолчанию
+режим выключен. [Настройка, структура YAML и ограничения](docs/AUTO-WHITELIST.md).
+
+
 Генератор конфигураций для [Mihomo](https://github.com/MetaCubeX/mihomo) (Clash Meta) и ссылок MASQUE для Cloudflare WARP. Статическое клиентское веб-приложение: разбор ссылок и сборка конфигов выполняются прямо в браузере — приватные ключи, ссылки и конфигурации никуда не отправляются.
 
 🌐 **Открыть генератор:** [saymer-alt.github.io/link-generators](https://saymer-alt.github.io/link-generators/)

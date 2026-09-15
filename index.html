@@ -137,6 +137,12 @@
     <div class="card">
       <div class="card-title">📋 Входные данные (ссылки / подписки)</div>
       <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
+      <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> Автоматический режим белых списков</label></div>
+      <div id="whitelistPanel" style="display:none">
+        <label for="whitelistInput">Резерв для белых списков (ссылки / подписки)</label>
+        <textarea id="whitelistInput" placeholder="vless://...&#10;https://sub.url/..."></textarea>
+        <div class="hint">Верхний набор — основной, этот — резерв. GLOBAL сначала использует обычные выходы, затем БС. Обе стороны обязательны. Ссылки можно смешивать с подписками при включённом Sub Mode. Проверка доступности — каждые 300 секунд; автоматическое переключение не мгновенное. WG-файлы входят в основной набор.</div>
+      </div>
       <div class="hint">Поддерживает: vless, vmess, trojan, ss, hy2, tuic, masque, mieru, tt, WG (.conf/.awg), HTTP(S) подписки</div>
     </div>
 
@@ -957,7 +963,7 @@ function updateVpsDnsFields() {
 }
 
 function onProfileChange() {
-  const isVps = document.getElementById('cfgProfile').value === 'vps';
+  const isVps = !document.getElementById('cfgAutoWhitelist').checked && document.getElementById('cfgProfile').value === 'vps';
   const panel = document.getElementById('vpsPanel');
   const tun = document.getElementById('cfgTun');
   panel.style.display = isVps ? 'block' : 'none';
@@ -972,6 +978,33 @@ function onProfileChange() {
   }
 }
 
+// UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
+let whitelistUiState = null;
+function onWhitelistChange() {
+  const on = document.getElementById('cfgAutoWhitelist').checked;
+  const perTun = document.getElementById('cfgPerProxyTun');
+  const perSocks = document.getElementById('cfgPerProxySocks');
+  const profile = document.getElementById('cfgProfile');
+  if (on && !whitelistUiState) {
+    whitelistUiState = { perTun: perTun.checked, perSocks: perSocks.checked, profile: profile.value };
+    perTun.checked = perSocks.checked = false;
+    const wasVps = profile.value === 'vps';
+    profile.value = 'generic';
+    if (wasVps) onProfileChange();
+  } else if (!on && whitelistUiState) {
+    perTun.checked = whitelistUiState.perTun;
+    perSocks.checked = whitelistUiState.perSocks;
+    profile.value = whitelistUiState.profile;
+    if (profile.value === 'vps') onProfileChange();
+    whitelistUiState = null;
+  }
+  perTun.disabled = perSocks.disabled = profile.disabled = on;
+  perTun.closest('label').style.display = on ? 'none' : '';
+  perSocks.closest('label').style.display = on ? 'none' : '';
+  profile.closest('.card').style.display = on ? 'none' : '';
+  document.getElementById('whitelistPanel').style.display = on ? 'block' : 'none';
+}
+
 // === MIHOMO BUILDER (via web4core) ===
 function buildMihomo() {
   const raw = document.getElementById('mihomoInput').value.trim();
@@ -982,14 +1015,17 @@ function buildMihomo() {
 
   const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
   const addTun = document.getElementById('cfgTun').checked;
-  const perProxyTun = document.getElementById('cfgPerProxyTun').checked;
+  const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
+  const perProxyTun = autoWhitelist ? false : document.getElementById('cfgPerProxyTun').checked;
   const tunStack = document.getElementById('cfgTunMips').checked ? 'mips' : 'gvisor';
-  const perProxySocks = document.getElementById('cfgPerProxySocks').checked;
+  const perProxySocks = autoWhitelist ? false : document.getElementById('cfgPerProxySocks').checked;
 
   try {
+    if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
     const result = api.buildFromRequest({
       core: 'mihomo',
       input: raw,
+      ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}),
       wgBeans: normalizeWgBeans(wgBeans),
       options: {
         addSocks: document.getElementById('cfgSocks').checked,
@@ -1009,7 +1045,7 @@ function buildMihomo() {
 
     // PATCH: Deployment profile — только при opt-in профиле VPS Gateway.
     // При 'generic' пост-патч не выполняется вовсе (инвариант byte-for-byte).
-    const deploymentProfile = document.getElementById('cfgProfile').value;
+    const deploymentProfile = autoWhitelist ? 'generic' : document.getElementById('cfgProfile').value;
     if (deploymentProfile === 'vps') {
       yaml = applyDeploymentProfile(yaml, deploymentProfile, tunStack);
     }
@@ -1050,6 +1086,7 @@ function copyText(text) {
 // === INIT ===
 initPingSelector();
 initWgUpload();
+document.getElementById('cfgAutoWhitelist').addEventListener('change', onWhitelistChange);
 document.getElementById('cfgProfile').addEventListener('change', onProfileChange);
 document.getElementById('vpsDnsEnabled').addEventListener('change', updateVpsDnsFields);
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний

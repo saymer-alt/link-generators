@@ -46,4 +46,16 @@ if (process.env.BASELINE_REF) {
     cases++;
   }
 }
+// Workflow must reject a runtime that silently ignores the second tier.
+assert.equal(typeof current.buildMihomoPriorityConfig, 'function');
+for (const sub of [false, true]) {
+  const result = current.buildFromRequest({ core: 'mihomo', input,
+    fallbackInput: (sub ? 'https://example.invalid/fallback\n' : '') + input,
+    options: { mihomoSubscriptionMode: sub, addTun: true, mihomoTunStack: 'mips' } }).data;
+  assert.match(result, /name: GLOBAL\n\s+type: fallback/);
+  assert.doesNotMatch(result, /name: (PRIMARY|FALLBACK)\n/);
+  assert.match(result, /filter: "\^\(PRIMARY-\|primary-\)`\^\(FALLBACK-\|fallback-\)"/);
+  assert.doesNotMatch(result, /listeners:/);
+  cases++;
+}
 console.log(`Runtime: ${cases} cases passed`);

@@ -45,7 +45,7 @@ jobs:
         working-directory: web4core-source
         run: |
           npm ci
-          node --test tools/tests/mihomo-exclude-filter.test.mjs tools/tests/mihomo-tun-stack.test.mjs
+          node --test tools/tests/mihomo-exclude-filter.test.mjs tools/tests/mihomo-tun-stack.test.mjs tools/tests/mihomo-priority.test.mjs
           npm run build:web:runtime
           test -s src/web4core.runtime.js
 

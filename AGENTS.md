@@ -1,5 +1,13 @@
 # AGENTS.md — link-generators
 
+## Дополнение: автоматический режим белых списков
+
+См. [docs/AUTO-WHITELIST.md](docs/AUTO-WHITELIST.md). UI policy остаётся здесь;
+generic `fallbackInput` и плоский primary/fallback GLOBAL живут в fork. Отсутствие
+`fallbackInput` сохраняет старый output. Обязательны `tests/whitelist.cjs`,
+baseline, реальный Mihomo -t и `tests/mihomo-failover.cjs`; source suite включает `mihomo-priority.test.mjs`.
+
+
 Инструкция для AI-агентов (в первую очередь ZCode), работающих в этом репозитории.
 Три слоя документации: **README.md** — пользовательская landing page (что это и как
 пользоваться), **docs/** — подробная техническая база знаний (архитектура, dataflow,

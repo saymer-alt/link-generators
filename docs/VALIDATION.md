@@ -1,5 +1,14 @@
 # VALIDATION — pre-copy валидатор Mihomo YAML
 
+## Автоматический режим белых списков (2026-09-15)
+
+Контракт и точная структура YAML: [AUTO-WHITELIST.md](AUTO-WHITELIST.md).
+UI передаёт опциональный `fallbackInput`; engine строит один плоский GLOBAL fallback
+с конечными узлами primary → fallback, без DIRECT и вложенных групп (#2588). Выключенный режим сохраняет прежний путь.
+Per-Proxy/VPS исключаются независимо от скрытия UI; существующий validator
+проверяет итоговый YAML. Runtime требуется с поддержкой нового generic API.
+
+
 Ревизия v1.19.31: обычный/Per-Proxy MIPS и AWG 3.1 fixture проходят структурную
 проверку. Runtime ограничивает выбор нового TUN stack; валидатор по-прежнему
 не проверяет глубоко `tun.stack`, AWG ranges или ключи. Это не `mihomo -t`.

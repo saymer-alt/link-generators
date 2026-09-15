@@ -3434,6 +3434,42 @@
     const rules = [`MATCH,${GLOBAL_GROUP_NAME}`];
     return { providers, groups, rules, proxies: extraProxies, listeners };
   }
+  function buildMihomoPriorityConfig(primary, fallback, opts) {
+    const proxies = [];
+    const providers = {};
+    const targets = [];
+    const providerTargets = [];
+    const probe = { url: getUrlTest(opts), interval: PROXY_FETCH_INTERVAL, "expected-status": getUrlTestExpectedStatus(opts), lazy: false };
+    for (const [name, side] of [["PRIMARY", primary], ["FALLBACK", fallback]]) {
+      const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
+      const names = [];
+      built.proxies.forEach((proxy, index) => {
+        proxy.name = name + "-" + (index + 1) + ": " + proxy.name;
+        names.push(proxy.name);
+        proxies.push(proxy);
+      });
+      const use = [];
+      Object.entries(built.providers || {}).forEach(([key, provider]) => {
+        const providerName = name.toLowerCase() + "-" + key;
+        provider["health-check"].lazy = false;
+        provider.override = { "additional-prefix": providerName + ": " };
+        providers[providerName] = provider;
+        use.push(providerName);
+      });
+      targets.push(...names);
+      providerTargets.push(...use);
+    }
+    const groups = [{
+      name: GLOBAL_GROUP_NAME,
+      type: "fallback",
+      ...targets.length ? { proxies: targets } : {},
+      ...providerTargets.length ? { use: providerTargets } : {},
+      filter: "^(PRIMARY-|primary-)`^(FALLBACK-|fallback-)",
+      ...probe,
+      "empty-fallback": "REJECT"
+    }];
+    return { proxies, providers, groups, rules: [`MATCH,${GLOBAL_GROUP_NAME}`] };
+  }
 
   // src/core/yaml.js
   function toYamlScalar(value, key) {
@@ -4211,6 +4247,25 @@
       if (options.addTun === void 0) options.addTun = false;
       if (options.addSocks === void 0) options.addSocks = true;
     }
+    if (core === "mihomo" && req.fallbackInput !== void 0) {
+      if (!options.addTun && !options.addSocks) throw new Error("Mihomo: enable at least one inbound (TUN or SOCKS5)");
+      if (options.mihomoPerProxyTun || options.perProxyPort) throw new Error("Mihomo primary/fallback groups do not support per-proxy listeners");
+      const parseSide = (text, profiles, label) => {
+        const { subUrls, proxyText } = splitMihomoSubscriptionInput(text);
+        if (subUrls.length && !options.mihomoSubscriptionMode) throw new Error("Enable Sub Mode for subscription URLs (" + label + ")");
+        const beans2 = [...proxyText.trim() ? buildBeansFromInput(proxyText) : [], ...profiles];
+        beans2.forEach(validateBean);
+        assertCoreSupports(beans2, core, "Mihomo", options);
+        if (!beans2.length && !subUrls.length) throw new Error("Mihomo: " + label + " input is empty");
+        return { beans: beans2, subUrls };
+      };
+      const cfg2 = buildMihomoPriorityConfig(parseSide(input, wgBeans, "primary"), parseSide(req.fallbackInput, [], "fallback"), options);
+      return { kind: "yaml", data: buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, [], {
+        addSocks: !!options.addSocks,
+        webUI: !!options.webUI,
+        tun: options.addTun ? { mode: "tun", stack: options.mihomoTunStack } : null
+      }) };
+    }
     const beans = input.trim() ? buildBeansFromInput(input.trim()) : [];
     const allBeans = beans.slice();
     if (wgBeans.length) allBeans.push(...wgBeans);
@@ -4329,6 +4384,7 @@
     buildXrayConfig,
     buildMihomoProxy,
     buildMihomoConfig,
+    buildMihomoPriorityConfig,
     buildMihomoSubscriptionConfig,
     buildMihomoYaml,
     parseWireGuardConf,
