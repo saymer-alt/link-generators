@@ -30,13 +30,13 @@ AWG 3.1 проверен по всему UI pipeline: семь строковы�
 | `anytls://` | `anytls` | `anytls` | password, `idle-session-*`, `disable-reuse`; в UI-хинте не упомянут, но поддерживается |
 | `hy2://`, `hysteria2://` | `hy2` | `hysteria2` | password, obfs(+password), hop-порты (`ports`, `hop-interval`), `bbr-profile`, `udp-mtu` |
 | `tuic://` | `tuic` | `tuic` | uuid+password или token; `congestion-controller`, `udp-relay-mode`, `reduce-rtt` |
-| `socks://`, `socks5://`, `socks5h://`, `socks4a://` | `socks` | `socks5` | username/password. **`socks4://` → ошибка «Mihomo does not support: socks4»** (проверено) |
+| `socks://`, `socks5://`, `socks5h://` | `socks` | `socks5` | username/password. **`socks4://` и `socks4a://` → ошибка «Mihomo does not support: socks4»** |
 | `http://`, `https://` | `http` | `http` | username/password; `https` → TLS-поля. ⚠️ тот же синтаксис, что у подписок — см. ниже |
 | `mieru://`, `mierus://` | `mieru` | `mieru` | **обязателен userinfo** (`user:pass@`, иначе «mieru: missing username/password»); `transport` (дефолт TCP, только TCP/UDP — кейс `TPC`), `port-range` из `server_ports`, multiplexing/handshake-mode/traffic-pattern |
 | `masque://` | `masque` | `masque` | private-key/public-key, `ip`, sni, `udp`, `remote-dns-resolve`+`dns`, `network: h2`; формат — контракт этого же генератора (вкладка 1) |
 | `tt://` (TrustTunnel) | `trusttunnel` | `trusttunnel` | ссылка = `tt://?<base64-payload>[&query]`; username/password, ECH (`ech-opts`), `quic`, `congestion-controller`, bbr |
 | `sdns://` | `sdns` | — | парсится, но **mihomo: «Mihomo does not support: sdns»** (sing-box extended-only); в mihomo-YAML не попадает никогда |
-| `socks4://` | — | — | парсится, отклоняется на этапе сборки (см. выше) |
+| `socks4://`, `socks4a://` | `socks` | — | парсятся как `socks.type: socks4`, отклоняются на этапе сборки (см. выше) |
 | `hysteria://` (v1) | — | — | **не поддерживается нигде**: схемы нет в `SUPPORTED_SCHEMES` → «Unknown link: hysteria» (проверено) |
 | `.conf` / `.wg` / `.awg` (файлы) | `wireguard` | `wireguard` | см. отдельный раздел ниже |
 
