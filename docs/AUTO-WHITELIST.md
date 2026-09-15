@@ -10,7 +10,8 @@ Opt-in checkbox `Автоматический режим белых списко
 ## Архитектура
 
 - `link-generators/index.html`: checkbox, второй ввод, снимок состояний только в
-  памяти, скрытие и отключение Per-Proxy TUN/SOCKS и всей карточки VPS Gateway.
+  памяти, скрытие и отключение опций «TUN на каждый прокси» / «SOCKS-порт на каждый
+  прокси» и всей карточки VPS Gateway.
   При сборке независимо от DOM принудительно `mihomoPerProxyTun: false`,
   `perProxyPort: false`, локальный `deploymentProfile: 'generic'`.
 - `web4core/src/build.js`: универсальное необязательное поле `fallbackInput`.
@@ -86,7 +87,8 @@ rules:
 - Обычный TUN и gVisor/MIPS, Mixed Port, Web UI, Allow LAN и Sub Mode остаются.
   Ordinary TUN сохраняет прежний `device: mitun0`, `auto-route: false`.
   MIPS требует Mihomo >= 1.19.31.
-- Выключение checkbox восстанавливает Per-Proxy/VPS из снимка в памяти; обновление
+- Выключение checkbox восстанавливает опции «на каждый прокси» и профиль VPS из
+  снимка в памяти; обновление
   страницы снимок не сохраняет. Содержимое второго поля при выключенном режиме
   игнорируется. Генерация выключенного режима не меняет байты; случайный `x-hwid`
   сравнивается с фиксированным RNG исключительно в тестах.

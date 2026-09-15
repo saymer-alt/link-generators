@@ -5,7 +5,7 @@
 Контракт и точная структура YAML: [AUTO-WHITELIST.md](AUTO-WHITELIST.md).
 UI передаёт опциональный `fallbackInput`; engine строит один плоский GLOBAL fallback
 с конечными узлами primary → fallback, без DIRECT и вложенных групп (#2588). Выключенный режим сохраняет прежний путь.
-Per-Proxy/VPS исключаются независимо от скрытия UI; существующий validator
+Опции «на каждый прокси» и VPS исключаются независимо от скрытия UI; существующий validator
 проверяет итоговый YAML. Runtime требуется с поддержкой нового generic API.
 
 
@@ -21,15 +21,22 @@ Per-Proxy/VPS исключаются независимо от скрытия UI
 | 🖥️ Web UI | `cfgWebUI` | `webUI` | ☑ | `external-controller: 0.0.0.0:9090`, `external-ui: ui` (+URL metacubexd), `secret:` пустой |
 | 📡 Sub Mode | `cfgSubMode` | `mihomoSubscriptionMode` | ☑ | URL → `proxy-providers`, см. ниже |
 | 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default gvisor / opt-in mips, `auto-route: false`) |
-| 🔒 Per-Proxy TUN | `cfgPerProxyTun` | `mihomoPerProxyTun` | ☐ | TUN-листенеры по одному на прокси/группу |
-| MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☐ | `stack: mips`; иначе `gvisor`; Mihomo >= 1.19.31 |
-| 🔌 Per-Proxy SOCKS | `cfgPerProxySocks` | `perProxyPort` | ☐ | `listeners: socks-<имя>` на портах 7890+i, `mixed-port` убирается |
+| ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☐ | `stack: mips`; иначе `gvisor`; Mihomo >= 1.19.31; требует `cfgTun` |
+| 🔒 TUN на каждый прокси | `cfgPerProxyTun` | `mihomoPerProxyTun` | ☐ | TUN-листенеры по одному на прокси/группу; требует `cfgTun`; скрыт в БС-режиме |
+| 🔌 SOCKS-порт на каждый прокси | `cfgPerProxySocks` | `perProxyPort` | ☐ | `listeners: socks-<имя>` на портах 7890+i, `mixed-port` убирается; требует `cfgSocks`; скрыт в БС-режиме |
 | 🏓 Ping server | `pingSelect` | `urlTest` | Google | `url`/`expected-status` url-test группы и health-check провайдеров |
 | 🎯 Профиль развёртывания | `cfgProfile` | — (пост-патч страницы) | Универсальный | при «VPS Gateway» — gateway-постпатч YAML; подробно [VPS-GATEWAY.md](VPS-GATEWAY.md) |
 
-Известная несостыковка UI: hint «TUN и Per-Proxy опции отключены по умолчанию» противоречит
-факту — `cfgTun` в HTML стоит `checked`. Это зафиксировано в [AGENTS.md](../AGENTS.md) как
-существующее поведение; менять только по явному решению владельца.
+Зависимости UI (группа «Отдельный вход на каждый прокси»): «⚡ MIPS stack для TUN» и
+«🔒 TUN на каждый прокси» включаемы только при `cfgTun`, «🔌 SOCKS-порт на каждый прокси» —
+только при `cfgSocks`; выключение родителя отключает и сбрасывает зависимую опцию
+(`updateMihomoOptionStates()`). `buildMihomo()` не доверяет DOM и повторно клампит те же
+зависимости (fail-safe против прямой подмены DOM): при `addTun=false` — `mihomoPerProxyTun=false`
+и `mihomoTunStack=gvisor`, при `addSocks=false` — `perProxyPort=false`.
+
+Дефолты UI (выправлено решением владельца 2026-09-15): hint «TUN включён по умолчанию;
+MIPS и опции «на каждый прокси» выключены» соответствует факту — `cfgTun` в HTML стоит
+`checked`, остальные опции выключены. Сами дефолты не менялись.
 
 Ограничение рантайма: нужен хотя бы один inbound — при `addSocks=false` и `addTun=false`
 ошибка «Mihomo: enable at least one inbound (TUN or SOCKS5)». Пустой ввод без wgBeans —
@@ -41,7 +48,7 @@ more HTTP(S) URLs…» (частая ловушка при тестирован�
 Всегда присутствует (`MIHOMO_DEFAULT_TEMPLATE` рантайма):
 
 ```yaml
-mixed-port: 7890          # убирается при per-proxy SOCKS
+mixed-port: 7890          # убирается режимом «SOCKS-порт на каждый прокси»
 allow-lan: false          # страница патчит на true + bind-address: "*"
 tcp-concurrent: true
 mode: rule
@@ -61,11 +68,11 @@ rules:
 - ≤1 прокси: `GLOBAL` (select) = [прокси, REJECT].
 - ≥2 прокси: `"⚡ Fastest"` (url-test: `url` = выбранный health-check, `interval: 300`
   секунд, `expected-status: 204/200`) + `GLOBAL` (select) = ["⚡ Fastest", все прокси, REJECT].
-- Per-proxy режимы (`Per-Proxy TUN` и/или `Per-Proxy SOCKS`): на каждый прокси — select
-  группа `🔒 <имя>` = [прокси, REJECT]; `GLOBAL` = [все `🔒`-группы, REJECT].
+- Режимы «на каждый прокси» («TUN на каждый прокси» и/или «SOCKS-порт на каждый прокси»):
+  на каждый прокси — select группа `🔒 <имя>` = [прокси, REJECT]; `GLOBAL` = [все `🔒`-группы, REJECT].
 
 Sub Mode: вместо `proxies` в группах — `use:` на провайдеров; группы `SUB-<провайдер>`
-в per-proxy режимах; `⚡ Fastest` с `tolerance: 50` и `empty-fallback: REJECT`.
+в режимах «на каждый прокси»; `⚡ Fastest` с `tolerance: 50` и `empty-fallback: REJECT`.
 
 ## TUN: два режима
 
@@ -80,10 +87,10 @@ Runtime разрешает только `mips`/`gvisor`, неизвестное 
   auto-detect-interface: true, device: mitun0 }`. `auto-route: false` принципиален —
   конфиги вставляются в окружения (роутеры), где захват всех маршрутов недопустим.
   При opt-in MIPS меняется только стек: `stack: mips`.
-- Per-Proxy TUN (`addTun` + `mihomoPerProxyTun`): отдельные tun-листенеры в секции
-  `listeners`: `mihomo-tun-N` (device `mitunN`, default gvisor / opt-in mips, `auto-route: false`,
-  `auto-detect-interface: false`, `inet4-address: 198.19.x.y/30`), каждый с `proxy:` на
-  свою `🔒`-группу / `SUB-`-группу.
+- TUN на каждый прокси (техн. Per-Proxy TUN; `addTun` + `mihomoPerProxyTun`): отдельные
+  tun-листенеры в секции `listeners`: `mihomo-tun-N` (device `mitunN`, default gvisor / opt-in mips,
+  `auto-route: false`, `auto-detect-interface: false`, `inet4-address: 198.19.x.y/30`), каждый с
+  `proxy:` на свою `🔒`-группу / `SUB-`-группу.
 - Профиль VPS Gateway (opt-in, селектор «Профиль развёртывания»): пост-патч поверх
   готового YAML — основная секция `tun:` приводится к gateway-виду (`tun-mihomo`,
   `inet4-address`, `mtu`, `gso`), добавляются `find-process-mode: off`,

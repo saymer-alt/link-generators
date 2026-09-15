@@ -89,6 +89,72 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), true);
     assert.equal(await page.locator('#cfgPerProxySocks').isChecked(), true);
     assert.equal(await page.locator('#cfgTun').isDisabled(), true);
+    // Зависимости UI (реальные клики): выключение родителя отключает и сбрасывает
+    // зависимые чекбоксы; включение родителя возвращает доступность.
+    await page.locator('#cfgProfile').selectOption('generic');
+    await page.locator('#cfgTun').uncheck();
+    for (const id of ['cfgTunMips', 'cfgPerProxyTun']) {
+      assert.equal(await page.locator('#' + id).isDisabled(), true, id);
+      assert.equal(await page.locator('#' + id).isChecked(), false, id);
+    }
+    assert.equal(await page.locator('#cfgPerProxySocks').isDisabled(), false);
+    await page.locator('#cfgSocks').uncheck();
+    assert.equal(await page.locator('#cfgPerProxySocks').isDisabled(), true);
+    assert.equal(await page.locator('#cfgPerProxySocks').isChecked(), false);
+    await page.locator('#cfgTun').check();
+    assert.equal(await page.locator('#cfgTunMips').isDisabled(), false);
+    assert.equal(await page.locator('#cfgPerProxyTun').isDisabled(), false);
+    await page.locator('#cfgSocks').check();
+    assert.equal(await page.locator('#cfgPerProxySocks').isDisabled(), false);
+    // Fail-safe: подмена DOM в обход зависимостей — сборка клампит запрещённые
+    // комбинации. cfgSocks в 256-матрицу не входит, поэтому socks=0+perSocks=1
+    // проверяется здесь.
+    const socksClamp = await page.evaluate(async () => {
+      document.getElementById('cfgSubMode').checked = false; // ссылки без Sub Mode
+      document.getElementById('cfgSocks').checked = false;
+      document.getElementById('cfgPerProxySocks').checked = true; // форс при Mixed off
+      document.getElementById('mihomoInput').value = 'socks://test:pass@192.0.2.1:1080#TEST-A';
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      const doc = jsyaml.load(document.getElementById('mihomoOutput').value);
+      return { state: MIHOMO_VALIDATION_STATE.state, tun: !!doc.tun, listeners: doc.listeners, mixed: doc['mixed-port'] };
+    });
+    assert.equal(socksClamp.state, 'VALID');
+    assert.equal(socksClamp.tun, true); // inbound — TUN (включён)
+    assert.equal(socksClamp.listeners, undefined); // Per-Proxy SOCKS клампнут
+    assert.equal(socksClamp.mixed, undefined);
+    const tunClamp = await page.evaluate(async () => {
+      document.getElementById('cfgSocks').checked = true;
+      document.getElementById('cfgPerProxySocks').checked = false;
+      document.getElementById('cfgTun').checked = false;
+      document.getElementById('cfgTunMips').checked = true;     // форс при TUN off
+      document.getElementById('cfgPerProxyTun').checked = true; // форс при TUN off
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      const doc = jsyaml.load(document.getElementById('mihomoOutput').value);
+      return { state: MIHOMO_VALIDATION_STATE.state, yaml: document.getElementById('mihomoOutput').value,
+        tun: !!doc.tun, listeners: doc.listeners, mixed: doc['mixed-port'] };
+    });
+    assert.equal(tunClamp.state, 'VALID');
+    assert.equal(tunClamp.tun, false);
+    assert.equal(tunClamp.listeners, undefined); // Per-Proxy TUN клампнут
+    assert.equal(tunClamp.mixed, 7890);
+    assert.doesNotMatch(tunClamp.yaml, /stack:/); // MIPS клампнут вместе с TUN
+    // Полное отсутствие inbound (TUN off + Mixed off) — fail-closed ошибкой рантайма.
+    const noInbound = await page.evaluate(() => {
+      document.getElementById('cfgSocks').checked = false;
+      document.getElementById('mihomoOutput').value = '';
+      buildMihomo();
+      return { state: MIHOMO_VALIDATION_STATE.state, out: document.getElementById('mihomoOutput').value };
+    });
+    assert.equal(noInbound.state, 'NOT_BUILT');
+    assert.equal(noInbound.out, ''); // ошибочная сборка не оставляет stale-вывод
+    assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
+    // Возврат DOM к дефолтам перед baseline (матрица не перебирает cfgSocks).
+    await page.evaluate(() => {
+      ['cfgSocks', 'cfgTun', 'cfgLan', 'cfgWebUI'].forEach(id => document.getElementById(id).checked = true);
+      ['cfgPerProxyTun', 'cfgPerProxySocks', 'cfgTunMips'].forEach(id => document.getElementById(id).checked = false);
+    });
     // Baseline includes subscriptions, all preserved switches, and VPS. Fix RNG in tests only.
     if (process.env.BASELINE_REF) {
       const oldHtml = execFileSync('git', ['show', `${process.env.BASELINE_REF}:index.html`], { cwd: root, encoding: 'utf8' });
@@ -103,6 +169,14 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
           Math.random = () => 0.5;
           crypto.getRandomValues = array => { array.fill(8); return array; };
           ['cfgSubMode','cfgTun','cfgPerProxyTun','cfgPerProxySocks','cfgTunMips','cfgLan','cfgWebUI'].forEach((id, i) => document.getElementById(id).checked = !!(mask & (1 << i)));
+          // Нормализация невозможных DOM-состояний по реальным UI-зависимостям:
+          // VPS форсирует TUN; TUN=false сбрасывает MIPS и Per-Proxy TUN.
+          // Невалидные комбинации проверяются отдельными bypass-тестами.
+          if (mask & 128) document.getElementById('cfgTun').checked = true;
+          if (!(mask & 2)) {
+            document.getElementById('cfgTunMips').checked = false;
+            document.getElementById('cfgPerProxyTun').checked = false;
+          }
           document.getElementById('cfgProfile').value = mask & 128 ? 'vps' : 'generic';
           document.getElementById('mihomoInput').value = (mask & 1 ? 'https://example.invalid/sub\n' : '') + a + '\n' + b;
           buildMihomo();

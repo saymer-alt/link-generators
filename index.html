@@ -172,12 +172,18 @@
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
-        <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 Per-Proxy TUN</label>
-        <label><input type="checkbox" id="cfgTunMips"> MIPS stack для TUN (Mihomo 1.19.31+)</label>
-        <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 Per-Proxy SOCKS</label>
+        <label><input type="checkbox" id="cfgTunMips"> ⚡ MIPS stack для TUN</label>
       </div>
-      <div class="hint">TUN и Per-Proxy опции отключены по умолчанию.</div>
-      <div class="hint">MIPS — новый TUN-стек Mihomo, не связанный с MIPS-архитектурой процессора. Опция выключена по умолчанию: используется gVisor. Применяется к обычному и Per-Proxy TUN.</div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:.8rem;font-weight:600;margin-bottom:2px">Отдельный вход на каждый прокси</div>
+        <div class="checkbox-grid">
+          <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
+          <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
+        </div>
+      </div>
+      <div class="hint">Обычный TUN включён по умолчанию. MIPS и режимы отдельного входа на каждый прокси — опциональны.</div>
+      <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию используется gVisor. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
+      <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
 
       <label style="margin-top:16px">🏓 Ping server (health-check)</label>
       <select id="pingSelect"></select>
@@ -978,6 +984,24 @@ function onProfileChange() {
   }
 }
 
+// Зависимости inbound-опций: дочерние чекбоксы включаемы только при активном
+// родителе (MIPS и «TUN на каждый прокси» — при TUN; «SOCKS-порт на каждый
+// прокси» — при Mixed Port); выключение родителя сбрасывает зависимую опцию.
+// В БС-режиме Per-Proxy принудительно недоступны (плюс кламп в buildMihomo).
+function updateMihomoOptionStates() {
+  const bsOn = document.getElementById('cfgAutoWhitelist').checked;
+  const tun = document.getElementById('cfgTun').checked;
+  const socks = document.getElementById('cfgSocks').checked;
+  const mips = document.getElementById('cfgTunMips');
+  const perTun = document.getElementById('cfgPerProxyTun');
+  const perSocks = document.getElementById('cfgPerProxySocks');
+  if (!tun) { mips.checked = false; perTun.checked = false; }
+  if (!socks) perSocks.checked = false;
+  mips.disabled = !tun;
+  perTun.disabled = !tun || bsOn;
+  perSocks.disabled = !socks || bsOn;
+}
+
 // UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
 let whitelistUiState = null;
 function onWhitelistChange() {
@@ -998,7 +1022,8 @@ function onWhitelistChange() {
     if (profile.value === 'vps') onProfileChange();
     whitelistUiState = null;
   }
-  perTun.disabled = perSocks.disabled = profile.disabled = on;
+  profile.disabled = on;
+  updateMihomoOptionStates();
   perTun.closest('label').style.display = on ? 'none' : '';
   perSocks.closest('label').style.display = on ? 'none' : '';
   profile.closest('.card').style.display = on ? 'none' : '';
@@ -1015,10 +1040,14 @@ function buildMihomo() {
 
   const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
   const addTun = document.getElementById('cfgTun').checked;
+  const addSocks = document.getElementById('cfgSocks').checked;
   const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
-  const perProxyTun = autoWhitelist ? false : document.getElementById('cfgPerProxyTun').checked;
-  const tunStack = document.getElementById('cfgTunMips').checked ? 'mips' : 'gvisor';
-  const perProxySocks = autoWhitelist ? false : document.getElementById('cfgPerProxySocks').checked;
+  // Fail-safe: не доверяем прямой подмене DOM — повторно проверяем зависимости
+  // (MIPS и Per-Proxy TUN требуют TUN, Per-Proxy SOCKS требует Mixed Port);
+  // БС-режим принудительно исключает Per-Proxy и VPS.
+  const perProxyTun = (autoWhitelist || !addTun) ? false : document.getElementById('cfgPerProxyTun').checked;
+  const tunStack = (addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor';
+  const perProxySocks = (autoWhitelist || !addSocks) ? false : document.getElementById('cfgPerProxySocks').checked;
 
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
@@ -1028,8 +1057,8 @@ function buildMihomo() {
       ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}),
       wgBeans: normalizeWgBeans(wgBeans),
       options: {
-        addSocks: document.getElementById('cfgSocks').checked,
-        addTun: addTun, 
+        addSocks: addSocks,
+        addTun: addTun,
         webUI: document.getElementById('cfgWebUI').checked,
         urlTest: urlTest,
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
@@ -1089,6 +1118,9 @@ initWgUpload();
 document.getElementById('cfgAutoWhitelist').addEventListener('change', onWhitelistChange);
 document.getElementById('cfgProfile').addEventListener('change', onProfileChange);
 document.getElementById('vpsDnsEnabled').addEventListener('change', updateVpsDnsFields);
+document.getElementById('cfgTun').addEventListener('change', updateMihomoOptionStates);
+document.getElementById('cfgSocks').addEventListener('change', updateMihomoOptionStates);
+updateMihomoOptionStates();
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
 // результат проверки недействительным — старый VALID не сохраняется
 ['input', 'change'].forEach(ev => document.addEventListener(ev, () => {

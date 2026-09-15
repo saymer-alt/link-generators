@@ -3,7 +3,7 @@
 С ревизии v1.19.31 `applyDeploymentProfile(yaml, profile, tunStack)` сохраняет явный
 выбор MIPS из Builder. По умолчанию третий аргумент `gvisor`; разрешён только `mips`
 или fallback `gvisor`. Это TUN stack, не CPU MIPS, требуется Mihomo >= 1.19.31.
-Работает также при VPS + Per-Proxy TUN: основной TUN и listeners получают выбранный
+Работает также при VPS + «TUN на каждый прокси» (Per-Proxy TUN): основной TUN и listeners получают выбранный
 стек. Остальные перечисленные ниже gateway-инварианты не менялись.
 
 Внутренняя документация. Описывает opt-in профиль «VPS Gateway» (добавлен 2026-09-09).
@@ -127,8 +127,8 @@ sysctl, systemd, watchdog, firewall, любую настройку самого 
   длинные AWG base64-строки (тот же гочай, что в `injectWgDns`).
 - jsyaml квотит строку `off` (защита от YAML 1.1 bool): в выводе будет
   `find-process-mode: 'off'` — валидный YAML; mihomo (yaml.v3) читает как строку `"off"`.
-- Сочетание VPS-профиля с Per-Proxy TUN/SOCKS технически возможно (патчится только
-  основная секция `tun:`), но gateway-сценарий предполагает обычный TUN.
+- Сочетание VPS-профиля с опциями «на каждый прокси» (Per-Proxy TUN/SOCKS) технически
+  возможно (патчится только основная секция `tun:`), но gateway-сценарий предполагает обычный TUN.
 - `web4core.runtime.js` не затронут; расширение — только wrapper'ом, как `injectWgDns`.
 
 ## Связанные документы

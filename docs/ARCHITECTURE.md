@@ -5,7 +5,9 @@
 Контракт и точная структура YAML: [AUTO-WHITELIST.md](AUTO-WHITELIST.md).
 UI передаёт опциональный `fallbackInput`; engine строит один плоский GLOBAL fallback
 с конечными узлами primary → fallback, без DIRECT и вложенных групп (#2588). Выключенный режим сохраняет прежний путь.
-Per-Proxy/VPS исключаются независимо от скрытия UI; существующий validator
+Опции «на каждый прокси» и VPS исключаются независимо от скрытия UI; то же для зависимостей TUN/Mixed →
+дочерние опции (MIPS, «на каждый прокси»): UI disable+reset, `buildMihomo()` повторно клампит.
+Существующий validator
 проверяет итоговый YAML. Runtime требуется с поддержкой нового generic API.
 
 
@@ -84,7 +86,7 @@ Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки:
 
 MIPS — source-level расширение в `saymer-alt/web4core@link-generators`:
 `src/build.js` передаёт `options.mihomoTunStack`, `src/core/yaml.js` выбирает
-стек обычного/Per-Proxy TUN. Default/invalid → `gvisor`, точное `mips` → MIPS.
+стек обычного TUN и per-proxy listeners. Default/invalid → `gvisor`, точное `mips` → MIPS.
 Runtime остаётся generated/vendor; ручные правки бандла запрещены.
 
 `spatiumstas/web4core → saymer-alt/web4core (source-level extensions) → built runtime → link-generators`.

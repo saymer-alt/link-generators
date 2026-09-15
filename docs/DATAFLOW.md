@@ -5,7 +5,7 @@
 Контракт и точная структура YAML: [AUTO-WHITELIST.md](AUTO-WHITELIST.md).
 UI передаёт опциональный `fallbackInput`; engine строит один плоский GLOBAL fallback
 с конечными узлами primary → fallback, без DIRECT и вложенных групп (#2588). Выключенный режим сохраняет прежний путь.
-Per-Proxy/VPS исключаются независимо от скрытия UI; существующий validator
+Опции «на каждый прокси» и VPS исключаются независимо от скрытия UI; существующий validator
 проверяет итоговый YAML. Runtime требуется с поддержкой нового generic API.
 
 
@@ -69,8 +69,8 @@ proxy-groups   ← ≤1 прокси: GLOBAL select [прокси, REJECT]
                           + GLOBAL select ["⚡ Fastest", все прокси, REJECT]
                  per-proxy режим: "🔒 <имя>" select на каждый прокси + GLOBAL из них
 rules          ← [ "MATCH,GLOBAL" ]   (единственное правило)
-listeners      ← Per-Proxy SOCKS: socks-<имя> на портах 7890+i (тогда mixed-port убирается)
-mixed-port     ← 7890, если Per-Proxy SOCKS выключен
+listeners      ← «SOCKS-порт на каждый прокси»: socks-<имя> на портах 7890+i (тогда mixed-port убирается)
+mixed-port     ← 7890, если «SOCKS-порт на каждый прокси» выключен
 ```
 
 Эмиссия YAML — собственный сериализатор рантайма `toYAML` (НЕ jsyaml): накладывает секции
@@ -157,6 +157,9 @@ cfgTunMips → tunStack → options.mihomoTunStack → buildFromRequest
 ```
 
 Checkbox выключен по умолчанию: `tunStack = 'gvisor'`; включён — `'mips'`.
+До сборки `buildMihomo()` клампит опции по UI-зависимостям, не доверяя DOM:
+`addTun=false` → `perProxyTun=false` и `tunStack='gvisor'`; `addSocks=false` →
+`perProxySocks=false`; БС-режим дополнительно исключает оба режима «на каждый прокси».
 Runtime принимает только точное `mips`, при отсутствующем/неверном значении fallback
 `gvisor`, в том числе для прямого `buildMihomoYaml`. Выбор стека сам по себе TUN не включает.
 VPS получает тот же `tunStack` третьим аргументом ниже; его default/fallback тоже `gvisor`.

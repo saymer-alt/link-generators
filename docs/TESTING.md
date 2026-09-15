@@ -19,12 +19,20 @@
 - Новый `tests/whitelist.cjs`: 10 YAML-сценариев (1+1, несколько+несколько,
   subscription+subscription, mixed+mixed, links с Sub Mode; каждый gVisor/MIPS).
   Проверены скрытие, восстановление, подмена запрещённых DOM-значений, отсутствие
-  поддержки в старом runtime, пустой резерв и блокировка Copy.
-- 256 сравнений UI-output с исходным `21c3010`: Sub Mode, TUN, Per-Proxy TUN/SOCKS,
-  MIPS, LAN, Web UI, generic/VPS. RNG стабилизирован только в тесте; сравниваются
-  полные строки YAML без нормализации результата. Выключенный режим byte-for-byte.
+  поддержки в старом runtime, пустой резерв и блокировка Copy; плюс зависимости UI
+  реальными кликами (TUN → MIPS и «TUN на каждый прокси», Mixed Port → «SOCKS-порт на
+  каждый прокси»: disable+reset)
+  и fail-safe клампы сборки при подмене DOM (в т.ч. Mixed off + «SOCKS-порт на каждый
+  прокси», которого
+  нет в 256-матрице, и fail-closed «нет ни одного inbound»).
+- 256 сравнений UI-output с исходным `21c3010`: Sub Mode, TUN, «TUN/SOCKS на каждый
+  прокси»,
+  MIPS, LAN, Web UI, generic/VPS. RNG стабилизирован только в тесте; маска нормализуется
+  по реальным UI-зависимостям перед выставлением DOM на обеих сторонах (VPS → TUN=true;
+  TUN=false → MIPS=false и «TUN на каждый прокси»=false), невозможные состояния в baseline не
+  участвуют и проверяются отдельными bypass-тестами. Выключенный режим byte-for-byte.
 - Официальный Mihomo v1.19.31 windows amd64 (Go 1.26.8, with_gvisor): `-t` прошёл
-  для 17 файлов — 10 новых и 7 прежних (обычный TUN/Per-Proxy/VPS/AWG).
+  для 17 файлов — 10 новых и 7 прежних (обычный TUN/«на каждый прокси»/VPS/AWG).
   Это проверка конфигураций, не сетевого failover или handshake.
 
 Новый browser test использует те же `NODE_PATH`, `JS_YAML_PATH`, `BROWSER_CHANNEL`,
@@ -70,7 +78,7 @@ Sub Mode, no-TUN, explicit gvisor, invalid values, прямой buildMihomoYaml,
 байтов исходного вывода в 16 комбинациях. Случайный subscription x-hwid фиксируется
 только внутри тестового VM. Три проверки textual patch удалены вместе со скриптом; все функциональные проверки сохранены.
 
-Browser: UI default/off/on, инвалидирование Copy, обычный/Per-Proxy MIPS, VPS с обеими
+Browser: UI default/off/on, инвалидирование Copy, обычный/per-proxy MIPS, VPS с обеими
 формами TUN и DNS toggle, generic→VPS→generic, AWG .conf upload со всеми девятью 3.1
 полями и проверкой промежуточных стадий, on/off и альтернативные booleans, scalar/range,
 false-only auto-version, plain WG, int-range; baseline generic/VPS × links/AWG,

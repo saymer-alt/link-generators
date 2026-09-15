@@ -5,7 +5,7 @@
 Контракт и точная структура YAML: [AUTO-WHITELIST.md](AUTO-WHITELIST.md).
 UI передаёт опциональный `fallbackInput`; engine строит один плоский GLOBAL fallback
 с конечными узлами primary → fallback, без DIRECT и вложенных групп (#2588). Выключенный режим сохраняет прежний путь.
-Per-Proxy/VPS исключаются независимо от скрытия UI; существующий validator
+Опции «на каждый прокси» и VPS исключаются независимо от скрытия UI; существующий validator
 проверяет итоговый YAML. Runtime требуется с поддержкой нового generic API.
 
 
