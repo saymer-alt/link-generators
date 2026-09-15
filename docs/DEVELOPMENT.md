@@ -22,10 +22,10 @@ py -m http.server 8017 --bind 127.0.0.1     # или любой static server
 
 - Основной файл приложения — `index.html` (handwritten, inline JS/CSS, секции
   `// === … ===`); документация и regression tests обновляются по затронутому контракту.
-- `web4core.runtime.js` — generated/vendor, ручные правки запрещены. Единственное
-  утверждённое исключение — воспроизводимая адаптация через `scripts/patch-mihomo-tun.cjs`
-  над чистым upstream-бандлом (см. [UPDATES.md](UPDATES.md)). Прочий новый функционал —
-  через публичный API рантайма, wrapper'ы входа/выхода или upstream PR.
+- `web4core.runtime.js` — generated/vendor из `saymer-alt/web4core@link-generators`.
+  Ручные правки запрещены. Изменения парсинга/эмиссии вносятся в исходники fork;
+  wrapper в `index.html` остаётся для адаптаций входа/выхода. См. [UPDATES.md](UPDATES.md).
+
 - DOM-id (`mihomoInput`, `cfgLan`, `wgFile`, `copyYamlBtn`, …) — стабильный контракт
   между HTML и JS; не переименовывать в одной половине.
 - Стиль: минимальные диффы, не реформатировать чужие участки, русские тексты UI,
@@ -40,16 +40,26 @@ node --check web4core.runtime.js
 node tests/runtime.cjs
 ```
 
-Если runtime изменён, его diff должен точно воспроизводиться patch-script'ом над чистым
-upstream-бандлом. Для исходной ревизии этой доработки проверка встроена в тест:
+Если runtime изменён, он должен точно воспроизводиться штатной сборкой fork:
 
 ```bash
+# в соседнем checkout web4core, ветка link-generators
+npm ci
+node --test tools/tests/mihomo-exclude-filter.test.mjs tools/tests/mihomo-tun-stack.test.mjs
+npm run build:web:runtime
+# обратно в link-generators
+node tests/runtime.cjs ../web4core/src/web4core.runtime.js
+cmp ../web4core/src/web4core.runtime.js web4core.runtime.js
 BASELINE_REF=fb285850bae09ba2f2336993e6b34fc2318a23af node tests/runtime.cjs
 ```
 
-В PowerShell: `$env:BASELINE_REF='fb285850bae09ba2f2336993e6b34fc2318a23af'`, затем
-`node tests/runtime.cjs`. После нового upstream build сравнивать с его чистым бандлом,
-не со старым baseline; команды применения патча — [UPDATES.md](UPDATES.md).
+На Windows checkout может иметь CRLF: сравнивать Git blob (LF) с output сборки,
+отдельно подтверждая, что отличие рабочей копии только в переводах строк.
+Baseline проверяет 16 старых API-сценариев, а не механизм удалённого bundle patch.
+В PowerShell задавать `$env:BASELINE_REF='fb285850bae09ba2f2336993e6b34fc2318a23af'`.
+Для сравнения с состоянием перед этой миграцией использовать `6b3368e`.
+Source SHA и SHA-256 бандла фиксировать в review; любые различия объяснить до копирования.
+
 Inline JS извлечь из последнего `<script>` и проверить `node --check`.
 
 Браузерный regression test — `node tests/browser.cjs` с **внешней** установкой Playwright
@@ -71,8 +81,7 @@ Inline JS извлечь из последнего `<script>` и провери�
 
 ## Safe change rules (кратко; полная версия — AGENTS.md)
 
-- Не редактировать `web4core.runtime.js` вручную; общее правило — upstream или wrapper,
-  единственное утверждённое исключение — maintained MIPS patch с проверкой воспроизводимости.
+- Не редактировать `web4core.runtime.js` вручную; воспроизводить его из исходников fork.
 - Не добавлять backend, npm/билд-систему, ES-модули, телеметрию/аналитику — это
   архитектурные границы проекта.
 - Не отправлять proxy-ссылки, конфиги, ключи наружу; не вводить сетевые вызовы с

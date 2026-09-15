@@ -24,10 +24,10 @@ BASELINE_REF=fb285850bae09ba2f2336993e6b34fc2318a23af node tests/browser.cjs
 `TEST_OUTPUT_DIR` опционален, должен находиться вне репозитория.
 Inline JS отдельно извлечь из последнего `<script>` и проверить `node --check`.
 
-Runtime: 43 проверки без baseline / 62 с baseline. Обычный TUN, все Per-Proxy listeners,
+Runtime: 43 проверки без baseline / 59 с baseline. Обычный TUN, все Per-Proxy listeners,
 Sub Mode, no-TUN, explicit gvisor, invalid values, прямой buildMihomoYaml, неизменность
 байтов исходного вывода в 16 комбинациях. Случайный subscription x-hwid фиксируется
-только внутри тестового VM. Проверяется точное воспроизведение патча и отказ при дрейфе.
+только внутри тестового VM. Три проверки textual patch удалены вместе со скриптом; все функциональные проверки сохранены.
 
 Browser: UI default/off/on, инвалидирование Copy, обычный/Per-Proxy MIPS, VPS с обеими
 формами TUN и DNS toggle, generic→VPS→generic, AWG .conf upload со всеми девятью 3.1
@@ -47,12 +47,15 @@ Clipboard в тесте подменён тестовым адаптером; в
 VPS + Per-Proxy MIPS, AWG 3.1, AWG 3.1 + VPS MIPS. Никаких пользовательских credentials.
 Это реальная проверка ядром, но не запуск TUN и не handshake AWG-сервера.
 
-### Runtime exception check
+### Воспроизводимость source-level runtime
 
-Исторические пункты ниже «runtime не тронут» заменены для этой доработки проверкой
-воспроизводимости `scripts/patch-mihomo-tun.cjs` против baseline. Допускаются только
-четыре scoped-замены MIPS; sing-box и AWG-код не меняются. Перед review:
-`git diff --check`, `git status --short`, `git diff -- web4core.runtime.js`.
+Runtime собирается штатно из `saymer-alt/web4core@link-generators`; команды —
+[DEVELOPMENT.md](DEVELOPMENT.md). Перед миграцией сборка на базе upstream `8998983`
+с MIPS в `src/build.js`/`src/core/yaml.js` побайтово совпала с runtime из commit `6b3368e`:
+193683 байта, SHA-256 `b445d1884c819f9a6da49c57d30ddb67e5d8b5cd01f9ca5412f7e0555f68fa1e`.
+Windows checkout отличается только CRLF. Runtime руками не редактируется.
+В fork добавлены source tests на базе существующего `node:test`; старые тесты сохранены.
+Ниже датированные прогоны 2026-09-08/09 — исторические результаты.
 
 ## Инфраструктура прогона
 
@@ -134,15 +137,17 @@ py -m http.server 8017 --bind 127.0.0.1
 | регресс `mieru … transport=TPC` → Build | state `INVALID` на `transport` (прежнее поведение сохранено) | ✅ |
 | регресс: `vless` → VALID; `ss` без `port` → INVALID | прежнее поведение сохранено | ✅ |
 
-## Runtime untouched check
-
-Перед каждым commit:
+## Проверка runtime перед commit
 
 ```bash
-git status --short                         # только задуманные файлы
-git diff --check                           # whitespace
-git diff --name-only web4core.runtime.js   # пусто = рантайм не тронут
+git status --short
+git diff --check
+node --check web4core.runtime.js
+node tests/runtime.cjs
 ```
+
+Изменённый runtime должен воспроизводиться сборкой fork; сравнение и baseline —
+[DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Регрессионный минимум перед любым пушем
 
@@ -151,7 +156,7 @@ git diff --name-only web4core.runtime.js   # пусто = рантайм не т
 3. AWG 3.1 `.conf` → VALID (`version: 3` в YAML, булевы `random-trailers`/`disable-cookies`
    из `on`/`off` присутствуют как booleans).
 4. Allow LAN: `allow-lan: true` + `bind-address: "*"` в выводе (регэксп-патч не сломан).
-5. `web4core.runtime.js` не тронут (см. команду выше).
+5. `web4core.runtime.js` воспроизводится сборкой fork; функциональные регрессии проходят.
 6. Профиль развёртывания: generic-вывод посимвольно равен эталону; при vps —
    контракт из раздела «Профиль VPS Gateway» (auto-route false, dns-тумблер,
    find-process-mode, store-*).
@@ -254,11 +259,12 @@ Baseline ДО фикса (зафиксирован тем же прогоном 
 
 ## Что не тестируется
 
-Ничего не гоняется автоматически: после пуша проверяется живая страница вручную, а после
-бот-коммита рантайма прогон повторяется (см. [UPDATES.md](UPDATES.md), [DEVELOPMENT.md](DEVELOPMENT.md)).
+Workflow автоматически запускает source Mihomo tests, сборку, проверку синтаксиса
+и runtime suite. Browser suite и реальный `mihomo -t` запускаются отдельно;
+после публикации остаётся проверка живой страницы.
 
-Для AWG-импорта за рамками тестов остаются три уровня, которые страница проверить не может:
-`mihomo -t` (схема YAML глазами реального ядра), фактический AWG-хендшейк против
+Для AWG-импорта за рамками тестов остаются два уровня, которые страница проверить не может:
+фактический AWG-хендшейк против
 self-hosted 3.1 сервера и поведение конкретной сборки ядра (требование mihomo ≥ 1.19.30
 для 3.1-ключей — см. [PROTOCOLS.md](PROTOCOLS.md)). Успешная структурная валидация ≠
 работающий туннель.

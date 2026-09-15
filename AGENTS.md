@@ -27,8 +27,7 @@ HTML-файле, компактный hand-written JS без фреймворк�
 | Файл | Роль | Редактировать |
 |---|---|---|
 | `index.html` | Всё приложение: inline CSS + inline JS; единственная страница | Да — основной файл |
-| `web4core.runtime.js` | Вендоренный артефакт сборки апстрим-проекта web4core | НЕТ — см. ниже |
-| `scripts/patch-mihomo-tun.cjs` | Maintained MIPS patch для upstream runtime | Только в согласованном scope; единственное исключение ниже |
+| `web4core.runtime.js` | Вендоренный артефакт сборки saymer-alt/web4core@link-generators | НЕТ — см. ниже |
 | `tests/` | Node/browser regression tests и fixtures | Да — синхронно с проверяемыми контрактами |
 | `docs/` | Внутренняя база знаний: ARCHITECTURE, DATAFLOW, MIHOMO, PROTOCOLS, VALIDATION, UPDATES, DEVELOPMENT, TESTING | Да — синхронно с изменениями поведения |
 | `.github/workflows/update-web4core-runtime.yml` | Автообновление рантайма | Аккуратно: имеет право писать в `main` |
@@ -41,6 +40,21 @@ HTML-файле, компактный hand-written JS без фреймворк�
 на Pages отдаёт 404, это ожидаемо.
 
 ## Архитектура: где какая логика
+
+Этот репозиторий — **UI/browser layer**. Protocol engine находится в
+`saymer-alt/web4core:link-generators`; runtime собирается из нашего fork.
+Новые parsers/builders и общую семантику протоколов не дублировать в `index.html`.
+UI-specific normalization/post-processing оставлять здесь только если это
+ответственность формы, UX или deployment profile; существующие AWG wrappers не
+переносить попутно. Новый outbound validation обычно затрагивает оба репозитория.
+
+Validator, README и docs должны отражать только реальную end-to-end поддержку:
+распознанный URI или разрешённый YAML-тип сами по себе не доказывают работоспособность.
+Полная карта, выбор слоя и workflow будущего агента — `docs/WEB4CORE-FORK.md`.
+До изменения читать AGENTS обоих репозиториев, проверять branch/remotes/status,
+определять scope; после — tests/build, runtime comparison и review до commit/push.
+Workflow обязан оставаться воспроизводимым и fail-closed: не пропускать ошибки
+checkout/build/tests, не копировать непроверенный runtime, не делать force-push.
 
 ### Вкладка 1 «WARP MASQUE Links» — вся логика инлайн в `index.html`
 
@@ -99,33 +113,32 @@ HTML-файле, компактный hand-written JS без фреймворк�
 
 ## web4core.runtime.js — сгенерированный файл, руками не трогать
 
-**Узкое исключение (контракт v1.19.31):** пользователь явно запросил параметр
-`options.mihomoTunStack` по всей цепочке runtime. Четыре локальные замены выполняет
-`scripts/patch-mihomo-tun.cjs` над чистым upstream-бандлом; этот же скрипт запускает
-workflow до сравнения/копирования. `mips` — opt-in, fallback `gvisor`; обычный TUN и
-listeners используют `opts.tun.stack`. Ручные правки остальных частей запрещены.
-При несовпадении/повторном применении патч аварийно останавливается; обновление
-апстрима требует review. Не отключать guard, не копировать непатченный runtime.
-Подробности и команды — `docs/UPDATES.md`, `docs/TESTING.md`.
-Все нижеследующие запреты на локальные runtime-правки имеют только это исключение.
+MIPS реализован в исходниках настоящего fork `saymer-alt/web4core`, ветка
+`link-generators`: `src/build.js` передаёт `options.mihomoTunStack`,
+`src/core/yaml.js` нормализует `opts.tun.stack` и использует его для обычного TUN
+и Per-Proxy listeners. Только точное `mips` включает MIPS; fallback — `gvisor`.
 
-Это IIFE-бандл (esbuild-стиль, ~4.3 тыс. строк), собранный из апстрима
-https://github.com/spatiumstas/web4core (`npm run build:web:runtime`, Node 22). Локальные
-ручные правки будут молча перезаписаны следующим автообновлением (см. ниже). Нужно менять
-поведение парсинга/сборки — общее правило: обёртка в `index.html` (как allow-lan патч)
-либо PR в апстрим web4core и ожидание автообновления. Единственное утверждённое
-исключение — maintained MIPS patch выше; это не разрешение на другие локальные правки.
+Это IIFE-бандл штатной esbuild-сборки fork (`npm ci && npm run build:web:runtime`,
+Node 22). `web4core.runtime.js` руками не редактировать: он должен воспроизводиться
+из исходников fork. Textual bundle patch удалён. Изменения парсинга/эмиссии —
+в source-ветке fork в согласованном scope; upstream PR предпочтителен для общих
+исправлений, wrapper в `index.html` остаётся вариантом для адаптаций входа/выхода.
+Новые протоколы требуют отдельной задачи владельца. Подробности — `docs/UPDATES.md`.
 
 В конце бандла — единственная точка экспорта: `globalThis.web4core = { … }`.
 
 ## GitHub Actions: автообновление рантайма
 
-`.github/workflows/update-web4core-runtime.yml`, триггеры: push в `main`, еженедельный
-cron `17 4 * * 1`, ручной dispatch. Шаги: чекаут этого репо и апстрима web4core (ветка
-main) → Node 22 → `npm ci && npm run build:web:runtime` → `scripts/patch-mihomo-tun.cjs`
-→ `node --check` → `tests/runtime.cjs` → `cmp` адаптированного
-`src/web4core.runtime.js` с локальным → при отличии copy и коммит «Update web4core runtime
-from upstream» от github-actions[bot] ПРЯМО в `main` и push.
+`.github/workflows/update-web4core-runtime.yml`: push в `main`, еженедельный
+cron `17 4 * * 1`, ручной dispatch. Checkout этого репо и
+`saymer-alt/web4core@link-generators` → Node 22 → npm ci → source Mihomo tests
+→ upstream build command → node --check → tests/runtime.cjs → artifact.
+Сборка и тесты выполняются с `contents: read`, без сохранённых Git credentials.
+Отдельный свежий job с `contents: write` только сравнивает/копирует runtime и при
+отличии создаёт «Update web4core runtime from upstream» в `main`. Код artifact
+там не выполняется. При изменении main после проверки — отказ; force-push запрещён.
+Синхронизация upstream в custom branch — controlled merge с review и тестами,
+не автоматический merge внешнего кода (см. `docs/UPDATES.md`).
 
 Следствия для агента:
 - каждый твой пуш в `main` запускает этот workflow (даже если runtime не менялся — тогда
@@ -240,7 +253,7 @@ gateway-конфига). Подробно — docs/VPS-GATEWAY.md. Инвари�
 5. Не менять DOM-id элементов (`mihomoInput`, `cfgLan`, `pingSelect`, …) без синхронного
    обновления JS — вся привязка по id.
 6. Новый функционал сборки — через публичный API `globalThis.web4core` или постобработкой
-   результата, не форком рантайма.
+   результата; изменения самого runtime — в исходниках fork в согласованном scope.
 7. Коммитить только целенаправленные изменения; перед коммитом проверить `git status` /
    `git diff`: в диффе не должно оказаться ничего, кроме задуманного (особенно — случайных
    изменений `web4core.runtime.js`).

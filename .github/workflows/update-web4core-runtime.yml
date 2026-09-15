@@ -9,57 +9,95 @@ on:
     - cron: '17 4 * * 1'
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: update-web4core-runtime
+  cancel-in-progress: false
 
 jobs:
-  update-runtime:
+  build-runtime:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout link-generators
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Checkout upstream web4core
+      - name: Checkout web4core fork
         uses: actions/checkout@v4
         with:
-          repository: spatiumstas/web4core
-          ref: main
-          path: web4core-upstream
-          fetch-depth: 1
+          repository: saymer-alt/web4core
+          ref: link-generators
+          path: web4core-source
+          persist-credentials: false
+
+      - name: Record source revision
+        working-directory: web4core-source
+        run: git rev-parse HEAD
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: web4core-upstream/package-lock.json
 
-      - name: Build upstream runtime
-        working-directory: web4core-upstream
+      - name: Build and test fork runtime
+        working-directory: web4core-source
         run: |
           npm ci
+          node --test tools/tests/mihomo-exclude-filter.test.mjs tools/tests/mihomo-tun-stack.test.mjs
           npm run build:web:runtime
           test -s src/web4core.runtime.js
 
-      - name: Apply maintained Mihomo TUN patch and check runtime
+      - name: Check runtime
         run: |
-          node scripts/patch-mihomo-tun.cjs web4core-upstream/src/web4core.runtime.js
-          node --check web4core-upstream/src/web4core.runtime.js
-          node tests/runtime.cjs web4core-upstream/src/web4core.runtime.js
+          node --check web4core-source/src/web4core.runtime.js
+          node tests/runtime.cjs web4core-source/src/web4core.runtime.js
+          sha256sum web4core-source/src/web4core.runtime.js
 
+      - name: Upload checked runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: web4core-runtime
+          path: web4core-source/src/web4core.runtime.js
+          if-no-files-found: error
+          retention-days: 7
+
+  update-runtime:
+    needs: build-runtime
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tested link-generators revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Download checked runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: web4core-runtime
+          path: ${{ runner.temp }}/checked-runtime
+
+      # Copy data only: never execute the artifact or external build code in this job.
       - name: Compare and update runtime
         run: |
-          if cmp -s web4core-upstream/src/web4core.runtime.js web4core.runtime.js; then
+          git fetch origin main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "main changed since validation; rerun against the new revision."
+            exit 1
+          fi
+          runtime="$RUNNER_TEMP/checked-runtime/web4core.runtime.js"
+          test -f "$runtime" && test -s "$runtime" && test ! -L "$runtime"
+          if cmp -s "$runtime" web4core.runtime.js; then
             echo "Runtime is already up to date."
             exit 0
           fi
-
-          echo "Upstream runtime differs; updating local runtime."
-          cp web4core-upstream/src/web4core.runtime.js web4core.runtime.js
-
+          cp "$runtime" web4core.runtime.js
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web4core.runtime.js
+          git add -- web4core.runtime.js
           git commit -m "Update web4core runtime from upstream"
-          git push
+          git push origin HEAD:main

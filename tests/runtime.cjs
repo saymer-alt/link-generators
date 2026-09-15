@@ -45,10 +45,5 @@ if (process.env.BASELINE_REF) {
     assert.equal(build(current, opts), build(baseline, opts));
     cases++;
   }
-  const { patchRuntime } = require('../scripts/patch-mihomo-tun.cjs');
-  assert.equal(patchRuntime(old).replace(/\r\n/g, '\n'), runtime.replace(/\r\n/g, '\n'));
-  assert.throws(() => patchRuntime(old.replace('const tunOpt = opts.tun;', 'const tunOpt = null;')));
-  assert.throws(() => patchRuntime(runtime));
-  cases += 3;
 }
 console.log(`Runtime: ${cases} cases passed`);

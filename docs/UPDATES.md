@@ -1,38 +1,28 @@
 # UPDATES — жизненный цикл `web4core.runtime.js`
 
-## Исключение: воспроизводимый MIPS TUN patch (2026-09-15)
+## Источник и воспроизводимость
 
-По запросу владельца добавлен runtime-контракт `options.mihomoTunStack`.
-`scripts/patch-mihomo-tun.cjs` делает четыре строго ограниченные замены в чистом
-upstream-бандле: нормализация stack, два места эмиссии, передача опции.
-Это единственное утверждённое исключение; вручную runtime не править.
+Карта двух репозиториев и выбор слоя изменения — [WEB4CORE-FORK.md](WEB4CORE-FORK.md).
 
-```bash
-node scripts/patch-mihomo-tun.cjs path/to/unpatched/web4core.runtime.js
-node --check path/to/unpatched/web4core.runtime.js
-node tests/runtime.cjs path/to/unpatched/web4core.runtime.js
+```text
+spatiumstas/web4core:main
+→ controlled sync с review и тестами
+→ saymer-alt/web4core:link-generators (source-level extensions)
+→ npm ci → npm run build:web:runtime
+→ src/web4core.runtime.js → проверки → link-generators/web4core.runtime.js
 ```
 
-Workflow делает эти шаги после сборки upstream и **до** compare/copy/commit.
-Скрипт требует ровно одно совпадение каждого участка, сохраняет переводы строк,
-записывает результат только после успеха всех замен. При дрейфе или повторном
-применении — ошибка без записи и публикации. Если upstream сам добавит поддержку,
-нужен review API и удаление/адаптация патча, а не обход проверки.
-Приложение по-прежнему работает с `file://`, сборка и новые browser-зависимости ему
-не нужны. Regression tests используют Node; браузерный тест — внешнюю установку Playwright.
+`saymer-alt/web4core` — настоящий GitHub fork `spatiumstas/web4core`.
+Ветка `main` следует upstream; расширения находятся только в `link-generators`.
+MIPS реализован в `src/build.js` (`buildFromRequest`) и `src/core/yaml.js`
+(`buildMihomoYaml`, включая вложенный builder listeners). Только точное `mips`
+включает MIPS, остальные значения дают `gvisor`. Sing-box/xray не затронуты.
 
-Как рантайм появляется, обновляется и почему его нельзя править руками. Workflow —
-`.github/workflows/update-web4core-runtime.yml` (с maintained MIPS patch, 2026-09-15).
-
-## Откуда берётся рантайм
-
-`web4core.runtime.js` — готовый IIFE-бандл (~4380 строк) сборки апстрим-проекта
-**https://github.com/spatiumstas/web4core** (ветка `main`). Апстрим собирает его сам:
-Node 22 → `npm ci && npm run build:web:runtime` → артефакт `src/web4core.runtime.js`.
-Затем `scripts/patch-mihomo-tun.cjs` строго воспроизводимо адаптирует бандл для MIPS;
-после проверки синтаксиса и runtime regression test он сравнивается с локальным файлом.
-При отличии коммитится готовый **vendored patched runtime**. Само приложение по-прежнему
-не имеет package.json/npm-зависимостей и не требует сборки для запуска.
+Textual bundle patch удалён: `web4core.runtime.js` никогда не редактируется вручную.
+Разрешён только результат штатной сборки fork после проверок. При первоначальном
+переносе runtime побайтово совпал с runtime из commit `6b3368e` (см. [TESTING.md](TESTING.md)).
+Приложение не имеет package.json/npm dependencies/build step и работает с `file://`;
+Node/npm нужны для сборки отдельного source-репозитория и проверок.
 
 Экспорт рантайма — один объект `globalThis.web4core` (17 функций): `buildBeansFromInput`,
 `validateBean`, `computeTag`, `getAllowedCoreProtocols`, `URLTEST`, `URLTEST_CHOICES`,
@@ -43,61 +33,97 @@ Node 22 → `npm ci && npm run build:web:runtime` → артефакт `src/web4
 
 ## Workflow автообновления
 
-`.github/workflows/update-web4core-runtime.yml`, права `contents: write`:
+`.github/workflows/update-web4core-runtime.yml`: push в `main`, cron `17 4 * * 1`,
+ручной dispatch. Обновления из проверенной custom branch остаются автоматическими.
 
-1. чекаут этого репо + чекаут апстрима `spatiumstas/web4core@main`;
-2. Node 22 → `npm ci && npm run build:web:runtime` (в каталоге апстрима);
-3. `node scripts/patch-mihomo-tun.cjs web4core-upstream/src/web4core.runtime.js`;
-4. `node --check web4core-upstream/src/web4core.runtime.js`;
-5. `node tests/runtime.cjs web4core-upstream/src/web4core.runtime.js`;
-6. `cmp` адаптированного `src/web4core.runtime.js` с локальным;
-7. если отличаются — копия поверх, коммит **прямо в `main`** от `github-actions[bot]`
-   с сообщением «Update web4core runtime from upstream» и push.
+1. `build-runtime`, `contents: read`, свежий GitHub-hosted runner:
+   - checkout consumer и `saymer-alt/web4core@link-generators`, оба без сохранения credentials;
+   - записать source SHA в лог; Node 22, `npm ci`;
+   - source Mihomo tests (включая обязательный MIPS test), штатный build;
+   - `node --check`, `node tests/runtime.cjs` на собранном файле, SHA-256 в лог;
+   - upload единственного runtime artifact текущего run (срок хранения 7 дней).
+2. `update-runtime`, отдельный свежий runner, `contents: write`, только для `main`:
+   - checkout проверенного consumer SHA, download artifact текущего run;
+   - если `origin/main` уже изменился — отказ, нужен повторный запуск;
+   - проверить наличие обычного непустого файла, `cmp`, при отличии copy;
+   - stage только `web4core.runtime.js`, commit «Update web4core runtime from upstream»;
+   - обычный `git push origin HEAD:main`, без force. Конкурентный push отклоняется Git.
 
-Триггеры: **каждый push в `main`**, еженедельный cron `17 4 * * 1`, ручной dispatch.
+В write-job не выполняются npm, source tests или сам artifact. Кэш сборки не переносится
+в него. Ошибка build/test прерывает цепочку; publish зависит от успешного build-job.
+Workflow runs сериализованы. При одинаковом runtime bot commit не создаётся.
+После bot commit проверить страницу, особенно allow-lan и валидатор.
 
-Следствия:
+Разделение jobs ограничивает доступ внешнего build-кода к write-token, но не доказывает
+безопасность его результата: runtime будет выполняться в браузере пользователей.
+Поэтому upstream/package-lock/build scripts требуют review до попадания в custom branch.
+Actions пока используют доверенные major tags `@v4`; pin полных SHA и branch protection
+с обязательным review — рекомендуемое последующее усиление, здесь настройки не менялись.
+Основание: [GitHub: secure use](https://docs.github.com/en/actions/reference/security/secure-use).
 
-- любой твой пуш запускает workflow (если рантайм не изменился — без коммита);
-- вскоре после пуша может прилететь бот-коммит, меняющий только `web4core.runtime.js` —
-  это нормально; не откатывать, не «чинить»;
-- обновление меняет поведение парсинга/сборки **без изменения `index.html`** — после
-  бот-коммита стоит перепроверить страницу (в первую очередь allow-lan патч и валидатор).
+## Upstream sync: выбран controlled merge
 
-## Почему руками не редактировать
+| Вариант | Свойства | Решение |
+|---|---|---|
+| Ручной controlled sync | Review исходников и зависимостей до build; конфликты/тесты блокируют публикацию | Основной вариант |
+| Scheduled merge + push | Может автоматически внести нежелательный код при зелёных тестах; нужны отдельные права и review | Сейчас не внедрять |
+| GitHub fork sync main + merge custom | Удобно обновляет зеркало main, но не переносит изменения в custom branch и не проверяет MIPS | Дополнение к controlled merge |
 
-Ручная правка бандла будет перезаписана автообновлением: файл целиком заменяется
-результатом upstream build + maintained MIPS patch. Механизм локальной адаптации —
-отдельный `scripts/patch-mihomo-tun.cjs`, а не ручные изменения внутри бандла.
-Разрешено только это утверждённое исключение; при дрейфе апстрима скрипт останавливает
-обновление до записи/публикации, обходить проверку нельзя.
+Не реже еженедельно сопровождающий проверяет upstream (например, перед понедельничным
+consumer cron). Это ручная обязанность: consumer cron сам upstream не сливает.
+Не синхронизировать custom branch кнопкой с удалением её собственных коммитов.
+
+Процедура (команды выполняются только в чистом checkout fork после отдельного разрешения
+на публикацию; ниже инструкция, не автоматически выполняемый сценарий):
+
+```bash
+git fetch upstream main
+git fetch origin main link-generators
+git switch main
+git merge --ff-only upstream/main
+# обновление зеркала main разрешено только fast-forward; при расхождении остановиться
+git switch -c sync/upstream-YYYY-MM-DD origin/link-generators
+git merge --no-commit --no-ff upstream/main
+# при конфликте STOP; git merge --abort, никаких push
+# review: source, package.json, lockfile, build scripts, workflows, лицензии
+npm ci
+node --test tools/tests/mihomo-exclude-filter.test.mjs tools/tests/mihomo-tun-stack.test.mjs
+npm run build:web:runtime
+npm run test:amnezia
+node --check src/web4core.runtime.js
+node ../link-generators/tests/runtime.cjs src/web4core.runtime.js
+git diff --check
+# затем browser baseline и реальные Mihomo -t, см. TESTING.md
+# только после успеха: commit candidate, push candidate и PR → link-generators
+# review и обычный merge PR; ни reset custom branch, ни force-push
+```
+
+Все команды — шаги с проверкой exit code, не цепочка для слепого запуска.
+При test failure ничего не публиковать. Если upstream уже содержит совместимую MIPS
+реализацию — отдельно проверить контракт и удалить дублирование source-изменений.
+
+Возможная будущая автоматика: scheduled read-only job fetch/compare → сообщение о новом
+upstream SHA; отдельный candidate build/test job без write-token; создание review PR
+доверенным job без выполнения upstream-кода. Merge в custom branch остаётся ручным.
+Такой workflow стоит вводить отдельной задачей после выбора PR permissions и protections;
+в этой миграции его нет. Автоматический upstream merge/rebase/push не включён.
+
+## Порядок публикации миграции
+
+Сначала review, commit и push source-изменений в `saymer-alt/web4core:link-generators`.
+Проверить сборку опубликованного SHA. Затем публиковать миграцию consumer workflow.
+Пока в удалённой custom branch нет source-изменений и MIPS test, новый workflow
+завершится ошибкой — это ожидаемый fail-closed барьер, не повод пропускать тест.
 
 ## Если нужна новая функция или фикс поведения
 
-Для новых изменений общее правило — два пути ниже. Уже утверждённый maintained MIPS
-patch — единственное исключение, не разрешение расширять локальную адаптацию произвольно.
-
-1. **Локальный wrapper в `index.html`** — трансформация входа до вызова рантайма или
-   пост-обработка его результата. Так работают адаптации страницы:
-   - allow-lan регэксп-патч (правка готового YAML);
-   - `normalizeWgText` (правка текста .conf до парсинга);
-   - `normalizeWgBeans` (правка beans между парсингом и сборкой);
-   - `injectWgDns` (правка YAML после сборки: jsyaml.load → правка → jsyaml.dump
-     `{ lineWidth: -1 }` — параметр обязателен, иначе переносятся длинные base64-строки AWG).
-   Критерий применимости: желаемое выражается трансформацией входа/выхода, без правки
-   внутренностей парсера/эмиссии.
-2. **PR в апстрим `spatiumstas/web4core`** — если менять надо сам парсинг/эмиссию. После
-   мержа рантайм обновится автоматически ближайшим запуском workflow. Известные
-   апстрим-проблемы, ожидающие именно такого решения: булевы `random-trailers`/`disable-cookies`
-   в значении `on`/`off` (официальный формат литералов AWG 3.1) молча теряются при парсинге
-   .conf — с 2026-09-09 компенсируются локально в `normalizeWgText`, но чистый фикс —
-   в апстриме; отсутствие `dns`-эмиссии для wireguard (закрыто локальным wrapper'ом,
-   но чище — в апстриме).
-
-Категорически нельзя: форкать рантайм внутри этого репо, коммитить вручную
-отредактированный `web4core.runtime.js`, «временно» править его в ветке.
-Допустим только артефакт upstream build с точно воспроизводимым maintained MIPS patch
-после проверок выше; любые другие изменения требуют отдельного решения владельца.
+- Wrapper в `index.html` подходит для адаптации входа/выхода: allow-lan,
+  `normalizeWgText`, `normalizeWgBeans`, `injectWgDns` (обязательно `lineWidth: -1`).
+- Изменение парсинга/эмиссии — в исходниках fork с тестами и review, в отдельном
+  согласованном scope. Общие исправления желательно отправлять upstream PR;
+  после upstream merge требуется controlled sync custom branch.
+- Bundle руками не править и textual patch заново не вводить.
+- Создание fork не разрешает добавлять новые протоколы без отдельной задачи.
 
 ## Связь с index.html и что проверять после обновления
 
