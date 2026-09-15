@@ -1,12 +1,8 @@
 # WARP & Mihomo Unified Generator
 
-Новый opt-in: **Автоматический режим белых списков** — обычные выходы приоритетны,
-отдельные БС-ссылки/подписки используются как резерв по health-check. Per-Proxy и
-VPS Gateway в этом режиме отключены; обычный TUN и MIPS доступны. По умолчанию
-режим выключен. [Настройка, структура YAML и ограничения](docs/AUTO-WHITELIST.md).
-
-
 Генератор конфигураций для [Mihomo](https://github.com/MetaCubeX/mihomo) (Clash Meta) и ссылок MASQUE для Cloudflare WARP. Статическое клиентское веб-приложение: разбор ссылок и сборка конфигов выполняются прямо в браузере — приватные ключи, ссылки и конфигурации никуда не отправляются.
+
+Новый opt-in: **Автоматический режим белых списков**. Обычные выходы всегда имеют приоритет, отдельные БС-ссылки/подписки используются как резерв по health-check, а после восстановления primary Mihomo автоматически возвращается на него. Режим поддерживает ссылки, подписки и их смесь; Per-Proxy TUN/SOCKS и VPS Gateway в нём отключены, обычный TUN и MIPS доступны. По умолчанию режим выключен. [Настройка, структура YAML и ограничения](docs/AUTO-WHITELIST.md).
 
 🌐 **Открыть генератор:** [saymer-alt.github.io/link-generators](https://saymer-alt.github.io/link-generators/)
 
@@ -27,6 +23,15 @@ VPS Gateway в этом режиме отключены; обычный TUN и M
 2. Вставьте proxy-ссылки. Если это обычные ссылки (а не URL подписок) — снимите галочку **📡 Sub Mode**.
 3. Нажмите **⚡ Build Config**: под YAML появится результат базовой проверки. Если ошибок нет — **📋 Copy YAML**.
 
+**Автоматический режим белых списков**
+
+1. Включите **Автоматический режим белых списков**.
+2. В верхнем поле оставьте обычные серверы/подписки — это `PRIMARY`.
+3. Во втором поле укажите серверы/подписки, доступные в режиме БС — это резерв `FALLBACK`.
+4. Соберите YAML. `GLOBAL` будет использовать первый живой primary-выход, переходить на fallback только при недоступности primary и возвращаться обратно после успешного health-check.
+
+В этом режиме `DIRECT` не добавляется в цели `GLOBAL`; Per-Proxy TUN/SOCKS и VPS Gateway принудительно отключаются. Внутри каждого набора выбирается первый живой выход, а не самый быстрый. Подробности и ограничения: [AUTO-WHITELIST.md](docs/AUTO-WHITELIST.md).
+
 **WireGuard / AmneziaWG → Mihomo YAML**
 
 1. Нажмите **📂 Загрузить .conf / .awg** и выберите один или несколько файлов.
@@ -35,7 +40,7 @@ VPS Gateway в этом режиме отключены; обычный TUN и M
 
 **YAML от WARP-бота → ссылки `masque://`**
 
-1. На вкладке **⚡ WARP MASQUE Links** вставьте YAML-конфиг от бота и нажмите **🔍 Распарсить** — ключи и параметры подставятся в форму.
+1. На вкладке **⚡ WARP MASQUE Links** вставьте YAML-конфигурацию WARP-бота и нажмите **🔍 Распарсить** — ключи и параметры подставятся в форму.
 2. **⚡ Сгенерировать ссылки** — получите пары `masque://`-ссылок (QUIC + H2).
 3. Кнопка **🚀 В Mihomo Builder** перенесёт их в сборщик конфига.
 
@@ -45,6 +50,7 @@ VPS Gateway в этом режиме отключены; обычный TUN и M
 - **HTTP(S)-подписки** — в режиме 📡 Sub Mode; генератор прописывает их как `proxy-providers`, скачивать подписку будет сам Mihomo, а не страница.
 - **WireGuard / AmneziaWG** — файлы `.conf`, `.wg`, `.awg` (можно несколько сразу).
 - **YAML от WARP-ботов** — см. следующий раздел.
+- **БС-резерв** — второй набор ссылок/подписок в автоматическом режиме белых списков; primary и fallback могут содержать обычные ссылки, providers или их смесь.
 
 ## Совместимость с WARP-ботами
 
@@ -114,7 +120,8 @@ mihomo -t -f config.yaml
 
 ## Возможности Mihomo Builder
 
-- **Proxy groups** — группа быстрейшего прокси (url-test) и селектор GLOBAL; при Per-Proxy режимах — отдельная группа на каждый прокси.
+- **Proxy groups** — группа быстрейшего прокси (`url-test`) и селектор `GLOBAL`; при Per-Proxy режимах — отдельная группа на каждый прокси. В автоматическом БС-режиме `GLOBAL` вместо этого становится плоской `fallback`-группой с абсолютным порядком primary → fallback.
+- **Автоматический режим белых списков** — два независимых набора выходов, автоматический переход на БС и возврат на primary по health-check. Поддерживаются static links, HTTP providers и mixed input. Вложенные `fallback → url-test` группы намеренно не используются из-за воспроизводимого [Mihomo #2588](https://github.com/MetaCubeX/mihomo/issues/2588).
 - **Health checks** — выбор endpoint'а: Google, Cloudflare, Apple, Microsoft, Ubuntu, Fedora.
 - **📡 Sub Mode** — HTTP(S)-подписки как `proxy-providers`: обновление раз в 12 часов, встроенный health-check. Включён по умолчанию; **для обычных ссылок отключите**.
 - **🛡️ TUN** и **🔒 Per-Proxy TUN** — системный туннель либо отдельный TUN-интерфейс на каждый прокси.
@@ -125,13 +132,16 @@ mihomo -t -f config.yaml
 - **🖥️ Web UI** — подключение дашборда metacubexd к `external-controller`.
 - **WireGuard / AmneziaWG** — см. раздел выше.
 - **Mieru port ranges** — поддерживается диапазон портов вместо одиночного порта; ошибки диапазона проверяются до копирования.
-- **Защита обновлений** — автоматические regression tests проверяют runtime, а обновление сохраняет адаптацию MIPS; при несовместимом изменении апстрима оно останавливается. [Подробнее о проверках](docs/TESTING.md).
+- **Защита обновлений** — `web4core.runtime.js` собирается из source-level ветки [`saymer-alt/web4core:link-generators`](https://github.com/saymer-alt/web4core/tree/link-generators). Workflow сначала собирает и тестирует runtime без write-token, затем отдельный write-job обновляет consumer только после успешных проверок. [Архитектура fork](docs/WEB4CORE-FORK.md) · [Тесты](docs/TESTING.md).
 
 ## Ограничения и важные замечания
 
 - Базовая проверка структурная: она отсеивает заведомо невалидные конфиги, но не гарантирует, что Mihomo примет конфигурацию. Финальная проверка — `mihomo -t` на целевой машине.
 - 📡 Sub Mode включён по умолчанию: он предназначен для URL-подписок — обычные ссылки требуют его отключения.
 - Подписки скачивает сам Mihomo на вашем устройстве, страница их не загружает.
+- В автоматическом БС-режиме health-check определяет доступность заданного HTTP endpoint; это не универсальный детектор режима белых списков и не проверка доступности каждого сайта/UDP.
+- Переключение БС не мгновенное и зависит от интервала/timeout health-check; уже установленные соединения не обязаны мигрировать на новый выход.
+- В БС-режиме Per-Proxy TUN/SOCKS и VPS Gateway недоступны; обычный TUN, gVisor/MIPS, Mixed Port, Web UI, Allow LAN и Sub Mode сохраняются.
 - IPv6 в генерируемом конфиге по умолчанию выключен (`ipv6: false`).
 - Старый адрес `/mihomo.html` больше не существует (файл удалён) — используйте главную страницу.
 
@@ -143,12 +153,15 @@ mihomo -t -f config.yaml
 
 | Документ | О чём |
 |---|---|
+| [AUTO-WHITELIST](docs/AUTO-WHITELIST.md) | автоматический primary → БС fallback, YAML и ограничения |
+| [FALLBACK-REVIEW](docs/FALLBACK-REVIEW.md) | проверка Mihomo #2588 и обоснование плоской fallback-схемы |
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | архитектура и схема потоков |
 | [DATAFLOW](docs/DATAFLOW.md) | прохождение данных, приватность |
 | [MIHOMO](docs/MIHOMO.md) | настройки Builder'а и структура YAML |
 | [PROTOCOLS](docs/PROTOCOLS.md) | протоколы: вход → bean → Mihomo |
 | [VALIDATION](docs/VALIDATION.md) | pre-copy валидатор подробно |
 | [VPS-GATEWAY](docs/VPS-GATEWAY.md) | опциональный профиль для amnezia-mihomo-gateway |
+| [WEB4CORE-FORK](docs/WEB4CORE-FORK.md) | source-level fork, ветка `link-generators` и сборка runtime |
 | [UPDATES](docs/UPDATES.md) | жизненный цикл `web4core.runtime.js` |
 | [DEVELOPMENT](docs/DEVELOPMENT.md) | разработка и проверки |
 | [TESTING](docs/TESTING.md) | тестовая стратегия |
@@ -157,4 +170,4 @@ mihomo -t -f config.yaml
 
 ## Credits
 
-Based on [web4core](https://github.com/spatiumstas/web4core) by [spatiumstas](https://github.com/spatiumstas) (BSD-3-Clause).
+Based on [web4core](https://github.com/spatiumstas/web4core) by [spatiumstas](https://github.com/spatiumstas) (BSD-3-Clause). Source-level extensions used by this project are maintained in the [`saymer-alt/web4core`](https://github.com/saymer-alt/web4core) fork on the `link-generators` branch.
