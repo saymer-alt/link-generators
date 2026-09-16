@@ -18,6 +18,7 @@ concurrency:
 jobs:
   build-runtime:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout link-generators
         uses: actions/checkout@v4
@@ -45,7 +46,11 @@ jobs:
         working-directory: web4core-source
         run: |
           npm ci
-          node --test tools/tests/mihomo-exclude-filter.test.mjs tools/tests/mihomo-tun-stack.test.mjs tools/tests/mihomo-priority.test.mjs
+          # Worker bundle is a gitignored build artifact required by amnezia.test.mjs.
+          npm run build:worker
+          # Auto-discovery: every tools/tests/*.test.mjs runs here; adding a new
+          # test file must not require workflow edits.
+          node --test tools/tests/*.test.mjs
           npm run build:web:runtime
           test -s src/web4core.runtime.js
 
@@ -67,6 +72,7 @@ jobs:
     needs: build-runtime
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
