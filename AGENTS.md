@@ -84,7 +84,8 @@ checkout/build/tests, не копировать непроверенный runti
 - Список health-check endpoints → `web4core.URLTEST_CHOICES` (Google/Cloudflare/Apple/Microsoft/Ubuntu/Fedora;
   фолбэк — Google generate_204).
 - Опции страницы → поля `options`: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
-  `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`.
+  `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`,
+  `excludeFilter` (только Sub Mode; пусто → прежний output).
 - Зависимости опций (группа «Расширенный режим: отдельный вход на каждый прокси»):
   advanced-крышка (`cfgPerProxyMaster`, по умолчанию OFF) обязательна для обоих child'ов;
   MIPS (`cfgTunMips`) и «TUN на каждый прокси» (`cfgPerProxyTun`) требуют `cfgTun`;

@@ -170,6 +170,11 @@
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Sub Mode</label>
       </div>
+      <div id="excludeFilterRow" style="margin-top:10px">
+        <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
+        <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia">
+        <div class="hint">Regexp/keyword-фильтр Mihomo <code>exclude-filter</code>: узлы provider, чьи имена совпали, исключаются. Применяется ко всем подпискам. Пусто — поле не добавляется.</div>
+      </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
         <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
@@ -1004,6 +1009,12 @@ function onProfileChange() {
 // родителе (MIPS и «TUN на каждый прокси» — при TUN; «SOCKS-порт на каждый
 // прокси» — при Mixed Port); выключение родителя сбрасывает зависимую опцию.
 // В БС-режиме Per-Proxy принудительно недоступны (плюс кламп в buildMihomo).
+function updateExcludeFilterVisibility() {
+  // Exclude Filter имеет смысл только для proxy-providers (Mihomo + Sub Mode).
+  document.getElementById('excludeFilterRow').style.display =
+    document.getElementById('cfgSubMode').checked ? '' : 'none';
+}
+
 function updateMihomoOptionStates() {
   const bsOn = document.getElementById('cfgAutoWhitelist').checked;
   const tun = document.getElementById('cfgTun').checked;
@@ -1097,6 +1108,7 @@ function buildMihomo() {
         webUI: document.getElementById('cfgWebUI').checked,
         urlTest: urlTest,
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
+        excludeFilter: document.getElementById('excludeFilterInput').value,
         mihomoPerProxyTun: perProxyTun,
         mihomoTunStack: tunStack,
         perProxyPort: perProxySocks
@@ -1158,6 +1170,8 @@ document.getElementById('cfgSocks').addEventListener('change', updateMihomoOptio
 document.getElementById('cfgPerProxyMaster').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgTunStackAdvanced').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgTunStackEx').addEventListener('change', updateMihomoOptionStates);
+document.getElementById('cfgSubMode').addEventListener('change', updateExcludeFilterVisibility);
+updateExcludeFilterVisibility();
 updateMihomoOptionStates();
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
 // результат проверки недействительным — старый VALID не сохраняется

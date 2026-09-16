@@ -200,6 +200,34 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     });
     assert.equal(advOff.ex, '');
     assert.equal(advOff.mipsDisabled, false);
+    // Exclude Filter (upstream parity): поле видно только при Sub Mode,
+    // значение применяется ко ВСЕМ provider'ам, пустое — ничего не добавляет.
+    const exFilter = await page.evaluate(async () => {
+      document.getElementById('cfgSubMode').checked = true;
+      document.getElementById('excludeFilterInput').value = '(?i)ru|russia';
+      document.getElementById('mihomoInput').value = 'https://example.com/one\nhttps://example.org/two';
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      const doc = jsyaml.load(document.getElementById('mihomoOutput').value);
+      const providers = Object.values(doc['proxy-providers'] || {});
+      return { state: MIHOMO_VALIDATION_STATE.state, count: providers.length,
+        values: providers.map(p => p['exclude-filter']) };
+    });
+    assert.equal(exFilter.state, 'VALID');
+    assert.equal(exFilter.count, 2);
+    assert.deepEqual(exFilter.values, ['(?i)ru|russia', '(?i)ru|russia']);
+    const exEmpty = await page.evaluate(async () => {
+      document.getElementById('excludeFilterInput').value = '';
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      const doc = jsyaml.load(document.getElementById('mihomoOutput').value);
+      return Object.values(doc['proxy-providers'] || {}).some(p => 'exclude-filter' in p);
+    });
+    assert.equal(exEmpty, false);
+    await page.locator('#cfgSubMode').uncheck();
+    assert.equal(await page.locator('#excludeFilterRow').isVisible(), false);
+    await page.locator('#cfgSubMode').check();
+    assert.equal(await page.locator('#excludeFilterRow').isVisible(), true);
     // Fail-safe: подмена DOM в обход зависимостей — сборка клампит запрещённые
     // комбинации. cfgSocks в 256-матрицу не входит, поэтому socks=0+perSocks=1
     // проверяется здесь.
@@ -251,6 +279,8 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
       ['cfgPerProxyTun', 'cfgPerProxySocks', 'cfgTunMips'].forEach(id => document.getElementById(id).checked = false);
       const master = document.getElementById('cfgPerProxyMaster');
       if (master) master.checked = false;
+      document.getElementById('excludeFilterInput').value = '';
+      document.getElementById('cfgTunStackEx').value = '';
     });
     // Baseline includes subscriptions, all preserved switches, and VPS. Fix RNG in tests only.
     if (process.env.BASELINE_REF) {
