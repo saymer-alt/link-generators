@@ -90,6 +90,7 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.equal(guarded.profile['store-selected'], true);
     assert.equal(guarded.tun['auto-route'], false); // existing ordinary TUN contract
     assert.notEqual(guarded.tun.device, 'tun-mihomo');
+    assert.equal(guarded.tun.stack, 'mips'); // VPS наследует продуктовый дефолт MIPS
     // Fail closed with an old runtime that would silently ignore fallbackInput.
     await page.evaluate(() => { const fn = web4core.buildMihomoPriorityConfig; delete web4core.buildMihomoPriorityConfig; buildMihomo(); web4core.buildMihomoPriorityConfig = fn; });
     assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
@@ -131,6 +132,7 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     // per-proxy listeners и скрытый static health checker.
     const masterOn = await page.evaluate(async () => {
       document.getElementById('cfgSubMode').checked = false;
+      document.getElementById('cfgTunMips').checked = true; // дефолт мог быть сброшен предыдущими секциями
       document.getElementById('cfgPerProxyTun').checked = true;
       document.getElementById('cfgPerProxySocks').checked = true;
       document.getElementById('mihomoInput').value = 'socks://test:pass@192.0.2.1:1080#TEST-A';
@@ -140,7 +142,64 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     });
     assert.equal(masterOn.state, 'VALID');
     assert.ok(Array.isArray(masterOn.doc.listeners) && masterOn.doc.listeners.length > 0);
+    assert.ok(masterOn.doc.listeners.filter(l => l.type === 'tun').every(l => l.stack === 'mips')); // per-proxy наследует дефолт MIPS
     assert.ok(masterOn.doc['proxy-groups'].some(g => g.name === '🌐 static-health' && g.hidden === true));
+    // Advanced TUN stack: system/mixed за крышкой; override снимает MIPS
+    // (единое состояние — нет «MIPS checked» при system/mixed в YAML).
+    const advStack = await page.evaluate(async () => {
+      document.getElementById('cfgPerProxyTun').checked = false; // обычный TUN: глобальный блок tun
+      document.getElementById('cfgPerProxySocks').checked = false;
+      document.getElementById('cfgTunStackAdvanced').checked = true;
+      document.getElementById('cfgTunStackEx').value = 'system';
+      document.getElementById('cfgTunMips').checked = true;
+      updateMihomoOptionStates(); // как при реальном событии change
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      const doc = jsyaml.load(document.getElementById('mihomoOutput').value || 'null');
+      return { state: MIHOMO_VALIDATION_STATE.state, stack: doc && doc.tun && doc.tun.stack,
+        mipsChecked: document.getElementById('cfgTunMips').checked, mipsDisabled: document.getElementById('cfgTunMips').disabled };
+    });
+    assert.equal(advStack.state, 'VALID', 'advStack state; toast=' + advStack.toast + ' head=' + advStack.head);
+    assert.equal(advStack.stack, 'system', 'advStack stack; head=' + advStack.head);
+    assert.equal(advStack.mipsChecked, false);
+    assert.equal(advStack.mipsDisabled, true);
+    // Per-proxy TUN наследует advanced stack.
+    const advPerProxy = await page.evaluate(async () => {
+      document.getElementById('cfgPerProxyMaster').checked = true;
+      document.getElementById('cfgPerProxyTun').checked = true;
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      const doc = jsyaml.load(document.getElementById('mihomoOutput').value);
+      return (doc.listeners || []).filter(l => l.type === 'tun').map(l => l.stack);
+    });
+    assert.ok(advPerProxy.length > 0 && advPerProxy.every(s => s === 'system'));
+    // Fail-safe: невалидное значение из подменённого DOM → безопасный фолбэк.
+    const invalidStack = await page.evaluate(async () => {
+      document.getElementById('cfgPerProxyTun').checked = false;
+      document.getElementById('cfgPerProxySocks').checked = false;
+      document.getElementById('cfgTunStackEx').value = 'banana';
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      const doc = jsyaml.load(document.getElementById('mihomoOutput').value);
+      return doc.tun && doc.tun.stack;
+    });
+    assert.equal(invalidStack, 'gvisor'); // mips снят override'ом ранее → gvisor
+    const mixedStack = await page.evaluate(async () => {
+      document.getElementById('cfgTunStackEx').value = 'mixed';
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      const doc = jsyaml.load(document.getElementById('mihomoOutput').value);
+      return doc.tun && doc.tun.stack;
+    });
+    assert.equal(mixedStack, 'mixed');
+    // Возврат: крышка OFF → сброс select, MIPS снова доступен.
+    const advOff = await page.evaluate(() => {
+      document.getElementById('cfgTunStackAdvanced').checked = false;
+      updateMihomoOptionStates();
+      return { ex: document.getElementById('cfgTunStackEx').value, mipsDisabled: document.getElementById('cfgTunMips').disabled };
+    });
+    assert.equal(advOff.ex, '');
+    assert.equal(advOff.mipsDisabled, false);
     // Fail-safe: подмена DOM в обход зависимостей — сборка клампит запрещённые
     // комбинации. cfgSocks в 256-матрицу не входит, поэтому socks=0+perSocks=1
     // проверяется здесь.

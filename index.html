@@ -172,7 +172,16 @@
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
-        <label><input type="checkbox" id="cfgTunMips"> ⚡ MIPS stack для TUN</label>
+        <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
+      </div>
+      <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
+      <div style="margin-top:10px">
+        <label><input type="checkbox" id="cfgTunStackAdvanced"> ⚙ Расширенный TUN stack (system / mixed)</label>
+        <select id="cfgTunStackEx" style="display:none;margin-left:8px">
+          <option value="system">system</option>
+          <option value="mixed">mixed</option>
+        </select>
+        <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
       </div>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <div style="font-size:.8rem;font-weight:600;margin-bottom:2px">Расширенный режим: отдельный вход на каждый прокси</div>
@@ -183,7 +192,7 @@
         </div>
       </div>
       <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется.</div>
-      <div class="hint">Обычный TUN включён по умолчанию. MIPS и режимы отдельного входа на каждый прокси — опциональны.</div>
+      <div class="hint">Обычный TUN и MIPS включены по умолчанию. Режимы отдельного входа на каждый прокси — за крышкой расширенного режима; system/mixed — за крышкой расширенного TUN stack.</div>
       <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию используется gVisor. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
       <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
 
@@ -825,6 +834,11 @@ function validateMihomoYaml(yaml) {
     }
   }
 
+  // Non-blocking compatibility notice: MIPS требует свежий Mihomo.
+  if (errors.length === 0 && /(^|\n)\s*stack: mips\s*(\n|$)/.test(yaml)) {
+    warn('tun', 'stack', 'mips', 'Requires Mihomo >= 1.19.31');
+  }
+
   return { status: errors.length ? 'INVALID' : 'VALID', errors, warnings };
 }
 
@@ -999,11 +1013,18 @@ function updateMihomoOptionStates() {
   const master = !!(masterEl && masterEl.checked);
   const perTun = document.getElementById('cfgPerProxyTun');
   const perSocks = document.getElementById('cfgPerProxySocks');
-  if (!tun) { mips.checked = false; }
+  const stackAdv = document.getElementById('cfgTunStackAdvanced');
+  const stackEx = document.getElementById('cfgTunStackEx');
+  if (!tun) { mips.checked = false; stackAdv.checked = false; }
   if (!master) { perTun.checked = false; perSocks.checked = false; }
   if (!tun) { perTun.checked = false; }
   if (!socks) perSocks.checked = false;
-  mips.disabled = !tun;
+  stackAdv.disabled = !tun;
+  if (!stackAdv.checked) stackEx.value = '';
+  stackEx.style.display = stackAdv.checked ? '' : 'none';
+  const advancedStackActive = stackAdv.checked && (stackEx.value === 'system' || stackEx.value === 'mixed');
+  mips.disabled = !tun || advancedStackActive;
+  if (advancedStackActive) mips.checked = false; // единое состояние: нет «MIPS checked» при system/mixed в YAML
   masterEl.disabled = bsOn;
   perTun.disabled = !master || !tun || bsOn;
   perSocks.disabled = !master || !socks || bsOn;
@@ -1057,7 +1078,10 @@ function buildMihomo() {
   // БС-режим принудительно исключает Per-Proxy и VPS.
   const master = document.getElementById('cfgPerProxyMaster') && document.getElementById('cfgPerProxyMaster').checked === true;
   const perProxyTun = (master && !autoWhitelist && addTun) ? document.getElementById('cfgPerProxyTun').checked : false;
-  const tunStack = (addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor';
+  const stackAdvEl = document.getElementById('cfgTunStackAdvanced');
+  const stackExEl = document.getElementById('cfgTunStackEx');
+  const advancedStack = (addTun && stackAdvEl && stackAdvEl.checked === true && stackExEl && (stackExEl.value === 'system' || stackExEl.value === 'mixed')) ? stackExEl.value : null;
+  const tunStack = advancedStack ? advancedStack : ((addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor');
   const perProxySocks = (master && !autoWhitelist && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
 
   try {
@@ -1132,6 +1156,8 @@ document.getElementById('vpsDnsEnabled').addEventListener('change', updateVpsDns
 document.getElementById('cfgTun').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgSocks').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgPerProxyMaster').addEventListener('change', updateMihomoOptionStates);
+document.getElementById('cfgTunStackAdvanced').addEventListener('change', updateMihomoOptionStates);
+document.getElementById('cfgTunStackEx').addEventListener('change', updateMihomoOptionStates);
 updateMihomoOptionStates();
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
 // результат проверки недействительным — старый VALID не сохраняется

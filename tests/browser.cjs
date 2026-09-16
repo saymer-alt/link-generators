@@ -27,7 +27,7 @@ const expectedAwg = {
     console.log('Browser: page loaded');
     await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
     await page.locator('button.tab').filter({ hasText: 'Mihomo' }).click();
-    assert.equal(await page.locator('#cfgTunMips').isChecked(), false);
+    assert.equal(await page.locator('#cfgTunMips').isChecked(), true); // продуктовый дефолт (NIGHT-09)
     await page.locator('#cfgSubMode').uncheck();
     await page.locator('#cfgWebUI').uncheck();
     await page.locator('#mihomoInput').fill(input);
@@ -43,12 +43,15 @@ const expectedAwg = {
       return result;
     }
     const defaultOutput = await build('default');
-    assert.equal(defaultOutput.doc.tun.stack, 'gvisor');
+    assert.equal(defaultOutput.doc.tun.stack, 'mips'); // продуктовый дефолт (NIGHT-09)
+    await page.locator('#cfgTunMips').uncheck(); // gVisor — compatibility fallback
+    const gvisor = await build('gvisor');
+    assert.equal(gvisor.doc.tun.stack, 'gvisor');
+    assert.equal(gvisor.yaml.replace('stack: gvisor', 'stack: mips'), defaultOutput.yaml);
     await page.locator('#cfgTunMips').check();
     assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
     const mips = await build('mips');
     assert.equal(mips.doc.tun.stack, 'mips');
-    assert.equal(mips.yaml.replace('stack: mips', 'stack: gvisor'), defaultOutput.yaml);
     await page.locator('#cfgPerProxyMaster').check(); // защитная крышка advanced-режима
     await page.locator('#cfgPerProxyTun').check();
     const per = await build('per-proxy-mips');
@@ -71,7 +74,7 @@ const expectedAwg = {
       await page.locator('#cfgProfile').selectOption('generic');
     }
     await page.locator('#cfgTunMips').uncheck();
-    assert.equal((await build()).yaml, defaultOutput.yaml);
+    assert.equal((await build()).yaml, gvisor.yaml); // uncheck -> тот же gvisor-вывод
 
     // Реальный file input -> normalizeWgText -> parser -> bean -> builder -> final YAML.
     await page.locator('#mihomoInput').fill('');

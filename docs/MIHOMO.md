@@ -21,7 +21,8 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 | 🖥️ Web UI | `cfgWebUI` | `webUI` | ☑ | `external-controller: 0.0.0.0:9090`, `external-ui: ui` (+URL metacubexd), `secret:` пустой |
 | 📡 Sub Mode | `cfgSubMode` | `mihomoSubscriptionMode` | ☑ | URL → `proxy-providers`, см. ниже |
 | 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default gvisor / opt-in mips, `auto-route: false`) |
-| ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☐ | `stack: mips`; иначе `gvisor`; Mihomo >= 1.19.31; требует `cfgTun` |
+| ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☑ | `stack: mips`; снят → `gvisor`; Mihomo >= 1.19.31 (некритичное предупреждение валидатора); требует `cfgTun`; продуктовый дефолт (NIGHT-09) |
+| ⚙ Расширенный TUN stack | `cfgTunStackAdvanced` + `cfgTunStackEx` | `mihomoTunStack` | ☐/— | `system`/`mixed` за крышкой; override снимает MIPS; невалидное значение → gvisor; Mihomo >= 1.19.31 |
 | 🧩 Расширенный режим: отдельный вход | `cfgPerProxyMaster` | — | ☐ | защитная крышка; OFF → оба child выключены и сброшены; скрыт в БС-режиме |
 | 🔒 TUN на каждый прокси | `cfgPerProxyTun` | `mihomoPerProxyTun` | ☐ | TUN-листенеры по одному на прокси/группу; требует `cfgPerProxyMaster` + `cfgTun`; скрыт в БС-режиме |
 | 🔌 SOCKS-порт на каждый прокси | `cfgPerProxySocks` | `perProxyPort` | ☐ | `listeners: socks-<имя>` на портах 7890+i, `mixed-port` убирается; требует `cfgPerProxyMaster` + `cfgSocks`; скрыт в БС-режиме; static-листья чекаются скрытой группой «🌐 static-health» |
