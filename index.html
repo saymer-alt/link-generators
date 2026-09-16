@@ -175,6 +175,11 @@
         <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia">
         <div class="hint">Regexp/keyword-фильтр Mihomo <code>exclude-filter</code>: узлы provider, чьи имена совпали, исключаются. Применяется ко всем подпискам. Пусто — поле не добавляется.</div>
       </div>
+      <div id="realityModernRow" style="margin-top:10px">
+        <label for="realityModernInput">🌐 Modern REALITY — серверы Xray v25.5.16+ (host или host:port, по одному в строке)</label>
+        <textarea id="realityModernInput" rows="3" placeholder="pan.example&#10;pan2.example:8443&#10;[2001:db8::1]:443"></textarea>
+        <div class="hint">Только для REALITY-узлов этих серверов добавляется ML-KEM (X25519MLKEM768) и client-fingerprint chrome, если не задан; обычные VLESS/TLS и другие серверы не затрагиваются. Требуется Xray v25.5.16+ на сервере. Пусто — legacy-вывод без изменений.</div>
+      </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
         <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
@@ -1015,6 +1020,35 @@ function updateExcludeFilterVisibility() {
     document.getElementById('cfgSubMode').checked ? '' : 'none';
 }
 
+// Selective modern REALITY: разбор строк «host» / «host:port» / «[ipv6]:port».
+// Голый IPv6 без скобок неоднозначен и считается некорректной строкой.
+function parseRealityModernLines() {
+  const hosts = [];
+  let invalid = 0;
+  for (const raw of document.getElementById('realityModernInput').value.split('\n')) {
+    const s = raw.trim();
+    if (!s) continue;
+    const bracket = s.match(/^\[([^\]]+)\](?::(\d{1,5}))?$/);
+    const hp = bracket ? null : s.match(/^([^:]+):(\d{1,5})$/);
+    let host, port;
+    if (bracket) {
+      host = bracket[1];
+      port = bracket[2] !== undefined ? Number(bracket[2]) : undefined;
+    } else if (hp) {
+      host = hp[1];
+      port = Number(hp[2]);
+    } else if (!s.includes(':')) {
+      host = s;
+    } else {
+      invalid++;
+      continue;
+    }
+    if (port !== undefined && (port < 1 || port > 65535)) { invalid++; continue; }
+    hosts.push(port === undefined ? { host: host.toLowerCase() } : { host: host.toLowerCase(), port });
+  }
+  return { hosts, invalid };
+}
+
 function updateMihomoOptionStates() {
   const bsOn = document.getElementById('cfgAutoWhitelist').checked;
   const tun = document.getElementById('cfgTun').checked;
@@ -1097,6 +1131,7 @@ function buildMihomo() {
 
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
+    const realityModern = parseRealityModernLines();
     const result = api.buildFromRequest({
       core: 'mihomo',
       input: raw,
@@ -1111,7 +1146,8 @@ function buildMihomo() {
         excludeFilter: document.getElementById('excludeFilterInput').value,
         mihomoPerProxyTun: perProxyTun,
         mihomoTunStack: tunStack,
-        perProxyPort: perProxySocks
+        perProxyPort: perProxySocks,
+        mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined
       }
     });
 
@@ -1136,6 +1172,9 @@ function buildMihomo() {
 
     document.getElementById('mihomoOutput').value = yaml;
     showToast('✅ Mihomo config built!');
+    if (realityModern.invalid > 0) {
+      showToast('⚠ Modern REALITY: пропущено некорректных строк: ' + realityModern.invalid);
+    }
     // Автоматическая проверка итогового YAML (после всех патчей), до Copy
     runMihomoValidation(yaml);
   } catch (e) {

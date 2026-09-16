@@ -20,6 +20,7 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 | 🔌 Mixed Port 7890 | `cfgSocks` | `addSocks` | ☑ | `mixed-port: 7890` (или per-proxy listeners) |
 | 🖥️ Web UI | `cfgWebUI` | `webUI` | ☑ | `external-controller: 0.0.0.0:9090`, `external-ui: ui` (+URL metacubexd), `secret:` пустой |
 | 📡 Sub Mode | `cfgSubMode` | `mihomoSubscriptionMode` | ☑ | URL → `proxy-providers`, см. ниже |
+| 🌐 Modern REALITY | `realityModernInput` | `mihomoRealityModernHosts` | пусто | multiline `host` / `host:port` / `[ipv6]:port`: только REALITY-узлы этих серверов получают `support-x25519mlkem768: true` + chrome fp (если не задан) и override-expr у провайдеров; пусто — legacy; сервер Xray v25.5.16+ |
 | 🚫 Exclude Filter | `excludeFilterInput` | `excludeFilter` | пусто | regexp/keyword `exclude-filter` в КАЖДЫЙ http-provider (upstream-паритет); только Sub Mode; пусто — поле не добавляется; сериализация цитирования покрыта source-тестами |
 | 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default gvisor / opt-in mips, `auto-route: false`) |
 | ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☑ | `stack: mips`; снят → `gvisor`; Mihomo >= 1.19.31 (некритичное предупреждение валидатора); требует `cfgTun`; продуктовый дефолт (NIGHT-09) |

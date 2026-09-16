@@ -228,6 +228,50 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.equal(await page.locator('#excludeFilterRow').isVisible(), false);
     await page.locator('#cfgSubMode').check();
     assert.equal(await page.locator('#excludeFilterRow').isVisible(), true);
+    // Selective modern REALITY: host/host:port/IPv6, invalid пропускается,
+    // дубликаты схлопываются, legacy-узлы не тронуты, providers получают
+    // override-expr. Пустое поле — legacy (byte-parity через 266 baseline).
+    const rModern = await page.evaluate(async () => {
+      document.getElementById('cfgSubMode').checked = true;
+      document.getElementById('realityModernInput').value = [
+        'pan1.example',
+        'pan1.example:8443',
+        '[2001:db8::1]:443',
+        'bad::ipv6',
+        '',
+        'pan1.example',
+      ].join('\n');
+      document.getElementById('mihomoInput').value = [
+        'vless://00000000-0000-4000-8000-000000000001@pan1.example:443?encryption=none&security=reality&pbk=TESTPBK&sid=ab&fp=chrome#R1',
+        'vless://00000000-0000-4000-8000-000000000001@pan2.example:443?encryption=none&security=reality&pbk=TESTPBK&sid=cd#R2',
+        'https://example.com/one',
+      ].join('\n');
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      const doc = jsyaml.load(document.getElementById('mihomoOutput').value);
+      const r1 = (doc.proxies || []).find(p => p.name === 'R1');
+      const r2 = (doc.proxies || []).find(p => p.name === 'R2');
+      const providers = Object.values(doc['proxy-providers'] || {});
+      return { state: MIHOMO_VALIDATION_STATE.state,
+        r1flag: r1 && r1['reality-opts'] && r1['reality-opts']['support-x25519mlkem768'],
+        r2flag: r2 && r2['reality-opts'] && r2['reality-opts']['support-x25519mlkem768'],
+        providersWithExpr: providers.filter(p => (p.override || {})['override-expr']).length,
+        exprsPerProvider: providers.length ? (providers[0].override['override-expr'] || []).length : 0,
+        exprHostMatched: providers.some(p => JSON.stringify(p.override['override-expr']).includes('pan1.example')) };
+    });
+    assert.equal(rModern.state, 'VALID');
+    assert.equal(rModern.r1flag, true, 'matching host gets modern flag');
+    assert.notEqual(rModern.r2flag, true, 'other host stays legacy');
+    assert.equal(rModern.providersWithExpr, 1);
+    assert.equal(rModern.exprsPerProvider, 6, '3 valid lines x 2 exprs (duplicate + invalid skipped)');
+    assert.equal(rModern.exprHostMatched, true);
+    const rEmpty = await page.evaluate(async () => {
+      document.getElementById('realityModernInput').value = '';
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      return document.getElementById('mihomoOutput').value.includes('support-x25519mlkem768');
+    });
+    assert.equal(rEmpty, false, 'empty list = legacy output');
     // Fail-safe: подмена DOM в обход зависимостей — сборка клампит запрещённые
     // комбинации. cfgSocks в 256-матрицу не входит, поэтому socks=0+perSocks=1
     // проверяется здесь.

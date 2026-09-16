@@ -85,7 +85,9 @@ checkout/build/tests, не копировать непроверенный runti
   фолбэк — Google generate_204).
 - Опции страницы → поля `options`: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
   `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`,
-  `excludeFilter` (только Sub Mode; пусто → прежний output).
+  `excludeFilter` (только Sub Mode; пусто → прежний output),
+  `mihomoRealityModernHosts` (selective modern REALITY: [{host, port?}] из multiline-поля;
+  пусто → legacy; минимальный сервер Xray v25.5.16+).
 - Зависимости опций (группа «Расширенный режим: отдельный вход на каждый прокси»):
   advanced-крышка (`cfgPerProxyMaster`, по умолчанию OFF) обязательна для обоих child'ов;
   MIPS (`cfgTunMips`) и «TUN на каждый прокси» (`cfgPerProxyTun`) требуют `cfgTun`;
