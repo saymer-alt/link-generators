@@ -170,6 +170,17 @@
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Sub Mode</label>
       </div>
+      <div id="webUiRow" style="margin-top:10px">
+        <label for="webUiSelect">🖥️ Дашборд Web UI</label>
+        <select id="webUiSelect">
+          <option value="metacubexd" selected>MetaCubeXD (по умолчанию)</option>
+          <option value="yacd">Yacd-meta</option>
+          <option value="zashboard">Zashboard</option>
+          <option value="custom">Custom URL…</option>
+        </select>
+        <input type="text" id="webUiCustomUrl" placeholder="https://example.com/dashboard.zip" style="display:none;margin-left:8px">
+        <div class="hint">Архив дашборда, который Mihomo скачает в каталог external-ui. MetaCubeXD — по умолчанию. Custom: абсолютный http/https URL архива (.zip/.tgz); URL только генерируется в конфиг, не проверяется из браузера.</div>
+      </div>
       <div id="excludeFilterRow" style="margin-top:10px">
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
         <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia">
@@ -1015,6 +1026,14 @@ function updateExcludeFilterVisibility() {
     document.getElementById('cfgSubMode').checked ? '' : 'none';
 }
 
+function updateWebUiVisibility() {
+  const webUi = document.getElementById('cfgWebUI').checked;
+  const select = document.getElementById('webUiSelect');
+  const custom = document.getElementById('webUiCustomUrl');
+  document.getElementById('webUiRow').style.display = webUi ? '' : 'none';
+  custom.style.display = select.value === 'custom' ? '' : 'none';
+}
+
 function updateMihomoOptionStates() {
   const bsOn = document.getElementById('cfgAutoWhitelist').checked;
   const tun = document.getElementById('cfgTun').checked;
@@ -1095,6 +1114,12 @@ function buildMihomo() {
   const tunStack = advancedStack ? advancedStack : ((addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor');
   const perProxySocks = (master && !autoWhitelist && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
 
+  const webUiChoice = document.getElementById('webUiSelect').value;
+  const webUiCustomUrl = document.getElementById('webUiCustomUrl').value.trim();
+  if (webUiChoice === 'custom' && !/^https?:\/\//i.test(webUiCustomUrl)) {
+    return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
+  }
+
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
     const result = api.buildFromRequest({
@@ -1109,6 +1134,8 @@ function buildMihomo() {
         urlTest: urlTest,
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
         excludeFilter: document.getElementById('excludeFilterInput').value,
+        webUiDashboard: webUiChoice,
+        webUiCustomUrl: webUiChoice === 'custom' ? webUiCustomUrl : undefined,
         mihomoPerProxyTun: perProxyTun,
         mihomoTunStack: tunStack,
         perProxyPort: perProxySocks
@@ -1171,7 +1198,10 @@ document.getElementById('cfgPerProxyMaster').addEventListener('change', updateMi
 document.getElementById('cfgTunStackAdvanced').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgTunStackEx').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgSubMode').addEventListener('change', updateExcludeFilterVisibility);
+document.getElementById('cfgWebUI').addEventListener('change', updateWebUiVisibility);
+document.getElementById('webUiSelect').addEventListener('change', updateWebUiVisibility);
 updateExcludeFilterVisibility();
+updateWebUiVisibility();
 updateMihomoOptionStates();
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
 // результат проверки недействительным — старый VALID не сохраняется

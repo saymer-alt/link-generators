@@ -228,6 +228,48 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.equal(await page.locator('#excludeFilterRow').isVisible(), false);
     await page.locator('#cfgSubMode').check();
     assert.equal(await page.locator('#excludeFilterRow').isVisible(), true);
+    // Выбор дашборда Web UI: пресеты с точными URL / custom / возврат на default.
+    const rebuild = async () => {
+      await page.locator('button[onclick="buildMihomo()"]').click();
+      await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID');
+      return page.inputValue('#mihomoOutput');
+    };
+    await page.locator('#webUiSelect').selectOption('yacd');
+    await rebuild();
+    let uiYaml = await page.inputValue('#mihomoOutput');
+    assert.ok(uiYaml.includes('external-ui-url: https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip'));
+    await page.locator('#webUiSelect').selectOption('zashboard');
+    uiYaml = await rebuild();
+    assert.ok(uiYaml.includes('external-ui-url: https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip'));
+    await page.locator('#webUiSelect').selectOption('custom');
+    assert.equal(await page.locator('#webUiCustomUrl').isVisible(), true);
+    const invalidToast = await page.evaluate(() => {
+      let captured = '';
+      const orig = window.showToast; window.showToast = m => { captured = m; };
+      document.getElementById('webUiCustomUrl').value = 'notaurl';
+      buildMihomo();
+      window.showToast = orig;
+      return captured;
+    });
+    assert.match(invalidToast, /Web UI/); // невалидный custom URL блокирует сборку с понятной ошибкой
+    await page.locator('#webUiCustomUrl').fill('https://ui.example.net/dash.zip');
+    uiYaml = await rebuild();
+    assert.ok(uiYaml.includes('external-ui-url: https://ui.example.net/dash.zip'));
+    await page.locator('#webUiSelect').selectOption('metacubexd');
+    uiYaml = await rebuild();
+    assert.ok(uiYaml.includes('external-ui-url: https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz'));
+    // Выключенный Web UI: выбор дашборда ни на что не влияет; крышка скрывает select.
+    await page.locator('#cfgWebUI').uncheck();
+    assert.equal(await page.locator('#webUiRow').isVisible(), false);
+    const offYaml = await rebuild();
+    const offMatch = offYaml.match(/external-ui[^\n]*/);
+    assert.equal(offMatch, null, 'webUI off: ' + JSON.stringify(offMatch));
+    await page.locator('#cfgWebUI').check();
+    assert.equal(await page.locator('#webUiRow').isVisible(), true);
+    await page.locator('#webUiSelect').selectOption('yacd');
+    const onYaml = await rebuild();
+    assert.match(onYaml, /external-ui-url: https:\/\/github\.com\/MetaCubeX\/Yacd-meta\/archive\/refs\/heads\/gh-pages\.zip/); // webUI снова on
+    await page.locator('#webUiSelect').selectOption('metacubexd');
     // Fail-safe: подмена DOM в обход зависимостей — сборка клампит запрещённые
     // комбинации. cfgSocks в 256-матрицу не входит, поэтому socks=0+perSocks=1
     // проверяется здесь.
@@ -280,6 +322,8 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
       const master = document.getElementById('cfgPerProxyMaster');
       if (master) master.checked = false;
       document.getElementById('excludeFilterInput').value = '';
+      document.getElementById('webUiSelect').value = 'metacubexd';
+      document.getElementById('webUiCustomUrl').value = '';
       document.getElementById('cfgTunStackEx').value = '';
     });
     // Baseline includes subscriptions, all preserved switches, and VPS. Fix RNG in tests only.

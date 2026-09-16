@@ -85,7 +85,9 @@ checkout/build/tests, не копировать непроверенный runti
   фолбэк — Google generate_204).
 - Опции страницы → поля `options`: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
   `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`,
-  `excludeFilter` (только Sub Mode; пусто → прежний output).
+  `excludeFilter` (только Sub Mode; пусто → прежний output),
+  `webUiDashboard`/`webUiCustomUrl` (выбор дашборда external-ui-url: metacubexd-дефолт
+  сохраняет byte-parity; custom требует абсолютный http/https URL).
 - Зависимости опций (группа «Расширенный режим: отдельный вход на каждый прокси»):
   advanced-крышка (`cfgPerProxyMaster`, по умолчанию OFF) обязательна для обоих child'ов;
   MIPS (`cfgTunMips`) и «TUN на каждый прокси» (`cfgPerProxyTun`) требуют `cfgTun`;
