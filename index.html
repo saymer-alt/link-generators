@@ -143,7 +143,7 @@
         <textarea id="whitelistInput" placeholder="vless://...&#10;https://sub.url/..."></textarea>
         <div class="hint">Верхний набор — основной, этот — резерв. GLOBAL сначала использует обычные выходы, затем БС. Обе стороны обязательны. Ссылки можно смешивать с подписками при включённом Sub Mode. Плановая проверка доступности — каждые 300 секунд; при неудачных подключениях (2 за 60 секунд) проверка запускается сразу. Переключение и возврат на основной — не мгновенные. WG-файлы входят в основной набор.</div>
       </div>
-      <div class="hint">Поддерживает: vless, vmess, trojan, ss, hy2, tuic, masque, mieru, tt, WG (.conf/.awg), HTTP(S) подписки</div>
+      <div class="hint">Поддерживает: vless, vmess, trojan, anytls, ss, socks/socks4/socks4a/socks5/socks5h, http/https, hy2/hysteria2, tuic, mieru/mierus, tt, masque, WG (.conf/.awg), HTTP(S) подписки</div>
     </div>
 
     <div class="card">
@@ -257,12 +257,12 @@
     <div class="card">
       <div class="card-title">📦 Mihomo YAML</div>
       <textarea id="mihomoOutput" readonly></textarea>
-      <div id="mihomoValidationBox" class="validation-box state-not-built"></div>
+      <div id="mihomoValidationBox" class="validation-box state-not-built" aria-live="polite"></div>
     </div>
   </div>
 </div>
 
-<div class="toast" id="toast">Done!</div>
+<div class="toast" id="toast" aria-live="polite">Done!</div>
 
 <!-- WEB4CORE RUNTIME -->
 <script src="./web4core.runtime.js"></script>
