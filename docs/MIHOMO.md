@@ -22,7 +22,7 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 | 🎛️ Дашборд Web UI | `webUiSelect` + `webUiCustomUrl` | `webUiDashboard` / `webUiCustomUrl` | MetaCubeXD | MetaCubeXD (tgz, дефолт — byte-parity) / Yacd-meta (gh-pages.zip) / Zashboard (dist.zip) / Custom http(s)-URL; виден при включённом Web UI; URL только генерируется, не проверяется браузером |
 | 📡 Sub Mode | `cfgSubMode` | `mihomoSubscriptionMode` | ☑ | URL → `proxy-providers`, см. ниже |
 | 🚫 Exclude Filter | `excludeFilterInput` | `excludeFilter` | пусто | regexp/keyword `exclude-filter` в КАЖДЫЙ http-provider (upstream-паритет); только Sub Mode; пусто — поле не добавляется; сериализация цитирования покрыта source-тестами |
-| 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default gvisor / opt-in mips, `auto-route: false`) |
+| 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default mips / снят чекбокс → gvisor, `auto-route: false`) |
 | ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☑ | `stack: mips`; снят → `gvisor`; Mihomo >= 1.19.31 (некритичное предупреждение валидатора); требует `cfgTun`; продуктовый дефолт (NIGHT-09) |
 | ⚙ Расширенный TUN stack | `cfgTunStackAdvanced` + `cfgTunStackEx` | `mihomoTunStack` | ☐/— | `system`/`mixed` за крышкой; override снимает MIPS; невалидное значение → gvisor; Mihomo >= 1.19.31 |
 | 🧩 Расширенный режим: отдельный вход | `cfgPerProxyMaster` | — | ☐ | защитная крышка; OFF → оба child выключены и сброшены; скрыт в БС-режиме |
@@ -90,9 +90,9 @@ Runtime разрешает только `mips`/`gvisor`, неизвестное 
 - Обычный (`addTun`): по умолчанию `tun: { enable: true, stack: gvisor, auto-route: false,
   auto-detect-interface: true, device: mitun0 }`. `auto-route: false` принципиален —
   конфиги вставляются в окружения (роутеры), где захват всех маршрутов недопустим.
-  При opt-in MIPS меняется только стек: `stack: mips`.
+  При MIPS (дефолт) меняется только стек: `stack: mips`; снятие чекбокса → `gvisor`.
 - TUN на каждый прокси (техн. Per-Proxy TUN; `addTun` + `mihomoPerProxyTun`): отдельные
-  tun-листенеры в секции `listeners`: `mihomo-tun-N` (device `mitunN`, default gvisor / opt-in mips,
+  tun-листенеры в секции `listeners`: `mihomo-tun-N` (device `mitunN`, default mips / снят чекбокс → gvisor,
   `auto-route: false`, `auto-detect-interface: false`, `inet4-address: 198.19.x.y/30`), каждый с
   `proxy:` на свою `🔒`-группу / `SUB-`-группу.
 - Профиль VPS Gateway (opt-in, селектор «Профиль развёртывания»): пост-патч поверх

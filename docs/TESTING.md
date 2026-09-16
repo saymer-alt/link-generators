@@ -12,8 +12,12 @@
 
 ## Автоматический режим белых списков — 2026-09-15
 
-- Source: 21 тест (9 прежних + 12 primary/fallback); Amnezia: 12 тестов.
-- Runtime: 45 проверок без baseline / 61 с `BASELINE_REF=21c3010`.
+- Source (web4core, `tools/tests/*.test.mjs`, автообнаружение): сейчас 8 файлов /
+  71 тест — exclude-filter, priority, tun-stack, port-validation, per-proxy-health,
+  webui-select, small-regressions, и `amnezia.test.mjs` (требует
+  `npm run build:worker` — workers/api/dist/worker.mjs, gitignored).
+- Runtime: `tests/runtime.cjs` — 65 проверок с `BASELINE_REF=21c3010`
+  (число растёт вместе с контрактами; исторические 45/61 относились к v1.3.0-эре).
 - Существующий browser suite: обе вкладки, AWG, VPS, MIPS, baseline; validator — 47 cases.
   Тестовый текст AWG нормализуется LF для одинаковой работы regex на Windows/Linux.
 - Новый `tests/whitelist.cjs`: 10 YAML-сценариев (1+1, несколько+несколько,
@@ -45,8 +49,10 @@ mihomo -t -d /absolute/isolated-test-home -f /absolute/yaml/whitelist-mixed-mips
 ```
 
 Для каждого YAML использовать отдельный тестовый home; реальные подписки и
-credentials не нужны. Workflow теперь требует source `mihomo-priority.test.mjs`
-и runtime smoke test нового API до копирования артефакта.
+credentials не нужны. Workflow автообновления теперь: `npm run build:worker`
+(артефакт для amnezia-тестов) → `node --test tools/tests/*.test.mjs`
+(автообнаружение всех unit-тестов) → runtime smoke test нового API до
+копирования артефакта; оба job ограничены `timeout-minutes`.
 
 
 С 2026-09-15 доступны автоматические регрессии `tests/runtime.cjs` (только Node,

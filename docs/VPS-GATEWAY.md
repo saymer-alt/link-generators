@@ -1,8 +1,10 @@
 # VPS-GATEWAY — опциональный профиль генерации для amnezia-mihomo-gateway
 
 С ревизии v1.19.31 `applyDeploymentProfile(yaml, profile, tunStack)` сохраняет явный
-выбор MIPS из Builder. По умолчанию третий аргумент `gvisor`; разрешён только `mips`
-или fallback `gvisor`. Это TUN stack, не CPU MIPS, требуется Mihomo >= 1.19.31.
+выбор MIPS из Builder. С 2026-09-17 (NIGHT-09) продукт по умолчанию шлёт `mips`
+и для vps-профиля; если gateway-тюнинг (см. `rp_filter` ниже) рассчитан на gvisor —
+явно выберите gVisor в генераторе. Разрешены `mips`/`gvisor`. Это TUN stack,
+не CPU MIPS, требуется Mihomo >= 1.19.31.
 Работает также при VPS + «TUN на каждый прокси» (Per-Proxy TUN): основной TUN и listeners получают выбранный
 стек. Остальные перечисленные ниже gateway-инварианты не менялись.
 

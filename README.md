@@ -129,7 +129,7 @@ mihomo -t -f config.yaml
 - **🎯 Профиль VPS Gateway** (опционально, выключен по умолчанию) — Mihomo-конфиг для transparent-gateway-сценария [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway); обычная генерация не меняется. Подробнее — [docs/VPS-GATEWAY.md](docs/VPS-GATEWAY.md).
 - **🔌 SOCKS-порт на каждый прокси** — отдельный SOCKS-порт на каждый прокси; доступен только при включённом Mixed Port.
 - **🌐 Allow LAN** и **Mixed Port 7890**.
-- **🖥️ Web UI** — подключение дашборда metacubexd к `external-controller`.
+- **🖥️ Web UI** — подключение дашборда к `external-controller`. Выбор: MetaCubeXD (по умолчанию), Yacd-meta, Zashboard или свой http/https URL архива.
 - **WireGuard / AmneziaWG** — см. раздел выше.
 - **Mieru port ranges** — поддерживается диапазон портов вместо одиночного порта; ошибки диапазона проверяются до копирования.
 - **Защита обновлений** — `web4core.runtime.js` собирается из source-level ветки [`saymer-alt/web4core:link-generators`](https://github.com/saymer-alt/web4core/tree/link-generators). Workflow сначала собирает и тестирует runtime без write-token, затем отдельный write-job обновляет consumer только после успешных проверок. [Архитектура fork](docs/WEB4CORE-FORK.md) · [Тесты](docs/TESTING.md).

@@ -24,10 +24,10 @@ Textual bundle patch удалён: `web4core.runtime.js` никогда не р�
 Приложение не имеет package.json/npm dependencies/build step и работает с `file://`;
 Node/npm нужны для сборки отдельного source-репозитория и проверок.
 
-Экспорт рантайма — один объект `globalThis.web4core` (17 функций): `buildBeansFromInput`,
+Экспорт рантайма — один объект `globalThis.web4core` (18 функций): `buildBeansFromInput`,
 `validateBean`, `computeTag`, `getAllowedCoreProtocols`, `URLTEST`, `URLTEST_CHOICES`,
 `buildSingBoxOutbound`, `buildSingBoxConfig`, `buildXrayOutbound`, `buildXrayConfig`,
-`buildMihomoProxy`, `buildMihomoConfig`, `buildMihomoSubscriptionConfig`, `buildMihomoYaml`,
+`buildMihomoProxy`, `buildMihomoConfig`, `buildMihomoPriorityConfig`, `buildMihomoSubscriptionConfig`, `buildMihomoYaml`,
 `parseWireGuardConf`, `fetchSubscription`, `buildFromRequest`. Страница использует
 `buildFromRequest`, `parseWireGuardConf`, `URLTEST_CHOICES` (см. [ARCHITECTURE.md](ARCHITECTURE.md)).
 
@@ -36,13 +36,17 @@ Node/npm нужны для сборки отдельного source-репози
 `.github/workflows/update-web4core-runtime.yml`: push в `main`, cron `17 4 * * 1`,
 ручной dispatch. Обновления из проверенной custom branch остаются автоматическими.
 
-1. `build-runtime`, `contents: read`, свежий GitHub-hosted runner:
+1. `build-runtime`, `contents: read`, свежий GitHub-hosted runner, `timeout-minutes: 15`:
    - checkout consumer и `saymer-alt/web4core@link-generators`, оба без сохранения credentials;
    - записать source SHA в лог; Node 22, `npm ci`;
-   - source Mihomo tests (включая обязательный MIPS test), штатный build;
-   - `node --check`, `node tests/runtime.cjs` на собранном файле, SHA-256 в лог;
+   - `npm run build:worker` — workers/api bundle (gitignored) нужен amnezia-тестам;
+   - `node --test tools/tests/*.test.mjs` — автообнаружение всех unit-тестов
+     (новый test file подхватывается без правки workflow);
+   - штатный build runtime; `node --check`, `node tests/runtime.cjs` на собранном
+     файле, SHA-256 в лог;
    - upload единственного runtime artifact текущего run (срок хранения 7 дней).
-2. `update-runtime`, отдельный свежий runner, `contents: write`, только для `main`:
+2. `update-runtime`, отдельный свежий runner, `contents: write`, `timeout-minutes: 10`,
+   только для `main`:
    - checkout проверенного consumer SHA, download artifact текущего run;
    - если `origin/main` уже изменился — отказ, нужен повторный запуск;
    - проверить наличие обычного непустого файла, `cmp`, при отличии copy;

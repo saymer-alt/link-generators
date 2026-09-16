@@ -156,12 +156,16 @@ cfgTunMips → tunStack → options.mihomoTunStack → buildFromRequest
           → normal TUN / Per-Proxy listeners
 ```
 
-Checkbox выключен по умолчанию: `tunStack = 'gvisor'`; включён — `'mips'`.
+Checkbox MIPS включён по умолчанию (NIGHT-09): `tunStack = 'mips'`; снят — `'gvisor'`.
+Расширенные значения `system`/`mixed` — только через крышку `cfgTunStackAdvanced`
+(+`cfgTunStackEx`); активный override снимает MIPS-чекбокс, невалидное значение
+подменённого DOM откатывается к gvisor/mips.
 До сборки `buildMihomo()` клампит опции по UI-зависимостям, не доверяя DOM:
 `addTun=false` → `perProxyTun=false` и `tunStack='gvisor'`; `addSocks=false` →
 `perProxySocks=false`; БС-режим дополнительно исключает оба режима «на каждый прокси».
-Runtime принимает только точное `mips`, при отсутствующем/неверном значении fallback
-`gvisor`, в том числе для прямого `buildMihomoYaml`. Выбор стека сам по себе TUN не включает.
+Runtime (с NIGHT-02) валидирует стек через `resolveMihomoTunStack`: допустимы
+`gvisor|system|mixed|mips`, невалидное значение — ошибка (не silent fallback).
+Выбор стека сам по себе TUN не включает.
 VPS получает тот же `tunStack` третьим аргументом ниже; его default/fallback тоже `gvisor`.
 
 ```text

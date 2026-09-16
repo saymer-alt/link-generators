@@ -79,7 +79,7 @@ Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки:
 
 Парсеры всех схем, внутреннее представление (beans), строители mihomo/sing-box/xray,
 эмиссия YAML (собственный сериализатор `toYAML`, не jsyaml). Точка экспорта одна:
-`globalThis.web4core = { … }` — 17 функций (полный список в [UPDATES.md](UPDATES.md)).
+`globalThis.web4core = { … }` — 18 функций (полный список в [UPDATES.md](UPDATES.md)).
 
 Страница использует только три: `buildFromRequest`, `parseWireGuardConf`, `URLTEST_CHOICES`.
 Остальные — публичный API рантайма, зарезервированный для будущих задач.

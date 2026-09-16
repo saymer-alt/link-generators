@@ -153,7 +153,8 @@ validateMihomoYaml(yaml)      [чистая функция: jsyaml.load + стр
 ## WARNING — предупреждения (Copy не блокируют)
 
 - имя группы совпадает с именем прокси (пересечение пространств имён);
-- у группы пустой список `proxies`.
+- у группы пустой список `proxies`;
+- `stack: mips` в `tun:`/listener'ах → «Requires Mihomo >= 1.19.31» (NIGHT-09; некритичное compatibility-замечание).
 
 ## Deliberate omissions — что сознательно НЕ проверяется
 
