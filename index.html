@@ -175,12 +175,14 @@
         <label><input type="checkbox" id="cfgTunMips"> ⚡ MIPS stack для TUN</label>
       </div>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <div style="font-size:.8rem;font-weight:600;margin-bottom:2px">Отдельный вход на каждый прокси</div>
+        <div style="font-size:.8rem;font-weight:600;margin-bottom:2px">Расширенный режим: отдельный вход на каждый прокси</div>
+        <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный режим</label>
         <div class="checkbox-grid">
           <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
           <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
         </div>
       </div>
+      <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется.</div>
       <div class="hint">Обычный TUN включён по умолчанию. MIPS и режимы отдельного входа на каждый прокси — опциональны.</div>
       <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию используется gVisor. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
       <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
@@ -993,13 +995,18 @@ function updateMihomoOptionStates() {
   const tun = document.getElementById('cfgTun').checked;
   const socks = document.getElementById('cfgSocks').checked;
   const mips = document.getElementById('cfgTunMips');
+  const masterEl = document.getElementById('cfgPerProxyMaster');
+  const master = !!(masterEl && masterEl.checked);
   const perTun = document.getElementById('cfgPerProxyTun');
   const perSocks = document.getElementById('cfgPerProxySocks');
-  if (!tun) { mips.checked = false; perTun.checked = false; }
+  if (!tun) { mips.checked = false; }
+  if (!master) { perTun.checked = false; perSocks.checked = false; }
+  if (!tun) { perTun.checked = false; }
   if (!socks) perSocks.checked = false;
   mips.disabled = !tun;
-  perTun.disabled = !tun || bsOn;
-  perSocks.disabled = !socks || bsOn;
+  masterEl.disabled = bsOn;
+  perTun.disabled = !master || !tun || bsOn;
+  perSocks.disabled = !master || !socks || bsOn;
 }
 
 // UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
@@ -1024,6 +1031,9 @@ function onWhitelistChange() {
   }
   profile.disabled = on;
   updateMihomoOptionStates();
+  const master = document.getElementById('cfgPerProxyMaster');
+  master.closest('label').style.display = on ? 'none' : '';
+  master.closest('div[style]').style.display = on ? 'none' : '';
   perTun.closest('label').style.display = on ? 'none' : '';
   perSocks.closest('label').style.display = on ? 'none' : '';
   profile.closest('.card').style.display = on ? 'none' : '';
@@ -1045,9 +1055,10 @@ function buildMihomo() {
   // Fail-safe: не доверяем прямой подмене DOM — повторно проверяем зависимости
   // (MIPS и Per-Proxy TUN требуют TUN, Per-Proxy SOCKS требует Mixed Port);
   // БС-режим принудительно исключает Per-Proxy и VPS.
-  const perProxyTun = (autoWhitelist || !addTun) ? false : document.getElementById('cfgPerProxyTun').checked;
+  const master = document.getElementById('cfgPerProxyMaster') && document.getElementById('cfgPerProxyMaster').checked === true;
+  const perProxyTun = (master && !autoWhitelist && addTun) ? document.getElementById('cfgPerProxyTun').checked : false;
   const tunStack = (addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor';
-  const perProxySocks = (autoWhitelist || !addSocks) ? false : document.getElementById('cfgPerProxySocks').checked;
+  const perProxySocks = (master && !autoWhitelist && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
 
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
@@ -1120,6 +1131,7 @@ document.getElementById('cfgProfile').addEventListener('change', onProfileChange
 document.getElementById('vpsDnsEnabled').addEventListener('change', updateVpsDnsFields);
 document.getElementById('cfgTun').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgSocks').addEventListener('change', updateMihomoOptionStates);
+document.getElementById('cfgPerProxyMaster').addEventListener('change', updateMihomoOptionStates);
 updateMihomoOptionStates();
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
 // результат проверки недействительным — старый VALID не сохраняется

@@ -20,19 +20,27 @@ let cases = 0;
 for (const sub of [false, true]) for (const perTun of [false, true]) {
   const options = { addTun: true, webUI: false, mihomoSubscriptionMode: sub, mihomoPerProxyTun: perTun };
   const defaults = build(current, options);
-  for (const value of [undefined, 'gvisor', 'foobar', '', null, 1, {}, 'MIPS', 'mips\nallow-lan: true']) {
+  for (const value of [undefined, 'gvisor', '', null]) {
     assert.equal(build(current, { ...options, mihomoTunStack: value }), defaults);
     cases++;
   }
-  const mips = build(current, { ...options, mihomoTunStack: 'mips' });
+  const mips = build(current, { ...options, mihomoTunStack: 'MIPS' }); // resolver нормализует регистр
   const stacks = [...mips.matchAll(/^\s+stack: (\w+)$/gm)].map(m => m[1]);
   assert.equal(stacks.length, perTun ? (sub ? 3 : 2) : 1);
   assert.ok(stacks.every(s => s === 'mips'));
   assert.equal(mips.replace(/stack: mips/g, 'stack: gvisor'), defaults); // тест сравнения, не генерация
   cases++;
+  for (const stack of ['system', 'mixed']) {
+    assert.match(build(current, { ...options, mihomoTunStack: stack }), new RegExp(`stack: ${stack}`));
+    cases++;
+  }
+  for (const value of ['foobar', 1, {}, 'mips\nallow-lan: true']) {
+    assert.throws(() => build(current, { ...options, mihomoTunStack: value }), /invalid TUN stack/);
+    cases++;
+  }
 }
 assert.doesNotMatch(build(current, { addTun: false, mihomoTunStack: 'mips' }), /stack:/);
-assert.match(current.buildMihomoYaml([], [], null, [], [], { tun: { stack: 'foobar' } }), /stack: gvisor/);
+assert.throws(() => current.buildMihomoYaml([], [], null, [], [], { tun: { stack: 'foobar' } }), /invalid TUN stack/);
 assert.match(current.buildMihomoYaml([], [], null, [], [], { tun: { stack: 'mips' } }), /stack: mips/);
 cases += 3;
 
@@ -40,9 +48,13 @@ cases += 3;
 if (process.env.BASELINE_REF) {
   const old = execFileSync('git', ['show', `${process.env.BASELINE_REF}:web4core.runtime.js`], { cwd: root, encoding: 'utf8' });
   const baseline = api(old);
+  // Нормализация намеренного изменения: скрытый per-proxy static checker
+  // ('🌐 static-health') существует только в новом runtime и не должен ломать
+  // byte-parity всего остального вывода.
+  const stripChecker = y => y.replace(/^  - name: "🌐 static-health"\n(?:    [^\n]*\n)*/m, '');
   for (const sub of [false, true]) for (const tun of [false, true]) for (const perTun of [false, true]) for (const socks of [false, true]) {
     const opts = { addTun: tun, mihomoPerProxyTun: perTun, perProxyPort: socks, mihomoSubscriptionMode: sub };
-    assert.equal(build(current, opts), build(baseline, opts));
+    assert.equal(stripChecker(build(current, opts)), stripChecker(build(baseline, opts)));
     cases++;
   }
 }

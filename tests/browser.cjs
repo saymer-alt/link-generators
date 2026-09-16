@@ -49,10 +49,12 @@ const expectedAwg = {
     const mips = await build('mips');
     assert.equal(mips.doc.tun.stack, 'mips');
     assert.equal(mips.yaml.replace('stack: mips', 'stack: gvisor'), defaultOutput.yaml);
+    await page.locator('#cfgPerProxyMaster').check(); // защитная крышка advanced-режима
     await page.locator('#cfgPerProxyTun').check();
     const per = await build('per-proxy-mips');
     assert.equal(per.doc.listeners.length, 2);
     assert.ok(per.doc.listeners.every(l => l.type === 'tun' && l.stack === 'mips' && l['auto-route'] === false));
+    assert.ok(per.doc['proxy-groups'].some(g => g.name === '🌐 static-health' && g.hidden === true));
     for (const perTun of [true, false]) {
       await page.locator('#cfgPerProxyTun').setChecked(perTun);
       await page.locator('#cfgProfile').selectOption('vps');

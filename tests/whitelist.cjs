@@ -5,7 +5,17 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { execFileSync } = require('node:child_process');
 const { chromium } = require('playwright');
+const yaml = require(process.env.JS_YAML_PATH);
 const root = path.resolve(__dirname, '..');
+const STATIC_HEALTH_GROUP = '🌐 static-health';
+// Baseline normalization: the hidden per-proxy static checker exists only in
+// the new runtime; strip it from both sides so byte-parity of everything else
+// stays provable.
+const stripChecker = y => {
+  const d = yaml.load(y);
+  if (d['proxy-groups']) d['proxy-groups'] = d['proxy-groups'].filter(g => g && g.name !== STATIC_HEALTH_GROUP);
+  return yaml.dump(d, { lineWidth: -1 });
+};
 const a = 'socks://test:pass@192.0.2.1:1080#GLOBAL';
 const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
 (async () => {
@@ -20,11 +30,12 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     await page.waitForFunction(() => globalThis.jsyaml && globalThis.web4core);
     await page.locator('button.tab').filter({ hasText: 'Mihomo' }).click();
     assert.equal(await page.locator('#cfgAutoWhitelist').isChecked(), false);
+    await page.locator('#cfgPerProxyMaster').check();
     await page.locator('#cfgPerProxyTun').check();
     await page.locator('#cfgPerProxySocks').check();
     await page.locator('#cfgProfile').selectOption('vps');
     await page.locator('#cfgAutoWhitelist').check();
-    for (const id of ['cfgPerProxyTun', 'cfgPerProxySocks', 'cfgProfile', 'vpsPanel']) assert.equal(await page.locator('#' + id).isVisible(), false);
+    for (const id of ['cfgPerProxyTun', 'cfgPerProxySocks', 'cfgProfile', 'vpsPanel', 'cfgPerProxyMaster']) assert.equal(await page.locator('#' + id).isVisible(), false);
     for (const id of ['cfgTun', 'cfgTunMips', 'cfgLan', 'cfgSocks', 'cfgWebUI', 'cfgSubMode']) assert.equal(await page.locator('#' + id).isVisible(), true);
     assert.equal(await page.locator('#cfgProfile').inputValue(), 'generic');
     assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), false);
@@ -65,6 +76,7 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
       count++;
     }
     // Bypass hidden/disabled DOM controls: build still clamps all prohibited modes.
+    // Master switch stays OFF here — its clamp must keep children out on its own.
     const guarded = await page.evaluate(() => {
       document.getElementById('cfgPerProxyTun').checked = true;
       document.getElementById('cfgPerProxySocks').checked = true;
@@ -106,12 +118,36 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.equal(await page.locator('#cfgPerProxyTun').isDisabled(), false);
     await page.locator('#cfgSocks').check();
     assert.equal(await page.locator('#cfgPerProxySocks').isDisabled(), false);
+    // Master switch: защитная крышка — OFF отключает и сбрасывает оба child.
+    await page.locator('#cfgPerProxyMaster').uncheck();
+    for (const id of ['cfgPerProxyTun', 'cfgPerProxySocks']) {
+      assert.equal(await page.locator('#' + id).isDisabled(), true, id);
+      assert.equal(await page.locator('#' + id).isChecked(), false, id);
+    }
+    await page.locator('#cfgPerProxyMaster').check();
+    assert.equal(await page.locator('#cfgPerProxyTun').isDisabled(), false);
+    assert.equal(await page.locator('#cfgPerProxySocks').isDisabled(), false);
+    // Позитив-контроль крышки: master ON + оба child + generic — в выводе
+    // per-proxy listeners и скрытый static health checker.
+    const masterOn = await page.evaluate(async () => {
+      document.getElementById('cfgSubMode').checked = false;
+      document.getElementById('cfgPerProxyTun').checked = true;
+      document.getElementById('cfgPerProxySocks').checked = true;
+      document.getElementById('mihomoInput').value = 'socks://test:pass@192.0.2.1:1080#TEST-A';
+      buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
+      return { state: MIHOMO_VALIDATION_STATE.state, doc: jsyaml.load(document.getElementById('mihomoOutput').value) };
+    });
+    assert.equal(masterOn.state, 'VALID');
+    assert.ok(Array.isArray(masterOn.doc.listeners) && masterOn.doc.listeners.length > 0);
+    assert.ok(masterOn.doc['proxy-groups'].some(g => g.name === '🌐 static-health' && g.hidden === true));
     // Fail-safe: подмена DOM в обход зависимостей — сборка клампит запрещённые
     // комбинации. cfgSocks в 256-матрицу не входит, поэтому socks=0+perSocks=1
     // проверяется здесь.
     const socksClamp = await page.evaluate(async () => {
       document.getElementById('cfgSubMode').checked = false; // ссылки без Sub Mode
       document.getElementById('cfgSocks').checked = false;
+      document.getElementById('cfgPerProxyMaster').checked = false; // крышка выключена
       document.getElementById('cfgPerProxySocks').checked = true; // форс при Mixed off
       document.getElementById('mihomoInput').value = 'socks://test:pass@192.0.2.1:1080#TEST-A';
       buildMihomo();
@@ -154,6 +190,8 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     await page.evaluate(() => {
       ['cfgSocks', 'cfgTun', 'cfgLan', 'cfgWebUI'].forEach(id => document.getElementById(id).checked = true);
       ['cfgPerProxyTun', 'cfgPerProxySocks', 'cfgTunMips'].forEach(id => document.getElementById(id).checked = false);
+      const master = document.getElementById('cfgPerProxyMaster');
+      if (master) master.checked = false;
     });
     // Baseline includes subscriptions, all preserved switches, and VPS. Fix RNG in tests only.
     if (process.env.BASELINE_REF) {
@@ -170,13 +208,16 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
           crypto.getRandomValues = array => { array.fill(8); return array; };
           ['cfgSubMode','cfgTun','cfgPerProxyTun','cfgPerProxySocks','cfgTunMips','cfgLan','cfgWebUI'].forEach((id, i) => document.getElementById(id).checked = !!(mask & (1 << i)));
           // Нормализация невозможных DOM-состояний по реальным UI-зависимостям:
-          // VPS форсирует TUN; TUN=false сбрасывает MIPS и Per-Proxy TUN.
+          // VPS форсирует TUN; TUN=false сбрасывает MIPS и Per-Proxy TUN;
+          // пер-прокси биты требуют master (в старом baseline master отсутствует).
           // Невалидные комбинации проверяются отдельными bypass-тестами.
           if (mask & 128) document.getElementById('cfgTun').checked = true;
           if (!(mask & 2)) {
             document.getElementById('cfgTunMips').checked = false;
             document.getElementById('cfgPerProxyTun').checked = false;
           }
+          const masterEl = document.getElementById('cfgPerProxyMaster');
+          if (masterEl) masterEl.checked = !!(mask & 4 || mask & 8);
           document.getElementById('cfgProfile').value = mask & 128 ? 'vps' : 'generic';
           document.getElementById('mihomoInput').value = (mask & 1 ? 'https://example.invalid/sub\n' : '') + a + '\n' + b;
           buildMihomo();
@@ -185,8 +226,9 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
         };
         const args = { mask, a: a.replace('#GLOBAL', '#TEST-A'), b: b.replace('#GLOBAL', '#TEST-B') };
         const result = await page.evaluate(setup, args);
+        const oldResult = await old.evaluate(setup, args);
         assert.equal(result.state, 'VALID');
-        assert.deepEqual(result, await old.evaluate(setup, args), 'baseline mask ' + mask);
+        assert.deepEqual(stripChecker(result.yaml), stripChecker(oldResult.yaml), 'baseline mask ' + mask);
         count++;
       }
       await old.close();

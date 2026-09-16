@@ -85,12 +85,17 @@ checkout/build/tests, не копировать непроверенный runti
   фолбэк — Google generate_204).
 - Опции страницы → поля `options`: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
   `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`.
-- Зависимости опций (группа «Отдельный вход на каждый прокси»): MIPS (`cfgTunMips`) и
-  «TUN на каждый прокси» (`cfgPerProxyTun`) требуют `cfgTun`; «SOCKS-порт на каждый прокси»
-  (`cfgPerProxySocks`) требует `cfgSocks`; выключение родителя отключает и сбрасывает
-  зависимую опцию (`updateMihomoOptionStates()`). `buildMihomo()` не доверяет DOM и
-  повторно клампит те же зависимости: `addTun=false` → `mihomoPerProxyTun=false` и
+- Зависимости опций (группа «Расширенный режим: отдельный вход на каждый прокси»):
+  advanced-крышка (`cfgPerProxyMaster`, по умолчанию OFF) обязательна для обоих child'ов;
+  MIPS (`cfgTunMips`) и «TUN на каждый прокси» (`cfgPerProxyTun`) требуют `cfgTun`;
+  «SOCKS-порт на каждый прокси» (`cfgPerProxySocks`) требует `cfgSocks`; выключение
+  родителя отключает и сбрасывает зависимую опцию (`updateMihomoOptionStates()`).
+  `buildMihomo()` не доверяет DOM и повторно клампит те же зависимости
+  (включая master): `addTun=false` → `mihomoPerProxyTun=false` и
   `mihomoTunStack=gvisor`; `addSocks=false` → `perProxyPort=false`.
+- В per-proxy режиме runtime добавляет скрытую url-test группу «🌐 static-health»
+  (hidden: true) над static-листьями: без неё static прокси лишены health-check
+  (регрессия upstream a0859bf); провайдеры чекаются собственными механизмами.
 - Чекбокс «Allow LAN» — постобработка: регэксп-патч `allow-lan: false → true` и вставка
   `bind-address: "*"` ПОСЛЕ того, как рантайм вернул YAML-строку. Патч привязан к
   текстовому формату YAML, который генерирует рантайм.
