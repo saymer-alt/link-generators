@@ -6,7 +6,7 @@
 <title>WARP & Mihomo Unified Generator</title>
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 <style>
-  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#238636; --red:#da3633; }
+  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#238636; --red:#da3633; --warn:#d29922; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.5;padding:20px}
   .container{max-width:850px;margin:0 auto}
@@ -45,9 +45,20 @@
   .wg-status.loaded{color:var(--green)}
   .checkbox-grid{display:flex;flex-wrap:wrap;gap:12px 20px;margin-top:8px}
   .checkbox-grid label{display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;font-size:.85rem;color:var(--text)}
-  .checkbox-grid input[type="checkbox"]{width:auto;accent-color:var(--accent)}
+  label > input[type="checkbox"]{width:16px;height:16px;padding:0;flex:0 0 auto;accent-color:var(--accent)}
   .toggle-row{display:flex;align-items:center;gap:10px;margin-top:12px}
   .toggle-row label{margin:0;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text)}
+  .advanced-stack-control{margin-top:10px;padding:10px 12px;border:1px dashed var(--border);border-radius:8px;background:rgba(139,148,158,.04)}
+  .advanced-stack-control label{display:flex;align-items:center;gap:8px;margin:0;cursor:pointer;color:var(--text)}
+  .advanced-stack-control select{margin-top:8px}
+  .advanced-panel{margin-top:12px;padding:12px 14px;border:1px solid rgba(210,153,34,.55);border-radius:10px;background:rgba(210,153,34,.06)}
+  .advanced-panel-title{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;color:var(--text)}
+  .advanced-badge{display:inline-block;padding:2px 7px;border:1px solid rgba(210,153,34,.7);border-radius:999px;color:#e3b341;background:rgba(210,153,34,.10);font-size:.68rem;letter-spacing:.05em}
+  .advanced-master{margin-top:10px;padding:10px 12px;border:1px solid rgba(210,153,34,.45);border-radius:8px;background:rgba(210,153,34,.08)}
+  .advanced-master label{display:flex;align-items:center;gap:10px;margin:0;cursor:pointer;color:var(--text);font-weight:600}
+  .advanced-master input[type="checkbox"]{width:18px;height:18px;accent-color:var(--warn)}
+  .advanced-panel .checkbox-grid{margin-top:10px;padding-top:10px;border-top:1px solid rgba(210,153,34,.22)}
+  .advanced-panel .hint{color:var(--muted)}
   button:disabled{opacity:.45;cursor:not-allowed}
   .validation-box{margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;font-size:.85rem;color:var(--muted)}
   .validation-box.state-validating{color:var(--accent)}
@@ -191,25 +202,27 @@
         <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
       </div>
       <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
-      <div style="margin-top:10px">
+      <div class="advanced-stack-control">
         <label><input type="checkbox" id="cfgTunStackAdvanced"> ⚙ Расширенный TUN stack (system / mixed)</label>
-        <select id="cfgTunStackEx" style="display:none;margin-left:8px">
+        <select id="cfgTunStackEx" style="display:none">
           <option value="system">system</option>
           <option value="mixed">mixed</option>
         </select>
         <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
       </div>
-      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <div style="font-size:.8rem;font-weight:600;margin-bottom:2px">Расширенный режим: отдельный вход на каждый прокси</div>
-        <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный режим</label>
+      <div id="perProxyAdvancedPanel" class="advanced-panel">
+        <div class="advanced-panel-title"><span class="advanced-badge">ADVANCED</span><span>Отдельный вход на каждый прокси</span></div>
+        <div class="advanced-master">
+          <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
+        </div>
+        <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен.</div>
         <div class="checkbox-grid">
           <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
           <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
         </div>
       </div>
-      <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется.</div>
       <div class="hint">Обычный TUN и MIPS включены по умолчанию. Режимы отдельного входа на каждый прокси — за крышкой расширенного режима; system/mixed — за крышкой расширенного TUN stack.</div>
-      <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию используется gVisor. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
+      <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
       <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
 
       <label style="margin-top:16px">🏓 Ping server (health-check)</label>
@@ -1082,11 +1095,8 @@ function onWhitelistChange() {
   }
   profile.disabled = on;
   updateMihomoOptionStates();
-  const master = document.getElementById('cfgPerProxyMaster');
-  master.closest('label').style.display = on ? 'none' : '';
-  master.closest('div[style]').style.display = on ? 'none' : '';
-  perTun.closest('label').style.display = on ? 'none' : '';
-  perSocks.closest('label').style.display = on ? 'none' : '';
+  const perProxyPanel = document.getElementById('perProxyAdvancedPanel');
+  if (perProxyPanel) perProxyPanel.style.display = on ? 'none' : '';
   profile.closest('.card').style.display = on ? 'none' : '';
   document.getElementById('whitelistPanel').style.display = on ? 'block' : 'none';
 }
