@@ -88,6 +88,9 @@ checkout/build/tests, не копировать непроверенный runti
   `excludeFilter` (только Sub Mode; пусто → прежний output),
   `webUiDashboard`/`webUiCustomUrl` (выбор дашборда external-ui-url: metacubexd-дефолт
   сохраняет byte-parity; custom требует абсолютный http/https URL).
+  `mihomoRealityModernHosts` (selective modern REALITY: `[{host, port?}]` из multiline-поля
+  `realityModernInput`; пусто → legacy byte-parity; некорректные строки пропускаются с non-blocking
+  предупреждением; совместимость версий сервера Xray — NEEDS_OWNER, детали в docs/MIHOMO.md).
 - Зависимости опций (группа «Расширенный режим: отдельный вход на каждый прокси»):
   advanced-крышка (`cfgPerProxyMaster`, по умолчанию OFF) обязательна для обоих child'ов;
   MIPS (`cfgTunMips`) и «TUN на каждый прокси» (`cfgPerProxyTun`) требуют `cfgTun`;
