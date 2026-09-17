@@ -199,6 +199,15 @@
     }
     return "";
   }
+  function parseOptionalBoolean(value) {
+    if (value === true || value === 1) return true;
+    if (value === false || value === 0) return false;
+    if (value === void 0 || value === null) return void 0;
+    const normalized = String(value).trim();
+    if (/^(?:1|t|true)$/i.test(normalized)) return true;
+    if (/^(?:0|f|false)$/i.test(normalized)) return false;
+    return void 0;
+  }
   function parseTlsQueryExtras(q) {
     return {
       certificatePublicKeySha256: getFirstTrimmedQueryValue(q, [
@@ -217,6 +226,23 @@
   function asInt(n, def = 0) {
     const x = parseInt(n, 10);
     return Number.isFinite(x) ? x : def;
+  }
+  function isValidMportList(v) {
+    return String(v).split(",").every((tok) => {
+      const m = tok.trim().match(/^(\d{1,5})(?:-(\d{1,5}))?$/);
+      if (!m) return false;
+      const a = Number(m[1]);
+      const b = m[2] !== void 0 ? Number(m[2]) : a;
+      return a >= 1 && a <= 65535 && b >= 1 && b <= 65535 && a <= b;
+    });
+  }
+  function parsePortValue(raw, def, proto) {
+    if (raw === void 0 || raw === null || raw === "") return def;
+    const s = String(raw).trim();
+    if (!/^\d{1,5}$/.test(s)) throw new Error(proto + ': invalid port "' + raw + '"');
+    const x = parseInt(s, 10);
+    if (x < 1 || x > 65535) throw new Error(proto + ": invalid port " + x + " (expected 1..65535)");
+    return x;
   }
   function sanitizeTag(s) {
     const cleaned = (s || "").replace(/[\u0000-\u001f]/g, "").trim();
@@ -464,6 +490,15 @@
         throw new Error("REALITY shortId is too long (max 16 hex characters)");
       }
     }
+    if (bean.port !== void 0 && bean.port !== null && bean.port !== "") {
+      if (!(p === "mieru" && hasValidPortRange(bean.mieru?.server_ports))) {
+        const n = Number(bean.port);
+        if (!Number.isFinite(n)) throw new Error(p + ': invalid port "' + bean.port + '"');
+        if (!Number.isInteger(n) || n < 1 || n > 65535) {
+          throw new Error(p + ": invalid port " + bean.port + " (expected 1..65535)");
+        }
+      }
+    }
   }
   function normalizeStream(stream, serverAddress) {
     if (!stream) return stream;
@@ -548,7 +583,7 @@
     return {
       proto: "masque",
       host: u.hostname,
-      port: asInt(u.port, 443),
+      port: parsePortValue(u.port, 443, "masque"),
       name,
       masque: {
         privateKey: (q.get("private-key") || "").trim(),
@@ -587,7 +622,7 @@
     const bean = {
       proto: isHttp || isHttps ? "http" : "socks",
       host: u.hostname,
-      port: asInt(u.port, isHttps ? 443 : isHttp ? 80 : 1080),
+      port: parsePortValue(u.port, isHttps ? 443 : isHttp ? 80 : 1080, isHttp ? "http" : "socks"),
       name: safeDecodeURIComponent(u.hash.replace("#", "")),
       socks: {
         type: isHttp || isHttps ? "http" : isSocks4 ? "socks4" : "socks5",
@@ -623,7 +658,7 @@
     const bean = {
       proto: "trojan",
       host: u.hostname,
-      port: asInt(u.port, 443),
+      port: parsePortValue(u.port, 443, "trojan"),
       name: safeDecodeURIComponent(u.hash.replace("#", "")),
       auth: { password: safeDecodeURIComponent(u.username || "") },
       stream: buildStreamFromQuery(q, true),
@@ -642,7 +677,7 @@
     const bean = {
       proto: "anytls",
       host: u.hostname,
-      port: asInt(u.port, 443),
+      port: parsePortValue(u.port, 443, "anytls"),
       name: safeDecodeURIComponent(u.hash.replace("#", "")),
       auth: { password: pwd },
       stream: buildStreamFromQuery(q, false),
@@ -674,7 +709,7 @@
     const rawAfterScheme = urlStr.slice("vless://".length);
     const rawAuthority = rawAfterScheme.split(/[?#]/)[0];
     let host = u.hostname;
-    let port = asInt(u.port, 443);
+    let port = parsePortValue(u.port, 443, "vless");
     const rawUser = safeDecodeURIComponent(u.username || "").trim();
     let uuid = rawUser;
     if (!isValidUuid(uuid) && rawUser) {
@@ -780,12 +815,20 @@
         allowInsecure: false,
         fp: obj.fp || "",
         packet_encoding: obj.pac_enc || "",
-        reality: { pbk: obj.pbk || "", sid: obj.sid || "", spx: obj.spx || "" }
+        reality: {
+          pbk: obj.pbk || "",
+          sid: obj.sid || "",
+          spx: obj.spx || "",
+          pqv: obj.pqv || "",
+          supportX25519MLKEM768: parseOptionalBoolean(
+            obj["support-x25519mlkem768"] ?? obj.supportX25519MLKEM768
+          )
+        }
       };
       const bean2 = {
         proto: "vmess",
         host: obj.add || "localhost",
-        port: asInt(obj.port, 443),
+        port: parsePortValue(obj.port, 443, "vmess"),
         name: obj.ps || "",
         auth: { uuid: obj.id, security: obj.scy || "auto" },
         stream,
@@ -801,7 +844,7 @@
     const bean = {
       proto: "vmess",
       host: u.hostname,
-      port: asInt(u.port, 443),
+      port: parsePortValue(u.port, 443, "vmess"),
       name: safeDecodeURIComponent(u.hash.replace("#", "")),
       auth: { uuid: safeDecodeURIComponent(u.username || ""), security: q.get("encryption") || "auto" },
       stream: buildStreamFromQuery(q, false),
@@ -923,6 +966,9 @@
     const brutalUp = (q.get("brutal_up") || q.get("brutalUp") || q.get("up") || "").trim();
     const brutalDown = (q.get("brutal_down") || q.get("brutalDown") || q.get("down") || "").trim();
     const hopPort = (q.get("mport") || "").trim();
+    if (hopPort && !isValidMportList(hopPort)) {
+      throw new Error('hysteria2: invalid mport "' + hopPort + '" (expected port or port-range list)');
+    }
     const hopIntervalRaw = (q.get("hop_interval") || "").trim();
     let hopIntervalValue = null;
     if (hopIntervalRaw) {
@@ -947,7 +993,7 @@
     return {
       proto: "hy2",
       host: u.hostname,
-      port: asInt(u.port, 443),
+      port: parsePortValue(u.port, 443, "hy2"),
       name: safeDecodeURIComponent(u.hash.replace("#", "")),
       auth: { password: pwd },
       hysteria2: {
@@ -981,7 +1027,7 @@
     return {
       proto: "tuic",
       host: u.hostname,
-      port: asInt(u.port, 443),
+      port: parsePortValue(u.port, 443, "tuic"),
       name: safeDecodeURIComponent(u.hash.replace("#", "")),
       auth: {
         uuid: safeDecodeURIComponent(u.username || ""),
@@ -1256,7 +1302,7 @@
     return {
       proto: "sdns",
       host: u.hostname,
-      port: asInt(u.port, 443),
+      port: parsePortValue(u.port, 443, "sdns"),
       name: name || "sdns-server",
       sdns: {
         stamp
@@ -1275,7 +1321,7 @@
       }
     }
     const lines = text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    return lines.map(parseLink);
+    return lines.filter((l) => !l.startsWith("#")).map(parseLink);
   }
   function buildStreamFromQuery(q, isTrojan) {
     const parseIntOrRange = (raw) => {
@@ -1339,7 +1385,8 @@
       pbk: q.get("pbk") || "",
       sid: (q.get("sid") || "").split(",")[0] || "",
       spx: q.get("spx") || "",
-      pqv: q.get("pqv") || ""
+      pqv: q.get("pqv") || "",
+      supportX25519MLKEM768: q.has("support-x25519mlkem768") ? parseOptionalBoolean(q.get("support-x25519mlkem768")) : void 0
     };
     const stream = {
       network: type,
@@ -2609,6 +2656,9 @@
   var FASTEST_GROUP_NAME = "\u26A1 Fastest";
   var GLOBAL_GROUP_NAME = "GLOBAL";
   var PER_PROXY_GROUP_PREFIX = "\u{1F512} ";
+  var STATIC_HEALTH_GROUP_NAME = "\u{1F310} static-health";
+  var FALLBACK_DIAL_FAILURE_WINDOW_MS = 6e4;
+  var FALLBACK_MAX_DIAL_FAILURES = 2;
   function getPerProxyGroupName(proxyName) {
     return `${PER_PROXY_GROUP_PREFIX}${proxyName}`;
   }
@@ -2689,7 +2739,9 @@
           const ro = { "public-key": s.reality.pbk };
           if (s.reality.sid) ro["short-id"] = s.reality.sid;
           if (s.reality.spx) ro["spider-x"] = s.reality.spx;
-          if (s.reality.pqv) ro.pqv = s.reality.pqv;
+          if (typeof s.reality.supportX25519MLKEM768 === "boolean") {
+            ro["support-x25519mlkem768"] = s.reality.supportX25519MLKEM768;
+          }
           obj["reality-opts"] = ro;
         }
       }
@@ -3213,13 +3265,13 @@
       const network = b.stream?.network || "tcp";
       const security = b.stream?.security || "";
       const flow = b.auth?.flow || "";
-      const pqv = b.stream?.reality?.pqv || "";
-      const pqvKey = pqv ? pqv.substring(0, 50) : "";
+      const supportX25519MLKEM768 = b.stream?.reality?.supportX25519MLKEM768;
+      const mlkemKey = typeof supportX25519MLKEM768 === "boolean" ? String(supportX25519MLKEM768) : "";
       let extra = "";
       if (b.proto === "wireguard") {
         extra = wireguardExtraKey(b.wireguard || {});
       }
-      const key = `${b.proto}|${b.host}|${b.port}|${auth}|${network}|${security}|${flow}|${pqvKey}|${extra}`;
+      const key = `${b.proto}|${b.host}|${b.port}|${auth}|${network}|${security}|${flow}|${mlkemKey}|${extra}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -3251,6 +3303,17 @@
       proxies.forEach((p) => {
         attachPerProxySelectGroup(groups, p);
       });
+      if (proxies.length > 0) {
+        groups.push({
+          name: STATIC_HEALTH_GROUP_NAME,
+          type: "url-test",
+          hidden: true,
+          proxies: proxies.map((p) => p.name),
+          url: urlTest,
+          interval: PROXY_FETCH_INTERVAL,
+          "expected-status": urlTestExpectedStatus
+        });
+      }
       const groupNames = proxies.map((p) => getPerProxyGroupName(p.name));
       groups.push({
         name: GLOBAL_GROUP_NAME,
@@ -3394,6 +3457,17 @@
       });
     }
     if (usePerProxyListeners) {
+      if (extraProxies.length > 0) {
+        groups.push({
+          name: STATIC_HEALTH_GROUP_NAME,
+          type: "url-test",
+          hidden: true,
+          proxies: extraProxies.map((p) => p.name),
+          url: urlTest,
+          interval: PROXY_FETCH_INTERVAL,
+          "expected-status": urlTestExpectedStatus
+        });
+      }
       const globalTargets = providerNames.map((providerName) => `SUB-${providerName}`);
       extraProxies.forEach((p) => {
         const targetGroup = getPerProxyGroupName(p.name);
@@ -3466,7 +3540,9 @@
       ...providerTargets.length ? { use: providerTargets } : {},
       filter: "^(PRIMARY-|primary-)`^(FALLBACK-|fallback-)",
       ...probe,
-      "empty-fallback": "REJECT"
+      "empty-fallback": "REJECT",
+      timeout: FALLBACK_DIAL_FAILURE_WINDOW_MS,
+      "max-failed-times": FALLBACK_MAX_DIAL_FAILURES
     }];
     return { proxies, providers, groups, rules: [`MATCH,${GLOBAL_GROUP_NAME}`] };
   }
@@ -3591,12 +3667,20 @@
     "rules:",
     '  - "MATCH,GLOBAL"'
   ].join("\n");
+  var MIHOMO_TUN_STACKS = /* @__PURE__ */ new Set(["gvisor", "system", "mixed", "mips"]);
+  function resolveMihomoTunStack(tunOpt) {
+    const raw = tunOpt && typeof tunOpt === "object" ? tunOpt.stack : "";
+    const stack = String(raw || "gvisor").trim().toLowerCase();
+    if (!MIHOMO_TUN_STACKS.has(stack)) {
+      throw new Error(`Mihomo: invalid TUN stack "${stack}"`);
+    }
+    return stack;
+  }
   function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     opts = opts || {};
     const addSocks = opts.addSocks !== false;
     const webUI = opts.webUI === true;
     const tunOpt = opts.tun;
-    const tunStack = tunOpt?.stack === "mips" ? "mips" : "gvisor";
     const perProxyGroupName = (name) => `\u{1F512} ${name}`;
     let template = MIHOMO_DEFAULT_TEMPLATE;
     if (!addSocks) {
@@ -3606,12 +3690,13 @@
       const lines = template.split("\n");
       const ipv6Index = lines.findIndex((l) => /^ipv6\s*:/i.test(l));
       if (ipv6Index !== -1) {
+        const externalUiUrl = String(opts.webUiUrl || "https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz");
         lines.splice(
           ipv6Index + 1,
           0,
           "external-controller: 0.0.0.0:9090",
           "external-ui: ui",
-          "external-ui-url: https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz",
+          "external-ui-url: " + externalUiUrl,
           "secret: "
         );
         template = lines.join("\n");
@@ -3621,6 +3706,7 @@
       const lines = template.split("\n");
       const proxiesIndex = lines.findIndex((l) => /^proxy-groups\s*:/i.test(l));
       const mode = tunOpt && typeof tunOpt === "object" && tunOpt.mode ? String(tunOpt.mode) : "tun";
+      const stack = resolveMihomoTunStack(tunOpt);
       if (mode === "listeners") {
         const buildTunListener = (idx, proxyName) => {
           const offset = idx * 4 + 1;
@@ -3631,7 +3717,7 @@
             name: `mihomo-tun-${idx + 1}`,
             type: "tun",
             device: `mitun${idx}`,
-            stack: tunStack,
+            stack,
             "auto-route": false,
             "auto-detect-interface": false,
             "inet4-address": [inet4]
@@ -3677,7 +3763,7 @@
       } else {
         const tun = {
           enable: true,
-          stack: tunStack,
+          stack,
           "auto-route": false,
           "auto-detect-interface": true,
           device: "mitun0"
@@ -4212,6 +4298,7 @@
     const subUrls = [];
     const proxyLines = [];
     for (const line of lines) {
+      if (line.startsWith("#")) continue;
       if (/^https?:\/\//i.test(line)) {
         try {
           const u = new URL(line);
@@ -4226,6 +4313,29 @@
     }
     return { subUrls, proxyText: proxyLines.join("\n") };
   }
+  var WEB_UI_DASHBOARD_URLS = {
+    yacd: "https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip",
+    zashboard: "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip"
+  };
+  function resolveWebUiUrl(options) {
+    const dashboard = String(options.webUiDashboard || "").trim().toLowerCase();
+    if (!dashboard || dashboard === "metacubexd") return void 0;
+    if (WEB_UI_DASHBOARD_URLS[dashboard]) return WEB_UI_DASHBOARD_URLS[dashboard];
+    if (dashboard === "custom") {
+      const raw = String(options.webUiCustomUrl || "").trim();
+      let parsed;
+      try {
+        parsed = new URL(raw);
+      } catch {
+        throw new Error("Invalid Web UI URL (expected absolute http/https URL)");
+      }
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("Invalid Web UI URL (expected http/https)");
+      }
+      return parsed.href;
+    }
+    throw new Error("Unknown Web UI dashboard: " + dashboard);
+  }
   function buildFromRequest(req) {
     const core = String(req?.core || "").toLowerCase();
     const input = String(req?.input || "");
@@ -4233,6 +4343,7 @@
     const options = Object.assign({}, optionsIn);
     const wgBeans = Array.isArray(req?.wgBeans) ? req.wgBeans : [];
     options.urlTest = resolveUrlTest(options.urlTest);
+    options.webUiUrl = resolveWebUiUrl(options);
     if (!core) throw new Error("Missing core");
     if (core !== "singbox" && core !== "xray" && core !== "mihomo") throw new Error("Invalid core: " + core);
     if (core === "singbox") {
@@ -4263,6 +4374,7 @@
       return { kind: "yaml", data: buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, [], {
         addSocks: !!options.addSocks,
         webUI: !!options.webUI,
+        webUiUrl: options.webUiUrl,
         tun: options.addTun ? { mode: "tun", stack: options.mihomoTunStack } : null
       }) };
     }
@@ -4340,7 +4452,7 @@
       throw new Error("Mihomo: enable at least one inbound (TUN or SOCKS5)");
     }
     const perProxyListeners = perProxyPort || !!options.mihomoPerProxyTun;
-    const mihomoTunOpts = addTun ? { mode: options.mihomoPerProxyTun ? "listeners" : "tun", stack: options.mihomoTunStack === "mips" ? "mips" : "gvisor" } : null;
+    const mihomoTunOpts = addTun ? { mode: options.mihomoPerProxyTun ? "listeners" : "tun", stack: options.mihomoTunStack } : null;
     const subMode = !!options.mihomoSubscriptionMode;
     if (subMode) {
       const { subUrls, proxyText } = splitMihomoSubscriptionInput(input);
@@ -4356,6 +4468,7 @@
       const yaml2 = buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, cfg2.listeners, {
         addSocks,
         webUI,
+        webUiUrl: options.webUiUrl,
         tun: mihomoTunOpts
       });
       return { kind: "yaml", data: yaml2 };
@@ -4365,6 +4478,7 @@
     const yaml = buildMihomoYaml(cfg.proxies, cfg["proxy-groups"], null, cfg.rules, cfg.listeners, {
       addSocks,
       webUI,
+      webUiUrl: options.webUiUrl,
       tun: mihomoTunOpts
     });
     return { kind: "yaml", data: yaml };
