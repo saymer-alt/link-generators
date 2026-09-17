@@ -198,9 +198,9 @@
         <div class="hint">Regexp/keyword-фильтр Mihomo <code>exclude-filter</code>: узлы provider, чьи имена совпали, исключаются. Применяется ко всем подпискам. Пусто — поле не добавляется.</div>
       </div>
       <div id="realityModernRow" style="margin-top:10px">
-        <label for="realityModernInput">🌐 Modern REALITY — серверы Xray v25.5.16+ (host или host:port, по одному в строке)</label>
+        <label for="realityModernInput">🌐 Modern REALITY (X25519+ML-KEM) — только для совместимых серверов (host или host:port, по одному в строке)</label>
         <textarea id="realityModernInput" rows="3" placeholder="pan.example&#10;pan2.example:8443&#10;[2001:db8::1]:443"></textarea>
-        <div class="hint">Только для REALITY-узлов этих серверов добавляется ML-KEM (X25519MLKEM768) и client-fingerprint chrome, если не задан; обычные VLESS/TLS и другие серверы не затрагиваются. Требуется Xray v25.5.16+ на сервере. Пусто — legacy-вывод без изменений.</div>
+        <div class="hint">Только для REALITY-узлов этих серверов добавляется ML-KEM (X25519MLKEM768) и client-fingerprint chrome, если не задан; обычные VLESS/TLS и другие серверы не затрагиваются. X25519MLKEM768 появился в Xray v25.5.16; применяйте только к серверам, совместимость которых подтверждена — сама версия не гарантирует совместимость. Пусто — legacy-вывод без изменений.</div>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
