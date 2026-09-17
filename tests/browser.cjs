@@ -76,6 +76,18 @@ const expectedAwg = {
     await page.locator('#cfgTunMips').uncheck();
     assert.equal((await build()).yaml, gvisor.yaml); // uncheck -> тот же gvisor-вывод
 
+    // Selective modern REALITY: поле не ломает advanced-контролы (guard фикса 927c446).
+    await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@pan1.example:443?encryption=none&security=reality&pbk=TESTPBK&sid=ab&fp=chrome#R1');
+    await page.locator('#realityModernInput').fill('pan1.example\nbad::ipv6');
+    const sel = await build('reality-selective');
+    assert.equal(sel.doc.proxies[0]['reality-opts']['support-x25519mlkem768'], true);
+    assert.equal(await page.locator('#perProxyAdvancedPanel').isVisible(), true);
+    assert.equal(await page.locator('#cfgPerProxyMaster').isChecked(), true);
+    assert.equal(await page.locator('#cfgPerProxyTun').isEnabled(), true);
+    assert.equal(await page.locator('#cfgTunStackAdvanced').isVisible(), true);
+    assert.equal(await page.locator('#cfgTunMips').isEnabled(), true);
+    await page.locator('#realityModernInput').fill('');
+
     // Реальный file input -> normalizeWgText -> parser -> bean -> builder -> final YAML.
     await page.locator('#mihomoInput').fill('');
     await page.locator('#wgFile').setInputFiles(path.join(__dirname, 'fixtures/awg31.conf'));
