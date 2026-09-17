@@ -103,7 +103,7 @@ calls the API, and adds its own layers on top of the result:
   сохраняет byte-parity; custom требует абсолютный http/https URL).
   `mihomoRealityModernHosts` (selective modern REALITY: `[{host, port?}]` из multiline-поля
   `realityModernInput`; пусто → legacy byte-parity; некорректные строки пропускаются с non-blocking
-  предупреждением; совместимость версий сервера Xray — NEEDS_OWNER, детали в docs/MIHOMO.md).
+  предупреждением; X25519MLKEM768 появился в Xray v25.5.16; применять только к серверам с подтверждённой совместимостью, без blanket-обещания для всех >= v25.5.16 (решение владельца A2)).
 - Зависимости опций (группа «Расширенный режим: отдельный вход на каждый прокси»):
   advanced-крышка (`cfgPerProxyMaster`, по умолчанию OFF) обязательна для обоих child'ов;
   MIPS (`cfgTunMips`) и «TUN на каждый прокси» (`cfgPerProxyTun`) требуют `cfgTun`;
