@@ -87,6 +87,10 @@ calls the API, and adds its own layers on top of the result:
   `excludeFilter` (Sub Mode only; empty → previous output),
   `webUiDashboard`/`webUiCustomUrl` (external-ui-url dashboard selection: the metacubexd default
   preserves byte parity; custom requires an absolute http/https URL).
+  `mihomoRealityModernHosts` (selective Modern REALITY: `[{host, port?}]` from multiline field
+  `realityModernInput`; empty -> legacy byte parity; invalid lines are skipped with a non-blocking
+  warning; X25519MLKEM768 appeared in Xray v25.5.16; use only for servers with confirmed
+  compatibility, without a blanket compatibility promise for all Xray >= v25.5.16 versions).
 - Option dependencies (group "Advanced mode: separate inbound for each proxy"):
   the advanced master switch (`cfgPerProxyMaster`, OFF by default) is mandatory for both children;
   MIPS (`cfgTunMips`) and "TUN for each proxy" (`cfgPerProxyTun`) require `cfgTun`;
@@ -94,6 +98,19 @@ calls the API, and adds its own layers on top of the result:
   the parent disables and resets the dependent option (`updateMihomoOptionStates()`).
   `buildMihomo()` does not trust the DOM and clamps the same dependencies again
   (including the master): `addTun=false` → `mihomoPerProxyTun=false` and
+  `excludeFilter` (только Sub Mode; пусто → прежний output),
+  `webUiDashboard`/`webUiCustomUrl` (выбор дашборда external-ui-url: metacubexd-дефолт
+  сохраняет byte-parity; custom требует абсолютный http/https URL).
+  `mihomoRealityModernHosts` (selective modern REALITY: `[{host, port?}]` из multiline-поля
+  `realityModernInput`; пусто → legacy byte-parity; некорректные строки пропускаются с non-blocking
+  предупреждением; совместимость версий сервера Xray — NEEDS_OWNER, детали в docs/MIHOMO.md).
+- Зависимости опций (группа «Расширенный режим: отдельный вход на каждый прокси»):
+  advanced-крышка (`cfgPerProxyMaster`, по умолчанию OFF) обязательна для обоих child'ов;
+  MIPS (`cfgTunMips`) и «TUN на каждый прокси» (`cfgPerProxyTun`) требуют `cfgTun`;
+  «SOCKS-порт на каждый прокси» (`cfgPerProxySocks`) требует `cfgSocks`; выключение
+  родителя отключает и сбрасывает зависимую опцию (`updateMihomoOptionStates()`).
+  `buildMihomo()` не доверяет DOM и повторно клампит те же зависимости
+  (включая master): `addTun=false` → `mihomoPerProxyTun=false` и
   `mihomoTunStack=gvisor`; `addSocks=false` → `perProxyPort=false`.
 - In per-proxy mode, the runtime adds the hidden url-test group "🌐 static-health"
   (`hidden: true`) over static leaves: without it, static proxies have no health check
