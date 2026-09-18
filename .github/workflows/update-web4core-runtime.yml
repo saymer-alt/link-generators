@@ -5,6 +5,13 @@ on:
   push:
     branches:
       - main
+  # Read-only validation of the build/test job on PRs. The write job below is
+  # gated on github.ref == 'refs/heads/main', so it cannot run for a PR ref
+  # (refs/pull/*/merge); the build job needs no secrets beyond the read-only
+  # default token.
+  pull_request:
+    branches:
+      - main
   schedule:
     - cron: '17 4 * * 1'
 
@@ -19,6 +26,9 @@ jobs:
   build-runtime:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Provenance: the SHA of the exact web4core checkout that was built and tested.
+    outputs:
+      source-sha: ${{ steps.source-revision.outputs.sha }}
     steps:
       - name: Checkout link-generators
         uses: actions/checkout@v4
@@ -34,8 +44,12 @@ jobs:
           persist-credentials: false
 
       - name: Record source revision
+        id: source-revision
         working-directory: web4core-source
-        run: git rev-parse HEAD
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -75,6 +89,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+    env:
+      SOURCE_SHA: ${{ needs.build-runtime.outputs.source-sha }}
     steps:
       - name: Checkout tested link-generators revision
         uses: actions/checkout@v4
@@ -102,8 +118,16 @@ jobs:
             exit 0
           fi
           cp "$runtime" web4core.runtime.js
+          # Provenance: SOURCE_SHA comes from the build job and is the exact
+          # web4core checkout the uploaded runtime was built and tested against.
+          case "$SOURCE_SHA" in
+            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+            *) echo "SOURCE_SHA is not a 40-char hex SHA: $SOURCE_SHA"; exit 1 ;;
+          esac
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- web4core.runtime.js
-          git commit -m "Update web4core runtime from upstream"
+          git commit -m "Update web4core runtime from upstream" \
+            -m "Source: saymer-alt/web4core@$SOURCE_SHA" \
+            -m "Source-Branch: link-generators"
           git push origin HEAD:main
