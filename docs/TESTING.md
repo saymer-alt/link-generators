@@ -1,5 +1,29 @@
 # TESTING — реальная тестовая стратегия
 
+## AWL-приоритет и production-интервалы — 2026-09-18
+
+`tests/mihomo-awl-priority.cjs` (быстрые интервалы 2s, детерминированный) фиксирует
+семантический контракт AWL против обычного url-test на одинаковых листьях: медленный,
+но живой primary удерживается приоритетом; восстановившийся, но всё ещё медленный
+primary возвращает трафик (url-test не возвращается); пассивное обнаружение смерти
+primary без трафика укладывается в один-два интервала проверок. Запуск в том же
+стиле, что и `mihomo-failover.cjs`:
+
+```bash
+MIHOMO_BIN=/absolute/mihomo JS_YAML_PATH=/absolute/js-yaml.min.js \
+TEST_OUTPUT_DIR=/absolute/out node tests/mihomo-awl-priority.cjs
+```
+
+Варианты провайдеров B/C/D и сосуществование `override-expr` + `additional-prefix`
+(ветка reality-selective-v2, `mihomo -t` + живой прогон) проверены отдельными
+лабораторными прогонами NIGHT-24A; артефакты — вне репозитория.
+`tests/mihomo-awl-soak.manual.cjs` — ручной soak на generated-интервалах
+(300s/60000ms), ~25 минут, в CI не ставится: активный failover на dial-ошибках,
+автоматический failback по сетке планировщика, чисто пассивное обнаружение
+(трафик затихает за 60 с до kill, дальше только read-only API-опросы), поведение
+«все узлы мертвы» и восстановление. Запускать эксклюзивно, без параллельных
+Mihomo-лабораторий.
+
 ## Дополнительный runtime review #2588
 
 Подробно: [FALLBACK-REVIEW.md](FALLBACK-REVIEW.md). На v1.19.31 баг воспроизведён
