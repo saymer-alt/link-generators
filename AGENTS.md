@@ -1,376 +1,375 @@
 # AGENTS.md — link-generators
 
-## Дополнение: автоматический режим белых списков
+## Addendum: automatic whitelist mode
 
-См. [docs/AUTO-WHITELIST.md](docs/AUTO-WHITELIST.md). UI policy остаётся здесь;
-generic `fallbackInput` и плоский primary/fallback GLOBAL живут в fork. Отсутствие
-`fallbackInput` сохраняет старый output. Обязательны `tests/whitelist.cjs`,
-baseline, реальный Mihomo -t и `tests/mihomo-failover.cjs`; source suite включает `mihomo-priority.test.mjs`.
+See [docs/AUTO-WHITELIST.md](docs/AUTO-WHITELIST.md). UI policy remains here;
+generic `fallbackInput` and flat primary/fallback GLOBAL live in the fork. Absence of
+`fallbackInput` preserves the previous output. `tests/whitelist.cjs`,
+baseline, real Mihomo -t, and `tests/mihomo-failover.cjs` are mandatory; the source suite includes `mihomo-priority.test.mjs`.
 
+Instructions for AI agents (primarily ZCode) working in this repository.
+There are three documentation layers: **README.md** — user-facing landing page (what it is and
+how to use it), **docs/** — detailed technical knowledge base (architecture, dataflow,
+protocols, validation, runtime updates, testing), **this file** — agent rules.
+If they disagree, trust the code; fix documentation that disagrees with code, and change code
+only for an explicit owner task.
 
-Инструкция для AI-агентов (в первую очередь ZCode), работающих в этом репозитории.
-Три слоя документации: **README.md** — пользовательская landing page (что это и как
-пользоваться), **docs/** — подробная техническая база знаний (архитектура, dataflow,
-протоколы, валидация, обновления рантайма, тестирование), **этот файл** — правила для
-агента. При расхождении верить коду; несоответствие коду чинить в документации, код —
-только по задаче владельца.
+## What this is
 
-## Что это
+A static single-page web tool, "WARP & Mihomo Unified Generator", published
+on GitHub Pages: https://saymer-alt.github.io/link-generators/ . Everything runs client-side:
+two tabs — a generator for WARP `masque://` links and a `config.yaml` builder for Mihomo.
 
-Статический одностраничный веб-инструмент «WARP & Mihomo Unified Generator», выложенный
-на GitHub Pages: https://saymer-alt.github.io/link-generators/ . Всё работает на клиенте:
-две вкладки — генератор `masque://`-ссылок для WARP и сборщик `config.yaml` для Mihomo.
+What the project DOES NOT have (do not invent it): an application build system, package.json,
+application npm dependencies, a linter, or a backend. Since 2026-09-15 there are Node regression tests
+in `tests/`; a runtime test also runs in the auto-update workflow.
+Every push to `main` is published to Pages immediately — "main = production".
 
-Чего в проекте НЕТ (не придумывать): сборочной системы приложения, package.json,
-npm-зависимостей приложения, линтера, бэкенда. С 2026-09-15 есть Node regression tests
-в `tests/`; runtime-тест выполняется также в workflow автообновления.
-Каждый пуш в `main` немедленно публикуется на Pages — «main = прод».
-
-Язык проекта — русский (UI, комментарии, документация). Код-стайл: всё инлайн в одном
-HTML-файле, компактный hand-written JS без фреймворков, комментарии-маркеры вида
+The project language is Russian (UI, comments, documentation). Code style: everything inline in one
+HTML file, compact hand-written JS without frameworks, section-marker comments like
 `// === SECTION ===`.
 
-## Состав репозитория (все файлы)
+## Repository contents (all files)
 
-| Файл | Роль | Редактировать |
+| File | Role | Edit |
 |---|---|---|
-| `index.html` | Всё приложение: inline CSS + inline JS; единственная страница | Да — основной файл |
-| `web4core.runtime.js` | Вендоренный артефакт сборки saymer-alt/web4core@link-generators | НЕТ — см. ниже |
-| `tests/` | Node/browser regression tests и fixtures | Да — синхронно с проверяемыми контрактами |
-| `docs/` | Внутренняя база знаний: ARCHITECTURE, DATAFLOW, MIHOMO, PROTOCOLS, VALIDATION, UPDATES, DEVELOPMENT, TESTING | Да — синхронно с изменениями поведения |
-| `.github/workflows/update-web4core-runtime.yml` | Автообновление рантайма | Аккуратно: имеет право писать в `main` |
-| `README.md` | Пользовательская landing page (переписана 2026-09-08) | Да, но не молча переписывать |
-| `.nojekyll` | Отключает Jekyll-обработку на Pages | Не трогать |
-| `LICENSE` | BSD-3-Clause (унаследована от web4core) | Не трогать |
+| `index.html` | Entire application: inline CSS + inline JS; the only page | Yes — primary file |
+| `web4core.runtime.js` | Vendored build artifact from saymer-alt/web4core@link-generators | NO — see below |
+| `tests/` | Node/browser regression tests and fixtures | Yes — in sync with the contracts they verify |
+| `docs/` | Internal knowledge base: ARCHITECTURE, DATAFLOW, MIHOMO, PROTOCOLS, VALIDATION, UPDATES, DEVELOPMENT, TESTING | Yes — in sync with behavior changes |
+| `.github/workflows/update-web4core-runtime.yml` | Runtime auto-update | Carefully: it is allowed to write to `main` |
+| `README.md` | User-facing landing page (rewritten 2026-09-08) | Yes, but do not silently rewrite it |
+| `.nojekyll` | Disables Jekyll processing on Pages | Do not touch |
+| `LICENSE` | BSD-3-Clause (inherited from web4core) | Do not touch |
 
-Историческое: `mihomo.html` (байт-копия `index.html` под вторым адресом) удалён
-2026-09-08 (e2cd5a9) как неиспользуемый артефакт — не восстанавливать; `/mihomo.html`
-на Pages отдаёт 404, это ожидаемо.
+Historical: `mihomo.html` (a byte-for-byte copy of `index.html` under a second URL) was removed
+on 2026-09-08 (e2cd5a9) as an unused artifact — do not restore it; `/mihomo.html`
+returns 404 on Pages, as expected.
 
-## Архитектура: где какая логика
+## Architecture: where each piece of logic lives
 
-Этот репозиторий — **UI/browser layer**. Protocol engine находится в
-`saymer-alt/web4core:link-generators`; runtime собирается из нашего fork.
-Новые parsers/builders и общую семантику протоколов не дублировать в `index.html`.
-UI-specific normalization/post-processing оставлять здесь только если это
-ответственность формы, UX или deployment profile; существующие AWG wrappers не
-переносить попутно. Новый outbound validation обычно затрагивает оба репозитория.
+This repository is the **UI/browser layer**. The protocol engine lives in
+`saymer-alt/web4core:link-generators`; the runtime is built from our fork.
+Do not duplicate new parsers/builders or shared protocol semantics in `index.html`.
+Keep UI-specific normalization/post-processing here only when it belongs to the form,
+UX, or deployment profile; do not move existing AWG wrappers opportunistically.
+New outbound validation usually affects both repositories.
 
-Validator, README и docs должны отражать только реальную end-to-end поддержку:
-распознанный URI или разрешённый YAML-тип сами по себе не доказывают работоспособность.
-Полная карта, выбор слоя и workflow будущего агента — `docs/WEB4CORE-FORK.md`.
-До изменения читать AGENTS обоих репозиториев, проверять branch/remotes/status,
-определять scope; после — tests/build, runtime comparison и review до commit/push.
-Workflow обязан оставаться воспроизводимым и fail-closed: не пропускать ошибки
-checkout/build/tests, не копировать непроверенный runtime, не делать force-push.
+Validator, README, and docs must describe only real end-to-end support:
+a recognized URI or an allowed YAML type alone does not prove that it works.
+The complete map, layer-selection rules, and workflow for future agents are in `docs/WEB4CORE-FORK.md`.
+Before making a change, read AGENTS in both repositories, check branch/remotes/status,
+and determine scope; afterwards run tests/build, runtime comparison, and review before commit/push.
+The workflow must remain reproducible and fail-closed: do not ignore checkout/build/test failures,
+do not copy an unverified runtime, and do not force-push.
 
-### Вкладка 1 «WARP MASQUE Links» — вся логика инлайн в `index.html`
+### Tab 1 "WARP MASQUE Links" — all logic is inline in `index.html`
 
-- `parseYaml()` — импорт YAML-конфига от Telegram-бота: `jsyaml.loadAll` по всем документам,
-  ищется `proxies[0]` либо объект с ключом `private-key`/`privateKey`; без `private-key`
-  отказ. Заполняет поля формы (privateKey, publicKey, ip, ipv6, sni, dns).
-- `generateWarp()` — генерация пар ссылок QUIC + H2. Это НЕ случайные числа, а выверенная
-  анти-DPI стратегия (в коде помечена комментариями «П.1/П.2/П.3») — см. «DPI-стратегия».
-- `sendToMihomo()` — перенос сгенерированных ссылок во вкладку 2 и автосборка.
-- `js-yaml@4.1.0` грузится с jsdelivr CDN — единственная внешняя сеть-зависимость страницы.
+- `parseYaml()` — imports a YAML config from the Telegram bot: `jsyaml.loadAll` over all documents,
+  finds `proxies[0]` or an object with a `private-key`/`privateKey` key; rejects input without
+  `private-key`. Fills form fields (privateKey, publicKey, ip, ipv6, sni, dns).
+- `generateWarp()` — generates pairs of QUIC + H2 links. These are NOT random numbers, but a tuned
+  anti-DPI strategy (marked in code with comments "П.1/П.2/П.3") — see "DPI strategy".
+- `sendToMihomo()` — moves generated links into tab 2 and triggers an automatic build.
+- `js-yaml@4.1.0` loads from the jsdelivr CDN — the page's only external network dependency.
 
-### Вкладка 2 «Mihomo Config Builder» — обёртка над рантаймом + собственные слои
+### Tab 2 "Mihomo Config Builder" — runtime wrapper + page-specific layers
 
-Парсинг ссылок и генерация YAML — в `web4core.runtime.js`; `index.html` собирает запрос,
-вызывает API и добавляет собственные слои поверх результата:
+Link parsing and YAML generation live in `web4core.runtime.js`; `index.html` builds the request,
+calls the API, and adds its own layers on top of the result:
 
 - `buildMihomo()` → `globalThis.web4core.buildFromRequest({ core: 'mihomo', input, wgBeans, options })`.
-- WG/AWG-файлы (`.conf`, `.wg`, `.awg`, multiple) → `web4core.parseWireGuardConf(text, filename)` → массив `wgBeans`.
-- Список health-check endpoints → `web4core.URLTEST_CHOICES` (Google/Cloudflare/Apple/Microsoft/Ubuntu/Fedora;
-  фолбэк — Google generate_204).
-- Опции страницы → поля `options`: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
+- WG/AWG files (`.conf`, `.wg`, `.awg`, multiple) → `web4core.parseWireGuardConf(text, filename)` → `wgBeans` array.
+- Health-check endpoint list → `web4core.URLTEST_CHOICES` (Google/Cloudflare/Apple/Microsoft/Ubuntu/Fedora;
+  fallback — Google generate_204).
+- Page options → `options` fields: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
   `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`,
-  `excludeFilter` (только Sub Mode; пусто → прежний output),
-  `webUiDashboard`/`webUiCustomUrl` (выбор дашборда external-ui-url: metacubexd-дефолт
-  сохраняет byte-parity; custom требует абсолютный http/https URL).
-- Зависимости опций (группа «Расширенный режим: отдельный вход на каждый прокси»):
-  advanced-крышка (`cfgPerProxyMaster`, по умолчанию OFF) обязательна для обоих child'ов;
-  MIPS (`cfgTunMips`) и «TUN на каждый прокси» (`cfgPerProxyTun`) требуют `cfgTun`;
-  «SOCKS-порт на каждый прокси» (`cfgPerProxySocks`) требует `cfgSocks`; выключение
-  родителя отключает и сбрасывает зависимую опцию (`updateMihomoOptionStates()`).
-  `buildMihomo()` не доверяет DOM и повторно клампит те же зависимости
-  (включая master): `addTun=false` → `mihomoPerProxyTun=false` и
+  `excludeFilter` (Sub Mode only; empty → previous output),
+  `webUiDashboard`/`webUiCustomUrl` (external-ui-url dashboard selection: the metacubexd default
+  preserves byte parity; custom requires an absolute http/https URL).
+- Option dependencies (group "Расширенный режим: отдельный вход на каждый прокси"):
+  the advanced master switch (`cfgPerProxyMaster`, OFF by default) is mandatory for both children;
+  MIPS (`cfgTunMips`) and "ТUN на каждый прокси" (`cfgPerProxyTun`) require `cfgTun`;
+  "SOCKS-порт на каждый прокси" (`cfgPerProxySocks`) requires `cfgSocks`; disabling
+  the parent disables and resets the dependent option (`updateMihomoOptionStates()`).
+  `buildMihomo()` does not trust the DOM and clamps the same dependencies again
+  (including the master): `addTun=false` → `mihomoPerProxyTun=false` and
   `mihomoTunStack=gvisor`; `addSocks=false` → `perProxyPort=false`.
-- В per-proxy режиме runtime добавляет скрытую url-test группу «🌐 static-health»
-  (hidden: true) над static-листьями: без неё static прокси лишены health-check
-  (регрессия upstream a0859bf); провайдеры чекаются собственными механизмами.
-- Чекбокс «Allow LAN» — постобработка: регэксп-патч `allow-lan: false → true` и вставка
-  `bind-address: "*"` ПОСЛЕ того, как рантайм вернул YAML-строку. Патч привязан к
-  текстовому формату YAML, который генерирует рантайм.
-- Собственный слой страницы (не рантайм), добавлен локально:
-  - **AWG-совместимость**: `normalizeWgText` (диапазон `PersistentKeepalive = 25-35` →
-    скаляр и булевы `RandomTrailers`/`DisableCookies = on|off` → `1|0` ДО парсинга —
-    официальный формат литералов AWG 3.1; заодно снимается UTF-8 BOM), `normalizeWgBeans`
-    (авто `version: 3` при наличии AWG 3.x-полей — иначе mihomo молча использует
-    legacy-движок; range-строки на int-полях mihomo `jc/jmin/jmax/s1-s4/itime` —
-    `AWG_INT_KEYS` — сворачиваются к нижней границе, иначе декодирование всего конфига
-    падает), `injectWgDns` (dns/`remote-dns-resolve` для wireguard-прокси из поля
-    «WireGuard DNS»; повторный dump только `jsyaml.dump(..., { lineWidth: -1 })`, иначе
-    рвутся длинные base64-строки). Форматы значений AWG и матрица версий mihomo —
+- In per-proxy mode, the runtime adds the hidden url-test group "🌐 static-health"
+  (`hidden: true`) over static leaves: without it, static proxies have no health check
+  (upstream regression a0859bf); providers are checked by their own mechanisms.
+- The "Allow LAN" checkbox is post-processing: regex patch `allow-lan: false → true` plus insertion
+  of `bind-address: "*"` AFTER the runtime returns the YAML string. The patch depends on
+  the exact YAML text format generated by the runtime.
+- Page-specific layer (not runtime), added locally:
+  - **AWG compatibility**: `normalizeWgText` (range `PersistentKeepalive = 25-35` →
+    scalar and boolean `RandomTrailers`/`DisableCookies = on|off` → `1|0` BEFORE parsing —
+    official AWG 3.1 literal formats; also removes UTF-8 BOM), `normalizeWgBeans`
+    (automatically `version: 3` when AWG 3.x fields are present — otherwise Mihomo silently uses
+    the legacy engine; range strings for Mihomo int fields `jc/jmin/jmax/s1-s4/itime` —
+    `AWG_INT_KEYS` — collapse to the lower bound, otherwise decoding the entire config fails),
+    `injectWgDns` (dns/`remote-dns-resolve` for WireGuard proxies from the
+    "WireGuard DNS" field; re-dump only with `jsyaml.dump(..., { lineWidth: -1 })`, otherwise
+    long base64 strings wrap). AWG value formats and the Mihomo version matrix are in
     docs/PROTOCOLS.md.
-  - **DNS-защита**: DNS `100.64.0.1` (Amnezia Premium) → автоподстановка `1.1.1.1, 8.8.8.8`
-    с предупреждением.
-  - **Pre-copy валидатор**: после Build Config финальный YAML проходит
+  - **DNS protection**: DNS `100.64.0.1` (Amnezia Premium) → automatically replace with
+    `1.1.1.1, 8.8.8.8` and show a warning.
+  - **Pre-copy validator**: after Build Config, final YAML passes through
     `validateMihomoYaml()` — state machine NOT_BUILT→VALIDATING→VALID/INVALID,
-    генерационный счётчик против race, Copy YAML заблокирована при INVALID. Enum-списки
-    типов/групп сверены с исходниками mihomo v1.19.x. Подробно — docs/VALIDATION.md и
-    docs/TESTING.md.
+    generation counter prevents races, Copy YAML is blocked when INVALID. Enum lists
+    of types/groups are verified against Mihomo v1.19.x sources. Details:
+    docs/VALIDATION.md and docs/TESTING.md.
 
-Рантайм additionally умеет сборку под sing-box и xray (`buildSingBox*`, `buildXray*`) и
-другие экспорты (`buildBeansFromInput`, `validateBean`, `computeTag`,
-`getAllowedCoreProtocols`, `fetchSubscription`, `buildMihomoYaml`, …) — страница их не
-использует, но они часть публичного API `globalThis.web4core`.
+The runtime additionally supports building for sing-box and xray (`buildSingBox*`, `buildXray*`)
+and other exports (`buildBeansFromInput`, `validateBean`, `computeTag`,
+`getAllowedCoreProtocols`, `fetchSubscription`, `buildMihomoYaml`, …) — the page does not
+use them, but they are part of the public `globalThis.web4core` API.
 
-### Связь файлов
+### File relationships
 
-`index.html` (единственная страница) подключает `./web4core.runtime.js` обычным
-(классическим) `<script>` — не module, поэтому страница работает и с `file://`. Если
-рантайм не загрузился, все действия builder'а показывают toast «web4core.runtime не
-загружен».
+`index.html` (the only page) loads `./web4core.runtime.js` as a normal
+(classic) `<script>`, not a module, so the page also works with `file://`. If
+the runtime does not load, all builder actions show the toast "web4core.runtime не
+загружен".
 
-## web4core.runtime.js — сгенерированный файл, руками не трогать
+## web4core.runtime.js — generated file, never edit by hand
 
-MIPS реализован в исходниках настоящего fork `saymer-alt/web4core`, ветка
-`link-generators`: `src/build.js` передаёт `options.mihomoTunStack`,
-`src/core/yaml.js` нормализует `opts.tun.stack` и использует его для обычного TUN
-и Per-Proxy listeners. Только точное `mips` включает MIPS; fallback — `gvisor`.
+MIPS is implemented in the real fork sources `saymer-alt/web4core`, branch
+`link-generators`: `src/build.js` passes `options.mihomoTunStack`,
+`src/core/yaml.js` normalizes `opts.tun.stack` and uses it for regular TUN
+and Per-Proxy listeners. Only exact `mips` enables MIPS; fallback is `gvisor`.
 
-Это IIFE-бандл штатной esbuild-сборки fork (`npm ci && npm run build:web:runtime`,
-Node 22). `web4core.runtime.js` руками не редактировать: он должен воспроизводиться
-из исходников fork. Textual bundle patch удалён. Изменения парсинга/эмиссии —
-в source-ветке fork в согласованном scope; upstream PR предпочтителен для общих
-исправлений, wrapper в `index.html` остаётся вариантом для адаптаций входа/выхода.
-Новые протоколы требуют отдельной задачи владельца. Подробности — `docs/UPDATES.md`.
+This is an IIFE bundle from the fork's standard esbuild build (`npm ci && npm run build:web:runtime`,
+Node 22). Never edit `web4core.runtime.js` by hand: it must be reproducible
+from fork sources. The textual bundle patch has been removed. Parsing/emission changes belong
+in the fork source branch within approved scope; an upstream PR is preferred for shared fixes,
+while a wrapper in `index.html` remains an option for input/output adaptations.
+New protocols require a separate owner task. Details: `docs/UPDATES.md`.
 
-В конце бандла — единственная точка экспорта: `globalThis.web4core = { … }`.
+The bundle has a single export point at the end: `globalThis.web4core = { … }`.
 
-## GitHub Actions: автообновление рантайма
+## GitHub Actions: runtime auto-update
 
-`.github/workflows/update-web4core-runtime.yml`: push в `main`, еженедельный
-cron `17 4 * * 1`, ручной dispatch. Checkout этого репо и
+`.github/workflows/update-web4core-runtime.yml`: push to `main`, weekly
+cron `17 4 * * 1`, manual dispatch. Checkout this repo and
 `saymer-alt/web4core@link-generators` → Node 22 → npm ci → source Mihomo tests
 → upstream build command → node --check → tests/runtime.cjs → artifact.
-Сборка и тесты выполняются с `contents: read`, без сохранённых Git credentials.
-Отдельный свежий job с `contents: write` только сравнивает/копирует runtime и при
-отличии создаёт «Update web4core runtime from upstream» в `main`. Код artifact
-там не выполняется. При изменении main после проверки — отказ; force-push запрещён.
-Синхронизация upstream в custom branch — controlled merge с review и тестами,
-не автоматический merge внешнего кода (см. `docs/UPDATES.md`).
+Build and tests run with `contents: read`, without persisted Git credentials.
+A separate fresh job with `contents: write` only compares/copies the runtime and, if
+different, creates "Update web4core runtime from upstream" in `main`. Artifact code
+is not executed there. If main changes after verification, it fails; force-push is forbidden.
+Upstream synchronization into the custom branch is a controlled merge with review and tests,
+not an automatic merge of external code (see `docs/UPDATES.md`).
 
-Следствия для агента:
-- каждый твой пуш в `main` запускает этот workflow (даже если runtime не менялся — тогда
-  он завершится без коммита);
-- скоро после твоего пуша в `main` может появиться бот-коммит, меняющий только
-  `web4core.runtime.js` — это нормально, не откатывать;
-- обновление рантайма меняет поведение парсинга/сборки без изменения `index.html` —
-  после автообновления стоит проверять страницу вручную (в первую очередь allow-lan
-  регэксп-патч).
+Consequences for the agent:
+- every push to `main` triggers this workflow (even if the runtime did not change — then
+  it completes without a commit);
+- shortly after your push to `main`, a bot commit may appear changing only
+  `web4core.runtime.js` — this is normal, do not revert it;
+- a runtime update can change parsing/build behavior without changing `index.html` —
+  after auto-update, the page should be manually checked (especially the allow-lan
+  regex patch).
 
-## README и код: что источник истины
+## README and code: source of truth
 
-Историческая справка: в README когда-то описывались три вкладки, «Warpscout Parser» и
-режим «WARP-in-WARP» (чекбокс + `dialer-proxy`). Эти функции были добавлены в
-`index.html` 19.08.2026 и удалены тем же вечером — страница возвращена к
-двухвкладочному варианту; восстанавливать их нельзя (см. правила ниже). 08.09.2026
-README переписан как пользовательская landing page; подробная техническая документация
-живёт в `docs/`, правила для агентов — в этом файле.
+Historical note: README once described three tabs, a "Warpscout Parser", and
+"WARP-in-WARP" mode (checkbox + `dialer-proxy`). These features were added to
+`index.html` on 2026-08-19 and removed the same evening — the page returned to
+the two-tab version; do not restore them (see rules below). On 2026-09-08,
+README was rewritten as a user-facing landing page; detailed technical documentation
+lives in `docs/`, and agent rules live in this file.
 
-Принцип: источник истины — КОД. Если README расходится с кодом, это устаревший README,
-а не баг кода. Правила:
+Principle: CODE is the source of truth. If README disagrees with code, README is stale,
+not the code. Rules:
 
-- в текущем коде НЕТ warpscout-парсера, `warpscout-account.json`, чекбокса WARP-in-WARP
-  и `dialer-proxy` (0 вхождений в HTML и рантайме). Самостоятельно «восстанавливать» их
-  нельзя — ни по старому README, ни по истории git (ревизия ed835e8/74a3f24);
-- если задача звучит как «починить/вернуть warpscout» — остановиться и уточнить у
-  владельца: восстанавливать или это устаревшая постановка;
-- правки кода, меняющие набор вкладок/фич, сопровождаются синхронной правкой README;
-- страница сейчас умеет только YAML-импорт от Telegram-бота (`parseYaml`); сырые
-  warpscout-логи она не парсит.
+- current code has NO warpscout parser, `warpscout-account.json`, WARP-in-WARP checkbox,
+  or `dialer-proxy` (0 occurrences in HTML and runtime). Do not "restore" them
+  independently — not from the old README and not from Git history (revisions ed835e8/74a3f24);
+- if the task says "fix/restore warpscout", stop and clarify with the owner whether it should
+  actually be restored or the request is stale;
+- code changes that alter the set of tabs/features must include a synchronized README update;
+- the page currently supports only YAML import from the Telegram bot (`parseYaml`); it does
+  not parse raw warpscout logs.
 
-## Форматы входных данных и контракты
+## Input formats and contracts
 
-### MASQUE: DPI-стратегия генерации (load-bearing, не менять «ради улучшения»)
+### MASQUE: generation DPI strategy (load-bearing, do not change "for improvement")
 
-Формат выходной ссылки (параметры и их имена — контракт, их парсят внешние импортеры,
-включая сам web4core при обратном импорте во вкладку 2):
+Output link format (parameters and their names are a contract parsed by external importers,
+including web4core itself when importing back into tab 2):
 
 ```
 masque://IP:PORT?sni=…&private-key=…&public-key=…&ip=…&udp=true&remote-dns-resolve=true[&ipv6=…][&dns=…][&network=h2]#ИМЯ
 ```
 
-- base64-ключи обязательно URL-энкодятся (`urlEncodeKey`: `+ / =` → `%2B %2F %3D`).
-- QUIC: только фиксированный пул `162.159.198.2 / 162.159.198.1 / 162.159.199.2`, всегда порт 443.
-- H2: IP только из `162.159.198.x / 162.159.199.x` (последний октет 1–254).
-- Порты H2 — взвешенный рандом. Safe Ports Only (по умолчанию): 443 (70%), 8443 (20%),
-  4443 (5%), 8095 (5%). Полный режим добавляет VPN-порты 500/1701/4500 (риск семантического
-  конфликта у DPI — поэтому по умолчанию выключены).
-- Анти-корреляция: если порт H2 совпал с портом QUIC, IP H2 обязан отличаться от IP QUIC.
-- Имена профилей: `PROFILE-QUIC[-N]` (без порта) и `PROFILE-H2-<port>[-N]`.
-- Дефолты полей — часть поведения: SNI `4pda.to`, DNS `1.1.1.1,1.0.0.1`, IP `172.16.0.2`,
-  профиль `WARP-MASQUE`.
+- base64 keys must be URL-encoded (`urlEncodeKey`: `+ / =` → `%2B %2F %3D`).
+- QUIC: only the fixed pool `162.159.198.2 / 162.159.198.1 / 162.159.199.2`, always port 443.
+- H2: IP only from `162.159.198.x / 162.159.199.x` (last octet 1–254).
+- H2 ports use weighted random selection. Safe Ports Only (default): 443 (70%), 8443 (20%),
+  4443 (5%), 8095 (5%). Full mode adds VPN ports 500/1701/4500 (risk of semantic
+  conflict for DPI — therefore disabled by default).
+- Anti-correlation: if the H2 port matches the QUIC port, the H2 IP must differ from the QUIC IP.
+- Profile names: `PROFILE-QUIC[-N]` (without port) and `PROFILE-H2-<port>[-N]`.
+- Field defaults are part of behavior: SNI `4pda.to`, DNS `1.1.1.1,1.0.0.1`, IP `172.16.0.2`,
+  profile `WARP-MASQUE`.
 
-### Вход вкладки 2: ссылки и подписки
+### Tab 2 input: links and subscriptions
 
-Рантайм парсит схемы (SUPPORTED_SCHEMES): `vmess, vless, trojan, anytls, ss, socks,
+The runtime parses schemes (SUPPORTED_SCHEMES): `vmess, vless, trojan, anytls, ss, socks,
 socks4, socks4a, socks5, socks5h, http, https, hy2, hysteria2, tuic, tt, mieru, mierus,
-sdns, masque`. Подписка-хинт в UI перечисляет меньше — фактический список шире.
+sdns, masque`. The subscription hint in the UI lists fewer; the actual list is broader.
 
-Ядро mihomo принимает (CORE_PROTOCOL_SUPPORT): `vmess, vless, trojan, anytls, ss, socks,
+The Mihomo core accepts (CORE_PROTOCOL_SUPPORT): `vmess, vless, trojan, anytls, ss, socks,
 http, hy2, tuic, wireguard, masque, mieru, trusttunnel`.
 
-Подписки: строка `http(s)://…` без логина/пароля в URL считается подпиской (в Sub Mode —
-proxy-providers с refresh 43200 с и fallback-ретраями); URL с кредами считается обычной
-ссылкой. `fetchSubscription` в браузере упирается в CORS — работают только отдающие
-CORS-заголовки источники; это ограничение платформы, не баг.
+Subscriptions: an `http(s)://…` line without username/password in the URL is considered a
+subscription (in Sub Mode — proxy-providers with 43200 s refresh and fallback retries);
+a URL with credentials is treated as a normal link. `fetchSubscription` in the browser is
+subject to CORS — only sources returning CORS headers work; this is a platform limitation,
+not a bug.
 
 ### WireGuard / AmneziaWG
 
-Файлы `.conf` / `.wg` / `.awg` парсятся на клиенте `parseWireGuardConf(text, fileName)`.
-Формат AmneziaWG (`Jc/Jmin/Jmax/…` параметры) поддерживается рантаймом.
+Files `.conf` / `.wg` / `.awg` are parsed client-side by
+`parseWireGuardConf(text, fileName)`.
+AmneziaWG format (`Jc/Jmin/Jmax/…` parameters) is supported by the runtime.
 
-### Контракт buildFromRequest
+### buildFromRequest contract
 
-`buildFromRequest({ core, input, wgBeans, options })` → `{ kind: "yaml", data: <строка> }`.
-Дефолты ядра mihomo: `webUI=true`, `addSocks=true`, `addTun=false`; требуется хотя бы один
-inbound (TUN или SOCKS), иначе ошибка «Mihomo: enable at least one inbound». Пустой ввод
-при пустых wgBeans → ошибка «No valid links or profiles provided».
+`buildFromRequest({ core, input, wgBeans, options })` → `{ kind: "yaml", data: <string> }`.
+Mihomo core defaults: `webUI=true`, `addSocks=true`, `addTun=false`; at least one
+inbound (TUN or SOCKS) is required, otherwise error "Mihomo: enable at least one inbound".
+Empty input with empty wgBeans → error "No valid links or profiles provided".
 
-### Профиль развёртывания «VPS Gateway» (opt-in, 2026-09-09)
+### "VPS Gateway" deployment profile (opt-in, 2026-09-09)
 
-Дополнительный post-processing сценарий для amnezia-mihomo-gateway (Mihomo-половина
-gateway-конфига). Подробно — docs/VPS-GATEWAY.md. Инварианты, которые нельзя нарушать:
+Additional post-processing scenario for amnezia-mihomo-gateway (the Mihomo half of
+the gateway config). Details: docs/VPS-GATEWAY.md. Invariants that must not be violated:
 
-- селектор `#cfgProfile` по умолчанию = `generic`; при `generic` функция
-  `applyDeploymentProfile()` НЕ вызывается (guard в `buildMihomo()`) — вывод
-  байт-в-байт прежний, без лишних `jsyaml.load/dump`;
-- `tun.auto-route: false` — жёсткий инвариант, в UI не выставляется;
-- дефолты профиля = переменные текущего `install.sh` amnezia-mihomo-gateway
-  (`PROXY_IF`/`TUN_INET_ADDR`/`FAKE_IP_RANGE`, пакет v2.0); якорь — константа
-  `VPS_GATEWAY_DEFAULTS` в `index.html`; при изменении в gateway-репо — синхронизировать;
-- DNS-блок существует только внутри vps-профиля (sub-toggle `#vpsDnsEnabled`);
-  выключение удаляет `dns` целиком; в generic `dns` не появляется никогда;
-- порядок постобработки: `injectWgDns` → `applyDeploymentProfile` (только vps) →
-  allow-lan регэксп-патч; повторный dump — только
+- selector `#cfgProfile` defaults to `generic`; when `generic`, function
+  `applyDeploymentProfile()` is NOT called (guard in `buildMihomo()`) — output stays
+  byte-for-byte identical to the previous behavior, without extra `jsyaml.load/dump`;
+- `tun.auto-route: false` is a hard invariant and is not configurable in the UI;
+- profile defaults = variables from the current amnezia-mihomo-gateway `install.sh`
+  (`PROXY_IF`/`TUN_INET_ADDR`/`FAKE_IP_RANGE`, package v2.0); anchor is constant
+  `VPS_GATEWAY_DEFAULTS` in `index.html`; synchronize it when the gateway repo changes;
+- the DNS block exists only inside the vps profile (sub-toggle `#vpsDnsEnabled`);
+  disabling it removes `dns` entirely; generic never gets `dns`;
+- post-processing order: `injectWgDns` → `applyDeploymentProfile` (vps only) →
+  allow-lan regex patch; re-dump only with
   `jsyaml.dump(doc, { lineWidth: -1 })`;
-- Linux-часть gateway (policy routing, iptables, Docker, AWG, systemd, watchdog)
-  генератором не создаётся — это зона amnezia-mihomo-gateway.
+- the Linux side of the gateway (policy routing, iptables, Docker, AWG, systemd, watchdog)
+  is not generated here — that belongs to amnezia-mihomo-gateway.
 
-## Правила внесения изменений
+## Change rules
 
-1. Перед изменением логики генерации (ссылки, YAML, парсинг) — сначала разобраться в
-   существующем формате и контрактах выше; не менять поведение «ради улучшения» без
-   задачи на это. Формат ссылок и структуру YAML пользователи вставляют в свои роутеры —
-   молчаливые изменения ломают чужие конфиги.
-2. Править `index.html` — он единственная страница приложения (историческое зеркало
-   `mihomo.html` удалено, см. таблицу файлов выше).
-3. `web4core.runtime.js` не редактировать вручную никогда (перезапишется автообновлением).
-4. Минимальные диффы; не реформатировать не тронутые участки; сохранять существующий
-   инлайн-стиль и русские тексты UI. Не вводить сборку, npm, ES-модули, фреймворки —
-   классический `<script>` и работа с `file://` являются фичей.
-5. Не менять DOM-id элементов (`mihomoInput`, `cfgLan`, `pingSelect`, …) без синхронного
-   обновления JS — вся привязка по id.
-6. Новый функционал сборки — через публичный API `globalThis.web4core` или постобработкой
-   результата; изменения самого runtime — в исходниках fork в согласованном scope.
-7. Коммитить только целенаправленные изменения; перед коммитом проверить `git status` /
-   `git diff`: в диффе не должно оказаться ничего, кроме задуманного (особенно — случайных
-   изменений `web4core.runtime.js`).
+1. Before changing generation logic (links, YAML, parsing), first understand the
+   existing format and contracts above; do not change behavior "for improvement" without
+   a task for it. Users paste generated link/YAML formats into their routers —
+   silent changes break other people's configs.
+2. Edit `index.html` — it is the only application page (the historical mirror
+   `mihomo.html` was removed; see the file table above).
+3. Never edit `web4core.runtime.js` by hand (auto-update will overwrite it).
+4. Keep diffs minimal; do not reformat untouched sections; preserve the existing
+   inline style and Russian UI text. Do not introduce a build system, npm, ES modules,
+   or frameworks — classic `<script>` and `file://` operation are features.
+5. Do not change DOM element IDs (`mihomoInput`, `cfgLan`, `pingSelect`, …) without
+   updating JS at the same time — all bindings are by ID.
+6. New build functionality must use public `globalThis.web4core` API or result
+   post-processing; runtime changes belong in fork sources within approved scope.
+7. Commit only targeted changes; before committing, check `git status` / `git diff`:
+   the diff must contain nothing except the intended change (especially no accidental
+   changes to `web4core.runtime.js`).
 
-## Проверки после изменения HTML/JS
+## Checks after changing HTML/JS
 
-Автоматические регрессии: `node tests/runtime.cjs` и внешний Playwright-прогон
-`tests/browser.cjs` (подробно — docs/TESTING.md). Дополнительные проверки:
+Automated regressions: `node tests/runtime.cjs` and the external Playwright run
+`tests/browser.cjs` (details: docs/TESTING.md). Additional checks:
 
-1. Синтаксис JS: inline-скрипт `index.html` извлечь (содержимое последнего тега
-   `<script>…</script>`) и прогнать через парсер; на хостах с Node — `node --check`
-   (в т.ч. для `web4core.runtime.js`).
-2. Ручной прогон в браузере (открытие `index.html` напрямую с `file://` работает;
-   для js-yaml с CDN нужен интернет): обе вкладки; полный сценарий — вставить YAML →
-   «Распарсить» → «Сгенерировать» → «В Mihomo Builder» → «Build Config» → валидация →
-   Copy; убедиться, что нужные опции (allow-lan, mixed-port, TUN) отражены.
-3. Регрессионный минимум валидатора: `transport: TPC` → INVALID и Copy заблокирована,
-   `TCP` → VALID; AWG 3.1 `.conf` → VALID (`version: 3` в YAML); любое изменение ввода
-   сбрасывает статус проверки.
-4. После пуша: проверить живую страницу https://saymer-alt.github.io/link-generators/ и
-   (если прилетел бот-коммит рантайма) повторить ручной прогон — в первую очередь
-   allow-lan патч и enum-списки валидатора (docs/UPDATES.md).
+1. JS syntax: extract the inline script from `index.html` (contents of the last
+   `<script>…</script>` tag) and run it through a parser; on hosts with Node use
+   `node --check` (including for `web4core.runtime.js`).
+2. Manual browser run (opening `index.html` directly via `file://` works;
+   js-yaml from CDN requires Internet): both tabs; full flow — paste YAML →
+   "Распарсить" → "Сгенерировать" → "В Mihomo Builder" → "Build Config" → validation →
+   Copy; verify the expected options (allow-lan, mixed-port, TUN) are reflected.
+3. Validator regression minimum: `transport: TPC` → INVALID and Copy blocked,
+   `TCP` → VALID; AWG 3.1 `.conf` → VALID (`version: 3` in YAML); any input change
+   resets validation state.
+4. After push: check the live page https://saymer-alt.github.io/link-generators/ and
+   (if a runtime bot commit arrived) repeat the manual run — especially the allow-lan
+   patch and validator enum lists (docs/UPDATES.md).
 
-## Конфиденциальность и безопасность
+## Privacy and security
 
-- Пользователь вставляет сюда секреты: private/public ключи WARP, адреса, SNI. Сейчас
-  страница ничего не отправляет и нигде не хранит: в `index.html` нет ни `fetch`,
-  `XMLHttpRequest`, `sendBeacon`, ни `localStorage`/`sessionStorage` — только запись в
-  буфер обмена. Так и должно оставаться: НЕ добавлять телеметрию, аналитику, отправку
-  данных, сохранение ключей в хранилище.
-- Нюанс рантайма: `web4core.fetchSubscription()` умеет скачивать текст подписки из
-  браузера и при неудаче прямого fetch уходит на публичный CORS-прокси
-  `sub.web2core.workers.dev` (инфраструктура апстрима). Текущий UI его НЕ вызывает —
-  подписки качает сам Mihomo через `proxy-providers`. Подключение fetchSubscription =
-  решение о передаче URL подписки третьей стороне — только с явного согласия владельца.
-- Пользовательский ввод недоверенный (YAML от бота, ссылки, файлы): парсить в try/catch
-  с понятной ошибкой в toast — как сделано сейчас.
-- Осторожно с `innerHTML`: `generateWarp()` вставляет сгенерированные ссылки через
-  `innerHTML` (ссылки содержат пользовательские ключи/SNI). Существующую поверхность не
-  расширять; при рефакторинге предпочтительнее `textContent`.
-- Ключи в ссылках маскировать/обрезать при цитировании в issue, коммит-сообщениях и
-  логах.
+- Users paste secrets here: WARP private/public keys, addresses, SNI. Currently
+  the page sends nothing and stores nothing: `index.html` contains no `fetch`,
+  `XMLHttpRequest`, `sendBeacon`, `localStorage`, or `sessionStorage` — only clipboard
+  writes. It must stay this way: DO NOT add telemetry, analytics, data transmission,
+  or persistence of keys.
+- Runtime nuance: `web4core.fetchSubscription()` can fetch subscription text from
+  the browser and, when direct fetch fails, falls back to the public CORS proxy
+  `sub.web2core.workers.dev` (upstream infrastructure). The current UI does NOT call it —
+  Mihomo itself fetches subscriptions through `proxy-providers`. Connecting fetchSubscription
+  is a decision to disclose the subscription URL to a third party — explicit owner approval
+  is required.
+- User input is untrusted (bot YAML, links, files): parse inside try/catch and show
+  a clear toast error, as currently implemented.
+- Be careful with `innerHTML`: `generateWarp()` inserts generated links through
+  `innerHTML` (links contain user keys/SNI). Do not expand the existing surface;
+  when refactoring, prefer `textContent`.
+- Mask/truncate keys in links when quoting them in issues, commit messages, or logs.
 
-## Типичные опасные регрессии
+## Common dangerous regressions
 
-- Потерять URL-энкодинг base64-ключей (`+ / =`) — ссылки станут невалидными.
-- Нарушить анти-корреляцию IP, вынести QUIC с порта 443 или «выпрямить» веса портов —
-  ломается вся DPI-стратегия.
-- Отредактировать `web4core.runtime.js` вручную — правка тихо исчезнет при следующем
-  автообновлении.
-- Не «восстанавливать» удалённый `mihomo.html` — убран осознанно (e2cd5a9); ссылки на
-  `/mihomo.html` отдают 404, это ожидаемо.
-- После обновления рантайма или смены целевой версии mihomo — сверить enum-списки
-  валидатора и контракт allow-lan патча (docs/UPDATES.md).
-- После обновления рантайма не проверить allow-lan регэксп-патч — сменившийся формат YAML
-  сломает его молча (замена просто не найдёт строку).
-- Изменить дефолты чекбоксов/полей — пользователи зависят от текущих значений. Дефолты
-  `cfgTun: checked` (подтверждён владельцем 2026-09-15) и `cfgTunMips: checked`
-  (решение владельца 2026-09-16, NIGHT-09; рядом предупреждение «требует Mihomo
-  >= 1.19.31», генерацию не блокирует) — осознанные. `system`/`mixed` доступны только
-  за крышкой `cfgTunStackAdvanced` (OFF по умолчанию; override снимает MIPS чекбокс —
-  единое состояние UI/YAML). Дефолты больше не менять мимоходом.
-- Сломать зависимости TUN/Mixed → дочерние опции или их fail-safe клампы в `buildMihomo()` —
-  невозможные DOM-состояния снова станут достижими; baseline 256 масок в
-  `tests/whitelist.cjs` нормализован по этим зависимостям, а валидные комбинации
-  (`socks=0+perSocks=1`, матрице не принадлежащие) покрыты bypass-тестом.
-- Включить профиль VPS Gateway по умолчанию или выполнять `applyDeploymentProfile()` при
-  `generic` — изменит вывод основного сценария (нарушение главного инварианта профиля).
-- Менять дефолты VPS-профиля без сверки с `install.sh` amnezia-mihomo-gateway — конфиг
-  перестанет совпадать с routing-скриптом (device/fake-ip-range/inet4-address установщик
-  перезаписывает или не находит).
-- Забыть `lineWidth: -1` в `applyDeploymentProfile()` — jsyaml перенесёт длинные AWG
-  base64-строки (I1–I5/H) и молча испортит конфиг.
-- Расширить `AWG_INT_KEYS` в `normalizeWgBeans` на строковые range-поля (`h1-h4`,
-  `content-padding-addition`, rekey-*/keepalive/max-handshake таймеры) — mihomo держит их
-  строками, v3-движок парсит «lo-hi» как UintRange: свёртка к числу сломает легальные
-  диапазоны (Amnezia Premium пишет H1–H4 диапазонами).
-- «Чинить» неработающий AWG 3.1-туннель генератором, когда ядро на устройстве старше
-  mihomo 1.19.30 — все 3.1-ключи в `amnezia-wg-option` ядро молча игнорирует (двусторонние
-  `HeaderProtectionKey`/`RandomTrailers` → туннель не поднимется). Production runtime
-  (официальный релиз, v1.19.30) поддержку имеет; диагностику начинать с `mihomo -v` на
-  устройстве — версия opkg-пакета может не совпадать с реальным бинарником
-  (update-mihomo.sh меняет бинарник напрямую, мимо opkg), а `PKG_VERSION` в Makefile
-  entware-go — версия апстрим-синка, не продакшена.
-- «Восстановить» warpscout / WARP-in-WARP / `dialer-proxy` — они удалены сознательно
-  (19.08.2026), см. раздел «README и код».
-- Перевести подключение рантайма на ES-модули — сломается открытие с `file://`.
+- Lose URL encoding of base64 keys (`+ / =`) — links become invalid.
+- Break IP anti-correlation, move QUIC off port 443, or "simplify" port weights —
+  the entire DPI strategy is broken.
+- Edit `web4core.runtime.js` by hand — the change silently disappears on the next
+  auto-update.
+- Do not "restore" removed `mihomo.html` — it was intentionally removed (e2cd5a9);
+  `/mihomo.html` returning 404 is expected.
+- After updating the runtime or changing the target Mihomo version, re-check validator
+  enum lists and the allow-lan patch contract (docs/UPDATES.md).
+- After a runtime update, failing to check the allow-lan regex patch can cause a changed
+  YAML format to break it silently (replacement simply finds no line).
+- Changing checkbox/field defaults — users rely on current values. Defaults
+  `cfgTun: checked` (confirmed by owner 2026-09-15) and `cfgTunMips: checked`
+  (owner decision 2026-09-16, NIGHT-09; warning nearby says "требует Mihomo
+  >= 1.19.31", generation is not blocked) are intentional. `system`/`mixed` are available
+  only behind `cfgTunStackAdvanced` (OFF by default; override clears the MIPS checkbox —
+  one consistent UI/YAML state). Do not casually change defaults anymore.
+- Break TUN/Mixed → child-option dependencies or their fail-safe clamps in `buildMihomo()` —
+  impossible DOM states become reachable again; the 256-mask baseline in
+  `tests/whitelist.cjs` is normalized by these dependencies, while valid combinations
+  outside the matrix (`socks=0+perSocks=1`) are covered by a bypass test.
+- Enable VPS Gateway profile by default or call `applyDeploymentProfile()` for
+  `generic` — changes the main scenario output (violates the profile's primary invariant).
+- Change VPS profile defaults without checking amnezia-mihomo-gateway `install.sh` —
+  config stops matching the routing script (the installer overwrites or fails to find
+  device/fake-ip-range/inet4-address).
+- Forget `lineWidth: -1` in `applyDeploymentProfile()` — jsyaml wraps long AWG
+  base64 strings (I1–I5/H) and silently corrupts the config.
+- Expand `AWG_INT_KEYS` in `normalizeWgBeans` to string range fields (`h1-h4`,
+  `content-padding-addition`, rekey-*/keepalive/max-handshake timers) — Mihomo keeps them
+  as strings, and the v3 engine parses "lo-hi" as UintRange: collapsing to a number breaks
+  valid ranges (Amnezia Premium writes H1–H4 as ranges).
+- "Fix" a non-working AWG 3.1 tunnel in the generator when the device core is older than
+  Mihomo 1.19.30 — all 3.1 keys in `amnezia-wg-option` are silently ignored by the core
+  (bidirectional `HeaderProtectionKey`/`RandomTrailers` → tunnel will not come up).
+  Production runtime (official release, v1.19.30) supports it; start diagnosis with
+  `mihomo -v` on the device — the opkg package version may differ from the actual binary
+  (update-mihomo.sh replaces the binary directly, bypassing opkg), and `PKG_VERSION` in the
+  entware-go Makefile is the upstream sync version, not necessarily production.
+- "Restore" warpscout / WARP-in-WARP / `dialer-proxy` — they were intentionally removed
+  (2026-08-19), see "README and code".
+- Switch runtime loading to ES modules — breaks `file://` opening.
 
+## Technical debt
 
-## Технический долг
-
-- Технический долг выявлять и фиксировать как отдельный инженерный риск, но не путать его с косметикой, личными стилевыми предпочтениями или просто «некрасивым» рабочим кодом.
-- Для каждого найденного долга сначала привести evidence и классифицировать влияние: **High** (риск поломки/безопасности/потери данных или блокирует эксплуатацию), **Medium** (мешает развитию, создаёт дублирование или расхождение логики, заметно усложняет сопровождение), **Low** (локальная сложность без существенного текущего риска).
-- Не выполнять рефакторинг только ради чистоты. Погашать долг, когда польза и снижение риска оправдывают изменение; стабильный проверенный код не переписывать без причины.
-- Исправление долга должно иметь минимальный scope, сохранять существующие safety-boundaries и проходить обычные regression/safety-проверки проекта. Если исправление создаёт больший риск или новый долг, остановиться и предложить более безопасный вариант.
-- При обнаружении долга вне текущей задачи не расширять scope молча: зафиксировать находку и рекомендацию, а реализацию выполнять только когда она входит в задачу или явно одобрена оператором.
-
-- Если долг обнаружен вне текущей задачи, не изменять код или документацию только ради фиксации находки. В итоговом отчёте указать место, краткое описание, evidence, уровень **High / Medium / Low**, риск и рекомендуемое действие. Если находка заслуживает отдельного отслеживания — предложить создать GitHub Issue. Создавать Issue, добавлять `TODO` или менять файлы для фиксации долга только по явному разрешению оператора. `TODO (TechDebt ...)` допустим, когда такой комментарий входит в согласованный scope и действительно нужен непосредственно рядом с кодом.
+- Treat technical debt as a separate engineering risk, but do not confuse it with cosmetics, personal style preferences, or merely "ugly" working code.
+- For each debt item, provide evidence first and classify its impact: **High** (breakage/security/data-loss risk or blocks operation), **Medium** (impedes development, creates duplication or logic divergence, or materially increases maintenance cost), **Low** (local complexity with little current risk).
+- Do not refactor for cleanliness alone. Pay down debt when the benefit and risk reduction justify the change; do not rewrite stable, verified code without a concrete reason.
+- Debt fixes must keep minimal scope, preserve existing safety boundaries, and pass the project's normal regression/safety checks. If the fix creates greater risk or new debt, stop and propose a safer alternative.
+- If debt is discovered outside the current task, do not silently expand scope: record the finding and recommendation, and implement it only when it is in scope or explicitly approved by the operator.
+- If debt is discovered outside the current task, do not change code or documentation solely to record the finding. In the final report, state the location, brief description, evidence, **High / Medium / Low** level, risk, and recommended action. If the finding deserves separate tracking, propose creating a GitHub Issue. Create an Issue, add a `TODO`, or change files to record debt only with explicit operator permission. `TODO (TechDebt ...)` is acceptable when such a comment is within the approved scope and is genuinely needed next to the code.
