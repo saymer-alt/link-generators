@@ -69,7 +69,7 @@ do not copy an unverified runtime, and do not force-push.
   finds `proxies[0]` or an object with a `private-key`/`privateKey` key; rejects input without
   `private-key`. Fills form fields (privateKey, publicKey, ip, ipv6, sni, dns).
 - `generateWarp()` — generates pairs of QUIC + H2 links. These are NOT random numbers, but a tuned
-  anti-DPI strategy (marked in code with comments "П.1/П.2/П.3") — see "DPI strategy".
+  anti-DPI strategy (marked in code with comments "P.1/P.2/P.3") — see "DPI strategy".
 - `sendToMihomo()` — moves generated links into tab 2 and triggers an automatic build.
 - `js-yaml@4.1.0` loads from the jsdelivr CDN — the page's only external network dependency.
 
@@ -87,10 +87,10 @@ calls the API, and adds its own layers on top of the result:
   `excludeFilter` (Sub Mode only; empty → previous output),
   `webUiDashboard`/`webUiCustomUrl` (external-ui-url dashboard selection: the metacubexd default
   preserves byte parity; custom requires an absolute http/https URL).
-- Option dependencies (group "Расширенный режим: отдельный вход на каждый прокси"):
+- Option dependencies (group "Advanced mode: separate inbound for each proxy"):
   the advanced master switch (`cfgPerProxyMaster`, OFF by default) is mandatory for both children;
-  MIPS (`cfgTunMips`) and "ТUN на каждый прокси" (`cfgPerProxyTun`) require `cfgTun`;
-  "SOCKS-порт на каждый прокси" (`cfgPerProxySocks`) requires `cfgSocks`; disabling
+  MIPS (`cfgTunMips`) and "TUN for each proxy" (`cfgPerProxyTun`) require `cfgTun`;
+  "SOCKS port for each proxy" (`cfgPerProxySocks`) requires `cfgSocks`; disabling
   the parent disables and resets the dependent option (`updateMihomoOptionStates()`).
   `buildMihomo()` does not trust the DOM and clamps the same dependencies again
   (including the master): `addTun=false` → `mihomoPerProxyTun=false` and
@@ -129,8 +129,7 @@ use them, but they are part of the public `globalThis.web4core` API.
 
 `index.html` (the only page) loads `./web4core.runtime.js` as a normal
 (classic) `<script>`, not a module, so the page also works with `file://`. If
-the runtime does not load, all builder actions show the toast "web4core.runtime не
-загружен".
+the runtime does not load, all builder actions show the toast "web4core.runtime is not loaded".
 
 ## web4core.runtime.js — generated file, never edit by hand
 
@@ -199,7 +198,7 @@ Output link format (parameters and their names are a contract parsed by external
 including web4core itself when importing back into tab 2):
 
 ```
-masque://IP:PORT?sni=…&private-key=…&public-key=…&ip=…&udp=true&remote-dns-resolve=true[&ipv6=…][&dns=…][&network=h2]#ИМЯ
+masque://IP:PORT?sni=…&private-key=…&public-key=…&ip=…&udp=true&remote-dns-resolve=true[&ipv6=…][&dns=…][&network=h2]#NAME
 ```
 
 - base64 keys must be URL-encoded (`urlEncodeKey`: `+ / =` → `%2B %2F %3D`).
@@ -291,7 +290,7 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
    `node --check` (including for `web4core.runtime.js`).
 2. Manual browser run (opening `index.html` directly via `file://` works;
    js-yaml from CDN requires Internet): both tabs; full flow — paste YAML →
-   "Распарсить" → "Сгенерировать" → "В Mihomo Builder" → "Build Config" → validation →
+   "Parse" → "Generate" → "To Mihomo Builder" → "Build Config" → validation →
    Copy; verify the expected options (allow-lan, mixed-port, TUN) are reflected.
 3. Validator regression minimum: `transport: TPC` → INVALID and Copy blocked,
    `TCP` → VALID; AWG 3.1 `.conf` → VALID (`version: 3` in YAML); any input change
@@ -335,7 +334,7 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
   YAML format to break it silently (replacement simply finds no line).
 - Changing checkbox/field defaults — users rely on current values. Defaults
   `cfgTun: checked` (confirmed by owner 2026-09-15) and `cfgTunMips: checked`
-  (owner decision 2026-09-16, NIGHT-09; warning nearby says "требует Mihomo
+  (owner decision 2026-09-16, NIGHT-09; warning nearby says "requires Mihomo
   >= 1.19.31", generation is not blocked) are intentional. `system`/`mixed` are available
   only behind `cfgTunStackAdvanced` (OFF by default; override clears the MIPS checkbox —
   one consistent UI/YAML state). Do not casually change defaults anymore.
