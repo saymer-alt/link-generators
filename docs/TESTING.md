@@ -1,5 +1,33 @@
 # TESTING — реальная тестовая стратегия
 
+## Selective Modern REALITY: реальный handshake E2E — 2026-09-18
+
+`tests/mihomo-reality-handshake.manual.cjs` — ручной интеграционный тест (никогда не CI):
+реальный Xray-core сервер + реальный mihomo v1.19.31, конфиг которого собран нашим
+рантаймом из vless-ссылки; dest — локальный `openssl s_server` (TLS 1.3, группы
+`X25519MLKEM768:X25519`), то есть ML-KEM-способная цель, как в предупреждении
+release notes Xray v25.5.16. Трафик доказывается HTTP-запросом через mihomo →
+xray → локальную цель; `mihomo -t` доказательством не считается.
+Бинарники в репозиторий не входят; фиксированные URL — в шапке теста.
+Требования: OpenSSL ≥ 3.5 в PATH, `XRAY_DIR`, `MIHOMO_BIN`, `JS_YAML_PATH`, `TEST_OUTPUT_DIR`.
+
+Замеренная матрица (mihomo v1.19.31, синтетические эфемерные ключи, 2026-09-18):
+
+| Xray | selective (match) | legacy / non-match / plain-TLS |
+|---|---|---|
+| v25.3.6 + ML-KEM dest | **FAIL** — xray «processed invalid connection», REALITY auth нет | OK, ML-KEM не используется |
+| v25.5.16 + ML-KEM dest | **OK — сквозное ML-KEM-согласование** (mihomo: «is using X25519MLKEM768 …: true») | OK, legacy |
+| v26.7.11 | FAIL (весь REALITY mihomo v1.19.31, верхняя граница) | FAIL |
+
+Выводы: граница совместимости v25.5.16 реальна и воспроизведена — на старом сервере
+клиентский hello с ML-KEM key share отвергается только тогда, когда цель поддерживает
+ML-KEM (при цели без ML-KEM старый сервер терпит тот же hello — потому формулировка
+продукта «только для совместимых серверов» точнее любого версионного порога).
+`support-x25519mlkem768` проставляется только совпавшему узлу; `client-fingerprint:
+chrome` только при отсутствии своего; plain VLESS/TLS не затронут; provider-выражения
+scoped через `has("reality-opts")` с `additional-prefix` поверх (проверено генерацией).
+Словесные формулировки UI (A2) не расширялись.
+
 ## AWL-приоритет и production-интервалы — 2026-09-18
 
 `tests/mihomo-awl-priority.cjs` (быстрые интервалы 2s, детерминированный) фиксирует
