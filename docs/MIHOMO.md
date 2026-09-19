@@ -103,9 +103,10 @@ Sub Mode: вместо `proxies` в группах — `use:` на провай�
 для обычного TUN, Per-Proxy TUN и VPS Gateway. Снятие checkbox даёт `gvisor`.
 **MIPS — TUN stack, не CPU architecture; требуется Mihomo >= 1.19.31.**
 На уровне engine API отсутствие значения по-прежнему нормализуется в безопасный
-`gvisor`; это fallback API, а не пользовательский UI-default. Неизвестное значение
-отклоняется/нормализуется согласно текущему runtime-контракту. Новая опция сама по себе
-TUN не включает. Прямой `buildMihomoYaml` принимает `opts.tun.stack` с тем же
+`gvisor`; это fallback API, а не пользовательский UI-default. Явные `mips`,
+`gvisor`, `system` и `mixed` принимаются текущим runtime; произвольное неизвестное
+значение engine отклоняет как `invalid TUN stack`. UI дополнительно не даёт штатно
+передать произвольную строку. Новая опция сама по себе TUN не включает. Прямой `buildMihomoYaml` принимает `opts.tun.stack` с тем же
 engine fallback. Обоснование по исходникам — [аудит](AUDIT-MIHOMO-1.19.31.md).
 
 - Обычный (`addTun`): при UI-дефолтах `tun: { enable: true, stack: mips, auto-route: false,
