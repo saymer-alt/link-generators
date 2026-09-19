@@ -59,12 +59,17 @@ Docker / AmneziaWG / Linux policy routing / iptables
 
 ## Параметры профиля
 
+**Наследуется из Builder:**
+
+| Параметр | Значение | Зачем нужен |
+|---|---|---|
+| `tun.stack` | выбранный TUN stack; UI-default v1.4.0+ = `mips` | профиль сохраняет общий выбор Builder; для совместимости можно явно выбрать `gvisor` |
+
 **Fixed (не редактируются, задаются кодом):**
 
 | Параметр | Значение | Зачем нужен |
 |---|---|---|
 | `tun.enable` | `true` | TUN — вход перехваченного трафика |
-| `tun.stack` | `gvisor` | в связке с `rp_filter=0` на VPS; `endpoint-independent-nat` ломает gvisor и удаляется |
 | `tun.auto-route` | `false` **(инвариант)** | иначе Mihomo перехватит весь трафик сервера и убьёт SSH; в UI не выставляется |
 | `tun.auto-detect-interface` | `true` | «критично для upload» (install.sh); корректный egress-интерфейс |
 | `tun.gso` | `true` | эмпирическая оптимизация v2.0 (замеры install.sh) |
