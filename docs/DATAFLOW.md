@@ -166,7 +166,9 @@ Checkbox MIPS включён по умолчанию (NIGHT-09): `tunStack = 'mi
 Runtime (с NIGHT-02) валидирует стек через `resolveMihomoTunStack`: допустимы
 `gvisor|system|mixed|mips`, невалидное значение — ошибка (не silent fallback).
 Выбор стека сам по себе TUN не включает.
-VPS получает тот же `tunStack` третьим аргументом ниже; его default/fallback тоже `gvisor`.
+VPS получает тот же `tunStack` третьим аргументом ниже: штатный UI передаёт
+`mips` по умолчанию, а `gvisor` остаётся fallback функции на случай отсутствующего
+явного значения.
 
 ```text
 1. result = web4core.buildFromRequest({ core:'mihomo', input, wgBeans: normalizeWgBeans(wgBeans), options })
