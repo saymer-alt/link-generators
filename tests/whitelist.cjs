@@ -143,7 +143,9 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.equal(masterOn.state, 'VALID');
     assert.ok(Array.isArray(masterOn.doc.listeners) && masterOn.doc.listeners.length > 0);
     assert.ok(masterOn.doc.listeners.filter(l => l.type === 'tun').every(l => l.stack === 'mips')); // per-proxy наследует дефолт MIPS
-    assert.ok(masterOn.doc['proxy-groups'].some(g => g.name === '🌐 static-health' && g.hidden === true));
+    const staticHealth = masterOn.doc['proxy-groups'].find(g => g.name === '🌐 static-health');
+    assert.ok(staticHealth && staticHealth.hidden === true);
+    assert.equal(staticHealth.lazy, false, 'static-health must keep scheduled checks enabled');
     // Advanced TUN stack: system/mixed за крышкой; override снимает MIPS
     // (единое состояние — нет «MIPS checked» при system/mixed в YAML).
     const advStack = await page.evaluate(async () => {
@@ -232,6 +234,8 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     // дубликаты схлопываются, legacy-узлы не тронуты, providers получают
     // override-expr. Пустое поле — legacy (byte-parity через 266 baseline).
     await page.evaluate(() => { window.__selPrevInput = document.getElementById('mihomoInput').value; });
+    // Deterministic valid X25519 public-key fixture (32 raw bytes, base64url without padding).
+    // Keep it fixed: this test needs validity/reproducibility, not fresh key material.
     const rModern = await page.evaluate(async () => {
       document.getElementById('cfgSubMode').checked = true;
       document.getElementById('realityModernInput').value = [
@@ -243,8 +247,8 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
         'pan1.example',
       ].join('\n');
       document.getElementById('mihomoInput').value = [
-        'vless://00000000-0000-4000-8000-000000000001@pan1.example:443?encryption=none&security=reality&pbk=TESTPBK&sid=ab&fp=chrome#R1',
-        'vless://00000000-0000-4000-8000-000000000001@pan2.example:443?encryption=none&security=reality&pbk=TESTPBK&sid=cd#R2',
+        'vless://00000000-0000-4000-8000-000000000001@pan1.example:443?encryption=none&security=reality&pbk=B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw&sid=ab&fp=chrome#R1',
+        'vless://00000000-0000-4000-8000-000000000001@pan2.example:443?encryption=none&security=reality&pbk=B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw&sid=cd#R2',
         'https://example.com/one',
       ].join('\n');
       buildMihomo();
