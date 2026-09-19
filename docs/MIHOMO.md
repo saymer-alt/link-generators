@@ -32,6 +32,22 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 | 🏓 Ping server | `pingSelect` | `urlTest` | Google | `url`/`expected-status` url-test группы и health-check провайдеров |
 | 🎯 Профиль развёртывания | `cfgProfile` | — (пост-патч страницы) | Универсальный | при «VPS Gateway» — gateway-постпатч YAML; подробно [VPS-GATEWAY.md](VPS-GATEWAY.md) |
 
+Для Selective Modern REALITY реальная handshake-матрица (Xray + Mihomo + ML-KEM-capable TLS target)
+описана в [TESTING.md](TESTING.md#selective-modern-reality-реальный-handshake-e2e--2026-09-18).
+Версия Xray сама по себе не считается гарантией совместимости.
+
+### Web UI / external-controller
+
+Штатная схема проекта предполагает, что `external-controller` доступен внутри доверенной
+локальной среды роутера. Поэтому пустой `secret:` в генерируемом YAML — намеренная и
+допустимая конфигурация проекта. `external-controller: 0.0.0.0:9090` означает bind на
+интерфейсы устройства, но сам по себе не доказывает публикацию controller в Интернет:
+граница доступа задаётся маршрутизацией/firewall/NAT самого устройства. Если оператор
+явно пробрасывает 9090 на WAN, публикует controller через reverse proxy или использует
+другую внешнюю топологию, защита этого доступа становится отдельной обязанностью такой
+топологии. Генератор не трактует пустой `secret` как ошибку или предупреждение без
+доказанной внешней экспозиции.
+
 Зависимости UI (группа «Отдельный вход на каждый прокси»): «⚡ MIPS stack для TUN» и
 «🔒 TUN на каждый прокси» включаемы только при `cfgTun`, «🔌 SOCKS-порт на каждый прокси» —
 только при `cfgSocks`; выключение родителя отключает и сбрасывает зависимую опцию
@@ -39,9 +55,10 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 зависимости (fail-safe против прямой подмены DOM): при `addTun=false` — `mihomoPerProxyTun=false`
 и `mihomoTunStack=gvisor`, при `addSocks=false` — `perProxyPort=false`.
 
-Дефолты UI (выправлено решением владельца 2026-09-15): hint «TUN включён по умолчанию;
-MIPS и опции «на каждый прокси» выключены» соответствует факту — `cfgTun` в HTML стоит
-`checked`, остальные опции выключены. Сами дефолты не менялись.
+Дефолты UI после v1.4.0: `cfgTun` и `cfgTunMips` в HTML стоят `checked`, поэтому
+обычный пользовательский TUN генерируется со `stack: mips`. Снятие MIPS переключает
+его на `gvisor`. Расширенный Per-Proxy master и обе дочерние Per-Proxy опции по умолчанию
+выключены; `system`/`mixed` доступны только через отдельную расширенную крышку.
 
 Ограничение рантайма: нужен хотя бы один inbound — при `addSocks=false` и `addTun=false`
 ошибка «Mihomo: enable at least one inbound (TUN or SOCKS5)». Пустой ввод без wgBeans —
@@ -81,17 +98,21 @@ Sub Mode: вместо `proxies` в группах — `use:` на провай�
 
 ## TUN: два режима
 
-С ревизии v1.19.31 добавлен checkbox `cfgTunMips` → `options.mihomoTunStack`.
-Он выключен: по умолчанию `gvisor`. При включении — `mips` в обоих режимах ниже,
-включая VPS Gateway. **MIPS — TUN stack, не CPU architecture; требуется Mihomo >= 1.19.31.**
-Runtime разрешает только `mips`/`gvisor`, неизвестное значение даёт безопасный `gvisor`.
-Новая опция сама по себе TUN не включает. Прямой `buildMihomoYaml` принимает
-`opts.tun.stack` с тем же fallback. Обоснование по исходникам — [аудит](AUDIT-MIHOMO-1.19.31.md).
+С ревизии v1.19.31 checkbox `cfgTunMips` передаёт `options.mihomoTunStack`.
+В текущем продукте (v1.4.0+) он **включён по умолчанию**, поэтому UI передаёт `mips`
+для обычного TUN, Per-Proxy TUN и VPS Gateway. Снятие checkbox даёт `gvisor`.
+**MIPS — TUN stack, не CPU architecture; требуется Mihomo >= 1.19.31.**
+На уровне engine API отсутствие значения по-прежнему нормализуется в безопасный
+`gvisor`; это fallback API, а не пользовательский UI-default. Явные `mips`,
+`gvisor`, `system` и `mixed` принимаются текущим runtime; произвольное неизвестное
+значение engine отклоняет как `invalid TUN stack`. UI дополнительно не даёт штатно
+передать произвольную строку. Новая опция сама по себе TUN не включает. Прямой `buildMihomoYaml` принимает `opts.tun.stack` с тем же
+engine fallback. Обоснование по исходникам — [аудит](AUDIT-MIHOMO-1.19.31.md).
 
-- Обычный (`addTun`): по умолчанию `tun: { enable: true, stack: gvisor, auto-route: false,
+- Обычный (`addTun`): при UI-дефолтах `tun: { enable: true, stack: mips, auto-route: false,
   auto-detect-interface: true, device: mitun0 }`. `auto-route: false` принципиален —
   конфиги вставляются в окружения (роутеры), где захват всех маршрутов недопустим.
-  При MIPS (дефолт) меняется только стек: `stack: mips`; снятие чекбокса → `gvisor`.
+  Снятие MIPS checkbox переключает только стек на `gvisor`.
 - TUN на каждый прокси (техн. Per-Proxy TUN; `addTun` + `mihomoPerProxyTun`): отдельные
   tun-листенеры в секции `listeners`: `mihomo-tun-N` (device `mitunN`, default mips / снят чекбокс → gvisor,
   `auto-route: false`, `auto-detect-interface: false`, `inet4-address: 198.19.x.y/30`), каждый с

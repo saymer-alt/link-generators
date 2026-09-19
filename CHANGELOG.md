@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Документация синхронизирована с фактическими дефолтами v1.4.0: MIPS включён по умолчанию, gVisor описан как compatibility/API fallback; REALITY E2E-матрица больше не трактуется как универсальная граница версий.
+- Consumer regression теперь отдельно фиксирует `static-health.lazy: false`, а Selective REALITY fixture использует детерминированный валидный X25519 public key вместо искусственного `TESTPBK`.
+
 ## [1.4.0] - 2026-09-19
 
 ### Added

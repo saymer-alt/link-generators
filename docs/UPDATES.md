@@ -34,7 +34,10 @@ Node/npm нужны для сборки отдельного source-репози
 ## Workflow автообновления
 
 `.github/workflows/update-web4core-runtime.yml`: push в `main`, cron `17 4 * * 1`,
-ручной dispatch. Обновления из проверенной custom branch остаются автоматическими.
+ручной dispatch и `pull_request` в `main`. PR-trigger запускает только read-only
+build/test job; write-job жёстко gated на `refs/heads/main`, поэтому PR не может
+обновить `web4core.runtime.js` или записать commit. Обновления из проверенной custom
+branch остаются автоматическими.
 
 1. `build-runtime`, `contents: read`, свежий GitHub-hosted runner, `timeout-minutes: 15`:
    - checkout consumer и `saymer-alt/web4core@link-generators`, оба без сохранения credentials;
@@ -112,12 +115,25 @@ upstream SHA; отдельный candidate build/test job без write-token; с
 Такой workflow стоит вводить отдельной задачей после выбора PR permissions и protections;
 в этой миграции его нет. Автоматический upstream merge/rebase/push не включён.
 
-## Порядок публикации миграции
+## Постоянный cross-repo порядок публикации
 
-Сначала review, commit и push source-изменений в `saymer-alt/web4core:link-generators`.
-Проверить сборку опубликованного SHA. Затем публиковать миграцию consumer workflow.
-Пока в удалённой custom branch нет source-изменений и MIPS test, новый workflow
-завершится ошибкой — это ожидаемый fail-closed барьер, не повод пропускать тест.
+Для любого изменения, которое меняет source-level поведение/runtime, порядок всегда
+source-first:
+
+1. Review/merge source PR в `saymer-alt/web4core:link-generators`.
+2. Зафиксировать фактический merged source SHA и убедиться, что сборка/tests этого SHA
+   дают ожидаемый runtime.
+3. До merge consumer PR повторно запустить его read-only workflow against PR context и
+   проверить, что checkout source указывает именно на новый merged SHA, build/test зелёные,
+   а write-job остаётся skipped.
+4. Только затем merge consumer PR в `link-generators:main`.
+5. Main workflow должен либо сообщить `Runtime is already up to date.` без bot commit,
+   либо создать объяснимый runtime-only commit с точным `Source: saymer-alt/web4core@<SHA>`.
+   Неожиданный byte diff — STOP и разбор причины до дальнейшей публикации.
+
+Этот порядок закреплён релизом v1.4.0 и нужен не только для первоначальной миграции.
+Нельзя сначала публиковать consumer, если его ожидаемый runtime зависит от ещё не
+merged source branch.
 
 ## Если нужна новая функция или фикс поведения
 

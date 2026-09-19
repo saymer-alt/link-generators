@@ -22,8 +22,8 @@
 //     connection") — the exact hazard the selective flag guards against;
 //   Xray v25.5.16: selective(match) OK with real ML-KEM negotiation
 //     (mihomo logs "is using X25519MLKEM768 ...: true"); legacy/non-match/plain-TLS OK;
-//   Xray v26.7.11: REALITY fails for mihomo v1.19.31 entirely (upper bound; a Mihomo-side
-//     limitation, not a generator bug — recorded as expected-fail).
+//   Xray v26.7.11: REALITY fails for the recorded mihomo v1.19.31 matrix.
+//     This is an expected-fail for that tested pair, not a universal Xray version boundary.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -189,7 +189,7 @@ function opensslMajor() {
               if (sc.id !== 'B-selective-match') assert.notEqual(row.mlkemUsed, true, 'non-selective rows must stay legacy');
             }
             if (version === 'v26.7.11') {
-              assert.equal(row.trafficOk, false, 'v26.7.11: mihomo v1.19.31 REALITY is expected to fail (upper bound)');
+              assert.equal(row.trafficOk, false, 'v26.7.11: recorded mihomo v1.19.31 matrix is expected to fail');
             }
           } finally {
             mh.kill(); await new Promise(r => mh.once('close', r)).catch(() => {});

@@ -86,8 +86,11 @@ Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки:
 
 MIPS — source-level расширение в `saymer-alt/web4core@link-generators`:
 `src/build.js` передаёт `options.mihomoTunStack`, `src/core/yaml.js` выбирает
-стек обычного TUN и per-proxy listeners. Default/invalid → `gvisor`, точное `mips` → MIPS.
-Runtime остаётся generated/vendor; ручные правки бандла запрещены.
+стек обычного TUN и per-proxy listeners. На уровне engine отсутствие значения
+даёт безопасный `gvisor`, а точное `mips` включает MIPS. Это не UI-default:
+в продукте v1.4.0+ `cfgTunMips` включён по умолчанию, поэтому обычный UI-путь
+явно передаёт `mips`; снятие checkbox переключает на gVisor. Runtime остаётся
+generated/vendor; ручные правки бандла запрещены.
 
 `spatiumstas/web4core → saymer-alt/web4core (source-level extensions) → built runtime → link-generators`.
 Upstream sync требует review и тестов до обновления custom branch; consumer workflow
