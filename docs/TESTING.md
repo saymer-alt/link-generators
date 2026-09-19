@@ -96,6 +96,10 @@ Mihomo-лабораторий.
   `lazy: false` проверяется независимо в `tests/whitelist.cjs` вне baseline-режима.
 - Существующий browser suite: обе вкладки, AWG, VPS, MIPS, baseline; validator — 47 cases.
   Тестовый текст AWG нормализуется LF для одинаковой работы regex на Windows/Linux.
+- Selective REALITY fixture в `tests/whitelist.cjs` использует фиксированный валидный
+  X25519 public key (base64url, 32 raw bytes), а не синтетическую строку `TESTPBK`.
+  Это сохраняет детерминизм browser-теста и позволяет тем же YAML проходить реальный
+  `mihomo -t` без искусственной ошибки ключа.
 - Новый `tests/whitelist.cjs`: 10 YAML-сценариев (1+1, несколько+несколько,
   subscription+subscription, mixed+mixed, links с Sub Mode; каждый gVisor/MIPS).
   Проверены скрытие, восстановление, подмена запрещённых DOM-значений, отсутствие
