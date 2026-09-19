@@ -59,8 +59,10 @@ package.json/npm dependencies/build step; классический script и `fi
 
 `cfgTunMips → tunStack → options.mihomoTunStack → buildFromRequest → opts.tun.stack
 → normal TUN / Per-Proxy listeners`. В fork затронуты `src/build.js` и `src/core/yaml.js`.
-Только точное `mips` включает MIPS (Mihomo >= 1.19.31); default/invalid → `gvisor`.
-UI/VPS/AWG pipeline сохранён. Maintained textual patch удалён после доказанной
+Только точное `mips` включает MIPS (Mihomo >= 1.19.31); отсутствие значения
+на уровне engine/API даёт безопасный `gvisor`. В продукте v1.4.0+ UI сам явно
+передаёт `mips` по умолчанию (`cfgTunMips: checked`), поэтому engine fallback
+нельзя путать с пользовательским UI-default. UI/VPS/AWG pipeline сохранён. Maintained textual patch удалён после доказанной
 побайтовой эквивалентности source build и прежнего runtime.
 
 ## Безопасный workflow будущего агента
