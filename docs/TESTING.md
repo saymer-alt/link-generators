@@ -32,12 +32,16 @@ xray → локальную цель; `mihomo -t` доказательством
 |---|---|---|
 | v25.3.6 + ML-KEM dest | **FAIL** — xray «processed invalid connection», REALITY auth нет | OK, ML-KEM не используется |
 | v25.5.16 + ML-KEM dest | **OK — сквозное ML-KEM-согласование** (mihomo: «is using X25519MLKEM768 …: true») | OK, legacy |
-| v26.7.11 | FAIL (весь REALITY mihomo v1.19.31, верхняя граница) | FAIL |
+| v26.7.11 | FAIL для проверенной связки с Mihomo v1.19.31 | FAIL для той же связки |
 
-Выводы: граница совместимости v25.5.16 реальна и воспроизведена — на старом сервере
-клиентский hello с ML-KEM key share отвергается только тогда, когда цель поддерживает
-ML-KEM (при цели без ML-KEM старый сервер терпит тот же hello — потому формулировка
-продукта «только для совместимых серверов» точнее любого версионного порога).
+Выводы этой лаборатории привязаны к **Mihomo v1.19.31**. Xray v25.5.16 — проверенная
+рабочая точка для selective ML-KEM в этой матрице, но не универсальный минимальный
+порог совместимости для любых будущих клиентов/серверов. Аналогично, наблюдавшийся
+FAIL на Xray v26.7.11 не является вечной «верхней границей» Xray: это результат
+конкретной связки Xray v26.7.11 + Mihomo v1.19.31. На v25.3.6 клиентский hello с
+ML-KEM key share отвергается только тогда, когда цель поддерживает ML-KEM (при цели
+без ML-KEM старый сервер терпит тот же hello), поэтому формулировка продукта
+«только для совместимых серверов» точнее любого голого версионного порога.
 `support-x25519mlkem768` проставляется только совпавшему узлу; `client-fingerprint:
 chrome` только при отсутствии своего; plain VLESS/TLS не затронут; provider-выражения
 scoped через `has("reality-opts")` с `additional-prefix` поверх (проверено генерацией).
@@ -58,8 +62,9 @@ TEST_OUTPUT_DIR=/absolute/out node tests/mihomo-awl-priority.cjs
 ```
 
 Варианты провайдеров B/C/D и сосуществование `override-expr` + `additional-prefix`
-(ветка reality-selective-v2, `mihomo -t` + живой прогон) проверены отдельными
-лабораторными прогонами NIGHT-24A; артефакты — вне репозитория.
+проверены отдельными лабораторными прогонами NIGHT-24A (`mihomo -t` + живой прогон)
+на кандидате, который затем вошёл в v1.4.0; временная ветка кандидата больше не является
+источником истины. Артефакты лаборатории — вне репозитория.
 `tests/mihomo-awl-soak.manual.cjs` — ручной soak на generated-интервалах
 (300s/60000ms), ~25 минут, в CI не ставится: активный failover на dial-ошибках,
 автоматический failback по сетке планировщика, чисто пассивное обнаружение
@@ -79,12 +84,16 @@ Mihomo-лабораторий.
 
 ## Автоматический режим белых списков — 2026-09-15
 
-- Source (web4core, `tools/tests/*.test.mjs`, автообнаружение): сейчас 8 файлов /
-  71 тест — exclude-filter, priority, tun-stack, port-validation, per-proxy-health,
-  webui-select, small-regressions, и `amnezia.test.mjs` (требует
-  `npm run build:worker` — workers/api/dist/worker.mjs, gitignored).
-- Runtime: `tests/runtime.cjs` — 65 проверок с `BASELINE_REF=21c3010`
-  (число растёт вместе с контрактами; исторические 45/61 относились к v1.3.0-эре).
+- Source (web4core, `tools/tests/*.test.mjs`, автообнаружение): после v1.4.0 —
+  **11 файлов / 82 теста**, включая selective REALITY и расширенный
+  `per-proxy-health`; `amnezia.test.mjs` требует `npm run build:worker`
+  (workers/api/dist/worker.mjs, gitignored).
+- Runtime: `tests/runtime.cjs` — **49 проверок без baseline / 65 с baseline**.
+  Для разных вопросов используются два именованных якоря: `21c3010` — исторический
+  переход consumer на source-level fork; `927c446` — ближайший функциональный
+  production baseline перед selective REALITY/static-health кандидатом. При baseline
+  скрытая группа `🌐 static-health` маскируется целиком, поэтому её критичный
+  `lazy: false` проверяется независимо в `tests/whitelist.cjs` вне baseline-режима.
 - Существующий browser suite: обе вкладки, AWG, VPS, MIPS, baseline; validator — 47 cases.
   Тестовый текст AWG нормализуется LF для одинаковой работы regex на Windows/Linux.
 - Новый `tests/whitelist.cjs`: 10 YAML-сценариев (1+1, несколько+несколько,
@@ -132,11 +141,13 @@ Workflow автообновления запускает runtime-тест до �
 ```bash
 node --check web4core.runtime.js
 node tests/runtime.cjs
-# Необязательный baseline старого кода и проверка воспроизводимости патча:
-BASELINE_REF=fb285850bae09ba2f2336993e6b34fc2318a23af node tests/runtime.cjs
+# Исторический якорь перехода на source-level fork:
+BASELINE_REF=21c3010 node tests/runtime.cjs
+# Ближайший функциональный baseline перед кандидатом v1.4.0:
+BASELINE_REF=927c446 node tests/runtime.cjs
 # Playwright установлен вне репозитория; его node_modules доступны через NODE_PATH.
 JS_YAML_PATH=/absolute/path/js-yaml.min.js TEST_OUTPUT_DIR=/absolute/path/yaml \
-BASELINE_REF=fb285850bae09ba2f2336993e6b34fc2318a23af node tests/browser.cjs
+BASELINE_REF=927c446 node tests/browser.cjs
 ```
 
 В PowerShell задавать переменные через `$env:NAME='value'`. `JS_YAML_PATH` — локальная
@@ -146,7 +157,7 @@ BASELINE_REF=fb285850bae09ba2f2336993e6b34fc2318a23af node tests/browser.cjs
 `TEST_OUTPUT_DIR` опционален, должен находиться вне репозитория.
 Inline JS отдельно извлечь из последнего `<script>` и проверить `node --check`.
 
-Runtime: 43 проверки без baseline / 59 с baseline. Обычный TUN, все Per-Proxy listeners,
+Runtime: 49 проверок без baseline / 65 с baseline. Обычный TUN, все Per-Proxy listeners,
 Sub Mode, no-TUN, explicit gvisor, invalid values, прямой buildMihomoYaml, неизменность
 байтов исходного вывода в 16 комбинациях. Случайный subscription x-hwid фиксируется
 только внутри тестового VM. Три проверки textual patch удалены вместе со скриптом; все функциональные проверки сохранены.
