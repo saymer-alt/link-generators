@@ -64,14 +64,18 @@ npm run build:web:runtime
 # обратно в link-generators
 node tests/runtime.cjs ../web4core/src/web4core.runtime.js
 cmp ../web4core/src/web4core.runtime.js web4core.runtime.js
-BASELINE_REF=fb285850bae09ba2f2336993e6b34fc2318a23af node tests/runtime.cjs
+# ближайший функциональный baseline перед кандидатом v1.4.0
+BASELINE_REF=927c446 node tests/runtime.cjs
 ```
 
 На Windows checkout может иметь CRLF: сравнивать Git blob (LF) с output сборки,
 отдельно подтверждая, что отличие рабочей копии только в переводах строк.
-Baseline проверяет 16 старых API-сценариев, а не механизм удалённого bundle patch.
-В PowerShell задавать `$env:BASELINE_REF='fb285850bae09ba2f2336993e6b34fc2318a23af'`.
-Для сравнения с состоянием перед этой миграцией использовать `6b3368e`.
+Baseline проверяет 16 API-сценариев, а не механизм удалённого bundle patch.
+Основные якоря: `21c3010` — исторический переход consumer на source-level fork;
+`927c446` — ближайший функциональный production baseline перед selective
+REALITY/static-health кандидатом. В PowerShell, например:
+`$env:BASELINE_REF='927c446'`. Полное назначение якорей — в
+[TESTING.md](TESTING.md).
 Source SHA и SHA-256 бандла фиксировать в review; любые различия объяснить до копирования.
 
 Inline JS извлечь из последнего `<script>` и проверить `node --check`.
