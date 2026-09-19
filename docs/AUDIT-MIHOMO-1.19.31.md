@@ -25,7 +25,10 @@
 Третье `stack: "gvisor"` в runtime относится к sing-box и не меняется.
 Отдельный hardcode был в `applyDeploymentProfile()` страницы.
 
-Новый checkbox `cfgTunMips` выключен. Цепочка:
+На момент первоначального аудита checkbox `cfgTunMips` был opt-in и выключен.
+С v1.4.0 продуктовый UI-default изменён: `cfgTunMips` включён, поэтому обычный
+пользовательский TUN получает MIPS по умолчанию. Ниже сохраняется engine-контракт
+этого аудита. Цепочка:
 `buildMihomo → options.mihomoTunStack → mihomoTunOpts.stack → buildMihomoYaml → tun/listeners`.
 Только точное значение `mips` включает новый стек; всё остальное, включая отсутствие
 опции, даёт `gvisor`. Такая нормализация соответствует существующим безопасным
@@ -36,7 +39,9 @@
 VPS получает выбранный стек отдельным аргументом (включая сочетание VPS + per-proxy TUN,
 когда VPS создаёт дополнительный основной TUN). Остальные gateway-поля, DNS toggle,
 `auto-route: false`, порядок постобработки и generic guard сохранены.
-Нужен **Mihomo >= 1.19.31**; это opt-in для обычного и per-proxy TUN.
+Нужен **Mihomo >= 1.19.31**. В исходном аудите MIPS был opt-in; в текущем
+продукте v1.4.0+ checkbox включён по умолчанию для обычного и per-proxy TUN,
+а gVisor остаётся compatibility fallback.
 
 ## AWG 3.1: проверка pipeline
 
