@@ -24,7 +24,7 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 | 🌐 Modern REALITY | `realityModernInput` | `mihomoRealityModernHosts` | пусто | multiline `host` / `host:port` / `[ipv6]:port`: только REALITY-узлы этих серверов получают `support-x25519mlkem768: true` + chrome fp (если не задан) и override-expr у провайдеров; пусто — legacy; только для совместимых серверов: X25519MLKEM768 появился в Xray v25.5.16, но сама версия не гарантирует совместимость (решение владельца A2) |
 | 🚫 Exclude Filter | `excludeFilterInput` | `excludeFilter` | пусто | regexp/keyword `exclude-filter` в КАЖДЫЙ http-provider (upstream-паритет); только режим URL-подписок; пусто — поле не добавляется; сериализация цитирования покрыта source-тестами |
 | 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default mips / снят чекбокс → gvisor, `auto-route: false`) |
-| ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☑ | `stack: mips`; снят → `gvisor`; Mihomo >= 1.19.31 (некритичное предупреждение валидатора); требует `cfgTun`; продуктовый дефолт (NIGHT-09) |
+| ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☑ | `stack: mips`; снят → `gvisor`; Mihomo >= 1.19.31 (показывается в Compatibility Summary); требует `cfgTun`; продуктовый дефолт (NIGHT-09) |
 | ⚙ Расширенный TUN stack | `cfgTunStackAdvanced` + `cfgTunStackEx` | `mihomoTunStack` | ☐/— | `system`/`mixed` за крышкой; override снимает MIPS; невалидное значение → gvisor; Mihomo >= 1.19.31 |
 | 🧩 Расширенный режим: отдельный вход | `cfgPerProxyMaster` | — | ☐ | защитная крышка; OFF → оба child выключены и сброшены; скрыт в БС-режиме |
 | 🔒 TUN на каждый прокси | `cfgPerProxyTun` | `mihomoPerProxyTun` | ☐ | TUN-листенеры по одному на прокси/группу; требует `cfgPerProxyMaster` + `cfgTun`; скрыт в БС-режиме |
@@ -143,6 +143,26 @@ Google (`google.com/generate_204`, 204), Cloudflare (`cp.cloudflare.com`, 204), 
 - Правила: всегда ровно `MATCH,GLOBAL` — разделение трафика делает не конфиг, а
   потребитель (на роутере — MagiTrickle и т.п.).
 
+## Сводка требований используемых функций
+
+После успешной сборки UI анализирует **финальный YAML** и, если в нём есть функции с
+особыми требованиями, показывает отдельный неблокирующий блок
+«🧩 Требования используемых функций». Сводка не меняет YAML, не влияет на validator
+state и не блокирует Copy. Если специальных требований нет, блок скрыт.
+
+Сейчас определяются:
+
+- `stack: mips` в обычном TUN или TUN-listener → Mihomo >= 1.19.31;
+- `amnezia-wg-option.version: 3` → AWG 3.1, Mihomo >= 1.19.30;
+- provider `override.override-expr` → Mihomo >= 1.19.29;
+- `support-x25519mlkem768: true` в static REALITY или provider override-expr →
+  предупреждение о selective Modern REALITY: Xray v25.5.16 является проверенной
+  рабочей точкой лаборатории, но версия сама по себе не гарантирует совместимость;
+- `mieru` и `trusttunnel` → пометка экспериментального пути генератора.
+
+Сводка строится по фактическому результату, а не по одному состоянию checkbox: поэтому
+отключённая/клампнутая функция в неё не попадает. При изменении любого входа блок
+сбрасывается вместе с результатом валидации и появляется снова только после Build.
 ## Выходной YAML и pre-copy валидатор
 
 Поле `Mihomo YAML` — **readonly preview**, а не второй редактор конфигурации. Изменения вносятся только через входные данные и настройки Builder, после чего нужно заново выполнить Build Config. Это сохраняет один источник истины для генерации и валидации.

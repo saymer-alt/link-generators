@@ -66,6 +66,8 @@
   .validation-box.state-invalid{border-color:var(--red);background:rgba(218,54,51,.08);color:var(--text)}
   .validation-issue{margin-top:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:monospace;font-size:.75rem;white-space:pre-wrap;word-break:break-word}
   .validation-issue-error{border-color:var(--red)}
+  .compat-box{display:none;margin-top:12px;padding:12px 14px;border:1px solid rgba(88,166,255,.45);border-radius:8px;background:rgba(88,166,255,.06);font-size:.85rem;color:var(--text)}
+  .compat-box ul{margin:8px 0 0 18px;padding:0}.compat-box li{margin:4px 0}
 </style>
 </head>
 <body>
@@ -280,6 +282,7 @@
       <textarea id="mihomoOutput" readonly aria-describedby="mihomoOutputHint"></textarea>
       <div id="mihomoOutputHint" class="hint">Предпросмотр только для чтения. Чтобы изменить YAML, поправьте входные данные или настройки выше и снова нажмите ⚡ Build Config.</div>
       <div id="mihomoValidationBox" class="validation-box state-not-built" aria-live="polite"></div>
+      <div id="mihomoCompatBox" class="compat-box" aria-live="polite"></div>
     </div>
   </div>
 </div>
@@ -872,10 +875,6 @@ function validateMihomoYaml(yaml) {
     }
   }
 
-  // Non-blocking compatibility notice: MIPS требует свежий Mihomo.
-  if (errors.length === 0 && /(^|\n)\s*stack: mips\s*(\n|$)/.test(yaml)) {
-    warn('tun', 'stack', 'mips', 'Requires Mihomo >= 1.19.31');
-  }
 
   return { status: errors.length ? 'INVALID' : 'VALID', errors, warnings };
 }
@@ -938,6 +937,81 @@ async function runMihomoValidation(yaml) {
   setMihomoValidationState(res.status, res); // 'VALID' | 'INVALID'
 }
 
+// === COMPATIBILITY SUMMARY (non-blocking, final YAML only) ===
+// Сводка строится из уже готового YAML после всех пост-патчей. Она не меняет
+// конфигурацию, не влияет на validator state и никогда не блокирует Copy.
+function deriveCompatSummary(doc) {
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return [];
+
+  const items = [];
+  const add = (key, text) => {
+    if (!items.some(x => x.key === key)) items.push({ key, text });
+  };
+  const proxies = Array.isArray(doc.proxies) ? doc.proxies : [];
+  const listeners = [
+    ...(Array.isArray(doc.listeners) ? doc.listeners : []),
+    ...(Array.isArray(doc.inbounds) ? doc.inbounds : [])
+  ];
+  const providers = doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object'
+    ? Object.values(doc['proxy-providers']) : [];
+
+  const usesMips = doc.tun?.stack === 'mips' || listeners.some(l => l && l.stack === 'mips');
+  if (usesMips) add('mips', 'MIPS TUN stack — требуется Mihomo >= 1.19.31.');
+
+  const usesAwg31 = proxies.some(p => {
+    const awg = p && p['amnezia-wg-option'];
+    return p?.type === 'wireguard' && awg && Number(awg.version) === 3;
+  });
+  if (usesAwg31) add('awg31', 'AmneziaWG 3.1 — требуется Mihomo >= 1.19.30.');
+
+  const overrideExprs = providers.flatMap(p => {
+    const expr = p && p.override && p.override['override-expr'];
+    return Array.isArray(expr) ? expr : [];
+  });
+  if (overrideExprs.length) add('override-expr', 'proxy-provider override-expr — требуется Mihomo >= 1.19.29.');
+
+  const modernStatic = proxies.some(p => p && p['reality-opts'] && p['reality-opts']['support-x25519mlkem768'] === true);
+  const modernProvider = overrideExprs.some(x => JSON.stringify(x).includes('support-x25519mlkem768'));
+  if (modernStatic || modernProvider) {
+    add('modern-reality', 'Modern REALITY (X25519+ML-KEM) — используйте только с серверами подтверждённой совместимости; Xray v25.5.16 — проверенная рабочая точка лаборатории, но версия сама по себе не является гарантией.');
+  }
+
+  if (proxies.some(p => p?.type === 'mieru')) {
+    add('mieru', 'Mieru / mierus — экспериментальный путь генератора; перед эксплуатацией рекомендуется проверка на вашей версии Mihomo.');
+  }
+  if (proxies.some(p => p?.type === 'trusttunnel')) {
+    add('trusttunnel', 'TrustTunnel (tt) — экспериментальный путь генератора; перед эксплуатацией рекомендуется проверка на вашей версии Mihomo.');
+  }
+
+  return items;
+}
+
+function resetCompatSummary() {
+  const box = document.getElementById('mihomoCompatBox');
+  if (!box) return;
+  box.style.display = 'none';
+  box.innerHTML = '';
+}
+
+function renderCompatSummary(yaml) {
+  const box = document.getElementById('mihomoCompatBox');
+  if (!box) return;
+  let doc;
+  try {
+    doc = jsyaml.load(String(yaml));
+  } catch (_) {
+    resetCompatSummary();
+    return;
+  }
+  const items = deriveCompatSummary(doc);
+  if (!items.length) {
+    resetCompatSummary();
+    return;
+  }
+  box.innerHTML = '<b>🧩 Требования используемых функций</b>' +
+    '<ul>' + items.map(x => '<li>' + escapeHtml(x.text) + '</li>').join('') + '</ul>';
+  box.style.display = 'block';
+}
 // === DEPLOYMENT PROFILE (VPS GATEWAY, opt-in) ===
 // Дефолты — зеркало текущего amnezia-mihomo-gateway/install.sh (источник истины для значений):
 // PROXY_IF (tun-mihomo), TUN_INET_ADDR (10.255.255.1/30), FAKE_IP_RANGE (198.18.0.0/16),
@@ -1220,6 +1294,7 @@ function buildMihomo() {
     }
 
     document.getElementById('mihomoOutput').value = yaml;
+    renderCompatSummary(yaml);
     showToast('✅ Mihomo config built!');
     if (realityModern.invalid > 0) {
       showToast('⚠ Modern REALITY: пропущено некорректных строк: ' + realityModern.invalid);
@@ -1227,6 +1302,7 @@ function buildMihomo() {
     // Автоматическая проверка итогового YAML (после всех патчей), до Copy
     runMihomoValidation(yaml);
   } catch (e) {
+    resetCompatSummary();
     setMihomoValidationState('NOT_BUILT');
     let message = String(e && e.message ? e.message : e);
     if (document.getElementById('cfgSubMode').checked &&
@@ -1277,8 +1353,10 @@ updateMihomoOptionStates();
 // результат проверки недействительным — старый VALID не сохраняется
 ['input', 'change'].forEach(ev => document.addEventListener(ev, () => {
   mihomoValidationSeq++; // инвалидируем незавершённую проверку, если была
+  resetCompatSummary();
   setMihomoValidationState('NOT_BUILT');
 }, true));
+resetCompatSummary();
 setMihomoValidationState('NOT_BUILT');
 </script>
 </body>

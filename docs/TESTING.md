@@ -170,6 +170,10 @@ Sub Mode, no-TUN, explicit gvisor, invalid values, прямой buildMihomoYaml,
 байтов исходного вывода в 16 комбинациях. Случайный subscription x-hwid фиксируется
 только внутри тестового VM. Три проверки textual patch удалены вместе со скриптом; все функциональные проверки сохранены.
 
+Browser: Compatibility Summary проверяется как consumer-only слой над финальным YAML:
+блок скрыт без специальных требований; MIPS, AWG 3.1, provider override-expr / Modern
+REALITY и experimental Mieru/TrustTunnel определяются без изменения YAML и без влияния
+на Copy.
 Browser: UI default/off/on, инвалидирование Copy, обычный/per-proxy MIPS, VPS с обеими
 формами TUN и DNS toggle, generic→VPS→generic, AWG .conf upload со всеми девятью 3.1
 полями и проверкой промежуточных стадий, on/off и альтернативные booleans, scalar/range,

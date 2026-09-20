@@ -177,7 +177,7 @@ validateMihomoYaml(yaml)      [чистая функция: jsyaml.load + стр
 
 - имя группы совпадает с именем прокси (пересечение пространств имён);
 - у группы пустой список `proxies`;
-- `stack: mips` в `tun:`/listener'ах → «Requires Mihomo >= 1.19.31» (NIGHT-09; некритичное compatibility-замечание).
+- Compatibility-требования (например, MIPS/AWG/Modern REALITY) вынесены в отдельный неблокирующий блок после Build и не считаются warning валидатора.
 
 ## Deliberate omissions — что сознательно НЕ проверяется
 
