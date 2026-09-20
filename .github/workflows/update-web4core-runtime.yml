@@ -25,7 +25,7 @@ concurrency:
 jobs:
   build-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     # Provenance: the SHA of the exact web4core checkout that was built and tested.
     outputs:
       source-sha: ${{ steps.source-revision.outputs.sha }}
@@ -94,6 +94,15 @@ jobs:
           JS_YAML_PATH="$lab/js/node_modules/js-yaml" \
           TEST_RUNTIME_PATH="$GITHUB_WORKSPACE/web4core-source/src/web4core.runtime.js" \
           TEST_OUTPUT_DIR="$lab/out" \
+          node tests/mihomo-awl-max-lab.manual.cjs
+
+          echo "Running one production-interval (300s) blackhole soak..."
+          MIHOMO_BIN="$lab/mihomo" \
+          JS_YAML_PATH="$lab/js/node_modules/js-yaml" \
+          TEST_RUNTIME_PATH="$GITHUB_WORKSPACE/web4core-source/src/web4core.runtime.js" \
+          TEST_OUTPUT_DIR="$lab/out-production" \
+          AWL_LAB_INTERVAL=300 \
+          AWL_PROD_BLACKHOLE_ONLY=1 \
           node tests/mihomo-awl-max-lab.manual.cjs
 
       - name: Upload Max AWL lab evidence
