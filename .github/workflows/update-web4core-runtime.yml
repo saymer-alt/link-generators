@@ -96,13 +96,13 @@ jobs:
           TEST_OUTPUT_DIR="$lab/out" \
           node tests/mihomo-awl-max-lab.manual.cjs
 
-          echo "Running one production-interval (300s) blackhole soak..."
+          echo "Running production-interval (300s) active-dial blackhole lab..."
           MIHOMO_BIN="$lab/mihomo" \
           JS_YAML_PATH="$lab/js/node_modules/js-yaml" \
           TEST_RUNTIME_PATH="$GITHUB_WORKSPACE/web4core-source/src/web4core.runtime.js" \
-          TEST_OUTPUT_DIR="$lab/out-production" \
+          TEST_OUTPUT_DIR="$lab/out-active" \
           AWL_LAB_INTERVAL=300 \
-          AWL_PROD_BLACKHOLE_ONLY=1 \
+          AWL_PROD_ACTIVE_ONLY=1 \
           node tests/mihomo-awl-max-lab.manual.cjs
 
       - name: Upload Max AWL lab evidence
