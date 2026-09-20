@@ -1228,7 +1228,12 @@ function buildMihomo() {
     runMihomoValidation(yaml);
   } catch (e) {
     setMihomoValidationState('NOT_BUILT');
-    showToast('❌ ' + (e.message || e), true);
+    let message = String(e && e.message ? e.message : e);
+    if (document.getElementById('cfgSubMode').checked &&
+        /Provide one or more HTTP\(S\) URLs/i.test(message)) {
+      message = 'Режим «URL-подписки» включён, но URL подписки не найден. Если вы вставили обычные proxy-ссылки — выключите «URL-подписки (Sub Mode)».';
+    }
+    showToast('❌ ' + message, true);
   }
 }
 
