@@ -83,7 +83,11 @@ calls the API, and adds its own layers on top of the result:
 - Health-check endpoint list → `web4core.URLTEST_CHOICES` (Google/Cloudflare/Apple/Microsoft/Ubuntu/Fedora;
   fallback — Google generate_204).
 - Page options → `options` fields: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
-  `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`,
+  `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`.
+  The user-facing label for `cfgSubMode` is **"URL-подписки (Sub Mode)"**: do not regress
+  it to the unexplained technical label "Sub Mode". With only ordinary proxy links in the
+  normal Builder flow, the user should switch it off; with HTTP(S) subscription URLs it
+  stays on. Mixed input is supported where a subscription URL is present.
   `excludeFilter` (Sub Mode only; empty → previous output),
   `webUiDashboard`/`webUiCustomUrl` (external-ui-url dashboard selection: the metacubexd default
   preserves byte parity; custom requires an absolute http/https URL).
@@ -133,6 +137,11 @@ calls the API, and adds its own layers on top of the result:
     generation counter prevents races, Copy YAML is blocked when INVALID. Enum lists
     of types/groups are verified against Mihomo v1.19.x sources. Details:
     docs/VALIDATION.md and docs/TESTING.md.
+  - **Readonly output UX**: `#mihomoOutput` is deliberately a preview, not a second
+    editor. Users change inputs/options and rebuild. If browser validation is VALID but
+    real `mihomo -t` rejects the YAML, do not invent a validator rule: require the full
+    generated YAML plus full stdout/stderr from `mihomo -t` first, then add only a
+    proven structural rule + regression fixture (or document a browser-validation limit).
 
 The runtime additionally supports building for sing-box and xray (`buildSingBox*`, `buildXray*`)
 and other exports (`buildBeansFromInput`, `validateBean`, `computeTag`,
