@@ -875,10 +875,6 @@ function validateMihomoYaml(yaml) {
     }
   }
 
-  // Non-blocking compatibility notice: MIPS требует свежий Mihomo.
-  if (errors.length === 0 && /(^|\n)\s*stack: mips\s*(\n|$)/.test(yaml)) {
-    warn('tun', 'stack', 'mips', 'Requires Mihomo >= 1.19.31');
-  }
 
   return { status: errors.length ? 'INVALID' : 'VALID', errors, warnings };
 }
