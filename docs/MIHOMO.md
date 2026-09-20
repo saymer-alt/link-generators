@@ -20,9 +20,9 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 | 🔌 Mixed Port 7890 | `cfgSocks` | `addSocks` | ☑ | `mixed-port: 7890` (или per-proxy listeners) |
 | 🖥️ Web UI | `cfgWebUI` | `webUI` | ☑ | `external-controller: 0.0.0.0:9090`, `external-ui: ui`, `external-ui-url` (+URL metacubexd), `secret:` пустой |
 | 🎛️ Дашборд Web UI | `webUiSelect` + `webUiCustomUrl` | `webUiDashboard` / `webUiCustomUrl` | MetaCubeXD | MetaCubeXD (tgz, дефолт — byte-parity) / Yacd-meta (gh-pages.zip) / Zashboard (dist.zip) / Custom http(s)-URL; виден при включённом Web UI; URL только генерируется, не проверяется браузером |
-| 📡 Sub Mode | `cfgSubMode` | `mihomoSubscriptionMode` | ☑ | URL → `proxy-providers`, см. ниже |
+| 📡 Использовать URL-подписки | `cfgSubMode` | `mihomoSubscriptionMode` | ☑ | HTTP(S) URL → `proxy-providers`; обычные proxy-ссылки без подписок в стандартном сценарии удобнее обрабатывать с выключенным режимом |
 | 🌐 Modern REALITY | `realityModernInput` | `mihomoRealityModernHosts` | пусто | multiline `host` / `host:port` / `[ipv6]:port`: только REALITY-узлы этих серверов получают `support-x25519mlkem768: true` + chrome fp (если не задан) и override-expr у провайдеров; пусто — legacy; только для совместимых серверов: X25519MLKEM768 появился в Xray v25.5.16, но сама версия не гарантирует совместимость (решение владельца A2) |
-| 🚫 Exclude Filter | `excludeFilterInput` | `excludeFilter` | пусто | regexp/keyword `exclude-filter` в КАЖДЫЙ http-provider (upstream-паритет); только Sub Mode; пусто — поле не добавляется; сериализация цитирования покрыта source-тестами |
+| 🚫 Exclude Filter | `excludeFilterInput` | `excludeFilter` | пусто | regexp/keyword `exclude-filter` в КАЖДЫЙ http-provider (upstream-паритет); только режим URL-подписок; пусто — поле не добавляется; сериализация цитирования покрыта source-тестами |
 | 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default mips / снят чекбокс → gvisor, `auto-route: false`) |
 | ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☑ | `stack: mips`; снят → `gvisor`; Mihomo >= 1.19.31 (некритичное предупреждение валидатора); требует `cfgTun`; продуктовый дефолт (NIGHT-09) |
 | ⚙ Расширенный TUN stack | `cfgTunStackAdvanced` + `cfgTunStackEx` | `mihomoTunStack` | ☐/— | `system`/`mixed` за крышкой; override снимает MIPS; невалидное значение → gvisor; Mihomo >= 1.19.31 |
@@ -62,8 +62,10 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 
 Ограничение рантайма: нужен хотя бы один inbound — при `addSocks=false` и `addTun=false`
 ошибка «Mihomo: enable at least one inbound (TUN or SOCKS5)». Пустой ввод без wgBeans —
-«No valid links or profiles provided». В Sub Mode без хотя бы одного URL — «Provide one or
-more HTTP(S) URLs…» (частая ловушка при тестировании: Sub Mode включён по умолчанию).
+«No valid links or profiles provided». В обычном Builder режиме URL-подписок без хотя бы одного HTTP(S) URL runtime возвращает
+«Provide one or more HTTP(S) URLs…», а UI переводит это в понятную подсказку:
+«Режим „URL-подписки“ включён, но URL подписки не найден…». Это важная UX-граница:
+режим включён по умолчанию, поэтому при вводе только обычных proxy-ссылок его следует выключить.
 
 ## Базовый шаблон YAML
 
@@ -93,7 +95,7 @@ rules:
 - Режимы «на каждый прокси» («TUN на каждый прокси» и/или «SOCKS-порт на каждый прокси»):
   на каждый прокси — select группа `🔒 <имя>` = [прокси, REJECT]; `GLOBAL` = [все `🔒`-группы, REJECT].
 
-Sub Mode: вместо `proxies` в группах — `use:` на провайдеров; группы `SUB-<провайдер>`
+Режим «Использовать URL-подписки» (технически Sub Mode): вместо `proxies` в группах — `use:` на провайдеров; группы `SUB-<провайдер>`
 в режимах «на каждый прокси»; `⚡ Fastest` с `tolerance: 50` и `empty-fallback: REJECT`.
 
 ## TUN: два режима
@@ -141,12 +143,18 @@ Google (`google.com/generate_204`, 204), Cloudflare (`cp.cloudflare.com`, 204), 
 - Правила: всегда ровно `MATCH,GLOBAL` — разделение трафика делает не конфиг, а
   потребитель (на роутере — MagiTrickle и т.п.).
 
-## Pre-copy валидатор (кратко; полностью — [VALIDATION.md](VALIDATION.md))
+## Выходной YAML и pre-copy валидатор
+
+Поле `Mihomo YAML` — **readonly preview**, а не второй редактор конфигурации. Изменения вносятся только через входные данные и настройки Builder, после чего нужно заново выполнить Build Config. Это сохраняет один источник истины для генерации и валидации.
+
+Полностью о проверке — [VALIDATION.md](VALIDATION.md).
+
+### Pre-copy валидатор
 
 После Build Config финальный YAML автоматически проверяется `validateMihomoYaml()`:
 
 - **успех** → «⚠️ Базовая проверка пройдена. Это не эквивалент проверки mihomo -t.»,
-  Copy YAML доступна;
+  Copy YAML доступна; UI дополнительно напоминает команду финальной проверки и просит сохранить полный YAML + полный вывод `mihomo -t`, если ядро всё же отвергнет конфиг;
 - **уверенная ошибка** → «❌ Ошибка базовой проверки» + Proxy/Field/Value/причина,
   Copy YAML заблокирована (disabled + guard в `copyMihomo()`);
 - **предупреждения** — показываются, Copy не блокируют;

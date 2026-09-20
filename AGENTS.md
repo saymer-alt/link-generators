@@ -84,9 +84,13 @@ calls the API, and adds its own layers on top of the result:
   fallback — Google generate_204).
 - Page options → `options` fields: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
   `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`,
-  `excludeFilter` (Sub Mode only; empty → previous output),
+  `excludeFilter` (subscription mode only; empty → previous output),
   `webUiDashboard`/`webUiCustomUrl` (external-ui-url dashboard selection: the metacubexd default
   preserves byte parity; custom requires an absolute http/https URL).
+  User-facing `cfgSubMode` text is **"Использовать URL-подписки"**. Keep the technical name
+  "Sub Mode" in code/docs only; do not expose the unexplained jargon as the primary UI label. In normal Builder flow, only ordinary proxy links →
+  switch it off; HTTP(S) subscription URLs → keep it on. Mixed input is supported where
+  a subscription URL is present.
   `mihomoRealityModernHosts` (selective Modern REALITY: `[{host, port?}]` from multiline field
   `realityModernInput`; empty -> legacy byte parity; invalid lines are skipped with a non-blocking
   warning; X25519MLKEM768 appeared in Xray v25.5.16; use only for servers with confirmed
@@ -133,6 +137,11 @@ calls the API, and adds its own layers on top of the result:
     generation counter prevents races, Copy YAML is blocked when INVALID. Enum lists
     of types/groups are verified against Mihomo v1.19.x sources. Details:
     docs/VALIDATION.md and docs/TESTING.md.
+  - **Readonly output UX**: `#mihomoOutput` is deliberately a preview, not a second
+    editor. Users change inputs/options and rebuild. If browser validation is VALID but
+    real `mihomo -t` rejects the YAML, do not invent a validator rule: require the full
+    generated YAML plus full stdout/stderr from `mihomo -t` first, then add only a
+    proven structural rule + regression fixture (or document a browser-validation limit).
 
 The runtime additionally supports building for sing-box and xray (`buildSingBox*`, `buildXray*`)
 and other exports (`buildBeansFromInput`, `validateBean`, `computeTag`,

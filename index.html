@@ -146,13 +146,15 @@
   <!-- TAB 2: MIHOMO BUILDER -->
   <div id="tab-mihomo" class="tab-content">
     <div class="card">
-      <div class="card-title">📋 Входные данные (ссылки / подписки)</div>
+      <div class="card-title">📋 Входные данные</div>
+      <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
       <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
+      <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Если используете HTTP(S) URL подписки, оставьте включённым режим «URL-подписки» ниже. Если в поле только обычные proxy-ссылки — режим URL-подписок лучше выключить.</div>
       <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> Автоматический режим белых списков</label></div>
       <div id="whitelistPanel" style="display:none">
         <label for="whitelistInput">Резерв для белых списков (ссылки / подписки)</label>
         <textarea id="whitelistInput" placeholder="vless://...&#10;https://sub.url/..."></textarea>
-        <div class="hint">Верхний набор — основной, этот — резерв. GLOBAL сначала использует обычные выходы, затем БС. Обе стороны обязательны. Ссылки можно смешивать с подписками при включённом Sub Mode. Плановая проверка доступности — каждые 300 секунд; при неудачных подключениях (2 за 60 секунд) проверка запускается сразу. Переключение и возврат на основной — не мгновенные. WG-файлы входят в основной набор.</div>
+        <div class="hint">Верхний набор — основной, этот — резерв. GLOBAL сначала использует обычные выходы, затем БС. Обе стороны обязательны. Ссылки можно смешивать с подписками при включённом режиме «URL-подписки». Плановая проверка доступности — каждые 300 секунд; при неудачных подключениях (2 за 60 секунд) проверка запускается сразу. Переключение и возврат на основной — не мгновенные. WG-файлы входят в основной набор.</div>
       </div>
       <div class="hint">Поддерживает: vless, vmess, trojan, anytls, ss, socks/socks4/socks4a/socks5/socks5h, http/https, hy2/hysteria2, tuic, mieru/mierus, tt, masque, WG (.conf/.awg), HTTP(S) подписки</div>
     </div>
@@ -179,8 +181,9 @@
         <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
-        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Sub Mode</label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки</label>
       </div>
+      <div id="subModeHint" class="hint"></div>
       <div id="webUiRow" style="margin-top:10px">
         <label for="webUiSelect">🖥️ Дашборд Web UI</label>
         <select id="webUiSelect">
@@ -274,7 +277,8 @@
 
     <div class="card">
       <div class="card-title">📦 Mihomo YAML</div>
-      <textarea id="mihomoOutput" readonly></textarea>
+      <textarea id="mihomoOutput" readonly aria-describedby="mihomoOutputHint"></textarea>
+      <div id="mihomoOutputHint" class="hint">Предпросмотр только для чтения. Чтобы изменить YAML, поправьте входные данные или настройки выше и снова нажмите ⚡ Build Config.</div>
       <div id="mihomoValidationBox" class="validation-box state-not-built" aria-live="polite"></div>
     </div>
   </div>
@@ -886,7 +890,8 @@ function renderMihomoValidation() {
   } else if (st.state === 'VALIDATING') {
     html = '⏳ Базовая проверка конфигурации...';
   } else if (st.state === 'VALID') {
-    html = '<b>⚠️ Базовая проверка пройдена. Это не эквивалент проверки mihomo -t.</b>';
+    html = '<b>⚠️ Базовая проверка пройдена. Это не эквивалент проверки mihomo -t.</b>' +
+      '<div style="margin-top:8px">Финальная проверка выполняется настоящим Mihomo: <code>mihomo -t -f /path/to/config.yaml</code>. Если Mihomo отвергнет YAML, для разбора сохраните полный YAML и полный вывод этой команды.</div>';
   } else if (st.state === 'INVALID') {
     html = '<b>❌ Ошибка базовой проверки</b>';
   }
@@ -1042,6 +1047,13 @@ function updateExcludeFilterVisibility() {
   // Exclude Filter имеет смысл только для proxy-providers (Mihomo + Sub Mode).
   document.getElementById('excludeFilterRow').style.display =
     document.getElementById('cfgSubMode').checked ? '' : 'none';
+}
+
+function updateSubModeHint() {
+  const on = document.getElementById('cfgSubMode').checked;
+  document.getElementById('subModeHint').textContent = on
+    ? 'URL-подписки включены: HTTP(S) URL будут добавлены как proxy-providers. Обычные proxy-ссылки можно смешивать с ними. Если в поле только обычные ссылки, выключите этот режим.'
+    : 'URL-подписки выключены: обычные proxy-ссылки разбираются напрямую. Чтобы использовать HTTP(S) URL подписки, включите этот режим.';
 }
 
 function updateWebUiVisibility() {
@@ -1216,7 +1228,12 @@ function buildMihomo() {
     runMihomoValidation(yaml);
   } catch (e) {
     setMihomoValidationState('NOT_BUILT');
-    showToast('❌ ' + (e.message || e), true);
+    let message = String(e && e.message ? e.message : e);
+    if (document.getElementById('cfgSubMode').checked &&
+        /Provide one or more HTTP\(S\) URLs/i.test(message)) {
+      message = 'Режим «URL-подписки» включён, но URL подписки не найден. Если вы вставили обычные proxy-ссылки — выключите «Использовать URL-подписки».';
+    }
+    showToast('❌ ' + message, true);
   }
 }
 
@@ -1246,10 +1263,14 @@ document.getElementById('cfgSocks').addEventListener('change', updateMihomoOptio
 document.getElementById('cfgPerProxyMaster').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgTunStackAdvanced').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgTunStackEx').addEventListener('change', updateMihomoOptionStates);
-document.getElementById('cfgSubMode').addEventListener('change', updateExcludeFilterVisibility);
+document.getElementById('cfgSubMode').addEventListener('change', () => {
+  updateExcludeFilterVisibility();
+  updateSubModeHint();
+});
 document.getElementById('cfgWebUI').addEventListener('change', updateWebUiVisibility);
 document.getElementById('webUiSelect').addEventListener('change', updateWebUiVisibility);
 updateExcludeFilterVisibility();
+updateSubModeHint();
 updateWebUiVisibility();
 updateMihomoOptionStates();
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
