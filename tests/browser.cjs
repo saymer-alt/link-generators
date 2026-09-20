@@ -32,6 +32,9 @@ const expectedAwg = {
     assert.match(await page.locator('#subModeHint').innerText(), /HTTP\(S\) URL.*proxy-providers/);
     assert.equal(await page.locator('#mihomoOutput').isEditable(), false);
     assert.match(await page.locator('#mihomoOutputHint').innerText(), /только для чтения.*Build Config/i);
+    await page.locator('#mihomoInput').fill(input);
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    assert.match(await page.locator('#toast').innerText(), /URL-подписки.*URL подписки не найден.*выключите/i);
     await page.locator('#cfgSubMode').uncheck();
     assert.match(await page.locator('#subModeHint').innerText(), /обычные proxy-ссылки.*напрямую/i);
     await page.locator('#cfgWebUI').uncheck();
