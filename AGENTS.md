@@ -357,8 +357,8 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
   YAML format to break it silently (replacement simply finds no line).
 - Changing checkbox/field defaults — users rely on current values. Defaults
   `cfgTun: checked` (confirmed by owner 2026-09-15) and `cfgTunMips: checked`
-  (owner decision 2026-09-16, NIGHT-09; warning nearby says "requires Mihomo
-  >= 1.19.31", generation is not blocked) are intentional. `system`/`mixed` are available
+  (owner decision 2026-09-16, NIGHT-09; the non-blocking Compatibility Summary reports
+  the Mihomo >= 1.19.31 requirement after Build) are intentional. `system`/`mixed` are available
   only behind `cfgTunStackAdvanced` (OFF by default; override clears the MIPS checkbox —
   one consistent UI/YAML state). Do not casually change defaults anymore.
 - Break TUN/Mixed → child-option dependencies or their fail-safe clamps in `buildMihomo()` —
