@@ -54,6 +54,7 @@ const expectedAwg = {
     assert.equal(defaultOutput.doc.tun.stack, 'mips'); // продуктовый дефолт (NIGHT-09)
     assert.equal(await page.locator('#mihomoCompatBox').isVisible(), true);
     assert.match(await page.locator('#mihomoCompatBox').innerText(), /MIPS TUN stack.*1\.19\.31/s);
+    assert.doesNotMatch(await page.locator('#mihomoValidationBox').innerText(), /Requires Mihomo/);
     assert.match(await page.locator('#mihomoValidationBox').innerText(), /mihomo -t -f \/path\/to\/config\.yaml/);
     assert.match(await page.locator('#mihomoValidationBox').innerText(), /полный YAML.*полный вывод/i);
     await page.locator('#cfgTunMips').uncheck(); // gVisor — compatibility fallback
