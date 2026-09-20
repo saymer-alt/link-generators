@@ -83,14 +83,14 @@ calls the API, and adds its own layers on top of the result:
 - Health-check endpoint list → `web4core.URLTEST_CHOICES` (Google/Cloudflare/Apple/Microsoft/Ubuntu/Fedora;
   fallback — Google generate_204).
 - Page options → `options` fields: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
-  `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`.
-  The user-facing label for `cfgSubMode` is **"URL-подписки (Sub Mode)"**: do not regress
-  it to the unexplained technical label "Sub Mode". With only ordinary proxy links in the
-  normal Builder flow, the user should switch it off; with HTTP(S) subscription URLs it
-  stays on. Mixed input is supported where a subscription URL is present.
-  `excludeFilter` (Sub Mode only; empty → previous output),
+  `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`,
+  `excludeFilter` (subscription mode only; empty → previous output),
   `webUiDashboard`/`webUiCustomUrl` (external-ui-url dashboard selection: the metacubexd default
   preserves byte parity; custom requires an absolute http/https URL).
+  User-facing `cfgSubMode` text is **"URL-подписки (Sub Mode)"**: do not regress it to
+  the unexplained label "Sub Mode". In normal Builder flow, only ordinary proxy links →
+  switch it off; HTTP(S) subscription URLs → keep it on. Mixed input is supported where
+  a subscription URL is present.
   `mihomoRealityModernHosts` (selective Modern REALITY: `[{host, port?}]` from multiline field
   `realityModernInput`; empty -> legacy byte parity; invalid lines are skipped with a non-blocking
   warning; X25519MLKEM768 appeared in Xray v25.5.16; use only for servers with confirmed
