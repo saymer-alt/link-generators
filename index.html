@@ -181,7 +181,7 @@
         <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
-        <label><input type="checkbox" id="cfgSubMode" checked> 📡 URL-подписки (Sub Mode)</label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки</label>
       </div>
       <div id="subModeHint" class="hint"></div>
       <div id="webUiRow" style="margin-top:10px">
@@ -1231,7 +1231,7 @@ function buildMihomo() {
     let message = String(e && e.message ? e.message : e);
     if (document.getElementById('cfgSubMode').checked &&
         /Provide one or more HTTP\(S\) URLs/i.test(message)) {
-      message = 'Режим «URL-подписки» включён, но URL подписки не найден. Если вы вставили обычные proxy-ссылки — выключите «URL-подписки (Sub Mode)».';
+      message = 'Режим «URL-подписки» включён, но URL подписки не найден. Если вы вставили обычные proxy-ссылки — выключите «Использовать URL-подписки».';
     }
     showToast('❌ ' + message, true);
   }
