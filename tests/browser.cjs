@@ -28,7 +28,7 @@ const expectedAwg = {
     await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
     await page.locator('button.tab').filter({ hasText: 'Mihomo' }).click();
     assert.equal(await page.locator('#cfgTunMips').isChecked(), true); // продуктовый дефолт (NIGHT-09)
-    assert.match(await page.locator('label:has(#cfgSubMode)').innerText(), /URL-подписки/);
+    assert.match(await page.locator('label:has(#cfgSubMode)').innerText(), /Использовать URL-подписки/);
     assert.match(await page.locator('#subModeHint').innerText(), /HTTP\(S\) URL.*proxy-providers/);
     assert.equal(await page.locator('#mihomoOutput').isEditable(), false);
     assert.match(await page.locator('#mihomoOutputHint').innerText(), /только для чтения.*Build Config/i);
