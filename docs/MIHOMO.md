@@ -62,8 +62,10 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 
 Ограничение рантайма: нужен хотя бы один inbound — при `addSocks=false` и `addTun=false`
 ошибка «Mihomo: enable at least one inbound (TUN or SOCKS5)». Пустой ввод без wgBeans —
-«No valid links or profiles provided». В обычном Builder режиме URL-подписок без хотя бы одного HTTP(S) URL — «Provide one or
-more HTTP(S) URLs…». Это важная UX-граница: режим включён по умолчанию, поэтому при вводе только обычных proxy-ссылок его следует выключить.
+«No valid links or profiles provided». В обычном Builder режиме URL-подписок без хотя бы одного HTTP(S) URL runtime возвращает
+«Provide one or more HTTP(S) URLs…», а UI переводит это в понятную подсказку:
+«Режим „URL-подписки“ включён, но URL подписки не найден…». Это важная UX-граница:
+режим включён по умолчанию, поэтому при вводе только обычных proxy-ссылок его следует выключить.
 
 ## Базовый шаблон YAML
 
