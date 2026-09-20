@@ -121,37 +121,37 @@ async function startMihomo(config, dir, control) {
   const state = () => inst.api('GET', '/proxies/GLOBAL');
   const waitNow = re => until(async () => { const s = await state(); return re.test(s.now) ? s : false; }, 'GLOBAL now ' + re);
   try {
-    const initial = await waitNow(/^PRIMARY-/);
-    const pName = initial.all.find(n => /^PRIMARY-/.test(n)), fName = initial.all.find(n => /^FALLBACK-/.test(n));
+    const initial = await waitNow(/^primary-/i);
+    const pName = initial.all.find(n => /^primary-/i.test(n)), fName = initial.all.find(n => /^fallback-/i.test(n));
     assert.ok(pName && fName); assert.equal(await requestThrough(mixed), 'PRIMARY-MOCK');
 
     let t = Date.now(); primary.setMode('hang');
-    const autoF = await waitNow(/^FALLBACK-/); const blackholeMs = Date.now() - t;
+    const autoF = await waitNow(/^fallback-/i); const blackholeMs = Date.now() - t;
     assert.equal(autoF.fixed, '');
     primary.setMode('ok'); t = Date.now();
-    const autoP = await waitNow(/^PRIMARY-/); const recoverMs = Date.now() - t;
+    const autoP = await waitNow(/^primary-/i); const recoverMs = Date.now() - t;
     evidence.scenarios.push({ name: 'provider-blackhole-auto', blackholeMs, recoverMs, now: autoP.now });
 
     await inst.api('PUT', '/proxies/GLOBAL', { name: fName });
     const fixedF = await state(); assert.equal(fixedF.fixed, fName); assert.equal(fixedF.now, fName);
     await sleep(4500); const stillF = await state(); assert.equal(stillF.now, fName);
     await inst.api('DELETE', '/proxies/GLOBAL');
-    const afterDelete = await waitNow(/^PRIMARY-/);
+    const afterDelete = await waitNow(/^primary-/i);
     evidence.scenarios.push({ name: 'manual-fallback-fixed', fixed: fixedF.fixed, afterChecks: stillF.now, afterDelete: afterDelete.now });
 
     await inst.api('PUT', '/proxies/GLOBAL', { name: pName }); assert.equal((await state()).fixed, pName);
     primary.setMode('hang'); t = Date.now();
-    const fixedDead = await waitNow(/^FALLBACK-/); const fixedDeadMs = Date.now() - t;
+    const fixedDead = await waitNow(/^fallback-/i); const fixedDeadMs = Date.now() - t;
     assert.equal(fixedDead.fixed, '');
     evidence.scenarios.push({ name: 'manual-primary-blackhole', fixedDeadMs, now: fixedDead.now, fixed: fixedDead.fixed });
 
-    primary.setMode('ok'); await waitNow(/^PRIMARY-/);
+    primary.setMode('ok'); await waitNow(/^primary-/i);
     await inst.api('PUT', '/proxies/GLOBAL', { name: fName }); assert.equal((await state()).fixed, fName);
     await inst.stop(); fs.writeFileSync(path.join(out, 'before-restart.log'), inst.logs());
     inst = await startMihomo(config, out, control);
     const restart = await state();
     if (restart.fixed) await inst.api('DELETE', '/proxies/GLOBAL');
-    const post = await waitNow(/^PRIMARY-/);
+    const post = await waitNow(/^primary-/i);
     evidence.scenarios.push({ name: 'restart-selection-persistence', restartFixed: restart.fixed, restartNow: restart.now, afterDelete: post.now });
 
     console.log(JSON.stringify(evidence, null, 2));
