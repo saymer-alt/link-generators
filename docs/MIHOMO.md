@@ -20,7 +20,7 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 | 🔌 Mixed Port 7890 | `cfgSocks` | `addSocks` | ☑ | `mixed-port: 7890` (или per-proxy listeners) |
 | 🖥️ Web UI | `cfgWebUI` | `webUI` | ☑ | `external-controller: 0.0.0.0:9090`, `external-ui: ui`, `external-ui-url` (+URL metacubexd), `secret:` пустой |
 | 🎛️ Дашборд Web UI | `webUiSelect` + `webUiCustomUrl` | `webUiDashboard` / `webUiCustomUrl` | MetaCubeXD | MetaCubeXD (tgz, дефолт — byte-parity) / Yacd-meta (gh-pages.zip) / Zashboard (dist.zip) / Custom http(s)-URL; виден при включённом Web UI; URL только генерируется, не проверяется браузером |
-| 📡 URL-подписки (Sub Mode) | `cfgSubMode` | `mihomoSubscriptionMode` | ☑ | HTTP(S) URL → `proxy-providers`; обычные proxy-ссылки без подписок в стандартном сценарии удобнее обрабатывать с выключенным режимом |
+| 📡 Использовать URL-подписки | `cfgSubMode` | `mihomoSubscriptionMode` | ☑ | HTTP(S) URL → `proxy-providers`; обычные proxy-ссылки без подписок в стандартном сценарии удобнее обрабатывать с выключенным режимом |
 | 🌐 Modern REALITY | `realityModernInput` | `mihomoRealityModernHosts` | пусто | multiline `host` / `host:port` / `[ipv6]:port`: только REALITY-узлы этих серверов получают `support-x25519mlkem768: true` + chrome fp (если не задан) и override-expr у провайдеров; пусто — legacy; только для совместимых серверов: X25519MLKEM768 появился в Xray v25.5.16, но сама версия не гарантирует совместимость (решение владельца A2) |
 | 🚫 Exclude Filter | `excludeFilterInput` | `excludeFilter` | пусто | regexp/keyword `exclude-filter` в КАЖДЫЙ http-provider (upstream-паритет); только режим URL-подписок; пусто — поле не добавляется; сериализация цитирования покрыта source-тестами |
 | 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default mips / снят чекбокс → gvisor, `auto-route: false`) |
@@ -95,7 +95,7 @@ rules:
 - Режимы «на каждый прокси» («TUN на каждый прокси» и/или «SOCKS-порт на каждый прокси»):
   на каждый прокси — select группа `🔒 <имя>` = [прокси, REJECT]; `GLOBAL` = [все `🔒`-группы, REJECT].
 
-Режим URL-подписок (Sub Mode): вместо `proxies` в группах — `use:` на провайдеров; группы `SUB-<провайдер>`
+Режим «Использовать URL-подписки» (технически Sub Mode): вместо `proxies` в группах — `use:` на провайдеров; группы `SUB-<провайдер>`
 в режимах «на каждый прокси»; `⚡ Fastest` с `tolerance: 50` и `empty-fallback: REJECT`.
 
 ## TUN: два режима
