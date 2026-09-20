@@ -137,6 +137,10 @@ credentials не нужны. Workflow автообновления теперь:
 
 С 2026-09-15 доступны автоматические регрессии `tests/runtime.cjs` (только Node,
 без npm install) и `tests/browser.cjs` (внешняя установка Playwright и браузер).
+После Vladimir UX pass browser suite также фиксирует понятную подпись «URL-подписки
+(Sub Mode)», динамическую подсказку для ordinary links/subscription URLs, readonly
+preview итогового YAML и evidence-текст с `mihomo -t` для случаев, когда ядро
+отвергает browser-VALID конфиг.
 Workflow автообновления запускает runtime-тест до замены бандла.
 Исторические ручные прогоны и матрицы ниже сохранены с их датами.
 
