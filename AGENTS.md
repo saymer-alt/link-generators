@@ -87,8 +87,8 @@ calls the API, and adds its own layers on top of the result:
   `excludeFilter` (subscription mode only; empty → previous output),
   `webUiDashboard`/`webUiCustomUrl` (external-ui-url dashboard selection: the metacubexd default
   preserves byte parity; custom requires an absolute http/https URL).
-  User-facing `cfgSubMode` text is **"URL-подписки (Sub Mode)"**: do not regress it to
-  the unexplained label "Sub Mode". In normal Builder flow, only ordinary proxy links →
+  User-facing `cfgSubMode` text is **"Использовать URL-подписки"**. Keep the technical name
+  "Sub Mode" in code/docs only; do not expose the unexplained jargon as the primary UI label. In normal Builder flow, only ordinary proxy links →
   switch it off; HTTP(S) subscription URLs → keep it on. Mixed input is supported where
   a subscription URL is present.
   `mihomoRealityModernHosts` (selective Modern REALITY: `[{host, port?}]` from multiline field
