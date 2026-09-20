@@ -74,6 +74,37 @@ jobs:
           node tests/runtime.cjs web4core-source/src/web4core.runtime.js
           sha256sum web4core-source/src/web4core.runtime.js
 
+      # Temporary read-only lab gate for branch awl-max-lab. Never runs on main.
+      - name: Max AWL fixed blackhole restart lab
+        if: github.event_name == 'pull_request' && github.head_ref == 'awl-max-lab'
+        env:
+          MIHOMO_URL: https://github.com/MetaCubeX/mihomo/releases/download/v1.19.31/mihomo-linux-amd64-v1.19.31.gz
+          MIHOMO_SHA256: d5e74bbddbdfff49a1aef7775bf5911da59f0d7196ed509a0ac914b3653dd5f1
+        run: |
+          set -euo pipefail
+          lab="$RUNNER_TEMP/awl-max-lab"
+          mkdir -p "$lab/out" "$lab/js"
+          curl -L --fail --retry 3 -o "$lab/mihomo.gz" "$MIHOMO_URL"
+          echo "$MIHOMO_SHA256  $lab/mihomo.gz" | sha256sum -c -
+          gzip -dc "$lab/mihomo.gz" > "$lab/mihomo"
+          chmod +x "$lab/mihomo"
+          "$lab/mihomo" -v
+          npm --silent --prefix "$lab/js" install js-yaml@4.1.0
+          MIHOMO_BIN="$lab/mihomo" \
+          JS_YAML_PATH="$lab/js/node_modules/js-yaml" \
+          TEST_RUNTIME_PATH="$GITHUB_WORKSPACE/web4core-source/src/web4core.runtime.js" \
+          TEST_OUTPUT_DIR="$lab/out" \
+          node tests/mihomo-awl-max-lab.manual.cjs
+
+      - name: Upload Max AWL lab evidence
+        if: github.event_name == 'pull_request' && github.head_ref == 'awl-max-lab' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awl-max-lab-evidence
+          path: ${{ runner.temp }}/awl-max-lab/out
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload checked runtime
         uses: actions/upload-artifact@v4
         with:
