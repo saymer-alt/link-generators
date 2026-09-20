@@ -102,13 +102,15 @@ async function startMihomo(config, dir, control) {
     options: { webUI: false, addTun: false, mihomoSubscriptionMode: true }
   }).data);
 
+  const labInterval = Number(process.env.AWL_LAB_INTERVAL || 2);
+  const prodBlackholeOnly = process.env.AWL_PROD_BLACKHOLE_ONLY === '1';
   const g = doc['proxy-groups'][0];
   assert.equal(g.type, 'fallback'); assert.equal(g.lazy, false);
   assert.equal(g.timeout, 60000); assert.equal(g['max-failed-times'], 2); assert.equal(g.interval, 300);
-  g.url = healthUrl; g.interval = 2; // lab scheduler only; keep 60s dial-failure window
+  g.url = healthUrl; g.interval = labInterval; // scheduler only; keep 60s dial-failure window
   for (const p of Object.values(doc['proxy-providers'])) {
     assert.equal(p['health-check'].lazy, false); assert.equal(p['health-check'].interval, 300);
-    p['health-check'].url = healthUrl; p['health-check'].interval = 2;
+    p['health-check'].url = healthUrl; p['health-check'].interval = labInterval;
     // No provider timeout override: exercise Mihomo's 5s default.
   }
 
@@ -119,11 +121,21 @@ async function startMihomo(config, dir, control) {
 
   let inst = await startMihomo(config, out, control);
   const state = () => inst.api('GET', '/proxies/GLOBAL');
-  const waitNow = re => until(async () => { const s = await state(); return re.test(s.now) ? s : false; }, 'GLOBAL now ' + re);
+  const waitNow = (re, timeoutMs = 18000) => until(async () => { const s = await state(); return re.test(s.now) ? s : false; }, 'GLOBAL now ' + re, timeoutMs);
   try {
     const initial = await waitNow(/^primary-/i);
     const pName = initial.all.find(n => /^primary-/i.test(n)), fName = initial.all.find(n => /^fallback-/i.test(n));
     assert.ok(pName && fName); assert.equal(await requestThrough(mixed), 'PRIMARY-MOCK');
+
+    if (prodBlackholeOnly) {
+      const tProd = Date.now();
+      primary.setMode('hang');
+      const prodFallback = await waitNow(/^fallback-/i, 330000);
+      evidence.scenarios.push({ name: 'provider-blackhole-production-interval', interval: labInterval,
+        blackholeMs: Date.now() - tProd, now: prodFallback.now, fixed: prodFallback.fixed });
+      console.log(JSON.stringify(evidence, null, 2));
+      return;
+    }
 
     let t = Date.now(); primary.setMode('hang');
     const autoF = await waitNow(/^fallback-/i); const blackholeMs = Date.now() - t;
