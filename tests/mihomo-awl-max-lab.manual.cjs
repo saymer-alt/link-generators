@@ -104,6 +104,7 @@ async function startMihomo(config, dir, control) {
 
   const labInterval = Number(process.env.AWL_LAB_INTERVAL || 2);
   const prodBlackholeOnly = process.env.AWL_PROD_BLACKHOLE_ONLY === '1';
+  const prodActiveOnly = process.env.AWL_PROD_ACTIVE_ONLY === '1';
   const g = doc['proxy-groups'][0];
   assert.equal(g.type, 'fallback'); assert.equal(g.lazy, false);
   assert.equal(g.timeout, 60000); assert.equal(g['max-failed-times'], 2); assert.equal(g.interval, 300);
@@ -133,6 +134,22 @@ async function startMihomo(config, dir, control) {
       const prodFallback = await waitNow(/^fallback-/i, 330000);
       evidence.scenarios.push({ name: 'provider-blackhole-production-interval', interval: labInterval,
         blackholeMs: Date.now() - tProd, now: prodFallback.now, fixed: prodFallback.fixed });
+      console.log(JSON.stringify(evidence, null, 2));
+      return;
+    }
+
+    if (prodActiveOnly) {
+      const tActive = Date.now();
+      primary.setMode('hang');
+      const dials = [];
+      for (let i = 1; i <= 2; i++) {
+        const started = Date.now();
+        try { dials.push({ i, ok: true, body: await requestThrough(mixed, 7000), ms: Date.now() - started }); }
+        catch (e) { dials.push({ i, ok: false, error: e.message, ms: Date.now() - started }); }
+      }
+      const activeFallback = await waitNow(/^fallback-/i, 25000);
+      evidence.scenarios.push({ name: 'provider-blackhole-active-dials', interval: labInterval,
+        blackholeMs: Date.now() - tActive, dials, now: activeFallback.now, fixed: activeFallback.fixed });
       console.log(JSON.stringify(evidence, null, 2));
       return;
     }
