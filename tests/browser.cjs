@@ -52,11 +52,14 @@ const expectedAwg = {
     }
     const defaultOutput = await build('default');
     assert.equal(defaultOutput.doc.tun.stack, 'mips'); // продуктовый дефолт (NIGHT-09)
+    assert.equal(await page.locator('#mihomoCompatBox').isVisible(), true);
+    assert.match(await page.locator('#mihomoCompatBox').innerText(), /MIPS TUN stack.*1\.19\.31/s);
     assert.match(await page.locator('#mihomoValidationBox').innerText(), /mihomo -t -f \/path\/to\/config\.yaml/);
     assert.match(await page.locator('#mihomoValidationBox').innerText(), /полный YAML.*полный вывод/i);
     await page.locator('#cfgTunMips').uncheck(); // gVisor — compatibility fallback
     const gvisor = await build('gvisor');
     assert.equal(gvisor.doc.tun.stack, 'gvisor');
+    assert.equal(await page.locator('#mihomoCompatBox').isVisible(), false);
     assert.equal(gvisor.yaml.replace('stack: gvisor', 'stack: mips'), defaultOutput.yaml);
     await page.locator('#cfgTunMips').check();
     assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
@@ -91,6 +94,7 @@ const expectedAwg = {
     await page.locator('#realityModernInput').fill('pan1.example\nbad::ipv6');
     const sel = await build('reality-selective');
     assert.equal(sel.doc.proxies[0]['reality-opts']['support-x25519mlkem768'], true);
+    assert.match(await page.locator('#mihomoCompatBox').innerText(), /Modern REALITY.*v25\.5\.16/s);
     assert.equal(await page.locator('#perProxyAdvancedPanel').isVisible(), true);
     assert.equal(await page.locator('#cfgPerProxyMaster').isChecked(), true);
     assert.equal(await page.locator('#cfgPerProxyTun').isEnabled(), true);
@@ -106,6 +110,7 @@ const expectedAwg = {
     const awg = await build('awg31');
     const proxy = awg.doc.proxies[0];
     for (const [key, value] of Object.entries(expectedAwg)) assert.equal(proxy['amnezia-wg-option'][key], value, key);
+    assert.match(await page.locator('#mihomoCompatBox').innerText(), /AmneziaWG 3\.1.*1\.19\.30/s);
     assert.equal(proxy['persistent-keepalive'], 25);
     assert.deepEqual(proxy.dns, ['1.1.1.1', '8.8.8.8']);
     assert.equal(proxy['amnezia-wg-option'].h1, '100001-100010');
@@ -169,6 +174,7 @@ const expectedAwg = {
     assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
     await page.locator('#mihomoInput').fill('mieru://test:test@192.0.2.4:20000?transport=TCP#TEST');
     await build();
+    assert.match(await page.locator('#mihomoCompatBox').innerText(), /Mieru \/ mierus.*эксперименталь/i);
 
     const extra = await page.evaluate(text => {
       const awgLines = /^(?:HeaderProtectionKey|ContentPaddingAddition|RekeyAfterTime|RekeyTimeout|RejectAfterTime|KeepaliveTimeout|MaxHandshakeAttempts|RandomTrailers|DisableCookies)\s*=.*\n/gm;
@@ -200,6 +206,21 @@ const expectedAwg = {
     await page.evaluate(() => { window.testClipboard = ''; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.testClipboard = text; } } }); });
     await page.locator('#copyYamlBtn').click();
     assert.equal(await page.evaluate(() => window.testClipboard), await page.locator('#mihomoOutput').inputValue());
+    const compat = await page.evaluate(() => {
+      const summary = doc => deriveCompatSummary(doc).map(x => x.key);
+      return {
+        none: summary({ proxies: [{ name: 'x', type: 'ss', server: '192.0.2.1', port: 443 }] }),
+        mipsListener: summary({ listeners: [{ type: 'tun', stack: 'mips' }] }),
+        awg31: summary({ proxies: [{ type: 'wireguard', 'amnezia-wg-option': { version: 3 } }] }),
+        providerModern: summary({ 'proxy-providers': { p: { override: { 'override-expr': [{ expr: 'x', value: { 'support-x25519mlkem768': true } }] } } } }),
+        tt: summary({ proxies: [{ type: 'trusttunnel' }] })
+      };
+    });
+    assert.deepEqual(compat.none, []);
+    assert.deepEqual(compat.mipsListener, ['mips']);
+    assert.deepEqual(compat.awg31, ['awg31']);
+    assert.deepEqual(compat.providerModern, ['override-expr', 'modern-reality']);
+    assert.deepEqual(compat.tt, ['trusttunnel']);
     const validator = await page.evaluate(() => {
       const results = [];
       const check = (name, doc, status, warnings) => {
