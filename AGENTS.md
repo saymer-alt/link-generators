@@ -23,7 +23,7 @@ two tabs — a generator for WARP `masque://` links and a `config.yaml` builder 
 What the project DOES NOT have (do not invent it): an application build system, package.json,
 application npm dependencies, a linter, or a backend. Since 2026-09-15 there are Node regression tests
 in `tests/`; a runtime test also runs in the auto-update workflow.
-Every push to `main` is published to Pages immediately — "main = production".
+`main` is the integration/development branch. `stable` is the production channel used for GitHub Pages and released user-facing builds. Changes normally land in `main` first and reach `stable` only by an explicit promotion after CI and the required functional/field checks. Do not develop directly on `stable`.
 
 The project language is Russian (UI, comments, documentation). Code style: everything inline in one
 HTML file, compact hand-written JS without frameworks, section-marker comments like
@@ -37,7 +37,7 @@ HTML file, compact hand-written JS without frameworks, section-marker comments l
 | `web4core.runtime.js` | Vendored build artifact from saymer-alt/web4core@link-generators | NO — see below |
 | `tests/` | Node/browser regression tests and fixtures | Yes — in sync with the contracts they verify |
 | `docs/` | Internal knowledge base: ARCHITECTURE, DATAFLOW, MIHOMO, PROTOCOLS, VALIDATION, UPDATES, DEVELOPMENT, TESTING | Yes — in sync with behavior changes |
-| `.github/workflows/update-web4core-runtime.yml` | Runtime auto-update | Carefully: it is allowed to write to `main` |
+| `.github/workflows/update-web4core-runtime.yml` | Runtime build/validation + auto-update | Carefully: validation runs for `main`/ `stable`, but write-back is allowed only to `main` |
 | `README.md` | User-facing landing page (rewritten 2026-09-08) | Yes, but do not silently rewrite it |
 | `.nojekyll` | Disables Jekyll processing on Pages | Do not touch |
 | `LICENSE` | BSD-3-Clause (inherited from web4core) | Do not touch |
@@ -184,8 +184,8 @@ Upstream synchronization into the custom branch is a controlled merge with revie
 not an automatic merge of external code (see `docs/UPDATES.md`).
 
 Consequences for the agent:
-- every push to `main` triggers this workflow (even if the runtime did not change — then
-  it completes without a commit);
+- pushes/PRs involving `main` or `stable` trigger the read-only runtime build/test job;
+- only a `main` run may execute the write-back job and create an updated `web4core.runtime.js` commit; `stable` must never receive an automatic runtime write-back;
 - shortly after your push to `main`, a bot commit may appear changing only
   `web4core.runtime.js` — this is normal, do not revert it;
 - a runtime update can change parsing/build behavior without changing `index.html` —

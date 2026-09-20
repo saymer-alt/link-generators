@@ -88,14 +88,29 @@ Inline JS извлечь из последнего `<script>` и провери�
 
 ## Deployment
 
-`push origin main` → GitHub Pages публикует сразу (**main = прод**), а workflow
-`update-web4core-runtime.yml` запускается автоматически (см. [UPDATES.md](UPDATES.md)).
-После пуша:
+Постоянные ветки разделены по назначению:
 
-1. открыть https://saymer-alt.github.io/link-generators/ и повторить быстрый сценарий;
-2. если прилетел бот-коммит «Update web4core runtime from upstream» — `git pull --ff-only`
-   и повторить прогон (allow-lan патч, WG-DNS, валидатор);
-3. не откатывать бот-коммит.
+- `main` — integration/development. Все обычные feature/fix/docs PR сначала попадают сюда.
+- `stable` — production channel для GitHub Pages. На `stable` не разрабатывают напрямую.
+- release tag (`vX.Y.Z`) — неизменяемый снимок проверенного production commit.
+
+Workflow `update-web4core-runtime.yml` запускает read-only build/test для `main` и `stable`,
+но автоматический write-back `web4core.runtime.js` разрешён только в `main`. Это специально:
+новый runtime сначала должен пройти integration и необходимые ручные/полевые проверки, а уже
+затем попасть в production через promotion.
+
+Promotion выполняется только после зелёного CI и нужных функциональных проверок:
+
+1. закончить изменения в `main` и убедиться, что CI зелёный;
+2. при изменении поведения пройти релевантный browser/real-Mihomo/field check;
+3. открыть promotion PR `main → stable` без дополнительных функциональных правок;
+4. после зелёного CI merge в `stable`;
+5. проверить https://saymer-alt.github.io/link-generators/;
+6. для релиза поставить тег на тот же production commit и опубликовать GitHub Release.
+
+До первого переключения GitHub Pages source в настройках репозитория необходимо вручную выбрать
+`stable` / root вместо `main` / root. После этого обычные commits в `main` больше не являются
+production deployment.
 
 ## Safe change rules (кратко; полная версия — AGENTS.md)
 

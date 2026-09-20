@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Введён отдельный production channel `stable`: `main` становится integration/development, runtime CI валидирует обе ветки, но автоматический write-back runtime остаётся только в `main`. GitHub Pages должен публиковаться из `stable`; promotion выполняется явно после зелёного CI и необходимых функциональных/полевых проверок.
+
 ## [1.4.1] - 2026-09-20
 
 ### Added
