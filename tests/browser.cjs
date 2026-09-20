@@ -28,7 +28,12 @@ const expectedAwg = {
     await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
     await page.locator('button.tab').filter({ hasText: 'Mihomo' }).click();
     assert.equal(await page.locator('#cfgTunMips').isChecked(), true); // продуктовый дефолт (NIGHT-09)
+    assert.match(await page.locator('label:has(#cfgSubMode)').innerText(), /URL-подписки/);
+    assert.match(await page.locator('#subModeHint').innerText(), /HTTP\(S\) URL.*proxy-providers/);
+    assert.equal(await page.locator('#mihomoOutput').isEditable(), false);
+    assert.match(await page.locator('#mihomoOutputHint').innerText(), /только для чтения.*Build Config/i);
     await page.locator('#cfgSubMode').uncheck();
+    assert.match(await page.locator('#subModeHint').innerText(), /обычные proxy-ссылки.*напрямую/i);
     await page.locator('#cfgWebUI').uncheck();
     await page.locator('#mihomoInput').fill(input);
     async function build(name) {
@@ -44,6 +49,8 @@ const expectedAwg = {
     }
     const defaultOutput = await build('default');
     assert.equal(defaultOutput.doc.tun.stack, 'mips'); // продуктовый дефолт (NIGHT-09)
+    assert.match(await page.locator('#mihomoValidationBox').innerText(), /mihomo -t -f \/path\/to\/config\.yaml/);
+    assert.match(await page.locator('#mihomoValidationBox').innerText(), /полный YAML.*полный вывод/i);
     await page.locator('#cfgTunMips').uncheck(); // gVisor — compatibility fallback
     const gvisor = await build('gvisor');
     assert.equal(gvisor.doc.tun.stack, 'gvisor');
