@@ -4,10 +4,12 @@
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-09-21
+
 ### Changed
 
 - Production-дефолт Mihomo изменён с `log-level: info` на `log-level: warning`: обычные успешные per-connection записи больше не попадают в лог, а warnings/errors сохраняются; это снижает риск многогигабайтных лог-файлов на VPS при перенаправлении stdout/stderr без ротации.
-- Введён отдельный production channel `stable`: `main` становится integration/development, runtime CI валидирует обе ветки, но автоматический write-back runtime остаётся только в `main`. GitHub Pages должен публиковаться из `stable`; promotion выполняется явно после зелёного CI и необходимых функциональных/полевых проверок.
+- Введён отдельный production channel `stable`: `main` становится integration/development, runtime CI валидирует обе ветки, но автоматический write-back runtime остаётся только в `main`. GitHub Pages публикуется из `stable`; promotion выполняется явно после зелёного CI и необходимых функциональных/полевых проверок.
 
 ## [1.4.1] - 2026-09-20
 
