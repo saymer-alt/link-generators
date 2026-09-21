@@ -76,7 +76,7 @@ mixed-port: 7890          # убирается режимом «SOCKS-порт �
 allow-lan: false          # страница патчит на true + bind-address: "*"
 tcp-concurrent: true
 mode: rule
-log-level: info
+log-level: warning
 ipv6: false
 unified-delay: true
 profile:
@@ -86,6 +86,13 @@ proxy-groups: …
 rules:
   - "MATCH,GLOBAL"        # единственное правило: всё в группу GLOBAL
 ```
+
+Production-дефолт — `warning`: обычные успешные TCP/UDP-соединения уровня `info` не
+записываются, но предупреждения и ошибки остаются видимыми. Это особенно важно для VPS, где
+stdout/stderr Mihomo перенаправляется в постоянный файл: `info` может создавать строку на каждое
+соединение и без внешней ротации раздувать лог до гигабайтов. Поддерживаемые Mihomo уровни:
+`silent`, `error`, `warning`, `info`, `debug`. Для временной диагностики уровень можно
+вручную повысить до `info` или `debug`, но production output генератора использует `warning`.
 
 ## Proxy-groups (обычный режим, ссылки)
 

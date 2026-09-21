@@ -3362,7 +3362,7 @@
     const config = {
       "allow-lan": false,
       mode: "rule",
-      "log-level": "info",
+      "log-level": "warning",
       proxies,
       "proxy-groups": groups,
       rules: [`MATCH,${GLOBAL_GROUP_NAME}`]
@@ -3671,7 +3671,7 @@
     "allow-lan: false",
     "tcp-concurrent: true",
     "mode: rule",
-    "log-level: info",
+    "log-level: warning",
     "ipv6: false",
     "unified-delay: true",
     "profile:",
