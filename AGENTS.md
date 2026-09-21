@@ -25,6 +25,18 @@ application npm dependencies, a linter, or a backend. Since 2026-09-15 there are
 in `tests/`; a runtime test also runs in the auto-update workflow.
 `main` is the integration/development branch. `stable` is the production channel used for GitHub Pages and released user-facing builds. Changes normally land in `main` first and reach `stable` only by an explicit promotion after CI and the required functional/field checks. Do not develop directly on `stable`.
 
+### Release invariant
+
+For every user-facing release, preserve this order:
+
+1. develop and merge changes into `main`;
+2. require green CI on `main` and complete all relevant browser / real-Mihomo / field checks;
+3. promote the tested state with a dedicated PR `main → stable` — do not add new functional changes in the promotion PR;
+4. require green CI on `stable` and verify the production GitHub Pages deployment;
+5. only then create the release tag `vX.Y.Z` on the production commit and publish the GitHub Release.
+
+Never tag or publish a release directly from an unpromoted `main` commit. The release tag must identify the same tested production state that users receive from `stable`.
+
 The project language is Russian (UI, comments, documentation). Code style: everything inline in one
 HTML file, compact hand-written JS without frameworks, section-marker comments like
 `// === SECTION ===`.
