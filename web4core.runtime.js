@@ -3528,7 +3528,7 @@
     const providers = {};
     const targets = [];
     const providerTargets = [];
-    const probe = { url: getUrlTest(opts), interval: PROXY_FETCH_INTERVAL, "expected-status": getUrlTestExpectedStatus(opts), lazy: false };
+    const probe = { url: getUrlTest(opts), interval: PROXY_FETCH_INTERVAL, lazy: false };
     for (const [name, side] of [["PRIMARY", primary], ["FALLBACK", fallback]]) {
       const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter, modernHosts: opts?.modernHosts }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
       const names = [];
