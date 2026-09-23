@@ -64,6 +64,12 @@ Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки:
 
 - **Вкладка 1**: `parseYaml()` (импорт YAML от Telegram-бота), `generateWarp()` (генерация
   ссылок, DPI-стратегия «П.1/П.2/П.3»), `sendToMihomo()` (передача в Builder).
+  Граница ответственности намеренная: `parseYaml()` импортирует WARP identity/tunnel
+  parameters (`private-key`, `public-key`, `ip`, `ipv6`, `sni`, `dns`), а
+  `generateWarp()` сам владеет выбором `server`/`port`/QUIC-vs-H2. Поля
+  `server`, `port`, `network` из Telegram YAML не должны начинать влиять на
+  существующую генерацию. Для источников с уже выбранным endpoint'ом нужен отдельный
+  явный import/conversion flow, не подмена legacy-пути.
 - **Вкладка 2, обёртка над рантаймом**: `buildMihomo()` (сборка options и вызов
   `web4core.buildFromRequest`), `initWgUpload()` (чтение .conf/.awg файлов).
 - **Вкладка 2, собственные слои поверх рантайма** (добавлены локально, существуют только в этом репо):
