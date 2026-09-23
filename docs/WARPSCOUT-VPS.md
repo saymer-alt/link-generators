@@ -28,7 +28,18 @@ sudo apt update
 sudo apt install -y curl ca-certificates tar jq
 ```
 
+Если вы уже вошли как `root`, `sudo` не нужен:
+
+```bash
+apt update
+apt install -y curl ca-certificates tar jq
+```
+
 `jq` нужен только для удобного чтения JSON в диагностике.
+
+Если `sudo` пишет `unable to resolve host <hostname>`, это отдельная проблема
+локального hostname/`/etc/hosts`; она не связана с WARPSCOUT и обычно не мешает
+самой установке. Исправить её лучше отдельно, прежде чем использовать `sudo` дальше.
 
 ## 2. Установка WARPSCOUT
 
@@ -44,16 +55,22 @@ curl -fsSL https://raw.githubusercontent.com/vernette/warpscout/master/install.s
 ~/.local/bin/warpscout
 ```
 
-Если каталог ещё не в `PATH`:
+Если каталог ещё не в `PATH`, добавьте его **в текущую SSH-сессию**:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Для постоянного PATH:
+Для следующих login-сессий добавьте ту же строку в `~/.profile`:
 
 ```bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile
+```
+
+Либо после записи перечитайте профиль в текущем shell:
+
+```bash
+. ~/.profile
 ```
 
 Проверка:
@@ -61,6 +78,9 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile
 ```bash
 warpscout version
 ```
+
+Если `~/.local/bin/warpscout` запускается, а `warpscout` отвечает
+`command not found`, установка исправна — проблема только в `PATH`.
 
 Install script умеет обновлять уже установленную версию повторным запуском.
 
