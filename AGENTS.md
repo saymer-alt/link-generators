@@ -79,7 +79,18 @@ do not copy an unverified runtime, and do not force-push.
 
 - `parseYaml()` — imports a YAML config from the Telegram bot: `jsyaml.loadAll` over all documents,
   finds `proxies[0]` or an object with a `private-key`/`privateKey` key; rejects input without
-  `private-key`. Fills form fields (privateKey, publicKey, ip, ipv6, sni, dns).
+  `private-key`. It deliberately imports only the WARP identity/tunnel parameters used by the form:
+  `private-key`, `public-key`, `ip`, `ipv6`, `sni`, and `dns`.
+- **Legacy Telegram import contract (load-bearing):** the Telegram YAML is a source of WARP
+  identity/tunnel parameters, **not** a source of transport endpoint selection. Source
+  `server`, `port`, and `network` values must not start overriding `generateWarp()`.
+  Their current non-use is intentional, not a missing parser feature. `generateWarp()` owns
+  endpoint/transport selection and applies the project's tested QUIC/H2 strategy below.
+  Do not "fix" this by wiring source endpoints into the existing Telegram path.
+  If another source (for example a scanner that has already discovered a specific working
+  endpoint) must preserve `server`/`port`/`network`, add a separate explicit
+  import/conversion path; it may reuse helpers, but it must not silently change the semantics
+  of `parseYaml()` or `generateWarp()`.
 - `generateWarp()` — generates pairs of QUIC + H2 links. These are NOT random numbers, but a tuned
   anti-DPI strategy (marked in code with comments "P.1/P.2/P.3") — see "DPI strategy".
 - `sendToMihomo()` — moves generated links into tab 2 and triggers an automatic build.
