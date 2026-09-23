@@ -67,6 +67,10 @@ for (const sub of [false, true]) {
   assert.match(result, /name: GLOBAL\n\s+type: fallback/);
   assert.doesNotMatch(result, /name: (PRIMARY|FALLBACK)\n/);
   assert.match(result, /filter: "\^\(PRIMARY-\|primary-\)`\^\(FALLBACK-\|fallback-\)"/);
+  const groupsStart = result.indexOf('proxy-groups:');
+  const rulesStart = result.indexOf('\nrules:', groupsStart);
+  assert.ok(groupsStart >= 0 && rulesStart > groupsStart);
+  assert.doesNotMatch(result.slice(groupsStart, rulesStart), /expected-status:/);
   assert.doesNotMatch(result, /listeners:/);
   cases++;
 }
