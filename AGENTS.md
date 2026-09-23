@@ -233,8 +233,12 @@ not the code. Rules:
 - if the task says "fix/restore warpscout", stop and clarify with the owner whether it should
   actually be restored or the request is stale;
 - code changes that alter the set of tabs/features must include a synchronized README update;
-- the page currently supports only YAML import from the Telegram bot (`parseYaml`); it does
-  not parse raw warpscout logs.
+- the page currently supports YAML identity import through `parseYaml()`. Compatible Mihomo
+  YAML emitted by WARPSCOUT can supply the same identity fields, but the page does **not**
+  parse raw WARPSCOUT console tables/logs and does not import WARPSCOUT transport endpoints;
+- practical WARPSCOUT procedures are documented in `docs/WARPSCOUT-WINDOWS.md` and
+  `docs/WARPSCOUT-VPS.md`. These docs are operational guidance, not evidence that a historical
+  Warpscout Parser UI has been restored.
 
 ## Input formats and contracts
 
