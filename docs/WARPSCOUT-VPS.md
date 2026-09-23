@@ -597,6 +597,34 @@ warpscout socks -e IP:PORT -p masque -masque-sni 4pda.to
 
 ---
 
+## Live-наблюдения 2026-09-23
+
+Эти результаты — диагностические точки, а не универсальные нормы Cloudflare.
+
+### SE2
+
+- WG scan: 70/70 рабочих; лучшие маршруты шли через `ARN` с примерно 1 ms TUN ping и 0% loss.
+- Лучший отдельный WG endpoint в одном из прогонов: `188.114.97.165:2408`, `NODE=ARN`, `SEEN AS=SE`.
+- MASQUE H3 с `SNI=4pda.to`: 2/14 рабочих.
+- MASQUE H2 с тем же SNI: 70/70 рабочих.
+- Реальный клиент при переключении WARP WG / MASQUE H2 / MASQUE H3 в тот момент получил
+  одинаковый Cloudflare exit: `104.28.225.221`, `loc=SE`, `colo=FRA`, `warp=on`.
+- Gemini в момент проверки работал во всех трёх режимах, поэтому транспортную причину
+  предыдущего сбоя установить не удалось. Такой тест надо повторять именно во время сбоя.
+
+### EE / Ubuntu 24.04
+
+До установки WARPSCOUT production Mihomo уже дал полезное независимое наблюдение:
+`WARP-MASQUE-QUIC` логировал `H3_REQUEST_CANCELLED`/closed network connection,
+`Fastest_MASQUE` неоднократно активировал health-check и в момент аудита выбрал H2.
+Это прямое evidence текущего production path, но WARPSCOUT scan с отдельным свежим
+аккаунтом всё равно нужен для сравнения доступности endpoint'ов H3/H2/WG из сети EE VPS.
+
+Не смешивайте эти уровни доказательств: WARPSCOUT измеряет отдельный тестовый WARP account
+и набор endpoint'ов; production Mihomo измеряет текущую конфигурацию пользователя.
+
+---
+
 ## 15. Быстрый чек-лист для каждого VPS
 
 ```bash
