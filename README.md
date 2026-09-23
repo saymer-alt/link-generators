@@ -40,8 +40,8 @@
 
 **YAML от WARP-бота → ссылки `masque://`**
 
-1. На вкладке **⚡ WARP MASQUE Links** вставьте YAML-конфигурацию WARP-бота и нажмите **🔍 Распарсить** — ключи и параметры подставятся в форму.
-2. **⚡ Сгенерировать ссылки** — получите пары `masque://`-ссылок (QUIC + H2).
+1. На вкладке **⚡ WARP MASQUE Links** вставьте YAML-конфигурацию WARP-бота и нажмите **🔍 Распарсить** — в форму импортируются ключи и параметры WARP-профиля. Endpoint и порт из исходного YAML намеренно не задают транспорт генератора.
+2. **⚡ Сгенерировать ссылки** — получите пары `masque://`-ссылок (QUIC + H2); endpoint'ы и порты выбираются самим генератором по его MASQUE/DPI-стратегии.
 3. Кнопка **🚀 В Mihomo Builder** перенесёт их в сборщик конфига.
 
 ## Какие данные можно подать на вход
@@ -60,7 +60,14 @@
 - внутренний IP туннеля `ip` (опционально `ipv6`);
 - `sni` и `dns`.
 
-Название бота не важно — важно наличие этих полей. Из них собираются `masque://`-ссылки; порты и распределение QUIC/H2 подбираются анти-DPI стратегией автоматически.
+Название бота не важно — важно наличие этих полей. Из них собираются `masque://`-ссылки; порты и распределение QUIC/H2 подбираются anti-DPI стратегией автоматически.
+
+**WARPSCOUT тоже подходит как источник MASQUE identity.** Его вывод
+`-conf - -conf-type mihomo` содержит совместимый `proxies:` блок с ключами, SNI,
+внутренним IP и DNS. Текущий импорт намеренно не переносит найденные WARPSCOUT
+`server` / `port` / `network` в transport-стратегию генератора: H2 продолжает
+использовать Safe Ports по умолчанию. Практические сценарии:
+[Windows](docs/WARPSCOUT-WINDOWS.md) и [VPS](docs/WARPSCOUT-VPS.md).
 
 ## Поддерживаемые протоколы
 
@@ -163,6 +170,8 @@ mihomo -t -f config.yaml
 | [PROTOCOLS](docs/PROTOCOLS.md) | протоколы: вход → bean → Mihomo |
 | [VALIDATION](docs/VALIDATION.md) | pre-copy валидатор подробно |
 | [VPS-GATEWAY](docs/VPS-GATEWAY.md) | опциональный профиль для amnezia-mihomo-gateway |
+| [WARPSCOUT-WINDOWS](docs/WARPSCOUT-WINDOWS.md) | WARP / MASQUE H3 / H2 на Windows и подготовка данных для генератора |
+| [WARPSCOUT-VPS](docs/WARPSCOUT-VPS.md) | установка на Ubuntu/Debian, сканы с VPS и диагностика H3/H2 через Mihomo |
 | [WEB4CORE-FORK](docs/WEB4CORE-FORK.md) | source-level fork, ветка `link-generators` и сборка runtime |
 | [UPDATES](docs/UPDATES.md) | жизненный цикл `web4core.runtime.js` |
 | [DEVELOPMENT](docs/DEVELOPMENT.md) | разработка и проверки |

@@ -188,13 +188,50 @@ VPS получает тот же `tunStack` третьим аргументом 
 ошибка может появиться именно на этапе генерации (реальный кейс — `transport: TPC` у
 Mieru, пришедший из пользовательской ссылки).
 
-## Вкладка 1: YAML бота → masque://
+## Вкладка 1: YAML бота → WARP identity → masque://
+
+Здесь намеренно разделены **identity** и **transport**.
 
 `parseYaml()` (`jsyaml.loadAll`, ищет `proxies[0]` или объект с `private-key`, иначе
-отказ) → поля формы → `generateWarp()` генерирует пары ссылок QUIC+H2 по DPI-стратегии
-(фиксированный пул QUIC `162.159.198.1/2, 162.159.199.2:443`; H2 — IP из 198/199-подсетей,
-взвешенные порты; анти-корреляция IP при совпадении портов; base64-ключи URL-энкодятся
-`+ / =` → `%2B %2F %3D`) → `sendToMihomo()` кладёт их в `#mihomoInput` и вызывает сборку.
+отказ) читает из YAML Telegram-бота только параметры зарегистрированного WARP-профиля,
+которые заполняют форму: `private-key`, `public-key`, `ip`, `ipv6`, `sni`, `dns`.
+Поля источника `server`, `port` и `network` не являются входом транспортной стратегии
+существующего Telegram-сценария. Это сознательное поведение, а не потеря данных парсером.
+
+Дальше `generateWarp()` сам выбирает transport endpoint'ы и генерирует пары ссылок QUIC+H2
+по DPI-стратегии: фиксированный пул QUIC `162.159.198.1/2, 162.159.199.2:443`; H2 — IP
+из 198/199-подсетей, взвешенные порты; анти-корреляция IP при совпадении портов;
+base64-ключи URL-энкодятся `+ / =` → `%2B %2F %3D`.
+`sendToMihomo()` кладёт результат в `#mihomoInput` и вызывает сборку.
+
+Поток данных:
+
+```text
+Telegram WARP YAML
+        │
+        │ identity/tunnel parameters only
+        ▼
+parseYaml()
+        ├─ private-key / public-key
+        ├─ ip / ipv6
+        ├─ sni
+        └─ dns
+        │
+        │ source server / port / network intentionally do not select transport
+        ▼
+generateWarp()
+        ├─ project QUIC endpoint pool
+        ├─ project H2 endpoint selection
+        ├─ weighted H2 ports
+        └─ anti-correlation
+        ▼
+masque:// links
+```
+
+Если внешний инструмент уже нашёл конкретный рабочий endpoint и его надо сохранить,
+это должен быть отдельный явный путь импорта/конвертации, а не изменение семантики
+`parseYaml()` или `generateWarp()`.
+
 Формат ссылки — контракт, см. [AGENTS.md](../AGENTS.md) («Форматы входных данных и контракты»).
 
 ## Сеть и приватность
