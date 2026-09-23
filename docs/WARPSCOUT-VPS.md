@@ -28,7 +28,18 @@ sudo apt update
 sudo apt install -y curl ca-certificates tar jq
 ```
 
+Если вы уже вошли как `root`, `sudo` не нужен:
+
+```bash
+apt update
+apt install -y curl ca-certificates tar jq
+```
+
 `jq` нужен только для удобного чтения JSON в диагностике.
+
+Если `sudo` пишет `unable to resolve host <hostname>`, это отдельная проблема
+локального hostname/`/etc/hosts`; она не связана с WARPSCOUT и обычно не мешает
+самой установке. Исправить её лучше отдельно, прежде чем использовать `sudo` дальше.
 
 ## 2. Установка WARPSCOUT
 
@@ -44,16 +55,44 @@ curl -fsSL https://raw.githubusercontent.com/vernette/warpscout/master/install.s
 ~/.local/bin/warpscout
 ```
 
-Если каталог ещё не в `PATH`:
+Для пользователя `root` это:
+
+```text
+/root/.local/bin/warpscout
+```
+
+Сразу после install script сначала проверьте **сам бинарник по прямому пути**:
+
+```bash
+~/.local/bin/warpscout version
+```
+
+Если эта команда работает, WARPSCOUT установлен корректно независимо от состояния `PATH`.
+
+Если затем обычная команда:
+
+```bash
+warpscout version
+```
+
+отвечает `command not found`, проблема только в `PATH`. Добавьте каталог
+**в текущую SSH-сессию**:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
+warpscout version
 ```
 
-Для постоянного PATH:
+Для следующих login-сессий добавьте ту же строку в `~/.profile`:
 
 ```bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile
+```
+
+Либо после записи перечитайте профиль в текущем shell:
+
+```bash
+. ~/.profile
 ```
 
 Проверка:
@@ -62,7 +101,32 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile
 warpscout version
 ```
 
+Если `~/.local/bin/warpscout` запускается, а `warpscout` отвечает
+`command not found`, установка исправна — проблема только в `PATH`.
+
 Install script умеет обновлять уже установленную версию повторным запуском.
+
+### Проверено на реальном VPS
+
+Проверенный smoke-test от 2026-09-23:
+
+```text
+Ubuntu 24.04.5 LTS
+x86_64 / amd64
+WARPSCOUT 0.16.0
+install path для root: /root/.local/bin/warpscout
+```
+
+Наблюдавшийся сценарий после установки:
+
+```text
+~/.local/bin/warpscout    -> запускается
+warpscout version         -> command not found
+```
+
+означал именно отсутствие `/root/.local/bin` в текущем `PATH`, а не неудачную
+установку WARPSCOUT. После `export PATH="$HOME/.local/bin:$PATH"` команда становится
+доступна в той же SSH-сессии.
 
 ## 3. Отдельный каталог для аккаунта
 
