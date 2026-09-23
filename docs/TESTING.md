@@ -72,6 +72,35 @@ TEST_OUTPUT_DIR=/absolute/out node tests/mihomo-awl-priority.cjs
 «все узлы мертвы» и восстановление. Запускать эксклюзивно, без параллельных
 Mihomo-лабораторий.
 
+## AWG field-check: relaxed group status — 2026-09-23
+
+Полевой кандидат для кейса Max: AWG 3.1 после ручного Ping получает latency, но затем
+может снова стать недоступным для GLOBAL. Исходники Mihomo v1.19.31 показывают, что
+`alive` сам по времени не протухает: состояние меняет следующий `URLTest()`. При этом
+MetaCubeXD manual Ping вызывает `/delay?url=...&timeout=...` без `expected-status`, а
+сгенерированный ранее GLOBAL требовал точный код (для Google — 204).
+
+Кандидат на `main` поэтому убирает `expected-status` **только у плоского GLOBAL
+fallback**. URL, `interval: 300`, `lazy: false`, dial-failure окно и provider
+health-check не меняются; HTTP providers по-прежнему сохраняют строгий
+`expected-status`. Обычный режим генератора также не меняется.
+
+Полевой прогон после сборки нового runtime:
+
+1. Сгенерировать новый Auto Whitelist config с тем же AWG и тем же Ping server.
+2. Reload/restart Mihomo и больше не нажимать Ping у AWG вручную.
+3. Проверить, появляется ли latency/живое состояние автоматически.
+4. Наблюдать минимум 15–20 минут (не менее трёх циклов по 300 секунд).
+5. По возможности воспроизвести БС → fallback → восстановление сети и проверить
+   автоматический возврат к первому доступному PRIMARY.
+6. Зафиксировать время, выбранный GLOBAL и состояние AWG до/после каждого 300-секундного
+   цикла. Если AWG снова становится dead, следующий кандидат — отдельный keep-warm
+   health-check; production `stable` до этого не менять.
+
+Успех этого field-check подтверждает практическую пригодность изменения, но сам по себе
+не доказывает, какой HTTP-код возвращался в прежнем неудачном цикле. Для точного root
+cause при повторении нужны логи health-check/URLTest или ответ тестового endpoint.
+
 ## Дополнительный runtime review #2588
 
 Подробно: [FALLBACK-REVIEW.md](FALLBACK-REVIEW.md). На v1.19.31 баг воспроизведён

@@ -62,6 +62,11 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
       assert.equal(global.filter, '^(PRIMARY-|primary-)`^(FALLBACK-|fallback-)');
       assert.equal(global.type, 'fallback');
       assert.equal(global.lazy, false);
+      // Auto Whitelist checks route reachability, not one exact HTTP response code.
+      assert.equal(global['expected-status'], undefined);
+      for (const provider of Object.values(doc['proxy-providers'] || {})) {
+        assert.equal(provider['health-check']['expected-status'], 204);
+      }
       assert.equal(doc.tun.stack, mips ? 'mips' : 'gvisor');
       assert.equal(doc.listeners, undefined);
       assert.equal(doc.dns, undefined);
