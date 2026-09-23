@@ -119,6 +119,37 @@ VPS. Это боевой дефолт схемы (потребители — к�
 Установщик при следующем запуске перезапишет `fake-ip-range` и `inet4-address` в конфиге
 своими значениями (sed-патчи в §2.7 install.sh) — рассинхрон бесполезен и вреден.
 
+## Cross-project contract: generator -> gateway -> bootstrap
+
+Этот профиль нельзя рассматривать отдельно от двух соседних проектов:
+
+```text
+link-generators
+  -> формирует desired Mihomo config для VPS Gateway
+amnezia-mihomo-gateway
+  -> сегодня применяет host-side AWG -> Mihomo routing/integration
+vps-gateway-bootstrap
+  -> будущий orchestration/ownership/rollback слой
+```
+
+Live-аудит SE2 от 2026-09-23 показал, почему эта граница важна. После старого удаления gateway
+на сервере могли оставаться Docker DNS override, запись `100 mihomo` и installer-era изменения
+Mihomo config. Поэтому:
+
+- генератор отвечает только за **желаемый YAML**, а не за ownership или rollback системного состояния;
+- `amnezia-mihomo-gateway` должен хранить/восстанавливать только доказуемо принадлежащее ему состояние;
+- будущий `vps-gateway-bootstrap` не должен повторно «патчить по догадке» YAML или системные файлы:
+  сначала discovery/ownership, затем plan/apply/validate/rollback;
+- изменение VPS-профиля здесь требует проверки не только `mihomo -t`, но и совместимости с
+  фактическими host-side инвариантами `amnezia-mihomo-gateway`;
+- значения `tun.device`, `fake-ip-range`, DNS и TUN-поля — межпроектный контракт, а не локальная
+  деталь UI.
+
+Текущий live-audit и rollout-status хранятся в
+[`amnezia-mihomo-gateway/docs/LIVE_AUDIT_2026-09-23.md`](https://github.com/saymer-alt/amnezia-mihomo-gateway/blob/stable/docs/LIVE_AUDIT_2026-09-23.md).
+До отдельного расходного VPS автоматический rollback в gateway остаётся непроверенным; это не
+причина менять значения VPS-профиля генератора без отдельного доказательства.
+
 ## Что генератор НЕ делает (никогда)
 
 Docker, AmneziaWG, `ip rule`/policy routing, iptables, MASQUERADE, fwmark, TCPMSS,
