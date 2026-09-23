@@ -145,6 +145,32 @@ Mihomo config. Поэтому:
 - значения `tun.device`, `fake-ip-range`, DNS и TUN-поля — межпроектный контракт, а не локальная
   деталь UI.
 
+### Live evidence: host DNS is not guaranteed by valid YAML
+
+Второй live-аудит 2026-09-23 на Ubuntu 24.04 показал важную границу ответственности.
+Mihomo с `dns.listen: 0.0.0.0:53` реально слушал TCP/UDP 53, а запросы самого хоста к
+`127.0.0.1:53` и адресу `docker0` проходили. При этом контейнер AmneziaWG не мог
+резолвить имена: UFW с default incoming deny блокировал `container -> host:53`.
+Точечные UDP+TCP правила только от Docker bridge/subnet к адресу host DNS немедленно
+восстановили DNS и HTTPS из контейнера.
+
+Следствие для этого репозитория: **это не ошибка генератора и не повод добавлять управление
+UFW в `link-generators`**. Валидный `dns:` в YAML описывает желаемый Mihomo listener, но
+не доказывает, что Linux firewall разрешает реальному потребителю добраться до него.
+Host-side слой обязан отдельно discover/apply/validate такую доступность и владеть своими
+firewall-правилами.
+
+На том же EE-хосте production Mihomo логировал `H3_REQUEST_CANCELLED` и закрытия
+`WARP-MASQUE-QUIC`, а `Fastest_MASQUE` периодически активировал health-check и в момент
+проверки выбрал H2. Это operational evidence для дальнейшего сравнения H3/H2, но не
+доказательство ошибки MASQUE-генерации и не основание менять transport defaults без
+повторяемых тестов.
+
+Кроме того, уже на двух VPS наблюдалось расхождение между desired YAML
+`tun.inet4-address: 10.255.255.1/30` и live-адресом `tun-mihomo 198.18.0.0/30`.
+Причина пока не установлена. Генератор должен продолжать описывать desired state, а
+runtime discovery должен проверять фактическое состояние перед выводами о маршрутизации.
+
 Текущий live-audit и rollout-status хранятся в
 [`amnezia-mihomo-gateway/docs/LIVE_AUDIT_2026-09-23.md`](https://github.com/saymer-alt/amnezia-mihomo-gateway/blob/stable/docs/LIVE_AUDIT_2026-09-23.md).
 До отдельного расходного VPS автоматический rollback в gateway остаётся непроверенным; это не
