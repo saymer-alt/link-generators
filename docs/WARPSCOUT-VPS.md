@@ -617,11 +617,29 @@ warpscout socks -e IP:PORT -p masque -masque-sni 4pda.to
 До установки WARPSCOUT production Mihomo уже дал полезное независимое наблюдение:
 `WARP-MASQUE-QUIC` логировал `H3_REQUEST_CANCELLED`/closed network connection,
 `Fastest_MASQUE` неоднократно активировал health-check и в момент аудита выбрал H2.
-Это прямое evidence текущего production path, но WARPSCOUT scan с отдельным свежим
-аккаунтом всё равно нужен для сравнения доступности endpoint'ов H3/H2/WG из сети EE VPS.
 
-Не смешивайте эти уровни доказательств: WARPSCOUT измеряет отдельный тестовый WARP account
-и набор endpoint'ов; production Mihomo измеряет текущую конфигурацию пользователя.
+Затем на этом же VPS был зарегистрирован свежий WARPSCOUT 0.16.0 account и выполнены
+сканы из сети самого сервера:
+
+- WG: **68/70 working**, 1 torn down; все наблюдаемые ноды `ARN`, `SEEN AS=EE`,
+  TUN ping около 7-8 ms;
+- `warpscout scan -p wg -P -best` в одном прогоне выбрал
+  `8.34.146.127:2408`, TUN ping 7 ms, loss 0%;
+- MASQUE H3 с `SNI=4pda.to`: **8/14 working**, 2 torn down, `ARN / EE`,
+  TUN ping около 7-8 ms;
+- MASQUE H2 с тем же SNI: **56/70 working**, 3 torn down, `ARN / EE`,
+  TUN ping около 7 ms.
+
+В этом конкретном прогоне H2 снова оказался доступнее H3, но уже не был «идеальным»:
+80% рабочих против примерно 57% у H3; WG был самым доступным (~97%). Это заметно мягче
+SE2, где H3 был 2/14, а H2 70/70. Значит, практический вывод пока такой: разница H2/H3
+зависит от конкретного VPS/маршрута и момента времени, хотя на обоих проверенных VPS H2
+показал более высокий working ratio.
+
+Не смешивайте уровни доказательств: WARPSCOUT измеряет отдельный тестовый WARP account
+и набор endpoint'ов; production Mihomo измеряет текущую пользовательскую конфигурацию.
+Совпадение направления результатов усиливает наблюдение, но не превращает его в доказательство
+универсальной неисправности H3.
 
 ---
 
