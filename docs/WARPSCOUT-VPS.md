@@ -691,6 +691,79 @@ warpscout scan -p wg -P -best
 
 ---
 
+
+## 15. Обязательный acceptance-тест нового VPS: Cloudflare node / colo
+
+Для нового VPS недостаточно проверить только ping, bandwidth и доступность WARP endpoint'ов.
+До ввода сервера в постоянную эксплуатацию обязательно зафиксируйте, к какому Cloudflare
+node / colo реально приходит трафик.
+
+Cloudflare использует Anycast: один и тот же IP объявляется из множества дата-центров, а
+конкретный путь определяется BGP/peering-маршрутом провайдера, текущей доступностью и
+traffic-engineering Cloudflare. Поэтому физически близкий дата-центр не гарантирован, а
+смена конкретного WARP endpoint IP/порта может вообще не изменить node.
+
+Минимальный acceptance-набор:
+
+```bash
+# 1. Лучший WG без фильтров
+warpscout scan -p wg -P -best
+
+# 2. Полный WG scan: какие nodes вообще доступны
+warpscout scan -p wg -P
+
+# 3. Проверка, существует ли альтернатива проблемному node
+warpscout scan -p wg -P \
+  -exclude-node ARN \
+  -best
+
+# 4. MASQUE H3
+warpscout scan -p masque -P \
+  -masque-sni 4pda.to \
+  -best
+
+# 5. MASQUE H2
+warpscout scan -p masque-h2 -P \
+  -masque-sni 4pda.to \
+  -best
+
+# 6. Реальный production-выход через Mihomo
+curl -x socks5h://127.0.0.1:7890 -s \
+  https://www.cloudflare.com/cdn-cgi/trace \
+  | grep -E '^(ip|loc|colo|warp)='
+```
+
+Записывайте как минимум:
+
+```text
+VPS/provider/location
+public VPS IP
+transport: WG / MASQUE H3 / MASQUE H2
+endpoint
+SEEN AS
+NODE / NODE LOCATION
+Cloudflare trace: ip / loc / colo / warp
+Gemini: OK / FAIL
+timestamp
+```
+
+### Практическое правило
+
+Если все WG endpoint'ы сходятся в один node и `-exclude-node <NODE>` отвечает
+`every endpoint was excluded`, не надо бесконечно перебирать IP/порты: в текущем
+маршруте VPS альтернативного Cloudflare node не видно.
+
+В таком случае возможны только внешние изменения маршрута: другой VPS/провайдер/ASN/локация,
+изменение peering/BGP у провайдера или изменение traffic-engineering Cloudflare. Иногда
+маршрут может поменяться сам со временем, поэтому node нельзя считать вечным свойством VPS,
+но при покупке/приёмке нового сервера его нужно считать важной характеристикой текущего
+сетевого пути.
+
+Отдельно проверяйте WG, H3 и H2: transport'ы могут попасть в один и тот же node, а могут
+повести себя по-разному. Один хороший WG endpoint ещё не доказывает, что H2/H3 будут иметь
+тот же Cloudflare path.
+
+
 ## 15. Быстрый чек-лист для каждого VPS
 
 ```bash
