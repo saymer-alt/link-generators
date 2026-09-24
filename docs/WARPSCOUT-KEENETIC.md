@@ -1,0 +1,357 @@
+# WARPSCOUT на Keenetic / Entware — практическая инструкция
+
+Эта страница дополняет инструкции для [Windows](WARPSCOUT-WINDOWS.md) и
+[VPS](WARPSCOUT-VPS.md). Здесь собран практический сценарий запуска WARPSCOUT
+прямо на роутерах Keenetic с установленным Entware.
+
+Цель та же, что и на Windows/VPS:
+
+1. проверить доступность WARP / WireGuard из сети конкретного роутера;
+2. проверить MASQUE H3 / QUIC;
+3. проверить MASQUE H2 / TCP;
+4. получить Mihomo YAML с MASQUE identity для импорта в первую вкладку
+   **WARP MASQUE Links**.
+
+Важно: текущий импорт в link-generators использует WARPSCOUT YAML только как источник
+**MASQUE identity** — ключи, SNI, внутренний IP и DNS. Найденные WARPSCOUT
+`server`, `port` и `network` намеренно не заменяют transport-стратегию генератора.
+Для H2 по умолчанию продолжают использоваться Safe Ports Only.
+
+---
+
+## 1. Где запускать
+
+Для Keenetic удобно держать WARPSCOUT в отдельном каталоге Entware:
+
+```sh
+mkdir -p /opt/etc/warpscout
+cd /opt/etc/warpscout
+```
+
+Проверьте бинарник:
+
+```sh
+warpscout version
+```
+
+В наших тестах использовался WARPSCOUT 0.16.0.
+
+Если `warpscout` не находится через PATH, используйте полный путь к бинарнику,
+который установили в Entware.
+
+---
+
+## 2. WARP account
+
+WARPSCOUT хранит регистрацию в файле:
+
+```text
+warpscout-account.json
+```
+
+Он ищется в **текущем каталоге**, поэтому перед сканированием удобно всегда делать:
+
+```sh
+cd /opt/etc/warpscout
+```
+
+Первичная регистрация:
+
+```sh
+warpscout register
+```
+
+После этого последующие команды должны писать примерно:
+
+```text
+Using cached WARP account from warpscout-account.json
+```
+
+Файл `warpscout-account.json` содержит приватные данные WARP. Не публикуйте его и
+не добавляйте в GitHub.
+
+---
+
+## 3. Ограничить параллелизм на роутере
+
+На Keenetic не нужно запускать WARPSCOUT с серверным уровнем параллелизма.
+Для роутеров мы используем ограничение примерно до четырёх параллельных задач:
+
+```sh
+JT=4
+```
+
+Дальше переменная передаётся через:
+
+```sh
+-jt "$JT"
+```
+
+Это особенно полезно на моделях с 128/256 MB RAM и снижает лишнюю нагрузку на CPU/RAM.
+
+---
+
+## 4. WARP / WireGuard
+
+Полный скан:
+
+```sh
+warpscout scan -p wg -P -jt "$JT"
+```
+
+Только лучший endpoint:
+
+```sh
+warpscout scan -p wg -P -jt "$JT" -best
+```
+
+Получить конфиг:
+
+```sh
+warpscout scan -p wg -P -jt "$JT" -conf warp-wg.conf
+```
+
+Потом файл можно посмотреть:
+
+```sh
+cat warp-wg.conf
+```
+
+### Проверка Cloudflare node
+
+Если нужно понять, в какой Cloudflare node попадает WARP-трафик, смотрите
+`NODE`, `NODE LOCATION` и `SEEN AS` в полном WG scan.
+
+Если есть подозрение на проблемный node, например `ARN`, можно проверить наличие
+альтернативы:
+
+```sh
+warpscout scan -p wg -P -jt "$JT" \
+  -exclude-node ARN \
+  -best
+```
+
+Если WARPSCOUT отвечает, что все endpoint'ы исключены, то в текущем маршруте
+альтернативного node он не видит. Бесконечный перебор IP/портов в такой ситуации
+обычно бессмысленен.
+
+---
+
+## 5. MASQUE H3 / QUIC
+
+В WARPSCOUT H3 соответствует протоколу `masque`.
+
+```sh
+warpscout scan -p masque -P -jt "$JT" \
+  -masque-sni 4pda.to
+```
+
+Лучший endpoint:
+
+```sh
+warpscout scan -p masque -P -jt "$JT" \
+  -masque-sni 4pda.to \
+  -best
+```
+
+Mihomo YAML с MASQUE identity:
+
+```sh
+warpscout scan -p masque -P -jt "$JT" \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+```
+
+Полученный `proxies:` блок можно вставить в первую вкладку link-generators
+как источник MASQUE identity.
+
+---
+
+## 6. MASQUE H2 / TCP
+
+Для H2 используется `masque-h2`.
+
+```sh
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -masque-sni 4pda.to
+```
+
+Лучший endpoint:
+
+```sh
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -masque-sni 4pda.to \
+  -best
+```
+
+Mihomo YAML:
+
+```sh
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+```
+
+В H2-блоке будет:
+
+```yaml
+network: h2
+```
+
+Но текущий link-generators не обязан наследовать найденные WARPSCOUT
+`server` / `port`. При стандартной настройке H2 transport продолжает собираться
+по Safe Ports Only:
+
+```text
+443, 8443, 4443, 8095
+```
+
+Порты `500`, `1701`, `4500`, которые иногда находит WARPSCOUT, в стандартную
+Safe Ports стратегию проекта не входят.
+
+---
+
+## 7. Точечная проверка endpoint'ов
+
+На роутере особенно полезно не гонять полный набор повторно, а проверить несколько
+конкретных адресов через `-target`.
+
+```sh
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -target 162.159.198.30,162.159.199.51 \
+  -masque-sni consumer-masque.cloudflareclient.com
+```
+
+Ещё один пример:
+
+```sh
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -target 162.159.198.80,162.159.199.203 \
+  -masque-sni consumer-masque.cloudflareclient.com
+```
+
+Если получаете `No working endpoints found` или сообщение
+`handshake ok, then cut mid-stream`, это ещё не доказывает, что MASQUE H2 в сети
+роутера не работает вообще. Результат зависит от конкретного endpoint, SNI,
+текущего маршрута и состояния Cloudflare.
+
+---
+
+## 8. SNI имеет значение
+
+В сегодняшних тестах на Keenetic поведение H2 заметно менялось при смене SNI.
+
+Для обычных тестов проекта мы часто используем `4pda.to`, но для диагностики
+самого Cloudflare MASQUE полезно отдельно проверить:
+
+```sh
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -masque-sni consumer-masque.cloudflareclient.com
+```
+
+Практический вывод: один неудачный скан с одним SNI не следует превращать в вывод
+«H2 на этом Keenetic не работает». Для диагностики сравнивайте как минимум два SNI
+и несколько endpoint'ов.
+
+---
+
+## 9. Получить identity для link-generators
+
+H3:
+
+```sh
+warpscout scan -p masque -P -jt "$JT" \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+```
+
+H2:
+
+```sh
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+```
+
+В выводе нужен `proxies:` блок с `private-key`, `public-key`, `ip`, `sni`
+и `dns`. Для H2 дополнительно будет `network: h2`.
+
+Вставьте YAML в первую вкладку **WARP MASQUE Links** и нажмите
+**«Распарсить»**. Генератор заберёт identity-поля, после чего сам применит свою
+QUIC/H2 transport-стратегию.
+
+---
+
+## 10. Не путать три разных результата
+
+На Keenetic удобно разделять:
+
+```text
+1. WARPSCOUT нашёл рабочий endpoint
+2. WARPSCOUT поднял через него тестовый WARP/MASQUE туннель
+3. production Mihomo реально использует свой endpoint и transport
+```
+
+Это не одно и то же.
+
+---
+
+## 11. Минимальный набор команд для роутера
+
+```sh
+cd /opt/etc/warpscout
+JT=4
+
+# WARP / WG
+warpscout scan -p wg -P -jt "$JT" -best
+
+# MASQUE H3
+warpscout scan -p masque -P -jt "$JT" \
+  -masque-sni 4pda.to \
+  -best
+
+# MASQUE H2
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -masque-sni 4pda.to \
+  -best
+
+# MASQUE H3 identity для link-generators
+warpscout scan -p masque -P -jt "$JT" \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+
+# MASQUE H2 identity для link-generators
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+```
+
+---
+
+## 12. Что записывать при сравнении роутеров
+
+```text
+модель Keenetic
+KeeneticOS
+провайдер
+протокол: WG / MASQUE H3 / MASQUE H2
+SNI
+endpoint
+working / torn down
+TUN ping / loss
+SEEN AS
+NODE / NODE LOCATION
+время проверки
+```
+
+Один и тот же WARPSCOUT может показывать заметно разные результаты на домашнем,
+рабочем или мобильном подключении из-за различий маршрута провайдера.
+
+---
+
+## См. также
+
+- [WARPSCOUT на Windows](WARPSCOUT-WINDOWS.md)
+- [WARPSCOUT на VPS](WARPSCOUT-VPS.md)
+- [WARPSCOUT upstream README_RU](https://github.com/vernette/warpscout/blob/master/README_RU.md)
+- [WARPSCOUT: MASQUE](https://github.com/vernette/warpscout/blob/master/docs/ru/masque.md)
