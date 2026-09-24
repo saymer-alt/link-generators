@@ -44,6 +44,22 @@ assert.throws(() => current.buildMihomoYaml([], [], null, [], [], { tun: { stack
 assert.match(current.buildMihomoYaml([], [], null, [], [], { tun: { stack: 'mips' } }), /stack: mips/);
 cases += 3;
 
+// Device Model is opt-in: empty keeps previous provider headers; a value must reach every subscription provider.
+const deviceModel = 'Keenetic Giga KN-1012';
+const subWithoutDevice = build(current, { mihomoSubscriptionMode: true });
+assert.doesNotMatch(subWithoutDevice, /x-device-model:/);
+const subWithDevice = build(current, { mihomoSubscriptionMode: true, deviceModel });
+assert.equal((subWithDevice.match(/x-device-model:/g) || []).length, 1);
+assert.match(subWithDevice, /Keenetic Giga KN-1012/);
+const priorityWithDevice = current.buildFromRequest({
+  core: 'mihomo',
+  input: 'https://example.invalid/primary',
+  fallbackInput: 'https://example.invalid/fallback',
+  options: { mihomoSubscriptionMode: true, deviceModel }
+}).data;
+assert.equal((priorityWithDevice.match(/x-device-model:/g) || []).length, 2);
+cases += 4;
+
 // Опциональный byte-for-byte baseline: исходный HEAD перед доработкой.
 if (process.env.BASELINE_REF) {
   const old = execFileSync('git', ['show', `${process.env.BASELINE_REF}:web4core.runtime.js`], { cwd: root, encoding: 'utf8' });
