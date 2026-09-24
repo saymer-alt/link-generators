@@ -108,6 +108,7 @@ calls the API, and adds its own layers on top of the result:
 - Page options → `options` fields: `addSocks` (mixed-port 7890), `addTun`, `webUI`,
   `urlTest`, `mihomoSubscriptionMode`, `mihomoPerProxyTun`, `mihomoTunStack`, `perProxyPort`,
   `excludeFilter` (subscription mode only; empty → previous output),
+  `deviceModel` (subscription mode only; optional `x-device-model` provider header; empty → previous output),
   `webUiDashboard`/`webUiCustomUrl` (external-ui-url dashboard selection: the metacubexd default
   preserves byte parity; custom requires an absolute http/https URL).
   User-facing `cfgSubMode` text is **"Использовать URL-подписки"**. Keep the technical name
