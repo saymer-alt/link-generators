@@ -3385,11 +3385,13 @@
     const usedProviderNames = /* @__PURE__ */ new Set();
     subscriptionUrls.forEach((url, index) => {
       const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames);
+      const deviceModel = typeof opts?.deviceModel === "string" ? opts.deviceModel.trim() : "";
       providers[providerName] = {
         type: "http",
         proxy: "DIRECT",
         header: {
-          "x-hwid": [generateSecretHex32()]
+          "x-hwid": [generateSecretHex32()],
+          ...deviceModel ? { "x-device-model": [deviceModel] } : {}
         },
         url,
         interval: SUB_REFRESH_INTERVAL,
@@ -3530,7 +3532,7 @@
     const providerTargets = [];
     const probe = { url: getUrlTest(opts), interval: PROXY_FETCH_INTERVAL, lazy: false };
     for (const [name, side] of [["PRIMARY", primary], ["FALLBACK", fallback]]) {
-      const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter, modernHosts: opts?.modernHosts }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
+      const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter, modernHosts: opts?.modernHosts, deviceModel: opts?.deviceModel }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
       const names = [];
       built.proxies.forEach((proxy, index) => {
         proxy.name = name + "-" + (index + 1) + ": " + proxy.name;
@@ -4539,7 +4541,7 @@
       extraBeans.forEach(validateBean);
       assertCoreSupports(extraBeans, core, "Mihomo", options);
       applyRealityModernHosts(extraBeans, modernHosts);
-      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter, modernHosts });
+      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter, modernHosts, deviceModel: options.deviceModel });
       const yaml2 = buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, cfg2.listeners, {
         addSocks,
         webUI,
