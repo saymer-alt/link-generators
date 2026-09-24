@@ -202,6 +202,11 @@
         <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia">
         <div class="hint">Regexp/keyword-фильтр Mihomo <code>exclude-filter</code>: узлы provider, чьи имена совпали, исключаются. Применяется ко всем подпискам. Пусто — поле не добавляется.</div>
       </div>
+      <div id="deviceModelRow" style="margin-top:10px">
+        <label for="deviceModelInput">📱 Device Model (необязательно)</label>
+        <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
+        <div class="hint">Передаётся серверу подписки как HTTP-заголовок <code>x-device-model</code> для каждого provider. Может использоваться панелью подписки для идентификации устройства. Пусто — заголовок не добавляется.</div>
+      </div>
       <div id="realityModernRow" style="margin-top:10px">
         <label for="realityModernInput">🌐 Modern REALITY (X25519+ML-KEM) — только для совместимых серверов (host или host:port, по одному в строке)</label>
         <textarea id="realityModernInput" rows="3" placeholder="pan.example&#10;pan2.example:8443&#10;[2001:db8::1]:443"></textarea>
@@ -1118,9 +1123,10 @@ function onProfileChange() {
 // прокси» — при Mixed Port); выключение родителя сбрасывает зависимую опцию.
 // В БС-режиме Per-Proxy принудительно недоступны (плюс кламп в buildMihomo).
 function updateExcludeFilterVisibility() {
-  // Exclude Filter имеет смысл только для proxy-providers (Mihomo + Sub Mode).
-  document.getElementById('excludeFilterRow').style.display =
-    document.getElementById('cfgSubMode').checked ? '' : 'none';
+  // Эти параметры имеют смысл только для proxy-providers (Mihomo + Sub Mode).
+  const visible = document.getElementById('cfgSubMode').checked ? '' : 'none';
+  document.getElementById('excludeFilterRow').style.display = visible;
+  document.getElementById('deviceModelRow').style.display = visible;
 }
 
 function updateSubModeHint() {
@@ -1265,6 +1271,7 @@ function buildMihomo() {
         urlTest: urlTest,
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
         excludeFilter: document.getElementById('excludeFilterInput').value,
+        deviceModel: document.getElementById('deviceModelInput').value,
         webUiDashboard: webUiChoice,
         webUiCustomUrl: webUiChoice === 'custom' ? webUiCustomUrl : undefined,
         mihomoPerProxyTun: perProxyTun,
