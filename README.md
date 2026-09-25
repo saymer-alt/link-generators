@@ -185,6 +185,7 @@ mihomo -t -f config.yaml
 | [VALIDATION](docs/VALIDATION.md) | pre-copy валидатор подробно |
 | [VPS-GATEWAY](docs/VPS-GATEWAY.md) | опциональный профиль для amnezia-mihomo-gateway |
 | [WARPSCOUT-WINDOWS](docs/WARPSCOUT-WINDOWS.md) | WARP / MASQUE H3 / H2 на Windows и подготовка данных для генератора |
+| [WARPSCOUT-KEENETIC](docs/WARPSCOUT-KEENETIC.md) | установка и полевые WARP / AWG / MASQUE H3 / H2 проверки на Keenetic / Entware |
 | [WARPSCOUT-VPS](docs/WARPSCOUT-VPS.md) | установка на Ubuntu/Debian, сканы с VPS и диагностика H3/H2 через Mihomo |
 | [WEB4CORE-FORK](docs/WEB4CORE-FORK.md) | source-level fork, ветка `link-generators` и сборка runtime |
 | [UPDATES](docs/UPDATES.md) | жизненный цикл `web4core.runtime.js` |
