@@ -597,6 +597,173 @@ warpscout socks -e IP:PORT -p masque -masque-sni 4pda.to
 
 ---
 
+## Live-наблюдения 2026-09-23
+
+Эти результаты — диагностические точки, а не универсальные нормы Cloudflare.
+
+### SE2
+
+- WG scan: 70/70 рабочих; лучшие маршруты шли через `ARN` с примерно 1 ms TUN ping и 0% loss.
+- Лучший отдельный WG endpoint в одном из прогонов: `188.114.97.165:2408`, `NODE=ARN`, `SEEN AS=SE`.
+- MASQUE H3 с `SNI=4pda.to`: 2/14 рабочих.
+- MASQUE H2 с тем же SNI: 70/70 рабочих.
+- Реальный клиент при переключении WARP WG / MASQUE H2 / MASQUE H3 в тот момент получил
+  одинаковый Cloudflare exit: `104.28.225.221`, `loc=SE`, `colo=FRA`, `warp=on`.
+- Gemini в момент проверки работал во всех трёх режимах, поэтому транспортную причину
+  предыдущего сбоя установить не удалось. Такой тест надо повторять именно во время сбоя.
+
+### EE / Ubuntu 24.04
+
+До установки WARPSCOUT production Mihomo уже дал полезное независимое наблюдение:
+`WARP-MASQUE-QUIC` логировал `H3_REQUEST_CANCELLED`/closed network connection,
+`Fastest_MASQUE` неоднократно активировал health-check и в момент аудита выбрал H2.
+
+Затем на этом же VPS был зарегистрирован свежий WARPSCOUT 0.16.0 account и выполнены
+сканы из сети самого сервера:
+
+- WG: **68/70 working**, 1 torn down; все наблюдаемые ноды `ARN`, `SEEN AS=EE`,
+  TUN ping около 7-8 ms;
+- `warpscout scan -p wg -P -best` в одном прогоне выбрал
+  `8.34.146.127:2408`, TUN ping 7 ms, loss 0%;
+- MASQUE H3 с `SNI=4pda.to`: **8/14 working**, 2 torn down, `ARN / EE`,
+  TUN ping около 7-8 ms;
+- MASQUE H2 с тем же SNI: **56/70 working**, 3 torn down, `ARN / EE`,
+  TUN ping около 7 ms.
+
+В этом конкретном прогоне H2 снова оказался доступнее H3, но уже не был «идеальным»:
+80% рабочих против примерно 57% у H3; WG был самым доступным (~97%). Это заметно мягче
+SE2, где H3 был 2/14, а H2 70/70. Значит, практический вывод пока такой: разница H2/H3
+зависит от конкретного VPS/маршрута и момента времени, хотя на обоих проверенных VPS H2
+показал более высокий working ratio.
+
+Не смешивайте уровни доказательств: WARPSCOUT измеряет отдельный тестовый WARP account
+и набор endpoint'ов; production Mihomo измеряет текущую пользовательскую конфигурацию.
+Совпадение направления результатов усиливает наблюдение, но не превращает его в доказательство
+универсальной неисправности H3.
+
+
+### SE2 — воспроизведение Gemini 2026-09-24
+
+Во время повторного теста удалось воспроизвести различие, которое днём ранее поймать не удалось.
+
+При одном и том же видимом WARP exit-IP `104.28.225.221` и `loc=SE` поведение Gemini
+менялось вместе с Cloudflare path / colo:
+
+- MASQUE H2 — Gemini работал;
+- MASQUE H3 — Gemini работал, Cloudflare trace показывал `colo=FRA`;
+- обычный WARP/WG — Gemini не работал, Cloudflare trace показывал `colo=ARN`.
+
+Для H3 и обычного WARP при этом совпадали как минимум:
+
+```text
+ip=104.28.225.221
+loc=SE
+warp=on
+```
+
+но отличался `colo`: рабочий вариант давал `FRA`, проблемный — `ARN`.
+
+Это не доказывает, что сам по себе `ARN` «ломает Gemini», но показывает важную вещь:
+проблема в этом наблюдении не сводилась к одному только внешнему IP или стране GeoIP.
+Cloudflare path / edge selection оказался значимой диагностической переменной.
+
+Практический обход для обычного WARP/WG — исключить проблемный node при подборе endpoint:
+
+```bash
+warpscout scan -p wg -P \
+  -exclude-node ARN \
+  -best
+```
+
+После выбора другого WARP endpoint/node Gemini снова заработал.
+
+Для контрольного сравнения без каких-либо node-фильтров используйте обычный поиск лучшего
+WG endpoint:
+
+```bash
+warpscout scan -p wg -P -best
+```
+
+Важно: `-exclude-node` применим к WG/AWG-поиску. Для MASQUE H2/H3 выбор Cloudflare node
+не управляется перебором endpoint'ов тем же способом, поэтому этот фильтр не является
+универсальным способом «переключить colo» для MASQUE.
+
+
+---
+
+
+## 15. Обязательный acceptance-тест нового VPS: Cloudflare node / colo
+
+Для нового VPS недостаточно проверить только ping, bandwidth и доступность WARP endpoint'ов.
+До ввода сервера в постоянную эксплуатацию обязательно зафиксируйте, к какому Cloudflare
+node / colo реально приходит трафик.
+
+Cloudflare использует Anycast: один и тот же IP объявляется из множества дата-центров, а
+конкретный путь определяется BGP/peering-маршрутом провайдера, текущей доступностью и
+traffic-engineering Cloudflare. Поэтому физически близкий дата-центр не гарантирован, а
+смена конкретного WARP endpoint IP/порта может вообще не изменить node.
+
+Минимальный acceptance-набор:
+
+```bash
+# 1. Лучший WG без фильтров
+warpscout scan -p wg -P -best
+
+# 2. Полный WG scan: какие nodes вообще доступны
+warpscout scan -p wg -P
+
+# 3. Проверка, существует ли альтернатива проблемному node
+warpscout scan -p wg -P \
+  -exclude-node ARN \
+  -best
+
+# 4. MASQUE H3
+warpscout scan -p masque -P \
+  -masque-sni 4pda.to \
+  -best
+
+# 5. MASQUE H2
+warpscout scan -p masque-h2 -P \
+  -masque-sni 4pda.to \
+  -best
+
+# 6. Реальный production-выход через Mihomo
+curl -x socks5h://127.0.0.1:7890 -s \
+  https://www.cloudflare.com/cdn-cgi/trace \
+  | grep -E '^(ip|loc|colo|warp)='
+```
+
+Записывайте как минимум:
+
+```text
+VPS/provider/location
+public VPS IP
+transport: WG / MASQUE H3 / MASQUE H2
+endpoint
+SEEN AS
+NODE / NODE LOCATION
+Cloudflare trace: ip / loc / colo / warp
+Gemini: OK / FAIL
+timestamp
+```
+
+### Практическое правило
+
+Если все WG endpoint'ы сходятся в один node и `-exclude-node <NODE>` отвечает
+`every endpoint was excluded`, не надо бесконечно перебирать IP/порты: в текущем
+маршруте VPS альтернативного Cloudflare node не видно.
+
+В таком случае возможны только внешние изменения маршрута: другой VPS/провайдер/ASN/локация,
+изменение peering/BGP у провайдера или изменение traffic-engineering Cloudflare. Иногда
+маршрут может поменяться сам со временем, поэтому node нельзя считать вечным свойством VPS,
+но при покупке/приёмке нового сервера его нужно считать важной характеристикой текущего
+сетевого пути.
+
+Отдельно проверяйте WG, H3 и H2: transport'ы могут попасть в один и тот же node, а могут
+повести себя по-разному. Один хороший WG endpoint ещё не доказывает, что H2/H3 будут иметь
+тот же Cloudflare path.
+
+
 ## 15. Быстрый чек-лист для каждого VPS
 
 ```bash

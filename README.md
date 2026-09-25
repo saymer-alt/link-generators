@@ -81,7 +81,7 @@
 внутренним IP и DNS. Текущий импорт намеренно не переносит найденные WARPSCOUT
 `server` / `port` / `network` в transport-стратегию генератора: H2 продолжает
 использовать Safe Ports по умолчанию. Практические сценарии:
-[Windows](docs/WARPSCOUT-WINDOWS.md) и [VPS](docs/WARPSCOUT-VPS.md).
+[Windows](docs/WARPSCOUT-WINDOWS.md), [Keenetic / Entware](docs/WARPSCOUT-KEENETIC.md) и [VPS](docs/WARPSCOUT-VPS.md).
 
 ## Поддерживаемые протоколы
 
