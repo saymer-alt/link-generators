@@ -6,7 +6,7 @@
 
 ### Added
 
-- Добавлены две прикладные инструкции WARPSCOUT: Windows-сценарий для поиска WARP / MASQUE H3 / H2 и VPS-сценарий для Ubuntu 24.04 / Debian 12 с установкой, сканированием из сети конкретного сервера и сравнительной диагностикой текущих H3/H2-выходов через Mihomo, Cloudflare trace/meta и внешний IP.
+- Добавлены три прикладные инструкции WARPSCOUT: Windows, Keenetic / Entware и VPS (Ubuntu 24.04 / Debian 12). Keenetic-гайд теперь включает проверенную установку через entware-go installer с GitHub-release fallback, безопасный `JT=4`, plain WG baseline, AWG-сценарий для фильтрованных сетей, SNI/full-scan методику для MASQUE и полевое A/B-сравнение дачных KN-1012 GSM/LTE и NC-1012 wired. В A/B зафиксировано: AWG даёт non-DME пути, wired H2/H3 технически проходят, но в текущем маршруте дают только DME; `find-sni` сам по себе не считается transport acceptance.
 
 ## [1.4.2] - 2026-09-21
 
