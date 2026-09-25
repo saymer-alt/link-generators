@@ -6,7 +6,7 @@
 
 Цель та же, что и на Windows/VPS:
 
-1. проверить доступность WARP / WireGuard из сети конкретного роутера;
+1. проверить plain WARP / WireGuard как общий baseline там, где он применим, и AWG на фильтрованных сетях;
 2. проверить MASQUE H3 / QUIC;
 3. проверить MASQUE H2 / TCP;
 4. получить Mihomo YAML с MASQUE identity для импорта в первую вкладку
@@ -110,7 +110,7 @@ JT=4
 
 ---
 
-## 4. WARP / WireGuard
+## 4. Plain WARP / WireGuard baseline и AWG
 
 Полный скан:
 
@@ -383,7 +383,7 @@ warpscout scan -p masque-h2 -P -jt "$JT" \
 модель Keenetic
 KeeneticOS
 провайдер
-протокол: WG / MASQUE H3 / MASQUE H2
+протокол: WG / AWG / MASQUE H3 / MASQUE H2
 SNI
 endpoint
 working / torn down
