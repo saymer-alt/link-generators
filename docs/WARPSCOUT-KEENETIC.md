@@ -349,6 +349,159 @@ NODE / NODE LOCATION
 
 ---
 
+---
+
+## 13. Полевой кейс: KN-1012 через GSM/LTE, 2026-09-25
+
+Реальная проверка выполнялась на **Keenetic Giga KN-1012 / KeeneticOS 5.1.6 / aarch64**
+в роли дачного GSM/LTE-роутера. Entware находился во внутреннем UBIFS `/opt`,
+активен штатный zRAM; параллельно работали Mihomo 1.19.31 с `tun.stack: mips`
+и MagiTrickle. Для WARPSCOUT использовалась версия **0.16.0** и ограничение:
+
+```sh
+JT=4
+```
+
+На этом профиле WARPSCOUT занимал примерно 3.1 MB, каталог
+`/opt/etc/warpscout` — несколько килобайт; после установки на `/opt` оставалось
+около 60 MB свободного места. Для такого 512 MB-класса `-jt 4` показал себя
+нормальной консервативной стартовой настройкой.
+
+### Регистрация WARP account на фильтрованной сети
+
+Прямой доступ к Cloudflare registration API не прошёл. Relay тоже не смог
+зарегистрировать account. WARPSCOUT затем перебрал generated AWG I1 и успешно
+зарегистрировал свежий account через **generated QUIC I1**. В ходе разных запусков
+рабочими маскировочными host для generated QUIC I1 встречались
+`cdn.jsdelivr.net`, `www.microsoft.com` и `www.google.com`.
+
+Приватную строку I1 и содержимое `warpscout-account.json` публиковать нельзя.
+
+### AWG
+
+Команда:
+
+```sh
+warpscout scan -p awg -P -jt "$JT" -gen-i1 quic
+```
+
+дала **70/70 working** в одном полном прогоне. Наблюдались Cloudflare nodes:
+
+```text
+DME  ARN  FRA  AMS
+```
+
+При этом `SEEN AS` оставался `RU`. Лучший DME-маршрут был примерно 30 ms
+внутри туннеля; ARN — примерно 51–65 ms.
+
+Повтор:
+
+```sh
+warpscout scan -p awg -P -jt "$JT" -gen-i1 quic -exclude-country RU
+```
+
+убрал DME из результата и оставил ARN/FRA/AMS, но `SEEN AS` всё равно остался
+`RU`. Это практическое подтверждение: выбор/исключение Cloudflare node или country
+в WARPSCOUT **не следует трактовать как гарантированную смену страны выходного IP**.
+Node/colo описывает путь обработки трафика, а не обещание GeoIP выхода.
+
+### MASQUE H2
+
+Для H2 штатный:
+
+```text
+consumer-masque.cloudflareclient.com
+```
+
+дал **0/14** в `find-sni`.
+
+Зато:
+
+```text
+www.apple.com
+```
+
+дал **14/14 working** в `find-sni -p masque-h2`, а полный запуск:
+
+```sh
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -masque-sni www.apple.com
+```
+
+дал **70/70 working**, nodes DME и FRA, loss 0%.
+
+В конкретном прогоне лучший DME endpoint был на `:4500` примерно с 32 ms TUN ping,
+а FRA встречался, например, на `:8095` примерно с 69 ms. Для проекта важно
+разделять эти результаты и transport-стратегию генератора: стандартный
+**Safe Ports Only** по-прежнему использует только:
+
+```text
+443, 8443, 4443, 8095
+```
+
+и не наследует автоматически найденные WARPSCOUT `500/1701/4500`.
+
+### MASQUE H3 / QUIC
+
+H3 оказался принципиально другим.
+
+`find-sni -p masque` показал:
+
+- `consumer-masque.cloudflareclient.com` — **0/14**;
+- `www.apple.com` — **4/14**;
+- `www.google.com` — **4/14**;
+- `www.microsoft.com` — **4/14**;
+- `cdn.jsdelivr.net` — **4/14**.
+
+Но последующие полноценные запуски с лучшим найденным SNI:
+
+```sh
+warpscout scan -p masque -P -jt "$JT" \
+  -masque-sni www.apple.com
+```
+
+несколько раз подряд завершались:
+
+```text
+no MASQUE endpoint passed data - this network blocks it, try -p awg
+```
+
+Точечная перепроверка именно IP, которые `find-sni` предварительно называл
+рабочими, дала тот же результат:
+
+```sh
+warpscout scan -p masque -P -jt "$JT" \
+  -target 162.159.198.1,162.159.198.2 \
+  -masque-sni www.apple.com
+```
+
+Итог для этого GSM/LTE-подключения: **MASQUE H3 не прошёл реальный data-path
+acceptance**, даже несмотря на предварительные `4/14` в `find-sni`.
+
+### Главное правило из этого кейса
+
+**Успех `find-sni` не равен подтверждению работоспособности MASQUE транспорта.**
+
+`find-sni` используется для поиска кандидата SNI. После него обязателен
+полноценный `scan` с найденным SNI; при необходимости — повторный точечный
+`-target` scan. Только прохождение реального data-path scan следует считать
+acceptance.
+
+Итоговая матрица этого KN-1012 GSM/LTE:
+
+| Транспорт | Результат |
+|---|---|
+| AWG + generated QUIC I1 | работает стабильно, до 70/70 |
+| MASQUE H2 + `www.apple.com` | работает стабильно, 70/70 |
+| MASQUE H3 + `www.apple.com` | `find-sni` видел 4/14, но полноценный scan не передал данные |
+| MASQUE H3 + штатный Cloudflare SNI | не работает |
+
+Это наблюдение относится к конкретному операторскому маршруту GSM/LTE на момент
+проверки. Оно не доказывает универсальную блокировку H3 у оператора или на всех
+Keenetic; цель кейса — показать правильную методику проверки и различие H2/H3 на
+одной и той же сети.
+
+
 ## См. также
 
 - [WARPSCOUT на Windows](WARPSCOUT-WINDOWS.md)
