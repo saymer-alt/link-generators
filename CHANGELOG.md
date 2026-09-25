@@ -6,7 +6,7 @@
 
 ### Added
 
-- Добавлены три прикладные инструкции WARPSCOUT: Windows, Keenetic / Entware и VPS (Ubuntu 24.04 / Debian 12). Keenetic-гайд теперь включает проверенную установку через entware-go installer с GitHub-release fallback, безопасный `JT=4`, plain WG baseline, AWG-сценарий для фильтрованных сетей, SNI/full-scan методику для MASQUE и полевое A/B-сравнение дачных KN-1012 GSM/LTE и NC-1012 wired. В A/B зафиксировано: AWG даёт non-DME пути, wired H2/H3 технически проходят, но в текущем маршруте дают только DME; `find-sni` сам по себе не считается transport acceptance.
+- Добавлены три прикладные инструкции WARPSCOUT: Windows, Keenetic / Entware и VPS (Ubuntu 24.04 / Debian 12). Keenetic-гайд теперь включает проверенную установку через entware-go installer с GitHub-release fallback, безопасный `JT=4`, общий plain-WG baseline для сетей, где он применим, AWG-сценарий для российского фильтрованного контура, SNI/full-scan методику для MASQUE и полевое A/B-сравнение дачных KN-1012 GSM/LTE и NC-1012 wired. В дачный A/B plain WG намеренно не включён как непрактичный для целевого фильтрованного сценария; зафиксировано, что AWG даёт non-DME пути, wired H2/H3 технически проходят, но в текущем маршруте дают только DME, а `find-sni` сам по себе не считается transport acceptance.
 
 ## [1.4.2] - 2026-09-21
 
