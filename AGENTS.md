@@ -237,9 +237,9 @@ not the code. Rules:
 - the page currently supports YAML identity import through `parseYaml()`. Compatible Mihomo
   YAML emitted by WARPSCOUT can supply the same identity fields, but the page does **not**
   parse raw WARPSCOUT console tables/logs and does not import WARPSCOUT transport endpoints;
-- practical WARPSCOUT procedures are documented in `docs/WARPSCOUT-WINDOWS.md` and
-  `docs/WARPSCOUT-VPS.md`. These docs are operational guidance, not evidence that a historical
-  Warpscout Parser UI has been restored.
+- practical WARPSCOUT procedures are documented in `docs/WARPSCOUT-WINDOWS.md`,
+  `docs/WARPSCOUT-KEENETIC.md` and `docs/WARPSCOUT-VPS.md`. These docs are operational guidance,
+  not evidence that a historical Warpscout Parser UI has been restored.
 
 ## Input formats and contracts
 
