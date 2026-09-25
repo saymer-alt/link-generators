@@ -534,7 +534,7 @@ warpscout scan -p awg -P -jt "$JT" -gen-i1 quic -exclude-country RU
 `SEEN AS` всё равно оставался `RU`. Это повторяет GSM-наблюдение: исключение
 Cloudflare country/node влияет на путь/colo, но не гарантирует смену GeoIP выхода.
 
-### MASQUE H2: найденный SNI и фактически выполненный scan
+### MASQUE H2
 
 `find-sni -p masque-h2` дал:
 
@@ -545,18 +545,23 @@ Cloudflare country/node влияет на путь/colo, но не гарант�
 То есть для этого проводного uplink лучшим найденным H2 SNI был
 **`www.google.com`**, а не `www.apple.com` как на GSM/LTE.
 
-После этого был выполнен полный scan с `www.apple.com`:
+Полный acceptance-scan с тем же SNI:
 
 ```sh
-warpscout scan -p masque-h2 -P -jt "$JT" \
-  -masque-sni www.apple.com
+warpscout scan -proto masque-h2 -masque-sni www.google.com
 ```
 
-и он ожидаемо не передал данные. Это **не является отрицательным acceptance H2
-в целом**, потому что полный scan с найденным лучшим SNI `www.google.com` в
-этом прогоне ещё не выполнялся.
+дал **70/70 working**, node **DME**, `SEEN AS RU`. Лучшие показанные endpoint'ы:
 
-### MASQUE H3: найденный SNI и фактически выполненный scan
+```text
+162.159.198.44:500   ~5 ms endpoint ping
+162.159.199.59:8443  ~6 ms endpoint ping
+```
+
+Для стандартной transport-стратегии link-generators из этих результатов интересен
+`:8443`; `:500` в Safe Ports Only не входит.
+
+### MASQUE H3
 
 `find-sni -p masque` дал:
 
@@ -568,28 +573,41 @@ warpscout scan -p masque-h2 -P -jt "$JT" \
 
 Лучшим найденным H3 SNI был **`cdn.jsdelivr.net`**.
 
-Полный H3 scan после этого был запущен с `www.apple.com`, а не с найденным
-лучшим `cdn.jsdelivr.net`, и завершился сообщением, что ни один MASQUE endpoint
-не передал данные. Поэтому по этому запуску **нельзя делать вывод, что H3 на
-проводном WAN заблокирован**.
-
-Для закрытия проводного acceptance остаются два точных теста:
+Полный acceptance-scan с тем же SNI:
 
 ```sh
-# H2 — использовать SNI, который find-sni реально выбрал на проводном WAN
-warpscout scan -p masque-h2 -P -jt "$JT" \
-  -masque-sni www.google.com
-
-# H3 — использовать SNI, который find-sni реально выбрал на проводном WAN
-warpscout scan -p masque -P -jt "$JT" \
-  -masque-sni cdn.jsdelivr.net
+warpscout scan -proto masque -masque-sni cdn.jsdelivr.net
 ```
 
-Этот кейс дополнительно подтверждает правило из GSM/LTE-теста:
-**результаты `find-sni` и полноценного `scan` нужно связывать одним и тем же
-SNI**. Иначе отрицательный scan другого SNI нельзя использовать как verdict для
-транспорта в целом.
+дал **13/14 working**, node **DME**, `SEEN AS RU`. Лучшие показанные endpoint'ы:
 
+```text
+162.159.198.2:8095  ~30 ms endpoint ping
+162.159.198.1:8443  ~33 ms endpoint ping
+```
+
+Итог: на проводном WAN MASQUE H3 **реально проходит data path**, в отличие от
+проверенного GSM/LTE-профиля, где H3 после `find-sni` не прошёл ни полный scan,
+ни точечную перепроверку.
+
+Этот A/B-кейс усиливает правило из GSM/LTE-теста:
+**результаты `find-sni` и полноценного `scan` нужно связывать одним и тем же
+SNI**. Здесь отрицательный scan с `www.apple.com` не описывал транспорт в целом:
+правильные SNI `www.google.com` для H2 и `cdn.jsdelivr.net` для H3 дали
+успешный full-scan.
+
+
+### Сравнение проводного WAN и GSM/LTE на даче
+
+| Профиль | AWG | MASQUE H2 | MASQUE H3 |
+|---|---|---|---|
+| KN-1012 GSM/LTE | до 70/70; DME/ARN/FRA/AMS | 70/70 с `www.apple.com` | не прошёл full data-path scan |
+| NC-1012 проводной WAN | 65/70; DME/ARN/AMS | 70/70 с `www.google.com` | 13/14 с `cdn.jsdelivr.net` |
+
+Практический вывод: различие H3 между двумя роутерами нельзя объяснить только
+моделью железа или WARPSCOUT — на проводном uplink H3 проходит, на GSM/LTE нет.
+Это сильный признак зависимости от конкретного сетевого маршрута/фильтрации uplink,
+но не доказательство универсальной политики конкретного оператора.
 
 ## См. также
 
