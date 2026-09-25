@@ -75,12 +75,12 @@
   <h1>🔗 WARP & Mihomo Unified</h1>
 
   <div class="tabs">
-    <button class="tab active" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
-    <button class="tab" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
+    <button class="tab" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
+    <button class="tab active" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
   </div>
 
   <!-- TAB 1: WARP GENERATOR -->
-  <div id="tab-warp" class="tab-content active">
+  <div id="tab-warp" class="tab-content">
     <div class="card">
       <div class="card-title">📥 Импорт из Telegram <span id="parsedBadge" class="parsed-badge" style="display:none">Заполнено</span></div>
       <textarea id="yamlInput" placeholder="Вставь YAML-конфиг от бота..."></textarea>
@@ -146,7 +146,7 @@
   </div>
 
   <!-- TAB 2: MIHOMO BUILDER -->
-  <div id="tab-mihomo" class="tab-content">
+  <div id="tab-mihomo" class="tab-content active">
     <div class="card">
       <div class="card-title">📋 Входные данные</div>
       <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
