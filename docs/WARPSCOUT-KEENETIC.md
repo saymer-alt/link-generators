@@ -502,6 +502,95 @@ Keenetic; цель кейса — показать правильную мето
 одной и той же сети.
 
 
+---
+
+## 14. Полевой кейс: NC-1012 через проводной WAN, 2026-09-25
+
+Для сравнения с GSM/LTE-профилем выполнен тот же WARPSCOUT-набор на
+**Netcraze Giga NC-1012 / KeeneticOS 5.1.6 / aarch64** с проводным WAN.
+Entware находится на внешнем EXT4 `/opt`; WARPSCOUT 0.16.0 запускался с:
+
+```sh
+JT=4
+```
+
+### AWG
+
+```sh
+warpscout scan -p awg -P -jt "$JT" -gen-i1 quic
+```
+
+дал **65/70 working**. Наблюдались nodes **DME / ARN / AMS**, `SEEN AS RU`.
+Лучший DME-маршрут был около **10 ms** TUN ping; ARN — около **28–30 ms**,
+AMS — около **50–53 ms**.
+
+При повторе:
+
+```sh
+warpscout scan -p awg -P -jt "$JT" -gen-i1 quic -exclude-country RU
+```
+
+остались только **ARN / AMS**, результат был **30/35 working**, но
+`SEEN AS` всё равно оставался `RU`. Это повторяет GSM-наблюдение: исключение
+Cloudflare country/node влияет на путь/colo, но не гарантирует смену GeoIP выхода.
+
+### MASQUE H2: найденный SNI и фактически выполненный scan
+
+`find-sni -p masque-h2` дал:
+
+- `consumer-masque.cloudflareclient.com` — **0/14**;
+- `www.apple.com` — **0/14**;
+- `www.google.com` — **14/14 working**.
+
+То есть для этого проводного uplink лучшим найденным H2 SNI был
+**`www.google.com`**, а не `www.apple.com` как на GSM/LTE.
+
+После этого был выполнен полный scan с `www.apple.com`:
+
+```sh
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -masque-sni www.apple.com
+```
+
+и он ожидаемо не передал данные. Это **не является отрицательным acceptance H2
+в целом**, потому что полный scan с найденным лучшим SNI `www.google.com` в
+этом прогоне ещё не выполнялся.
+
+### MASQUE H3: найденный SNI и фактически выполненный scan
+
+`find-sni -p masque` дал:
+
+- `consumer-masque.cloudflareclient.com` — **0/14**;
+- `www.apple.com` — **4/14**;
+- `www.google.com` — **4/14**;
+- `www.microsoft.com` — **4/14**;
+- `cdn.jsdelivr.net` — **14/14 working**.
+
+Лучшим найденным H3 SNI был **`cdn.jsdelivr.net`**.
+
+Полный H3 scan после этого был запущен с `www.apple.com`, а не с найденным
+лучшим `cdn.jsdelivr.net`, и завершился сообщением, что ни один MASQUE endpoint
+не передал данные. Поэтому по этому запуску **нельзя делать вывод, что H3 на
+проводном WAN заблокирован**.
+
+Для закрытия проводного acceptance остаются два точных теста:
+
+```sh
+# H2 — использовать SNI, который find-sni реально выбрал на проводном WAN
+warpscout scan -p masque-h2 -P -jt "$JT" \
+  -masque-sni www.google.com
+
+# H3 — использовать SNI, который find-sni реально выбрал на проводном WAN
+warpscout scan -p masque -P -jt "$JT" \
+  -masque-sni cdn.jsdelivr.net
+```
+
+Этот кейс дополнительно подтверждает правило из GSM/LTE-теста:
+**результаты `find-sni` и полноценного `scan` нужно связывать одним и тем же
+SNI**. Иначе отрицательный scan другого SNI нельзя использовать как verdict для
+транспорта в целом.
+
+
 ## См. также
 
 - [WARPSCOUT на Windows](WARPSCOUT-WINDOWS.md)
