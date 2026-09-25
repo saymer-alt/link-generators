@@ -19,6 +19,25 @@
 
 ---
 
+## 0. Установка на Keenetic / Entware
+
+Проверенный на двух 512 MB-class дачных 1012 роутерах способ:
+
+```sh
+opkg update && opkg install curl ca-bundle && \
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/entware-go/gh-action-build/warpscout/install.sh | sh
+```
+
+В полевой проверке 2026-09-25 пакет `warpscout` ещё отсутствовал в подключённых
+opkg feeds, поэтому installer штатно перешёл на GitHub latest release,
+скачал `warpscout_0.16.0-1_aarch64-3.10.ipk`, установил WARPSCOUT 0.16.0 и
+запустил регистрацию WARP account. Это fallback installer'а, а не ошибка установки.
+
+На фильтрованной GSM/LTE-сети прямой Cloudflare registration API и relay не прошли;
+installer/ WARPSCOUT смог зарегистрировать account через generated QUIC I1. Не
+копируйте в документацию или issue приватную строку I1 и содержимое
+`warpscout-account.json`.
+
 ## 1. Где запускать
 
 Для Keenetic удобно держать WARPSCOUT в отдельном каталоге Entware:
@@ -134,6 +153,31 @@ warpscout scan -p wg -P -jt "$JT" \
 Если WARPSCOUT отвечает, что все endpoint'ы исключены, то в текущем маршруте
 альтернативного node он не видит. Бесконечный перебор IP/портов в такой ситуации
 обычно бессмысленен.
+
+### AWG на фильтрованных сетях
+
+Обычный `-p wg` полезен как baseline, но в полевых тестах 2026-09-25 на двух
+дачных 1012 основной рабочий сценарий был **AWG**, а не plain WG:
+
+```sh
+warpscout scan -p awg -P -jt "$JT" -gen-i1 quic
+```
+
+Для поиска пути без российского Cloudflare node/country:
+
+```sh
+warpscout scan -p awg -P -jt "$JT" -gen-i1 quic -exclude-country RU
+```
+
+`-exclude-country RU` фильтрует выбранный Cloudflare path/node в терминах
+WARPSCOUT. Он **не гарантирует смену выходной GeoIP-страны**: в обоих дачных
+тестах после исключения DME/российского path поле `SEEN AS` всё равно оставалось
+`RU`.
+
+Важно для журнала тестов: сегодняшнее A/B-сравнение проводного NC-1012 и GSM
+KN-1012 проверяло именно `-p awg`. Plain `-p wg` на этих двух uplink'ах в
+этом сравнении ещё не проходил полный A/B acceptance и должен оставаться
+отдельным baseline-тестом.
 
 ---
 
@@ -302,8 +346,11 @@ QUIC/H2 transport-стратегию.
 cd /opt/etc/warpscout
 JT=4
 
-# WARP / WG
+# Plain WARP / WG baseline
 warpscout scan -p wg -P -jt "$JT" -best
+
+# AWG — основной полевой сценарий на фильтрованных сетях
+warpscout scan -p awg -P -jt "$JT" -gen-i1 quic
 
 # MASQUE H3
 warpscout scan -p masque -P -jt "$JT" \
@@ -346,8 +393,6 @@ NODE / NODE LOCATION
 
 Один и тот же WARPSCOUT может показывать заметно разные результаты на домашнем,
 рабочем или мобильном подключении из-за различий маршрута провайдера.
-
----
 
 ---
 
@@ -589,6 +634,16 @@ warpscout scan -proto masque -masque-sni cdn.jsdelivr.net
 Итог: на проводном WAN MASQUE H3 **реально проходит data path**, в отличие от
 проверенного GSM/LTE-профиля, где H3 после `find-sni` не прошёл ни полный scan,
 ни точечную перепроверку.
+
+Для практической задачи этого проводного дачного роутера есть дополнительный
+критерий: **избежать DME**. В текущем полном acceptance и H2, и H3 дали только
+node **DME**, поэтому технически рабочие MASQUE H2/H3 сейчас не решают эту задачу.
+AWG, напротив, показал ARN/AMS после исключения российского path и потому является
+проверенным non-DME-кандидатом. Это вывод про текущий маршрут, а не запрет на
+MASQUE вообще: при другом uplink/маршруте node может измениться.
+
+Plain WARP/WG (`-p wg`) в сегодняшнем A/B не проверялся; не следует записывать
+результаты AWG как доказательство plain WG.
 
 Этот A/B-кейс усиливает правило из GSM/LTE-теста:
 **результаты `find-sni` и полноценного `scan` нужно связывать одним и тем же
