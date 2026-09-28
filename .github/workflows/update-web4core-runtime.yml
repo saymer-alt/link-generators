@@ -77,6 +77,11 @@ jobs:
           node tests/runtime.cjs web4core-source/src/web4core.runtime.js
           sha256sum web4core-source/src/web4core.runtime.js
 
+      - name: Browser semantic regression suite
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          BROWSER_CHANNEL=chrome node tests/browser.cjs
+
       - name: Upload checked runtime
         uses: actions/upload-artifact@v4
         with:
