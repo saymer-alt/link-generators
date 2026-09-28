@@ -4,9 +4,41 @@
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-28
+
 ### Added
 
-- Добавлены три прикладные инструкции WARPSCOUT: Windows, Keenetic / Entware и VPS (Ubuntu 24.04 / Debian 12). Keenetic-гайд теперь включает проверенную установку через entware-go installer с GitHub-release fallback, безопасный `JT=4`, общий plain-WG baseline для сетей, где он применим, AWG-сценарий для российского фильтрованного контура, SNI/full-scan методику для MASQUE и полевое A/B-сравнение дачных KN-1012 GSM/LTE и NC-1012 wired. В дачный A/B plain WG намеренно не включён как непрактичный для целевого фильтрованного сценария; зафиксировано, что AWG даёт non-DME пути, wired H2/H3 технически проходят, но в текущем маршруте дают только DME, а `find-sni` сам по себе не считается transport acceptance.
+- Добавлены три прикладные инструкции WARPSCOUT: Windows, Keenetic / Entware и VPS (Ubuntu 24.04 / Debian 12), включая проверенные сценарии установки, SNI/full-scan для MASQUE, AWG-сценарии на фильтрованных сетях, VPS acceptance для Cloudflare colo/path и полевые A/B-наблюдения по дачным KN-1012/NC-1012.
+- Добавлено опциональное поле **Device Model** для URL-подписок Mihomo: значение передаётся как provider header `x-device-model`; пустое поле сохраняет прежнее поведение.
+- CI теперь проверяет provenance vendored `web4core.runtime.js`: freshly-built runtime из `saymer-alt/web4core:link-generators` должен совпадать с tracked runtime после нормализации переводов строк.
+- Браузерные регрессии расширены проверками semantic YAML round-trip, WARP import flow, WG/AWG async state, VPS stack contract, reserved names/dedup и другими audit-сценариями.
+
+### Changed
+
+- При открытии страницы по умолчанию активен **Mihomo Builder**; WARP MASQUE остаётся доступен второй вкладкой.
+- WARP identity import стал атомарным: поля, отсутствующие в новом импорте, очищаются, а переход **«В Mihomo Builder»** на свежей странице автоматически выключает URL-подписки и использует статический ввод.
+- VPS Gateway приведён к фактическому контракту **Mihomo 1.19.31**: top-level `tun.inet4-address` больше не генерируется; effective IPv4 TUN берётся из `dns.fake-ip-range`. Для VPS `gvisor` остаётся рекомендуемым baseline, `mips` поддерживается и проверен, а `system` / `mixed` явно сохраняются только как экспериментальный выбор без молчаливой подмены.
+- Runtime обновлён из интеграционной ветки `saymer-alt/web4core:link-generators`; генератор теперь сохраняет строковую семантику YAML-значений, корректно обрабатывает UTF-8 VMess-имена и использует более точную идентичность outbound для dedup.
+
+### Fixed
+
+- WARP output больше не строится через небезопасный `innerHTML`: пользовательские SNI/имена отображаются как текст и не превращаются в DOM.
+- Исправлена YAML-семантика строк, похожих на scalar-типы (`true`, `false`, `null`, `00123`, `1e3`, значения с `#`): после round-trip они остаются строками.
+- Dedup больше не схлопывает разные VLESS outbound только из-за совпадения host/port/UUID: учитываются transport, WS/gRPC/HTTP параметры, TLS/SNI, REALITY, fingerprint, ALPN и другие значимые поля.
+- Исправлены конфликты пользовательских proxy-имён с `GLOBAL`, `DIRECT`, `REJECT`, `⚡ Fastest`, `🌐 static-health` и дубликатами: имена получают детерминированные безопасные суффиксы.
+- Исправлен UTF-8 decode VMess JSON, включая имена вроде `Москва 🚀`.
+- AWG 3.1 import корректно обрабатывает inline-комментарии после `PersistentKeepalive`, `RandomTrailers` и `DisableCookies`.
+- Загрузка WG/AWG файлов стала race-safe: Build блокируется на время чтения, stale async result не может перезаписать более новую загрузку, Copy сбрасывается до актуальной валидации.
+- Выключенный Web UI больше не блокирует Build из-за скрытого некорректного Custom URL; при повторном включении URL снова валидируется.
+- Актуализированы MASQUE/DPI и AWL regression-тесты: тесты проверяют текущий UI/health-check contract, реальный proxy traffic и дожидаются собственного окна control health-check.
+
+### Verified
+
+- Финальная интеграция проверена на официальном **Mihomo v1.19.31**; SHA-256 release asset: `d5e74bbddbdfff49a1aef7775bf5911da59f0d7196ed509a0ac914b3653dd5f1`.
+- Перед production promotion: web4core source **106/106**, consumer runtime **53/53**, validator **47/47**, MASQUE/DPI **7/7 групп**, browser suite и whitelist — PASS.
+- Реальный Mihomo failover: static / providers / mixed — **3/3 P→F→P**; AWL priority-over-speed и возврат к более медленному primary — PASS.
+- Финальный независимый smoke Z CODE прошёл браузерную матрицу A–M и `mihomo -t` на 10 probe YAML — **10/10 PASS**; воспроизведённых дефектов продукта не найдено.
+- Long production-interval AWL soak остаётся отдельным manual observation и намеренно не является CI/release gate.
 
 ## [1.4.2] - 2026-09-21
 
