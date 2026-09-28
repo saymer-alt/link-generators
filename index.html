@@ -561,6 +561,8 @@ function initPingSelector() {
 
 // === WIREGUARD UPLOAD ===
 let wgBeans = [];
+let wgUploadSeq = 0;
+let wgUploadPending = false;
 
 // AWG-патч 1/3: рантайм-парсер понимает только скаляры, а реальные AWG-конфиги
 // пишут диапазоны и словесные булевы: PersistentKeepalive = 25-35 (Premium и
@@ -652,8 +654,10 @@ function initWgUpload() {
   const btnEl = document.getElementById('btnWg');
 
   fileInput.addEventListener('change', async () => {
+    const requestId = ++wgUploadSeq;
     const files = Array.from(fileInput.files || []);
     if (!files.length) {
+      wgUploadPending = false;
       wgBeans = [];
       const dnsInput = document.getElementById('wgCustomDns');
       const dnsWarn = document.getElementById('wgDnsWarning');
@@ -662,23 +666,41 @@ function initWgUpload() {
       updateWgStatus();
       return;
     }
-    
+
     const api = globalThis.web4core;
     if (!api?.parseWireGuardConf) {
+      wgUploadPending = false;
       showToast('web4core.runtime не загружен!', true);
       return;
     }
 
-    wgBeans = [];
+    // Не публикуем частично прочитанный набор файлов: пока чтение идёт,
+    // предыдущий wgBeans остаётся неизменным, а Build блокируется.
+    wgUploadPending = true;
+    statusEl.textContent = '⏳ Чтение WG/AWG...';
+    statusEl.classList.remove('loaded');
+    btnEl.textContent = '📂 WG/AWG (чтение...)';
+
+    const nextBeans = [];
     for (const file of files) {
       try {
-        const text = normalizeWgText(await file.text());
+        const raw = await file.text();
+        if (requestId !== wgUploadSeq) return;
+        const text = normalizeWgText(raw);
         const bean = api.parseWireGuardConf(text, file.name);
-        if (bean) wgBeans.push(bean);
+        if (bean) nextBeans.push(bean);
       } catch (e) {
+        if (requestId !== wgUploadSeq) return;
         showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true);
       }
     }
+
+    // Более новый selection уже стартовал: старый async result не имеет права
+    // менять wgBeans/status/validation state.
+    if (requestId !== wgUploadSeq) return;
+
+    wgBeans = nextBeans;
+    wgUploadPending = false;
 
     // Перехват нестабильного DNS
     const customDnsInput = document.getElementById('wgCustomDns');
@@ -699,6 +721,13 @@ function initWgUpload() {
       }
     }
     updateWgStatus();
+
+    // File input change invalidated state when selection started. This second
+    // invalidation is required because a build may have completed while an old
+    // browser/runtime still allowed async reading to finish later.
+    mihomoValidationSeq++;
+    resetCompatSummary();
+    setMihomoValidationState('NOT_BUILT');
   });
 
   function updateWgStatus() {
@@ -1259,6 +1288,12 @@ function onWhitelistChange() {
 
 // === MIHOMO BUILDER (via web4core) ===
 function buildMihomo() {
+  if (wgUploadPending) {
+    mihomoValidationSeq++;
+    resetCompatSummary();
+    setMihomoValidationState('NOT_BUILT');
+    return showToast('WG/AWG файл ещё читается. Дождитесь завершения загрузки.', true);
+  }
   const raw = document.getElementById('mihomoInput').value.trim();
   if (!raw && wgBeans.length === 0) return showToast('Вставь ссылки или загрузи WG конфиг', true);
   
