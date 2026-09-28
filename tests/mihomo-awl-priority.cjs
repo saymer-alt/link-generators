@@ -141,7 +141,8 @@ const now_ = async inst => (await inst.get('/proxies/GLOBAL')).now;
     const g = doc['proxy-groups'];
     assert.equal(g.length, 1, 'single flat group, no nesting');
     assert.equal(g[0].type, 'fallback'); assert.equal(g[0].name, 'GLOBAL');
-    assert.equal(g[0].lazy, false); assert.equal(g[0]['expected-status'], 204);
+    assert.equal(g[0].lazy, false);
+    assert.equal(g[0]['expected-status'], undefined, 'GLOBAL deliberately accepts any HTTP response');
     assert.equal(g[0]['max-failed-times'], 2); assert.equal(g[0]['empty-fallback'], 'REJECT');
     assert.deepEqual(g[0].proxies, ['PRIMARY-1: P1', 'PRIMARY-2: P2', 'FALLBACK-1: F1', 'FALLBACK-2: F2'],
       'PRIMARY members before FALLBACK members');
