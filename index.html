@@ -499,8 +499,33 @@ function generateWarp() {
     const h2 = buildLink(h2Ip, h2Port, true);
     
     lastGeneratedLinks.push(quic, h2);
-    out.innerHTML += `<div class="link-block"><div class="link-label">🔷 ${quic.split('#')[1]} (${quicEndpoint.ip})</div><div class="link-text">${quic}</div><button class="copy-btn" onclick="copyText('${quic.replace(/'/g, "\\'")}')">Copy</button></div>`;
-    out.innerHTML += `<div class="link-block"><div class="link-label">🟢 ${h2.split('#')[1]} (${h2Ip})</div><div class="link-text">${h2}</div><button class="copy-btn" onclick="copyText('${h2.replace(/'/g, "\\'")}')">Copy</button></div>`;
+
+    // Недоверенные значения WARP (включая импортированный YAML) должны оставаться
+    // текстом. Не собираем результат через innerHTML/inline onclick.
+    const appendLinkBlock = (link, endpointIp, icon) => {
+      const block = document.createElement('div');
+      block.className = 'link-block';
+
+      const label = document.createElement('div');
+      label.className = 'link-label';
+      label.textContent = `${icon} ${link.split('#')[1] || ''} (${endpointIp})`;
+
+      const text = document.createElement('div');
+      text.className = 'link-text';
+      text.textContent = link;
+
+      const button = document.createElement('button');
+      button.className = 'copy-btn';
+      button.type = 'button';
+      button.textContent = 'Copy';
+      button.addEventListener('click', () => copyText(link));
+
+      block.append(label, text, button);
+      out.appendChild(block);
+    };
+
+    appendLinkBlock(quic, quicEndpoint.ip, '🔷');
+    appendLinkBlock(h2, h2Ip, '🟢');
   }
   
   const modeStr = safePortsOnly ? 'Safe Ports' : 'All Ports';
