@@ -26,6 +26,33 @@ const expectedAwg = {
     await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
     console.log('Browser: page loaded');
     await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+    const yamlScalarRoundTrip = await page.evaluate(() => {
+      const values = ['true', 'false', 'null', '123', '00123', '0x10', '1e3', '1.2', '.nan', '.inf', '#', '#abc', ':', 'a\\nb', 'a\\r\\nb', 'Москва 😀', 'a: b', 'a #b', '{}', '[]', '~'];
+      return values.map(value => {
+        try {
+          const input = 'trojan://' + encodeURIComponent(value) + '@192.0.2.1:443#SCALAR';
+          const yaml = web4core.buildFromRequest({
+            core: 'mihomo',
+            input,
+            options: { addTun: false, addSocks: true, webUI: false, mihomoSubscriptionMode: false }
+          }).data;
+          const doc = jsyaml.load(yaml);
+          return {
+            value,
+            password: doc.proxies[0].password,
+            passwordType: typeof doc.proxies[0].password,
+          };
+        } catch (e) {
+          return { value, error: String(e && e.message ? e.message : e) };
+        }
+      });
+    });
+    for (const row of yamlScalarRoundTrip) {
+      assert.equal(row.error, undefined, 'round-trip error for ' + JSON.stringify(row.value) + ': ' + row.error);
+      assert.equal(row.passwordType, 'string', 'password type for ' + JSON.stringify(row.value));
+      assert.equal(row.password, row.value, 'password value for ' + JSON.stringify(row.value));
+    }
+
     await page.locator('button.tab').filter({ hasText: 'Mihomo' }).click();
     assert.equal(await page.locator('#cfgTunMips').isChecked(), true); // продуктовый дефолт (NIGHT-09)
     assert.match(await page.locator('label:has(#cfgSubMode)').innerText(), /Использовать URL-подписки/);
@@ -37,7 +64,32 @@ const expectedAwg = {
     assert.match(await page.locator('#toast').innerText(), /URL-подписки.*URL подписки не найден.*выключите/i);
     await page.locator('#cfgSubMode').uncheck();
     assert.match(await page.locator('#subModeHint').innerText(), /обычные proxy-ссылки.*напрямую/i);
-    await page.locator('#cfgWebUI').uncheck();
+    // Hidden invalid custom Web UI settings must not block a build while Web UI is disabled.
+    // Set the hidden state directly: this regression targets inactive stored values,
+    // not pointer/visibility behavior of the controls themselves.
+    await page.evaluate(() => {
+      document.getElementById('webUiSelect').value = 'custom';
+      document.getElementById('webUiCustomUrl').value = 'not-a-url';
+      const webUi = document.getElementById('cfgWebUI');
+      webUi.checked = false;
+      webUi.dispatchEvent(new Event('change'));
+    });
+    await page.locator('#mihomoInput').fill(input);
+    const webUiOff = await build('webui-off-invalid-hidden');
+    assert.equal(webUiOff.doc['external-ui-url'], undefined);
+
+    // The same invalid value must still be rejected when Web UI is enabled.
+    await page.locator('#cfgWebUI').check();
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    assert.match(await page.locator('#toast').innerText(), /Web UI.*абсолютный http\/https URL/i);
+    assert.notEqual(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'VALID');
+    await page.evaluate(() => {
+      document.getElementById('webUiSelect').value = 'metacubexd';
+      document.getElementById('webUiCustomUrl').value = '';
+      const webUi = document.getElementById('cfgWebUI');
+      webUi.checked = false;
+      webUi.dispatchEvent(new Event('change'));
+    });
     await page.locator('#mihomoInput').fill(input);
     async function build(name) {
       await page.locator('button[onclick="buildMihomo()"]').click();
@@ -79,6 +131,7 @@ const expectedAwg = {
       assert.equal(vps.doc.tun.stack, 'mips');
       assert.equal(vps.doc.tun['auto-route'], false);
       assert.equal(vps.doc.tun.device, 'tun-mihomo');
+      assert.equal(vps.doc.tun['inet4-address'], undefined);
       assert.equal(vps.doc['find-process-mode'], 'off');
       assert.equal(vps.doc.profile['store-selected'], false);
       if (perTun) assert.ok(vps.doc.listeners.every(l => l.stack === 'mips'));
@@ -89,6 +142,23 @@ const expectedAwg = {
     }
     await page.locator('#cfgTunMips').uncheck();
     assert.equal((await build()).yaml, gvisor.yaml); // uncheck -> тот же gvisor-вывод
+
+    // VPS must preserve an explicitly selected experimental stack instead of
+    // silently rewriting system/mixed to gVisor.
+    await page.locator('#cfgPerProxyMaster').uncheck();
+    await page.locator('#cfgTunStackAdvanced').check();
+    for (const stack of ['system', 'mixed']) {
+      await page.locator('#cfgTunStackEx').selectOption(stack);
+      await page.locator('#cfgProfile').selectOption('vps');
+      const vpsExperimental = await build('vps-' + stack);
+      assert.equal(vpsExperimental.doc.tun.stack, stack);
+      assert.equal(vpsExperimental.doc.tun['inet4-address'], undefined);
+      assert.equal(vpsExperimental.doc.tun['auto-route'], false);
+      await page.locator('#cfgProfile').selectOption('generic');
+    }
+    await page.locator('#cfgTunStackAdvanced').uncheck();
+    await page.locator('#cfgTunMips').uncheck();
+    await page.locator('#cfgPerProxyMaster').check();
 
     // Selective modern REALITY: поле не ломает advanced-контролы (guard фикса 927c446).
     await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@pan1.example:443?encryption=none&security=reality&pbk=TESTPBK&sid=ab&fp=chrome#R1');
@@ -102,6 +172,36 @@ const expectedAwg = {
     assert.equal(await page.locator('#cfgTunStackAdvanced').isVisible(), true);
     assert.equal(await page.locator('#cfgTunMips').isEnabled(), true);
     await page.locator('#realityModernInput').fill('');
+
+    // Async WG upload must never leave a newly-built stale VALID result.
+    await page.locator('#mihomoInput').fill('trojan://test-only@192.0.2.99:443#RACE');
+    await page.evaluate(() => {
+      const original = File.prototype.text;
+      globalThis.__wgOriginalFileText = original;
+      globalThis.__wgReleaseRead = null;
+      File.prototype.text = function () {
+        const file = this;
+        return new Promise(resolve => {
+          globalThis.__wgReleaseRead = async () => resolve(await original.call(file));
+        });
+      };
+    });
+    await page.locator('#wgFile').setInputFiles(path.join(__dirname, 'fixtures/awg31.conf'));
+    await page.waitForFunction(() => wgUploadPending === true && typeof globalThis.__wgReleaseRead === 'function');
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT');
+    assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
+    assert.match(await page.locator('#toast').innerText(), /WG\/AWG файл ещё читается/);
+
+    await page.evaluate(async () => { await globalThis.__wgReleaseRead(); });
+    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 1);
+    assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT');
+    assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
+    await page.evaluate(() => {
+      File.prototype.text = globalThis.__wgOriginalFileText;
+      delete globalThis.__wgOriginalFileText;
+      delete globalThis.__wgReleaseRead;
+    });
 
     // Реальный file input -> normalizeWgText -> parser -> bean -> builder -> final YAML.
     await page.locator('#mihomoInput').fill('');
@@ -134,6 +234,26 @@ const expectedAwg = {
       assert.equal(values['random-trailers'], on !== 'OFF');
       assert.equal(values['disable-cookies'], off === 'ON');
     }
+    const inlineComments = await page.evaluate(({ text }) => {
+      const commented = text
+        .replace('RandomTrailers = on', 'RandomTrailers = on # keep enabled')
+        .replace('DisableCookies = off', 'DisableCookies = off ; keep disabled')
+        .replace('PersistentKeepalive = 25-35', 'PersistentKeepalive = 25-35 # use lower bound');
+      const normalizedText = normalizeWgText(commented);
+      const b = web4core.parseWireGuardConf(normalizedText, 'comments.awg');
+      const normalized = normalizeWgBeans([b])[0];
+      return {
+        awg: normalized.wireguard['amnezia-wg-option'],
+        keepalive: normalized.wireguard.persistentKeepalive,
+        text: normalizedText,
+      };
+    }, { text: fixture });
+    assert.equal(inlineComments.awg['random-trailers'], true);
+    assert.equal(inlineComments.awg['disable-cookies'], false);
+    assert.equal(inlineComments.keepalive, 25);
+    assert.match(inlineComments.text, /RandomTrailers = 1 # keep enabled/);
+    assert.match(inlineComments.text, /DisableCookies = 0 ; keep disabled/);
+    assert.match(inlineComments.text, /PersistentKeepalive = 25 # use lower bound/);
     await page.locator('#cfgTunMips').check();
     await page.locator('#cfgProfile').selectOption('vps');
     const awgVps = await build('awg31-vps-mips');
@@ -195,13 +315,48 @@ const expectedAwg = {
     assert.deepEqual(extra.falseOnly, { 'random-trailers': false, version: 3 });
     assert.equal(extra.intRange, 15);
 
+    // WARP output: импортированные значения остаются текстом и не исполняют HTML/JS.
+    await page.locator('button.tab').filter({ hasText: 'WARP' }).click();
+    await page.evaluate(() => { globalThis.auditXss = 0; });
+    const htmlLikeSni = '<span data-audit=warp-output>INERT</span>';
+    await page.locator('#yamlInput').fill('private-key: SYNTHETIC\npublic-key: SYNTHETIC\nsni: "' + htmlLikeSni + '"\n');
+    await page.locator('button[onclick="parseYaml()"]').click();
+    assert.equal(await page.locator('#sni').inputValue(), htmlLikeSni);
+    await page.evaluate(() => generateWarp());
+    await page.waitForFunction(() => document.querySelectorAll('#warpOutput .link-text').length >= 2);
+    assert.equal(await page.locator('#warpOutput [data-audit="warp-output"]').count(), 0);
+    assert.match(await page.locator('#warpOutput .link-text').first().innerText(), /<span data-audit=warp-output>INERT<\/span>/);
+
     // Обе вкладки, прежний сценарий YAML бота -> MASQUE -> Builder -> Copy.
     await page.locator('button.tab').filter({ hasText: 'WARP' }).click();
+
+    // Повторный импорт — atomic replace, а не merge со старыми identity-полями.
+    await page.locator('#yamlInput').fill('private-key: FIRST\npublic-key: FIRST-PUB\nip: 172.16.0.9\nipv6: 2606:4700::9\nsni: old.example\ndns: [1.1.1.1, 8.8.8.8]\n');
+    await page.locator('button[onclick="parseYaml()"]').click();
+    await page.locator('#yamlInput').fill('private-key: SECOND\n');
+    await page.locator('button[onclick="parseYaml()"]').click();
+    assert.equal(await page.locator('#privateKey').inputValue(), 'SECOND');
+    assert.equal(await page.locator('#publicKey').inputValue(), '');
+    assert.equal(await page.locator('#ip').inputValue(), '');
+    assert.equal(await page.locator('#ipv6').inputValue(), '');
+    assert.equal(await page.locator('#sni').inputValue(), '');
+    assert.equal(await page.locator('#dns').inputValue(), '');
+
     await page.locator('#yamlInput').fill('proxies:\n  - private-key: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=\n    public-key: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=\n    ip: 172.16.0.2\n');
     await page.locator('button[onclick="parseYaml()"]').click();
     await page.locator('button[onclick="generateWarp()"]').click();
+
+    // Свежая страница стартует с Sub Mode=true; WARP-links должны сами
+    // переключить Builder в static-link mode.
+    await page.evaluate(() => {
+      const el = document.getElementById('cfgSubMode');
+      el.checked = true;
+      el.dispatchEvent(new Event('change'));
+    });
     await page.locator('button[onclick="sendToMihomo()"]').click();
     await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID' && document.getElementById('mihomoInput').value.startsWith('masque://'));
+    assert.equal(await page.locator('#cfgSubMode').isChecked(), false);
+    assert.match(await page.locator('#subModeHint').innerText(), /URL-подписки выключены/);
     assert.equal(await page.locator('#copyYamlBtn').isDisabled(), false);
     // Clipboard adapter is stubbed only for test; real copyMihomo guard and call run.
     await page.evaluate(() => { window.testClipboard = ''; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.testClipboard = text; } } }); });

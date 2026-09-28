@@ -224,6 +224,7 @@
           <option value="mixed">mixed</option>
         </select>
         <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
+        <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
       </div>
       <div id="perProxyAdvancedPanel" class="advanced-panel">
         <div class="advanced-panel-title"><span class="advanced-badge">ADVANCED</span><span>Отдельный вход на каждый прокси</span></div>
@@ -258,7 +259,6 @@
       <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
         <div class="row">
           <div><label>TUN device</label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
-          <div><label>TUN inet4-address</label><input type="text" id="vpsInet4" value="10.255.255.1/30"></div>
         </div>
         <div class="row" style="margin-top:12px">
           <div><label>MTU</label><input type="text" id="vpsMtu" value="1420"></div>
@@ -277,7 +277,7 @@
           </div>
           <div id="vpsDnsWarn" class="hint" style="color:#d9534f;margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
         </div>
-        <div class="hint" style="margin-top:8px">⚠️ device, inet4-address и fake-ip-range должны соответствовать переменным routing-скрипта amnezia-mihomo-gateway (PROXY_IF / TUN_INET_ADDR / FAKE_IP_RANGE). Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
+        <div class="hint" style="margin-top:8px">⚠️ Для Mihomo 1.19.31 top-level tun.inet4-address не управляет адресом TUN: IPv4-префикс вычисляется из dns.fake-ip-range и приводится к /30. Поэтому VPS-профиль задаёт device + fake-ip-range, но не обещает отдельный inet4-address. Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
       </div>
       <div class="hint">VPS Gateway выключен по умолчанию и не влияет на обычную генерацию. Подробно — docs/VPS-GATEWAY.md.</div>
     </div>
@@ -367,12 +367,11 @@ function parseYaml() {
     
     ['privateKey','publicKey','ip','ipv6','sni','dns'].forEach(k => {
       const el = document.getElementById(k);
-      if (el && r[k]) {
-        el.value = r[k];
+      if (!el) return;
+      el.value = r[k] || '';
+      if (r[k]) {
         el.classList.add('field-filled');
         setTimeout(() => el.classList.remove('field-filled'), 2000);
-      } else if (k === 'ipv6' && el) {
-        el.value = '';
       }
     });
     
@@ -499,8 +498,33 @@ function generateWarp() {
     const h2 = buildLink(h2Ip, h2Port, true);
     
     lastGeneratedLinks.push(quic, h2);
-    out.innerHTML += `<div class="link-block"><div class="link-label">🔷 ${quic.split('#')[1]} (${quicEndpoint.ip})</div><div class="link-text">${quic}</div><button class="copy-btn" onclick="copyText('${quic.replace(/'/g, "\\'")}')">Copy</button></div>`;
-    out.innerHTML += `<div class="link-block"><div class="link-label">🟢 ${h2.split('#')[1]} (${h2Ip})</div><div class="link-text">${h2}</div><button class="copy-btn" onclick="copyText('${h2.replace(/'/g, "\\'")}')">Copy</button></div>`;
+
+    // Недоверенные значения WARP (включая импортированный YAML) должны оставаться
+    // текстом. Не собираем результат через innerHTML/inline onclick.
+    const appendLinkBlock = (link, endpointIp, icon) => {
+      const block = document.createElement('div');
+      block.className = 'link-block';
+
+      const label = document.createElement('div');
+      label.className = 'link-label';
+      label.textContent = `${icon} ${link.split('#')[1] || ''} (${endpointIp})`;
+
+      const text = document.createElement('div');
+      text.className = 'link-text';
+      text.textContent = link;
+
+      const button = document.createElement('button');
+      button.className = 'copy-btn';
+      button.type = 'button';
+      button.textContent = 'Copy';
+      button.addEventListener('click', () => copyText(link));
+
+      block.append(label, text, button);
+      out.appendChild(block);
+    };
+
+    appendLinkBlock(quic, quicEndpoint.ip, '🔷');
+    appendLinkBlock(h2, h2Ip, '🟢');
   }
   
   const modeStr = safePortsOnly ? 'Safe Ports' : 'All Ports';
@@ -509,6 +533,11 @@ function generateWarp() {
 
 function sendToMihomo() {
   if (!lastGeneratedLinks.length) return showToast('Сначала сгенерируй ссылки', true);
+  const subMode = document.getElementById('cfgSubMode');
+  if (subMode && subMode.checked) {
+    subMode.checked = false;
+    subMode.dispatchEvent(new Event('change'));
+  }
   document.getElementById('mihomoInput').value = lastGeneratedLinks.join('\n');
   switchTab(null, 'mihomo');
   setTimeout(buildMihomo, 100);
@@ -532,6 +561,8 @@ function initPingSelector() {
 
 // === WIREGUARD UPLOAD ===
 let wgBeans = [];
+let wgUploadSeq = 0;
+let wgUploadPending = false;
 
 // AWG-патч 1/3: рантайм-парсер понимает только скаляры, а реальные AWG-конфиги
 // пишут диапазоны и словесные булевы: PersistentKeepalive = 25-35 (Premium и
@@ -543,9 +574,10 @@ let wgBeans = [];
 function normalizeWgText(text) {
   return String(text)
     .replace(/^\uFEFF/, '')
-    .replace(/^(\s*PersistentKeepalive\s*=\s*)(\d+)\s*-\s*\d+\s*$/gim, '$1$2')
-    .replace(/^(\s*(?:RandomTrailers|DisableCookies)\s*=\s*)(on|off)\s*$/gim,
-      (m, p1, p2) => p1 + (p2.toLowerCase() === 'on' ? '1' : '0'));
+    .replace(/^(\s*PersistentKeepalive\s*=\s*)(\d+)\s*-\s*\d+(\s*(?:[#;].*)?)$/gim,
+      '$1$2$3')
+    .replace(/^(\s*(?:RandomTrailers|DisableCookies)\s*=\s*)(on|off)(\s*(?:[#;].*)?)$/gim,
+      (m, p1, p2, p3) => p1 + (p2.toLowerCase() === 'on' ? '1' : '0') + p3);
 }
 
 // AWG-патч 2/3: в .conf нет поля Version, а mihomo активирует движок AWG 3.x
@@ -622,8 +654,10 @@ function initWgUpload() {
   const btnEl = document.getElementById('btnWg');
 
   fileInput.addEventListener('change', async () => {
+    const requestId = ++wgUploadSeq;
     const files = Array.from(fileInput.files || []);
     if (!files.length) {
+      wgUploadPending = false;
       wgBeans = [];
       const dnsInput = document.getElementById('wgCustomDns');
       const dnsWarn = document.getElementById('wgDnsWarning');
@@ -632,23 +666,41 @@ function initWgUpload() {
       updateWgStatus();
       return;
     }
-    
+
     const api = globalThis.web4core;
     if (!api?.parseWireGuardConf) {
+      wgUploadPending = false;
       showToast('web4core.runtime не загружен!', true);
       return;
     }
 
-    wgBeans = [];
+    // Не публикуем частично прочитанный набор файлов: пока чтение идёт,
+    // предыдущий wgBeans остаётся неизменным, а Build блокируется.
+    wgUploadPending = true;
+    statusEl.textContent = '⏳ Чтение WG/AWG...';
+    statusEl.classList.remove('loaded');
+    btnEl.textContent = '📂 WG/AWG (чтение...)';
+
+    const nextBeans = [];
     for (const file of files) {
       try {
-        const text = normalizeWgText(await file.text());
+        const raw = await file.text();
+        if (requestId !== wgUploadSeq) return;
+        const text = normalizeWgText(raw);
         const bean = api.parseWireGuardConf(text, file.name);
-        if (bean) wgBeans.push(bean);
+        if (bean) nextBeans.push(bean);
       } catch (e) {
+        if (requestId !== wgUploadSeq) return;
         showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true);
       }
     }
+
+    // Более новый selection уже стартовал: старый async result не имеет права
+    // менять wgBeans/status/validation state.
+    if (requestId !== wgUploadSeq) return;
+
+    wgBeans = nextBeans;
+    wgUploadPending = false;
 
     // Перехват нестабильного DNS
     const customDnsInput = document.getElementById('wgCustomDns');
@@ -669,6 +721,13 @@ function initWgUpload() {
       }
     }
     updateWgStatus();
+
+    // File input change invalidated state when selection started. This second
+    // invalidation is required because a build may have completed while an old
+    // browser/runtime still allowed async reading to finish later.
+    mihomoValidationSeq++;
+    resetCompatSummary();
+    setMihomoValidationState('NOT_BUILT');
   });
 
   function updateWgStatus() {
@@ -1019,15 +1078,14 @@ function renderCompatSummary(yaml) {
 }
 // === DEPLOYMENT PROFILE (VPS GATEWAY, opt-in) ===
 // Дефолты — зеркало текущего amnezia-mihomo-gateway/install.sh (источник истины для значений):
-// PROXY_IF (tun-mihomo), TUN_INET_ADDR (10.255.255.1/30), FAKE_IP_RANGE (198.18.0.0/16),
+// PROXY_IF (tun-mihomo), FAKE_IP_RANGE (198.18.0.0/16),
 // пакет v2.0 (mtu 1420, gso, find-process-mode: off, store-*: false).
 // При изменении install.sh — синхронизировать эту константу и value= в полях
-// #vpsDevice/#vpsInet4/#vpsMtu/#vpsFakeIp/#vpsDnsListen/#vpsDnsNs/#vpsProxyNs.
+// #vpsDevice/#vpsMtu/#vpsFakeIp/#vpsDnsListen/#vpsDnsNs/#vpsProxyNs.
 // Generic-профиль: applyDeploymentProfile() НЕ вызывается (guard в buildMihomo) —
 // вывод байт-в-байт прежний. Подробно — docs/VPS-GATEWAY.md.
 const VPS_GATEWAY_DEFAULTS = {
   device: 'tun-mihomo',
-  inet4Address: '10.255.255.1/30',
   mtu: 1420,
   fakeIpRange: '198.18.0.0/16',
   dnsListen: '0.0.0.0:53',
@@ -1063,10 +1121,9 @@ function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') {
   doc.tun = Object.assign({}, doc.tun, {
     'enable': true,
     'device': vpsField('vpsDevice', VPS_GATEWAY_DEFAULTS.device),
-    'stack': tunStack === 'mips' ? 'mips' : 'gvisor',
+    'stack': ['gvisor', 'mips', 'system', 'mixed'].includes(tunStack) ? tunStack : 'gvisor',
     'auto-route': false, // инвариант: иначе Mihomo перехватит весь трафик VPS (потеря SSH)
     'auto-detect-interface': true,
-    'inet4-address': vpsField('vpsInet4', VPS_GATEWAY_DEFAULTS.inet4Address),
     'mtu': mtu,
     'gso': true
   });
@@ -1229,6 +1286,12 @@ function onWhitelistChange() {
 
 // === MIHOMO BUILDER (via web4core) ===
 function buildMihomo() {
+  if (wgUploadPending) {
+    mihomoValidationSeq++;
+    resetCompatSummary();
+    setMihomoValidationState('NOT_BUILT');
+    return showToast('WG/AWG файл ещё читается. Дождитесь завершения загрузки.', true);
+  }
   const raw = document.getElementById('mihomoInput').value.trim();
   if (!raw && wgBeans.length === 0) return showToast('Вставь ссылки или загрузи WG конфиг', true);
   
@@ -1250,9 +1313,10 @@ function buildMihomo() {
   const tunStack = advancedStack ? advancedStack : ((addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor');
   const perProxySocks = (master && !autoWhitelist && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
 
+  const webUiEnabled = document.getElementById('cfgWebUI').checked;
   const webUiChoice = document.getElementById('webUiSelect').value;
   const webUiCustomUrl = document.getElementById('webUiCustomUrl').value.trim();
-  if (webUiChoice === 'custom' && !/^https?:\/\//i.test(webUiCustomUrl)) {
+  if (webUiEnabled && webUiChoice === 'custom' && !/^https?:\/\//i.test(webUiCustomUrl)) {
     return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
   }
 
@@ -1267,13 +1331,13 @@ function buildMihomo() {
       options: {
         addSocks: addSocks,
         addTun: addTun,
-        webUI: document.getElementById('cfgWebUI').checked,
+        webUI: webUiEnabled,
         urlTest: urlTest,
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
         excludeFilter: document.getElementById('excludeFilterInput').value,
         deviceModel: document.getElementById('deviceModelInput').value,
-        webUiDashboard: webUiChoice,
-        webUiCustomUrl: webUiChoice === 'custom' ? webUiCustomUrl : undefined,
+        webUiDashboard: webUiEnabled ? webUiChoice : undefined,
+        webUiCustomUrl: webUiEnabled && webUiChoice === 'custom' ? webUiCustomUrl : undefined,
         mihomoPerProxyTun: perProxyTun,
         mihomoTunStack: tunStack,
         perProxyPort: perProxySocks,
