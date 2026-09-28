@@ -81,7 +81,6 @@ Docker / AmneziaWG / Linux policy routing / iptables
 | Поле UI | Параметр | Дефолт | Зачем нужен |
 |---|---|---|---|
 | `#vpsDevice` | `tun.device` | `tun-mihomo` | имя, которое ищут routing-скрипт и watchdog |
-| `#vpsInet4` | `tun.inet4-address` | `10.255.255.1/30` | без IPv4 на интерфейсе MASQUERADE не работает |
 | `#vpsMtu` | `tun.mtu` | `1420` | двойная инкапсуляция AWG+WARP; вместе с TCPMSS clamp на Linux-стороне давал ~2x |
 | `#vpsFakeIp` | `dns.fake-ip-range` | `198.18.0.0/16` | диапазон fake-ip; должен совпадать с main-маршрутом в routing-скрипте |
 | `#vpsDnsEnabled` | секция `dns:` целиком | включён | DNS-перехват (fake-ip); выключение удаляет `dns` без остатков |
@@ -98,7 +97,7 @@ Docker / AmneziaWG / Linux policy routing / iptables
 | Точка | Дефолт | Что сломается при рассинхроне |
 |---|---|---|
 | `tun.device` | `tun-mihomo` | routing-скрипт и watchdog ждут интерфейс с этим именем — правил не будет, watchdog будет циклично рестартовать Mihomo |
-| `tun.inet4-address` | `10.255.255.1/30` | MASQUERADE не заработает — трафик клиентов уйдёт без NAT |
+| effective TUN IPv4 | выводится Mihomo 1.19.31 из `dns.fake-ip-range` с маской `/30` | наличие IPv4 на TUN по-прежнему требуется для NAT; отдельный top-level `tun.inet4-address` в RawTun 1.19.31 не применяется |
 | `dns.fake-ip-range` | `198.18.0.0/16` | не совпадёт с main-маршрутом `FAKE_IP_RANGE` — пакеты на fake-ip не попадут в TUN |
 | `tun.auto-route` | `false` (инвариант) | `true` перехватит весь трафик VPS — потеря SSH; в UI исключено |
 
@@ -114,9 +113,9 @@ VPS. Это боевой дефолт схемы (потребители — к�
 
 ## Правило синхронизации с routing-скриптом
 
-Изменение `device`, `inet4-address` или `fake-ip-range` **обязано** соответствовать
+Изменение `device` или `fake-ip-range` **обязано** соответствовать
 переменным routing-скрипта gateway (`PROXY_IF` / `TUN_INET_ADDR` / `FAKE_IP_RANGE`).
-Установщик при следующем запуске перезапишет `fake-ip-range` и `inet4-address` в конфиге
+Установщик при следующем запуске приводит `fake-ip-range` к своему контракту; отдельный top-level `inet4-address` для Mihomo 1.19.31 больше не считается рабочим параметром
 своими значениями (sed-патчи в §2.7 install.sh) — рассинхрон бесполезен и вреден.
 
 ## Cross-project contract: generator -> gateway -> bootstrap
@@ -166,10 +165,12 @@ firewall-правилами.
 доказательство ошибки MASQUE-генерации и не основание менять transport defaults без
 повторяемых тестов.
 
-Кроме того, уже на двух VPS наблюдалось расхождение между desired YAML
+Кроме того, уже на двух VPS наблюдалось расхождение между старым desired YAML
 `tun.inet4-address: 10.255.255.1/30` и live-адресом `tun-mihomo 198.18.0.0/30`.
-Причина пока не установлена. Генератор должен продолжать описывать desired state, а
-runtime discovery должен проверять фактическое состояние перед выводами о маршрутизации.
+Причина теперь установлена по исходникам **Mihomo v1.19.31**: top-level `RawTun.Inet4Address`
+закомментирован, а `parseTun()` формирует IPv4-префикс TUN из `dns.fake-ip-range` и
+приводит его к `/30`. Для `198.18.0.0/16` это объясняет наблюдаемый `198.18.0.0/30`.
+Per-proxy TUN listeners используют другой config path, где `inet4-address` поддерживается.
 
 Текущий live-audit и rollout-status хранятся в
 [`amnezia-mihomo-gateway/docs/LIVE_AUDIT_2026-09-23.md`](https://github.com/saymer-alt/amnezia-mihomo-gateway/blob/stable/docs/LIVE_AUDIT_2026-09-23.md).
@@ -199,3 +200,9 @@ sysctl, systemd, watchdog, firewall, любую настройку самого 
 
 Параметры Builder'а — [MIHOMO.md](MIHOMO.md); тесты — [TESTING.md](TESTING.md);
 контракт для агентов — [AGENTS.md](../AGENTS.md).
+
+### Статус TUN stack для VPS (Mihomo 1.19.31)
+
+- **gVisor** — рекомендуемый baseline проекта.
+- **MIPS** — реально запускался на VPS; в сравнительной серии EE оказался примерно на 10 Мбит/с хуже по download, поэтому baseline не меняется.
+- **system / mixed** — доступны как экспериментальные значения Mihomo, но для нашего gateway не рекомендуются: владелец пробовал их на VPS без устойчивого положительного результата. Генератор не подменяет выбранный stack молча; при эксперименте в YAML остаётся выбранное значение.

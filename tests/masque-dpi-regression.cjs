@@ -44,6 +44,8 @@ function parseLink(link) {
     });
     await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
     await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+    await page.locator('button.tab').filter({ hasText: 'WARP' }).click();
+    await page.locator('#tab-warp').waitFor({ state: 'visible' });
 
     // contract defaults on the form itself
     assert.equal(await page.locator('#safePortsOnly').isChecked(), true, 'Safe Ports Only is the default');
