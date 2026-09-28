@@ -182,7 +182,10 @@ const now_ = async inst => (await inst.get('/proxies/GLOBAL')).now;
       // Return-to-primary: kill both primaries, then restore P1 still slower than F1/F2.
       await P1.setMode('refuse'); await P2.setMode('refuse');
       await waitTraffic(awl, ['F1', 'F2'], 15000);
-      const ctlFallback = await now_(ctl);
+      const ctlFallback = await until(async () => {
+        const current = await now_(ctl);
+        return /^FALLBACK-/.test(current) ? current : false;
+      }, 'control left the dead primary', 15000);
       assert.match(ctlFallback, /^FALLBACK-/, 'control left the dead primary');
       await P1.setMode('slow:600');
       await waitTraffic(awl, 'P1', 15000);
