@@ -195,8 +195,18 @@ const expectedAwg = {
     assert.deepEqual(extra.falseOnly, { 'random-trailers': false, version: 3 });
     assert.equal(extra.intRange, 15);
 
-    // Обе вкладки, прежний сценарий YAML бота -> MASQUE -> Builder -> Copy.
+    // WARP output: импортированные значения остаются текстом и не исполняют HTML/JS.
     await page.locator('button.tab').filter({ hasText: 'WARP' }).click();
+    await page.evaluate(() => { globalThis.auditXss = 0; });
+    await page.locator('#yamlInput').fill('private-key: SYNTHETIC\\npublic-key: SYNTHETIC\\nsni: "<img src=data:,x onerror=globalThis.auditXss=42>"\\n');
+    await page.locator('button[onclick="parseYaml()"]').click();
+    await page.locator('button[onclick="generateWarp()"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('#warpOutput .link-text').length === 2);
+    assert.equal(await page.evaluate(() => globalThis.auditXss), 0);
+    assert.equal(await page.locator('#warpOutput img').count(), 0);
+    assert.match(await page.locator('#warpOutput .link-text').first().innerText(), /<img src=data:,x onerror=globalThis\.auditXss=42>/);
+
+    // Обе вкладки, прежний сценарий YAML бота -> MASQUE -> Builder -> Copy.
     await page.locator('#yamlInput').fill('proxies:\n  - private-key: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=\n    public-key: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=\n    ip: 172.16.0.2\n');
     await page.locator('button[onclick="parseYaml()"]').click();
     await page.locator('button[onclick="generateWarp()"]').click();
