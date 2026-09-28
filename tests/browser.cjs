@@ -79,6 +79,7 @@ const expectedAwg = {
       assert.equal(vps.doc.tun.stack, 'mips');
       assert.equal(vps.doc.tun['auto-route'], false);
       assert.equal(vps.doc.tun.device, 'tun-mihomo');
+      assert.equal(vps.doc.tun['inet4-address'], undefined);
       assert.equal(vps.doc['find-process-mode'], 'off');
       assert.equal(vps.doc.profile['store-selected'], false);
       if (perTun) assert.ok(vps.doc.listeners.every(l => l.stack === 'mips'));
@@ -89,6 +90,22 @@ const expectedAwg = {
     }
     await page.locator('#cfgTunMips').uncheck();
     assert.equal((await build()).yaml, gvisor.yaml); // uncheck -> тот же gvisor-вывод
+
+    // VPS must preserve an explicitly selected experimental stack instead of
+    // silently rewriting system/mixed to gVisor.
+    await page.locator('#cfgPerProxyMaster').uncheck();
+    await page.locator('#cfgTunStackAdvanced').check();
+    for (const stack of ['system', 'mixed']) {
+      await page.locator('#cfgTunStackEx').selectOption(stack);
+      await page.locator('#cfgProfile').selectOption('vps');
+      const vpsExperimental = await build('vps-' + stack);
+      assert.equal(vpsExperimental.doc.tun.stack, stack);
+      assert.equal(vpsExperimental.doc.tun['inet4-address'], undefined);
+      assert.equal(vpsExperimental.doc.tun['auto-route'], false);
+      await page.locator('#cfgProfile').selectOption('generic');
+    }
+    await page.locator('#cfgTunStackAdvanced').uncheck();
+    await page.locator('#cfgTunMips').uncheck();
 
     // Selective modern REALITY: поле не ломает advanced-контролы (guard фикса 927c446).
     await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@pan1.example:443?encryption=none&security=reality&pbk=TESTPBK&sid=ab&fp=chrome#R1');
