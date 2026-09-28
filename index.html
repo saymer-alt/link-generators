@@ -224,6 +224,7 @@
           <option value="mixed">mixed</option>
         </select>
         <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
+        <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
       </div>
       <div id="perProxyAdvancedPanel" class="advanced-panel">
         <div class="advanced-panel-title"><span class="advanced-badge">ADVANCED</span><span>Отдельный вход на каждый прокси</span></div>
@@ -258,7 +259,6 @@
       <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
         <div class="row">
           <div><label>TUN device</label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
-          <div><label>TUN inet4-address</label><input type="text" id="vpsInet4" value="10.255.255.1/30"></div>
         </div>
         <div class="row" style="margin-top:12px">
           <div><label>MTU</label><input type="text" id="vpsMtu" value="1420"></div>
@@ -277,7 +277,7 @@
           </div>
           <div id="vpsDnsWarn" class="hint" style="color:#d9534f;margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
         </div>
-        <div class="hint" style="margin-top:8px">⚠️ device, inet4-address и fake-ip-range должны соответствовать переменным routing-скрипта amnezia-mihomo-gateway (PROXY_IF / TUN_INET_ADDR / FAKE_IP_RANGE). Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
+        <div class="hint" style="margin-top:8px">⚠️ Для Mihomo 1.19.31 top-level tun.inet4-address не управляет адресом TUN: IPv4-префикс вычисляется из dns.fake-ip-range и приводится к /30. Поэтому VPS-профиль задаёт device + fake-ip-range, но не обещает отдельный inet4-address. Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
       </div>
       <div class="hint">VPS Gateway выключен по умолчанию и не влияет на обычную генерацию. Подробно — docs/VPS-GATEWAY.md.</div>
     </div>
@@ -1078,15 +1078,14 @@ function renderCompatSummary(yaml) {
 }
 // === DEPLOYMENT PROFILE (VPS GATEWAY, opt-in) ===
 // Дефолты — зеркало текущего amnezia-mihomo-gateway/install.sh (источник истины для значений):
-// PROXY_IF (tun-mihomo), TUN_INET_ADDR (10.255.255.1/30), FAKE_IP_RANGE (198.18.0.0/16),
+// PROXY_IF (tun-mihomo), FAKE_IP_RANGE (198.18.0.0/16),
 // пакет v2.0 (mtu 1420, gso, find-process-mode: off, store-*: false).
 // При изменении install.sh — синхронизировать эту константу и value= в полях
-// #vpsDevice/#vpsInet4/#vpsMtu/#vpsFakeIp/#vpsDnsListen/#vpsDnsNs/#vpsProxyNs.
+// #vpsDevice/#vpsMtu/#vpsFakeIp/#vpsDnsListen/#vpsDnsNs/#vpsProxyNs.
 // Generic-профиль: applyDeploymentProfile() НЕ вызывается (guard в buildMihomo) —
 // вывод байт-в-байт прежний. Подробно — docs/VPS-GATEWAY.md.
 const VPS_GATEWAY_DEFAULTS = {
   device: 'tun-mihomo',
-  inet4Address: '10.255.255.1/30',
   mtu: 1420,
   fakeIpRange: '198.18.0.0/16',
   dnsListen: '0.0.0.0:53',
@@ -1122,10 +1121,9 @@ function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') {
   doc.tun = Object.assign({}, doc.tun, {
     'enable': true,
     'device': vpsField('vpsDevice', VPS_GATEWAY_DEFAULTS.device),
-    'stack': tunStack === 'mips' ? 'mips' : 'gvisor',
+    'stack': ['gvisor', 'mips', 'system', 'mixed'].includes(tunStack) ? tunStack : 'gvisor',
     'auto-route': false, // инвариант: иначе Mihomo перехватит весь трафик VPS (потеря SSH)
     'auto-detect-interface': true,
-    'inet4-address': vpsField('vpsInet4', VPS_GATEWAY_DEFAULTS.inet4Address),
     'mtu': mtu,
     'gso': true
   });
