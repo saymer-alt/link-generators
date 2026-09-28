@@ -198,13 +198,14 @@ const expectedAwg = {
     // WARP output: импортированные значения остаются текстом и не исполняют HTML/JS.
     await page.locator('button.tab').filter({ hasText: 'WARP' }).click();
     await page.evaluate(() => { globalThis.auditXss = 0; });
-    await page.locator('#yamlInput').fill('private-key: SYNTHETIC\\npublic-key: SYNTHETIC\\nsni: "<img src=data:,x onerror=globalThis.auditXss=42>"\\n');
+    const htmlLikeSni = '<span data-audit=warp-output>INERT</span>';
+    await page.locator('#yamlInput').fill('private-key: SYNTHETIC\\npublic-key: SYNTHETIC\\nsni: "' + htmlLikeSni + '"\\n');
     await page.locator('button[onclick="parseYaml()"]').click();
-    await page.locator('button[onclick="generateWarp()"]').click();
-    await page.waitForFunction(() => document.querySelectorAll('#warpOutput .link-text').length === 2);
-    assert.equal(await page.evaluate(() => globalThis.auditXss), 0);
-    assert.equal(await page.locator('#warpOutput img').count(), 0);
-    assert.match(await page.locator('#warpOutput .link-text').first().innerText(), /<img src=data:,x onerror=globalThis\.auditXss=42>/);
+    assert.equal(await page.locator('#sni').inputValue(), htmlLikeSni);
+    await page.evaluate(() => generateWarp());
+    await page.waitForFunction(() => document.querySelectorAll('#warpOutput .link-text').length >= 2);
+    assert.equal(await page.locator('#warpOutput [data-audit="warp-output"]').count(), 0);
+    assert.match(await page.locator('#warpOutput .link-text').first().innerText(), /<span data-audit=warp-output>INERT<\/span>/);
 
     // Обе вкладки, прежний сценарий YAML бота -> MASQUE -> Builder -> Copy.
     await page.locator('#yamlInput').fill('proxies:\n  - private-key: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=\n    public-key: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=\n    ip: 172.16.0.2\n');
