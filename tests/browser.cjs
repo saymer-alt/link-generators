@@ -197,11 +197,34 @@ const expectedAwg = {
 
     // Обе вкладки, прежний сценарий YAML бота -> MASQUE -> Builder -> Copy.
     await page.locator('button.tab').filter({ hasText: 'WARP' }).click();
+
+    // Повторный импорт — atomic replace, а не merge со старыми identity-полями.
+    await page.locator('#yamlInput').fill('private-key: FIRST\npublic-key: FIRST-PUB\nip: 172.16.0.9\nipv6: 2606:4700::9\nsni: old.example\ndns: [1.1.1.1, 8.8.8.8]\n');
+    await page.locator('button[onclick="parseYaml()"]').click();
+    await page.locator('#yamlInput').fill('private-key: SECOND\n');
+    await page.locator('button[onclick="parseYaml()"]').click();
+    assert.equal(await page.locator('#privateKey').inputValue(), 'SECOND');
+    assert.equal(await page.locator('#publicKey').inputValue(), '');
+    assert.equal(await page.locator('#ip').inputValue(), '');
+    assert.equal(await page.locator('#ipv6').inputValue(), '');
+    assert.equal(await page.locator('#sni').inputValue(), '');
+    assert.equal(await page.locator('#dns').inputValue(), '');
+
     await page.locator('#yamlInput').fill('proxies:\n  - private-key: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=\n    public-key: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=\n    ip: 172.16.0.2\n');
     await page.locator('button[onclick="parseYaml()"]').click();
     await page.locator('button[onclick="generateWarp()"]').click();
+
+    // Свежая страница стартует с Sub Mode=true; WARP-links должны сами
+    // переключить Builder в static-link mode.
+    await page.evaluate(() => {
+      const el = document.getElementById('cfgSubMode');
+      el.checked = true;
+      el.dispatchEvent(new Event('change'));
+    });
     await page.locator('button[onclick="sendToMihomo()"]').click();
     await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID' && document.getElementById('mihomoInput').value.startsWith('masque://'));
+    assert.equal(await page.locator('#cfgSubMode').isChecked(), false);
+    assert.match(await page.locator('#subModeHint').innerText(), /URL-подписки выключены/);
     assert.equal(await page.locator('#copyYamlBtn').isDisabled(), false);
     // Clipboard adapter is stubbed only for test; real copyMihomo guard and call run.
     await page.evaluate(() => { window.testClipboard = ''; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.testClipboard = text; } } }); });
