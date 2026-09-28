@@ -74,15 +74,23 @@ async function mock(name) {
 function requestThrough(port, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const req = http.get({ host: '127.0.0.1', port, path: 'http://127.0.0.1:18080/data', agent: false }, res => {
-      let text = ''; res.on('data', d => text += d); res.on('end', () => resolve(text));
+      let text = '';
+      res.on('data', d => text += d);
+      res.on('end', () => resolve({ statusCode: res.statusCode || 0, body: text }));
     });
     req.setTimeout(timeoutMs, () => req.destroy(Error('request timeout')));
     req.on('error', reject);
   });
 }
 async function probe(port, timeoutMs) {
-  try { return { ok: true, body: await requestThrough(port, timeoutMs) }; }
-  catch (e) { return { ok: false, error: e.message }; }
+  try {
+    const r = await requestThrough(port, timeoutMs);
+    const ok = r.statusCode === 200 && (r.body === 'P1' || r.body === 'F1');
+    return ok ? { ok: true, statusCode: r.statusCode, body: r.body }
+      : { ok: false, statusCode: r.statusCode, body: r.body, error: 'unexpected HTTP response' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 }
 
 (async () => {
