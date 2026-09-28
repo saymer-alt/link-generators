@@ -56,9 +56,13 @@ const expectedAwg = {
     await page.locator('button[onclick="buildMihomo()"]').click();
     assert.match(await page.locator('#toast').innerText(), /Web UI.*абсолютный http\/https URL/i);
     assert.notEqual(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'VALID');
-    await page.locator('#cfgWebUI').uncheck();
-    await page.locator('#webUiSelect').selectOption('metacubexd');
-    await page.locator('#webUiCustomUrl').fill('');
+    await page.evaluate(() => {
+      document.getElementById('webUiSelect').value = 'metacubexd';
+      document.getElementById('webUiCustomUrl').value = '';
+      const webUi = document.getElementById('cfgWebUI');
+      webUi.checked = false;
+      webUi.dispatchEvent(new Event('change'));
+    });
     await page.locator('#mihomoInput').fill(input);
     async function build(name) {
       await page.locator('button[onclick="buildMihomo()"]').click();
