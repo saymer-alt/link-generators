@@ -38,9 +38,15 @@ const expectedAwg = {
     await page.locator('#cfgSubMode').uncheck();
     assert.match(await page.locator('#subModeHint').innerText(), /обычные proxy-ссылки.*напрямую/i);
     // Hidden invalid custom Web UI settings must not block a build while Web UI is disabled.
-    await page.locator('#webUiSelect').selectOption('custom');
-    await page.locator('#webUiCustomUrl').fill('not-a-url');
-    await page.locator('#cfgWebUI').uncheck();
+    // Set the hidden state directly: this regression targets inactive stored values,
+    // not pointer/visibility behavior of the controls themselves.
+    await page.evaluate(() => {
+      document.getElementById('webUiSelect').value = 'custom';
+      document.getElementById('webUiCustomUrl').value = 'not-a-url';
+      const webUi = document.getElementById('cfgWebUI');
+      webUi.checked = false;
+      webUi.dispatchEvent(new Event('change'));
+    });
     await page.locator('#mihomoInput').fill(input);
     const webUiOff = await build('webui-off-invalid-hidden');
     assert.equal(webUiOff.doc['external-ui-url'], undefined);
