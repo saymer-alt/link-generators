@@ -79,6 +79,9 @@ jobs:
 
       - name: Browser semantic regression suite
         run: |
+          # Temporary verification only: exercise the freshly built source PR
+          # through the real consumer page, not the tracked old runtime.
+          cp web4core-source/src/web4core.runtime.js web4core.runtime.js
           npm install --no-save --no-package-lock playwright@1.55.0
           BROWSER_CHANNEL=chrome node tests/browser.cjs
 
