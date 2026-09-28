@@ -77,6 +77,37 @@ jobs:
           node tests/runtime.cjs web4core-source/src/web4core.runtime.js
           sha256sum web4core-source/src/web4core.runtime.js
 
+      - name: Verify tracked runtime provenance
+        id: tracked-runtime
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          tracked = Path("web4core.runtime.js").read_bytes().replace(b"\r\n", b"\n")
+          built = Path("web4core-source/src/web4core.runtime.js").read_bytes().replace(b"\r\n", b"\n")
+          tracked_sha = hashlib.sha256(tracked).hexdigest()
+          built_sha = hashlib.sha256(built).hexdigest()
+          print(f"tracked-normalized-sha256={tracked_sha}")
+          print(f"built-normalized-sha256={built_sha}")
+          Path("/tmp/runtime-match").write_text("1" if tracked == built else "0")
+          PY
+          match="$(cat /tmp/runtime-match)"
+          echo "match=$match" >> "$GITHUB_OUTPUT"
+          if [ "$match" = 1 ]; then
+            echo "Tracked runtime matches the freshly built runtime."
+          else
+            echo "::warning::Tracked web4core.runtime.js does not match the freshly built runtime."
+          fi
+
+      - name: Require published runtime match
+        if: steps.tracked-runtime.outputs.match != '1' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/stable')
+        run: |
+          echo "Tracked web4core.runtime.js is not the runtime built and tested from the checked-out web4core source."
+          echo "Regenerate/update the tracked runtime before this PR/stable revision can pass validation."
+          exit 1
+
       - name: Upload checked runtime
         uses: actions/upload-artifact@v4
         with:
