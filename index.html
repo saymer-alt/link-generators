@@ -367,12 +367,11 @@ function parseYaml() {
     
     ['privateKey','publicKey','ip','ipv6','sni','dns'].forEach(k => {
       const el = document.getElementById(k);
-      if (el && r[k]) {
-        el.value = r[k];
+      if (!el) return;
+      el.value = r[k] || '';
+      if (r[k]) {
         el.classList.add('field-filled');
         setTimeout(() => el.classList.remove('field-filled'), 2000);
-      } else if (k === 'ipv6' && el) {
-        el.value = '';
       }
     });
     
@@ -509,6 +508,11 @@ function generateWarp() {
 
 function sendToMihomo() {
   if (!lastGeneratedLinks.length) return showToast('Сначала сгенерируй ссылки', true);
+  const subMode = document.getElementById('cfgSubMode');
+  if (subMode && subMode.checked) {
+    subMode.checked = false;
+    subMode.dispatchEvent(new Event('change'));
+  }
   document.getElementById('mihomoInput').value = lastGeneratedLinks.join('\n');
   switchTab(null, 'mihomo');
   setTimeout(buildMihomo, 100);
