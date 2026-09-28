@@ -37,7 +37,22 @@ const expectedAwg = {
     assert.match(await page.locator('#toast').innerText(), /URL-подписки.*URL подписки не найден.*выключите/i);
     await page.locator('#cfgSubMode').uncheck();
     assert.match(await page.locator('#subModeHint').innerText(), /обычные proxy-ссылки.*напрямую/i);
+    // Hidden invalid custom Web UI settings must not block a build while Web UI is disabled.
+    await page.locator('#webUiSelect').selectOption('custom');
+    await page.locator('#webUiCustomUrl').fill('not-a-url');
     await page.locator('#cfgWebUI').uncheck();
+    await page.locator('#mihomoInput').fill(input);
+    const webUiOff = await build('webui-off-invalid-hidden');
+    assert.equal(webUiOff.doc['external-ui-url'], undefined);
+
+    // The same invalid value must still be rejected when Web UI is enabled.
+    await page.locator('#cfgWebUI').check();
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    assert.match(await page.locator('#toast').innerText(), /Web UI.*абсолютный http\/https URL/i);
+    assert.notEqual(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'VALID');
+    await page.locator('#cfgWebUI').uncheck();
+    await page.locator('#webUiSelect').selectOption('metacubexd');
+    await page.locator('#webUiCustomUrl').fill('');
     await page.locator('#mihomoInput').fill(input);
     async function build(name) {
       await page.locator('button[onclick="buildMihomo()"]').click();
