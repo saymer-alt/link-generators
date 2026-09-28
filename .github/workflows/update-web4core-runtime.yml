@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: saymer-alt/web4core
-          ref: link-generators
+          ref: fix/mihomo-proxy-dedup-identity
           path: web4core-source
           persist-credentials: false
 
