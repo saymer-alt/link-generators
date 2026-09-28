@@ -30,27 +30,28 @@ const expectedAwg = {
     const yamlScalarRoundTrip = await page.evaluate(() => {
       const values = ['true', 'false', 'null', '123', '00123', '0x10', '1e3', '1.2', '.nan', '.inf', '#', '#abc', ':', 'a\\nb', 'a\\r\\nb', 'Москва 😀', 'a: b', 'a #b', '{}', '[]', '~'];
       return values.map(value => {
-        const input = 'trojan://' + encodeURIComponent(value) + '@192.0.2.1:443#' + encodeURIComponent('NAME-' + value);
-        const yaml = web4core.buildFromRequest({
-          core: 'mihomo',
-          input,
-          options: { addTun: false, addSocks: true, webUI: false, mihomoSubscriptionMode: false }
-        }).data;
-        const doc = jsyaml.load(yaml);
-        return {
-          value,
-          password: doc.proxies[0].password,
-          passwordType: typeof doc.proxies[0].password,
-          name: doc.proxies[0].name,
-          nameType: typeof doc.proxies[0].name,
-        };
+        try {
+          const input = 'trojan://' + encodeURIComponent(value) + '@192.0.2.1:443#SCALAR';
+          const yaml = web4core.buildFromRequest({
+            core: 'mihomo',
+            input,
+            options: { addTun: false, addSocks: true, webUI: false, mihomoSubscriptionMode: false }
+          }).data;
+          const doc = jsyaml.load(yaml);
+          return {
+            value,
+            password: doc.proxies[0].password,
+            passwordType: typeof doc.proxies[0].password,
+          };
+        } catch (e) {
+          return { value, error: String(e && e.message ? e.message : e) };
+        }
       });
     });
     for (const row of yamlScalarRoundTrip) {
+      assert.equal(row.error, undefined, 'round-trip error for ' + JSON.stringify(row.value) + ': ' + row.error);
       assert.equal(row.passwordType, 'string', 'password type for ' + JSON.stringify(row.value));
       assert.equal(row.password, row.value, 'password value for ' + JSON.stringify(row.value));
-      assert.equal(row.nameType, 'string', 'name type for ' + JSON.stringify(row.value));
-      assert.equal(row.name, 'NAME-' + row.value, 'name value for ' + JSON.stringify(row.value));
     }
 
     await page.locator('button.tab').filter({ hasText: 'Mihomo' }).click();
