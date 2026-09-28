@@ -77,6 +77,13 @@ jobs:
           node tests/runtime.cjs web4core-source/src/web4core.runtime.js
           sha256sum web4core-source/src/web4core.runtime.js
 
+      - name: Extra regression verification
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          BROWSER_CHANNEL=chrome node tests/masque-dpi-regression.cjs
+          node --check tests/mihomo-awl-priority.cjs
+          node --check tests/mihomo-awl-soak.manual.cjs
+
       - name: Upload checked runtime
         uses: actions/upload-artifact@v4
         with:
