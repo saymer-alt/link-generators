@@ -26,6 +26,33 @@ const expectedAwg = {
     await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
     console.log('Browser: page loaded');
     await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+
+    const yamlScalarRoundTrip = await page.evaluate(() => {
+      const values = ['true', 'false', 'null', '123', '00123', '0x10', '1e3', '1.2', '.nan', '.inf', '#', '#abc', ':', 'a\\nb', 'a\\r\\nb', 'Москва 😀', 'a: b', 'a #b', '{}', '[]', '~'];
+      return values.map(value => {
+        const input = 'trojan://' + encodeURIComponent(value) + '@192.0.2.1:443#' + encodeURIComponent('NAME-' + value);
+        const yaml = web4core.buildFromRequest({
+          core: 'mihomo',
+          input,
+          options: { addTun: false, addSocks: true, webUI: false, mihomoSubscriptionMode: false }
+        }).data;
+        const doc = jsyaml.load(yaml);
+        return {
+          value,
+          password: doc.proxies[0].password,
+          passwordType: typeof doc.proxies[0].password,
+          name: doc.proxies[0].name,
+          nameType: typeof doc.proxies[0].name,
+        };
+      });
+    });
+    for (const row of yamlScalarRoundTrip) {
+      assert.equal(row.passwordType, 'string', 'password type for ' + JSON.stringify(row.value));
+      assert.equal(row.password, row.value, 'password value for ' + JSON.stringify(row.value));
+      assert.equal(row.nameType, 'string', 'name type for ' + JSON.stringify(row.value));
+      assert.equal(row.name, 'NAME-' + row.value, 'name value for ' + JSON.stringify(row.value));
+    }
+
     await page.locator('button.tab').filter({ hasText: 'Mihomo' }).click();
     assert.equal(await page.locator('#cfgTunMips').isChecked(), true); // продуктовый дефолт (NIGHT-09)
     assert.match(await page.locator('label:has(#cfgSubMode)').innerText(), /Использовать URL-подписки/);
