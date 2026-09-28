@@ -1315,9 +1315,10 @@ function buildMihomo() {
   const tunStack = advancedStack ? advancedStack : ((addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor');
   const perProxySocks = (master && !autoWhitelist && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
 
+  const webUiEnabled = document.getElementById('cfgWebUI').checked;
   const webUiChoice = document.getElementById('webUiSelect').value;
   const webUiCustomUrl = document.getElementById('webUiCustomUrl').value.trim();
-  if (webUiChoice === 'custom' && !/^https?:\/\//i.test(webUiCustomUrl)) {
+  if (webUiEnabled && webUiChoice === 'custom' && !/^https?:\/\//i.test(webUiCustomUrl)) {
     return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
   }
 
@@ -1332,13 +1333,13 @@ function buildMihomo() {
       options: {
         addSocks: addSocks,
         addTun: addTun,
-        webUI: document.getElementById('cfgWebUI').checked,
+        webUI: webUiEnabled,
         urlTest: urlTest,
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
         excludeFilter: document.getElementById('excludeFilterInput').value,
         deviceModel: document.getElementById('deviceModelInput').value,
-        webUiDashboard: webUiChoice,
-        webUiCustomUrl: webUiChoice === 'custom' ? webUiCustomUrl : undefined,
+        webUiDashboard: webUiEnabled ? webUiChoice : undefined,
+        webUiCustomUrl: webUiEnabled && webUiChoice === 'custom' ? webUiCustomUrl : undefined,
         mihomoPerProxyTun: perProxyTun,
         mihomoTunStack: tunStack,
         perProxyPort: perProxySocks,
