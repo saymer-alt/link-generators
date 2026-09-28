@@ -134,6 +134,26 @@ const expectedAwg = {
       assert.equal(values['random-trailers'], on !== 'OFF');
       assert.equal(values['disable-cookies'], off === 'ON');
     }
+    const inlineComments = await page.evaluate(({ text }) => {
+      const commented = text
+        .replace('RandomTrailers = on', 'RandomTrailers = on # keep enabled')
+        .replace('DisableCookies = off', 'DisableCookies = off ; keep disabled')
+        .replace('PersistentKeepalive = 25-35', 'PersistentKeepalive = 25-35 # use lower bound');
+      const normalizedText = normalizeWgText(commented);
+      const b = web4core.parseWireGuardConf(normalizedText, 'comments.awg');
+      const normalized = normalizeWgBeans([b])[0];
+      return {
+        awg: normalized.wireguard['amnezia-wg-option'],
+        keepalive: normalized.wireguard.persistentKeepalive,
+        text: normalizedText,
+      };
+    }, { text: fixture });
+    assert.equal(inlineComments.awg['random-trailers'], true);
+    assert.equal(inlineComments.awg['disable-cookies'], false);
+    assert.equal(inlineComments.keepalive, 25);
+    assert.match(inlineComments.text, /RandomTrailers = 1 # keep enabled/);
+    assert.match(inlineComments.text, /DisableCookies = 0 ; keep disabled/);
+    assert.match(inlineComments.text, /PersistentKeepalive = 25 # use lower bound/);
     await page.locator('#cfgTunMips').check();
     await page.locator('#cfgProfile').selectOption('vps');
     const awgVps = await build('awg31-vps-mips');
