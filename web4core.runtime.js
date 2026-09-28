@@ -48,6 +48,16 @@
       return "";
     }
   }
+  function decodeBase64UrlUtf8(input) {
+    const binary = decodeBase64Url(input);
+    if (!binary) return "";
+    try {
+      const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      return binary;
+    }
+  }
   function safeDecodeURIComponent(input) {
     const s = (input ?? "").toString();
     if (!s) return "";
@@ -776,7 +786,7 @@
     const payloadRaw = urlStr.slice("vmess://".length);
     let payload = (payloadRaw || "").split("#")[0].split("?")[0];
     const tryDecode = (s) => {
-      const decoded = decodeBase64Url(s || "");
+      const decoded = decodeBase64UrlUtf8(s || "");
       const obj2 = decoded ? tryJSON(decoded) : null;
       return obj2;
     };
@@ -2715,6 +2725,21 @@
     });
     return groupName;
   }
+  function assignSafeProxyNames(proxies, reservedNames = []) {
+    const reserved = new Set(reservedNames.map((name) => String(name || "").trim()).filter(Boolean));
+    const used = /* @__PURE__ */ new Set();
+    for (const proxy of proxies) {
+      const base = String(proxy?.name || "proxy").trim() || "proxy";
+      let name = base;
+      let i = 2;
+      while (used.has(name) || reserved.has(name)) {
+        name = base + "-" + i++;
+      }
+      proxy.name = name;
+      used.add(name);
+    }
+    return proxies;
+  }
   function buildMihomoProxy(bean) {
     const s = bean.stream || {};
     const base = { name: bean.name || computeTag(bean, /* @__PURE__ */ new Set()), type: "", server: bean.host, port: bean.port };
@@ -3213,65 +3238,20 @@
     throw new Error("Not supported by Mihomo: " + bean.proto);
   }
   function deduplicateProxies(beans) {
-    const toKeyPart = (v) => {
-      if (v === null || v === void 0) return "";
-      if (Array.isArray(v)) return v.map(toKeyPart).join(",");
-      return String(v);
-    };
-    const stableObjectKey = (obj) => {
-      if (!obj || typeof obj !== "object") return "";
-      const keys = Object.keys(obj).sort();
-      return keys.map((k) => `${k}=${toKeyPart(obj[k])}`).join("&");
-    };
-    const wireguardExtraKey = (wg) => {
-      const peers = Array.isArray(wg?.peers) ? wg.peers : [];
-      const peersKey = peers.map((p) => {
-        const allowed = Array.isArray(p?.allowedIPs) ? p.allowedIPs.map(toKeyPart).join(",") : "";
-        const reserved = p && p.reserved !== void 0 ? toKeyPart(p.reserved) : "";
-        return [
-          toKeyPart(p?.server),
-          toKeyPart(p?.port),
-          toKeyPart(p?.publicKey),
-          toKeyPart(p?.preSharedKey),
-          allowed,
-          reserved
-        ].join("|");
-      }).join(";");
-      const dns = Array.isArray(wg?.dns) ? wg.dns.map(toKeyPart).join(",") : "";
-      const allowedIPs = Array.isArray(wg?.allowedIPs) ? wg.allowedIPs.map(toKeyPart).join(",") : "";
-      return [
-        `pk=${toKeyPart(wg?.privateKey)}`,
-        `pub=${toKeyPart(wg?.publicKey)}`,
-        `psk=${toKeyPart(wg?.preSharedKey)}`,
-        `ip=${toKeyPart(wg?.ip)}`,
-        `ipv6=${toKeyPart(wg?.ipv6)}`,
-        `allowed=${allowedIPs}`,
-        `res=${toKeyPart(wg?.reserved)}`,
-        `mtu=${toKeyPart(wg?.mtu)}`,
-        `keepalive=${toKeyPart(wg?.persistentKeepalive)}`,
-        `udp=${toKeyPart(wg?.udp)}`,
-        `remoteDnsResolve=${toKeyPart(wg?.remoteDnsResolve)}`,
-        `dns=${dns}`,
-        `ipStack=${stableObjectKey(wg?.ipStack)}`,
-        `refreshServerIPInterval=${toKeyPart(wg?.refreshServerIPInterval)}`,
-        `workers=${toKeyPart(wg?.workers)}`,
-        `awg=${stableObjectKey(wg?.["amnezia-wg-option"])}`,
-        `peers=${peersKey}`
-      ].join("&");
+    const stableKey = (value) => {
+      if (value === null) return "null";
+      if (Array.isArray(value)) return "[" + value.map(stableKey).join(",") + "]";
+      if (value && typeof value === "object") {
+        return "{" + Object.keys(value).sort().map((k) => JSON.stringify(k) + ":" + stableKey(value[k])).join(",") + "}";
+      }
+      return JSON.stringify(value);
     };
     const seen = /* @__PURE__ */ new Set();
-    return beans.filter((b) => {
-      const auth = b.auth?.uuid || b.auth?.password || b.ss?.password || b.socks?.username || "";
-      const network = b.stream?.network || "tcp";
-      const security = b.stream?.security || "";
-      const flow = b.auth?.flow || "";
-      const supportX25519MLKEM768 = b.stream?.reality?.supportX25519MLKEM768;
-      const mlkemKey = typeof supportX25519MLKEM768 === "boolean" ? String(supportX25519MLKEM768) : "";
-      let extra = "";
-      if (b.proto === "wireguard") {
-        extra = wireguardExtraKey(b.wireguard || {});
-      }
-      const key = `${b.proto}|${b.host}|${b.port}|${auth}|${network}|${security}|${flow}|${mlkemKey}|${extra}`;
+    return beans.filter((bean) => {
+      const proxy = buildMihomoProxy(bean);
+      const identity = { ...proxy };
+      delete identity.name;
+      const key = stableKey(identity);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -3282,20 +3262,20 @@
     const urlTestExpectedStatus = getUrlTestExpectedStatus(opts);
     const dedupedBeans = deduplicateProxies(beans);
     const proxies = dedupedBeans.map((b) => buildMihomoProxy(b));
-    const used = /* @__PURE__ */ new Set();
-    for (const p of proxies) {
-      let base = (p.name || "proxy").toString();
-      if (!base.trim()) base = "proxy";
-      let name = base;
-      let i = 2;
-      while (used.has(name)) {
-        name = `${base}-${i++}`;
-      }
-      p.name = name;
-      used.add(name);
-    }
-    const names = proxies.map((p) => p.name);
     const usePerProxyListeners = isPerProxyListenerMode(opts);
+    const reservedProxyNames = [
+      GLOBAL_GROUP_NAME,
+      FASTEST_GROUP_NAME,
+      STATIC_HEALTH_GROUP_NAME,
+      "DIRECT",
+      "REJECT"
+    ];
+    if (usePerProxyListeners) {
+      const rawNames = proxies.map((p) => String(p?.name || "proxy").trim() || "proxy");
+      rawNames.forEach((name) => reservedProxyNames.push(getPerProxyGroupName(name)));
+    }
+    assignSafeProxyNames(proxies, reservedProxyNames);
+    const names = proxies.map((p) => p.name);
     const usePerProxyPort = !!(opts && opts.perProxyPort);
     const addSocks = !opts || opts.addSocks !== false;
     const groups = [];
@@ -3460,8 +3440,22 @@
     if (Array.isArray(extraBeans) && extraBeans.length > 0) {
       extraBeans.forEach((bean) => {
         validateBean(bean);
-        const p = buildMihomoProxy(bean);
-        extraProxies.push(p);
+        extraProxies.push(buildMihomoProxy(bean));
+      });
+      const reservedProxyNames = [
+        GLOBAL_GROUP_NAME,
+        FASTEST_GROUP_NAME,
+        STATIC_HEALTH_GROUP_NAME,
+        "DIRECT",
+        "REJECT",
+        ...providerNames.map((providerName) => `SUB-${providerName}`)
+      ];
+      if (usePerProxyListeners) {
+        const rawNames = extraProxies.map((p) => String(p?.name || "proxy").trim() || "proxy");
+        rawNames.forEach((name) => reservedProxyNames.push(getPerProxyGroupName(name)));
+      }
+      assignSafeProxyNames(extraProxies, reservedProxyNames);
+      extraProxies.forEach((p) => {
         if (usePerProxyListeners) {
           attachPerProxySelectGroup(groups, p);
         } else {
@@ -3565,17 +3559,28 @@
   }
 
   // src/core/yaml.js
+  function quoteYamlString(value) {
+    return JSON.stringify(String(value));
+  }
+  function isYamlPlainStringSafe(value) {
+    const s = String(value);
+    if (!/^[A-Za-z0-9_.:@#\-]+$/.test(s)) return false;
+    if (s.startsWith("#") || s === ":" || s === "-") return false;
+    if (/^(?:null|true|false|\.nan|[+-]?\.inf)$/i.test(s)) return false;
+    if (/^[+-]?(?:[0-9][0-9_]*|0[bBoOxX][0-9A-Fa-f_]+)$/.test(s)) return false;
+    if (/^[+-]?(?:(?:[0-9][0-9_]*)?\.[0-9_]+|[0-9][0-9_]*\.)(?:[eE][+-]?[0-9]+)?$/.test(s)) return false;
+    if (/^[+-]?[0-9][0-9_]*[eE][+-]?[0-9]+$/.test(s)) return false;
+    if (/^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:[Tt ]|$)/.test(s)) return false;
+    return true;
+  }
   function toYamlScalar(value, key) {
     if (value === null || value === void 0) return "";
     if (typeof value === "boolean") return value ? "true" : "false";
     if (typeof value === "number") return String(value);
     const s = String(value);
-    if (key === "exclude-filter") return JSON.stringify(s);
-    if (key === "grpc-service-name") {
-      return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
-    }
-    if (/^[A-Za-z0-9_.:@#\-]+$/.test(s)) return s;
-    return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+    if (key === "exclude-filter" || key === "grpc-service-name") return quoteYamlString(s);
+    if (isYamlPlainStringSafe(s)) return s;
+    return quoteYamlString(s);
   }
   function toYAML(obj, indent = 0) {
     const space = "  ".repeat(indent);
@@ -4411,7 +4416,8 @@
     const options = Object.assign({}, optionsIn);
     const wgBeans = Array.isArray(req?.wgBeans) ? req.wgBeans : [];
     options.urlTest = resolveUrlTest(options.urlTest);
-    options.webUiUrl = resolveWebUiUrl(options);
+    const effectiveWebUi = options.webUI === void 0 ? core === "mihomo" : !!options.webUI;
+    options.webUiUrl = effectiveWebUi ? resolveWebUiUrl(options) : void 0;
     const modernHosts = normalizeRealityModernHosts(options.mihomoRealityModernHosts);
     options.modernHosts = modernHosts;
     if (!core) throw new Error("Missing core");
