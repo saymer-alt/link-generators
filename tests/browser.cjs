@@ -199,7 +199,7 @@ const expectedAwg = {
     await page.locator('button.tab').filter({ hasText: 'WARP' }).click();
     await page.evaluate(() => { globalThis.auditXss = 0; });
     const htmlLikeSni = '<span data-audit=warp-output>INERT</span>';
-    await page.locator('#yamlInput').fill('private-key: SYNTHETIC\\npublic-key: SYNTHETIC\\nsni: "' + htmlLikeSni + '"\\n');
+    await page.locator('#yamlInput').fill('private-key: SYNTHETIC\npublic-key: SYNTHETIC\nsni: "' + htmlLikeSni + '"\n');
     await page.locator('button[onclick="parseYaml()"]').click();
     assert.equal(await page.locator('#sni').inputValue(), htmlLikeSni);
     await page.evaluate(() => generateWarp());
