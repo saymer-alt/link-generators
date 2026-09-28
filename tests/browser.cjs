@@ -103,6 +103,36 @@ const expectedAwg = {
     assert.equal(await page.locator('#cfgTunMips').isEnabled(), true);
     await page.locator('#realityModernInput').fill('');
 
+    // Async WG upload must never leave a newly-built stale VALID result.
+    await page.locator('#mihomoInput').fill('trojan://test-only@192.0.2.99:443#RACE');
+    await page.evaluate(() => {
+      const original = File.prototype.text;
+      globalThis.__wgOriginalFileText = original;
+      globalThis.__wgReleaseRead = null;
+      File.prototype.text = function () {
+        const file = this;
+        return new Promise(resolve => {
+          globalThis.__wgReleaseRead = async () => resolve(await original.call(file));
+        });
+      };
+    });
+    await page.locator('#wgFile').setInputFiles(path.join(__dirname, 'fixtures/awg31.conf'));
+    await page.waitForFunction(() => wgUploadPending === true && typeof globalThis.__wgReleaseRead === 'function');
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT');
+    assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
+    assert.match(await page.locator('#toast').innerText(), /WG\/AWG файл ещё читается/);
+
+    await page.evaluate(async () => { await globalThis.__wgReleaseRead(); });
+    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 1);
+    assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT');
+    assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
+    await page.evaluate(() => {
+      File.prototype.text = globalThis.__wgOriginalFileText;
+      delete globalThis.__wgOriginalFileText;
+      delete globalThis.__wgReleaseRead;
+    });
+
     // Реальный file input -> normalizeWgText -> parser -> bean -> builder -> final YAML.
     await page.locator('#mihomoInput').fill('');
     await page.locator('#wgFile').setInputFiles(path.join(__dirname, 'fixtures/awg31.conf'));
