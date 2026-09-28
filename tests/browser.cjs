@@ -106,6 +106,7 @@ const expectedAwg = {
     }
     await page.locator('#cfgTunStackAdvanced').uncheck();
     await page.locator('#cfgTunMips').uncheck();
+    await page.locator('#cfgPerProxyMaster').check();
 
     // Selective modern REALITY: поле не ломает advanced-контролы (guard фикса 927c446).
     await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@pan1.example:443?encryption=none&security=reality&pbk=TESTPBK&sid=ab&fp=chrome#R1');
