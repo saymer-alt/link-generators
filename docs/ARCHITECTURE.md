@@ -47,8 +47,8 @@ functional/field checks. Язык проекта — русский.
 
 | Файл | Природа | Роль |
 |---|---|---|
-| `index.html` | **handwritten** | Единственная страница приложения: inline CSS + inline JS (~880 строк) |
-| `web4core.runtime.js` | **generated/vendor** | IIFE-бандл fork saymer-alt/web4core@link-generators (~4380 строк). Руками не редактировать |
+| `index.html` | **handwritten** | Единственная страница приложения: inline CSS + inline JS |
+| `web4core.runtime.js` | **generated/vendor** | IIFE-бандл fork saymer-alt/web4core@link-generators. Руками не редактировать |
 | `tests/` | regression tests | Node runtime tests, внешний Playwright browser test и синтетические fixtures |
 | `.github/workflows/update-web4core-runtime.yml` | handwritten (automation) | Сборка fork с read-only правами; отдельный job коммитит runtime в `main` |
 | `README.md` | документация | Пользовательская документация (обновляется вручную) |

@@ -416,7 +416,7 @@ JT=4
 
 ### Контекст uplink на момент полевых тестов
 
-Live MCP-снимок того же вечера показывает двухмодемную схему:
+Системный снимок того же вечера показывает двухмодемную схему:
 
 - `UsbLte0` — **MCN Telecom / T2**, модем **Fibocom FM350-GL**,
   APN `modem.tele2.ru`; именно этот интерфейс был default route;
@@ -582,8 +582,8 @@ Keenetic; цель кейса — показать правильную мето
 Фактический WAN этого роутера — **PPPoE `Mynetcity`** поверх
 `GigabitEthernet1`; live snapshot показывает link **1 Gbit/s**, PPPoE MTU **1492**
 и default route через `PPPoE0`. Entware находится на внешнем EXT4 `/opt`
-на пользовательском **USB/NVMe 32 GB** накопителе; MCP одновременно видит этот
-USB 3.x media device. WARPSCOUT 0.16.0 запускался с:
+на пользовательском **USB/NVMe 32 GB** накопителе — по диагностическому
+снимку это USB 3.x media device. WARPSCOUT 0.16.0 запускался с:
 
 ```sh
 JT=4
@@ -623,7 +623,7 @@ Cloudflare country/node влияет на путь/colo, но не гарант�
 Полный acceptance-scan с тем же SNI:
 
 ```sh
-warpscout scan -proto masque-h2 -masque-sni www.google.com
+warpscout scan -p masque-h2 -masque-sni www.google.com
 ```
 
 дал **70/70 working**, node **DME**, `SEEN AS RU`. Лучшие показанные endpoint'ы:
@@ -651,7 +651,7 @@ warpscout scan -proto masque-h2 -masque-sni www.google.com
 Полный acceptance-scan с тем же SNI:
 
 ```sh
-warpscout scan -proto masque -masque-sni cdn.jsdelivr.net
+warpscout scan -p masque -masque-sni cdn.jsdelivr.net
 ```
 
 дал **13/14 working**, node **DME**, `SEEN AS RU`. Лучшие показанные endpoint'ы:
