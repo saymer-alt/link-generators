@@ -363,8 +363,9 @@ node tests/runtime.cjs
 
 ### VPS-контракт
 
-- все fixed-поля: `tun.{enable, device: tun-mihomo, stack: gvisor, auto-route: false,
-  auto-detect-interface: true, inet4-address: 10.255.255.1/30, mtu: 1420, gso: true}` — ✅
+- текущий default UI-path даёт `tun.{enable, device: tun-mihomo, stack: mips,
+  auto-route: false, auto-detect-interface: true, mtu: 1420, gso: true}`; top-level
+  `tun.inet4-address` отсутствует — ✅
 - `endpoint-independent-nat` отсутствует; при ручной инъекции в YAML удаляется
   (юнит-прогон `applyDeploymentProfile`) — ✅
 - `find-process-mode: 'off'` в корне (jsyaml квотит строку `off` — YAML 1.1 bool
@@ -372,8 +373,11 @@ node tests/runtime.cjs
 - `profile.store-selected/store-fake-ip = false`, merge без замены секции — ✅
 - `auto-route: false` в выводе; `auto-route: true` нигде; в DOM нет контрола
   управления auto-route — ✅
-- passthrough редактируемых полей: device / inet4-address / mtu / fake-ip-range /
-  listen реально пробрасываются в YAML — ✅
+- passthrough редактируемых полей: `device` и `mtu` идут в `tun`, а
+  `fake-ip-range` / `listen` — в включённую секцию `dns`; отдельного редактируемого
+  top-level `inet4-address` в текущем VPS-профиле нет — ✅
+- явно выбранные experimental stack `system` / `mixed` сохраняются, а не переписываются
+  молча в gVisor; при MIPS checkbox off используется gVisor — ✅
 - DNS sub-toggle: off → `dns` отсутствует целиком (без частичных остатков) — ✅
 - пустые поля → боевые дефолты (device=tun-mihomo, nameserver=1.1.1.1/8.8.8.8) — ✅
 - Sub Mode + VPS: `proxy-providers` на месте + gateway-tun — ✅
