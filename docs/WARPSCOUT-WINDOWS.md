@@ -18,7 +18,7 @@ endpoint'ы, понять куда выходит трафик и получит
 3. **MASQUE H2 / TCP** — то же для H2, включая реальные endpoint'ы, которые видит именно
    текущая сеть Windows-компьютера.
 
-Важно: для MASQUE текущая первая вкладка нашего проекта использует WARPSCOUT YAML как
+Важно: для MASQUE вкладка **WARP MASQUE Links** использует WARPSCOUT YAML как
 **источник identity**, а не как источник transport endpoint'а. Поля `server`, `port`,
 `network` из WARPSCOUT не переопределяют нашу проверенную стратегию генерации.
 
