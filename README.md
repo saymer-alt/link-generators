@@ -8,17 +8,9 @@
 
 ## Происхождение проекта и лицензия
 
-Этот проект изначально основан на [spatiumstas/web4core](https://github.com/spatiumstas/web4core) и со временем был существенно переработан и расширен для собственных сценариев WARP, Mihomo и генерации конфигураций. Репозиторий ведётся как самостоятельный проект, а не как технический GitHub Fork.
+Этот проект изначально основан на [spatiumstas/web4core](https://github.com/spatiumstas/web4core) и со временем был существенно переработан и расширен для собственных сценариев WARP, Mihomo и генерации конфигураций. `saymer-alt/link-generators` ведётся как самостоятельный производный проект, а не как технический GitHub Fork.
 
-Исходный `web4core` распространяется по лицензии **BSD 3-Clause**. Оригинальное уведомление об авторских правах, условия лицензии и отказ от гарантий сохранены в файле [LICENSE](LICENSE), как того требует лицензия.
-
----
-
-## Происхождение проекта
-
-Этот проект изначально основан на [spatiumstas/web4core](https://github.com/spatiumstas/web4core) и с тех пор существенно переработан и расширен. Исходный проект распространяется по лицензии BSD 3-Clause; оригинальные copyright notices и полный текст лицензии сохранены в [LICENSE](LICENSE).
-
-Репозиторий `saymer-alt/link-generators` ведётся как самостоятельный производный проект, поэтому GitHub может не отображать его как технический fork исходного репозитория.
+Исходный `web4core` распространяется по лицензии **BSD 3-Clause**. Оригинальные copyright notices, условия лицензии и отказ от гарантий сохранены в [LICENSE](LICENSE).
 
 ---
 
@@ -98,7 +90,7 @@ proxy-ссылок отключите **📡 Использовать URL-под
 | TUIC | `tuic://` | `type: tuic` | UUID/пароль или token |
 | AnyTLS | `anytls://` | `type: anytls` | Пароль и параметры сессии |
 | Mieru | `mieru://`, `mierus://` | `type: mieru` | Логин/пароль, TCP/UDP; одиночный порт или `port-range` |
-| MASQUE | `masque://` | `type: masque` | Включая ссылки WARP из первой вкладки, QUIC и HTTP/2 |
+| MASQUE | `masque://` | `type: masque` | Включая ссылки WARP из вкладки **WARP MASQUE Links**, QUIC и HTTP/2 |
 | TrustTunnel | `tt://` | `type: trusttunnel` | Payload формата TrustTunnel |
 | SOCKS5 / SOCKS5H | `socks://`, `socks5://`, `socks5h://` | `type: socks5` | Алиасы входа; логин/пароль при необходимости |
 | HTTP / HTTPS proxy | `http://`, `https://` | `type: http` | HTTPS включает TLS; URL прокси не путать с подпиской |
