@@ -127,10 +127,12 @@ engine fallback. Обоснование по исходникам — [ауди�
   `auto-route: false`, `auto-detect-interface: false`, `inet4-address: 198.19.x.y/30`), каждый с
   `proxy:` на свою `🔒`-группу / `SUB-`-группу.
 - Профиль VPS Gateway (opt-in, селектор «Профиль развёртывания»): пост-патч поверх
-  готового YAML — основная секция `tun:` приводится к gateway-виду (`tun-mihomo`,
-  `inet4-address`, `mtu`, `gso`), добавляются `find-process-mode: off`,
-  `profile.store-*: false` и опциональная секция `dns:` (fake-ip). По умолчанию выключен,
-  на Generic-вывод не влияет; подробно — [VPS-GATEWAY.md](VPS-GATEWAY.md).
+  готового YAML — основная секция `tun:` получает `device: tun-mihomo`, выбранный stack,
+  `auto-route: false`, `auto-detect-interface: true`, `mtu` и `gso`; добавляются
+  `find-process-mode: off`, `profile.store-*: false` и опциональная секция `dns:` (fake-ip).
+  Для целевого Mihomo 1.19.31 top-level `tun.inet4-address` намеренно не генерируется:
+  effective IPv4-префикс TUN определяется через `dns.fake-ip-range`. По умолчанию профиль
+  выключен и на Generic-вывод не влияет; подробно — [VPS-GATEWAY.md](VPS-GATEWAY.md).
 
 ## Health-check endpoints (`web4core.URLTEST_CHOICES`)
 
