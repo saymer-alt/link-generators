@@ -114,9 +114,12 @@ VPS. Это боевой дефолт схемы (потребители — к�
 ## Правило синхронизации с routing-скриптом
 
 Изменение `device` или `fake-ip-range` **обязано** соответствовать
-переменным routing-скрипта gateway (`PROXY_IF` / `TUN_INET_ADDR` / `FAKE_IP_RANGE`).
-Установщик при следующем запуске приводит `fake-ip-range` к своему контракту; отдельный top-level `inet4-address` для Mihomo 1.19.31 больше не считается рабочим параметром
-своими значениями (sed-патчи в §2.7 install.sh) — рассинхрон бесполезен и вреден.
+переменным routing-скрипта gateway (`PROXY_IF` / `TUN_INET_ADDR` / `FAKE_IP_RANGE`):
+`device` соответствует `PROXY_IF`, `fake-ip-range` — gateway/routing-контракту.
+Установщик при следующем запуске приводит `fake-ip-range` к своему контракту
+своими значениями (sed-патчи в §2.7 install.sh). Отдельный top-level
+`inet4-address` для Mihomo 1.19.31 больше не является рабочим способом задания
+IPv4 TUN, поэтому рассинхрон generator/gateway бесполезен и вреден.
 
 ## Cross-project contract: generator -> gateway -> bootstrap
 

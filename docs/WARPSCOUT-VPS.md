@@ -764,7 +764,7 @@ timestamp
 тот же Cloudflare path.
 
 
-## 15. Быстрый чек-лист для каждого VPS
+## 16. Быстрый чек-лист для каждого VPS
 
 ```bash
 cd ~/warpscout-data

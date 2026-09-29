@@ -37,7 +37,7 @@
 - Финальная интеграция проверена на официальном **Mihomo v1.19.31**; SHA-256 release asset: `d5e74bbddbdfff49a1aef7775bf5911da59f0d7196ed509a0ac914b3653dd5f1`.
 - Перед production promotion: web4core source **106/106**, consumer runtime **53/53**, validator **47/47**, MASQUE/DPI **7/7 групп**, browser suite и whitelist — PASS.
 - Реальный Mihomo failover: static / providers / mixed — **3/3 P→F→P**; AWL priority-over-speed и возврат к более медленному primary — PASS.
-- Финальный независимый smoke Z CODE прошёл браузерную матрицу A–M и `mihomo -t` на 10 probe YAML — **10/10 PASS**; воспроизведённых дефектов продукта не найдено.
+- Финальный независимый smoke-прогон прошёл браузерную матрицу A–M и `mihomo -t` на 10 probe YAML — **10/10 PASS**; воспроизведённых дефектов продукта не найдено.
 - Long production-interval AWL soak остаётся отдельным manual observation и намеренно не является CI/release gate.
 
 ## [1.4.2] - 2026-09-21
