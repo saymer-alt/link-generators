@@ -9,7 +9,7 @@
 1. проверить plain WARP / WireGuard как общий baseline там, где он применим, и AWG на фильтрованных сетях;
 2. проверить MASQUE H3 / QUIC;
 3. проверить MASQUE H2 / TCP;
-4. получить Mihomo YAML с MASQUE identity для импорта в первую вкладку
+4. получить Mihomo YAML с MASQUE identity для импорта во вкладку
    **WARP MASQUE Links**.
 
 Важно: текущий импорт в link-generators использует WARPSCOUT YAML только как источник
@@ -208,7 +208,7 @@ warpscout scan -p masque -P -jt "$JT" \
   -conf - -conf-type mihomo
 ```
 
-Полученный `proxies:` блок можно вставить в первую вкладку link-generators
+Полученный `proxies:` блок можно вставить во вкладку **WARP MASQUE Links**
 как источник MASQUE identity.
 
 ---
@@ -322,7 +322,7 @@ warpscout scan -p masque-h2 -P -jt "$JT" \
 В выводе нужен `proxies:` блок с `private-key`, `public-key`, `ip`, `sni`
 и `dns`. Для H2 дополнительно будет `network: h2`.
 
-Вставьте YAML в первую вкладку **WARP MASQUE Links** и нажмите
+Вставьте YAML во вкладку **WARP MASQUE Links** и нажмите
 **«Распарсить»**. Генератор заберёт identity-поля, после чего сам применит свою
 QUIC/H2 transport-стратегию.
 
