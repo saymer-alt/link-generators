@@ -21,6 +21,11 @@ MIPS реализован в `src/build.js` (`buildFromRequest`) и `src/core/ya
 Textual bundle patch удалён: `web4core.runtime.js` никогда не редактируется вручную.
 Разрешён только результат штатной сборки fork после проверок. При первоначальном
 переносе runtime побайтово совпал с runtime из commit `6b3368e` (см. [TESTING.md](TESTING.md)).
+Исторически первый runtime попал в consumer раньше этой source-level схемы: он был сохранён
+вместе с опубликованной страницей upstream и использовался как готовый browser bundle,
+пока provenance не был разобран и сборка не была перенесена в настоящий fork. Полная
+история и различие между bootstrap и текущим контрактом — в разделе
+[«Историческое происхождение runtime»](WEB4CORE-FORK.md#историческое-происхождение-runtime).
 Приложение не имеет package.json/npm dependencies/build step и работает с `file://`;
 Node/npm нужны для сборки отдельного source-репозитория и проверок.
 
