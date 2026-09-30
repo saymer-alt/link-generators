@@ -3698,8 +3698,52 @@
     }
     return stack;
   }
+  var MIHOMO_WG_DIALER_DEFAULT_GROUP = "WARP-DIALER";
+  function resolveMihomoWgDialer(proxies, groups, opts) {
+    const target = String(opts && opts.wgDialerProxy || "").trim();
+    const membersRaw = opts && Array.isArray(opts.wgDialerGroupMembers) ? opts.wgDialerGroupMembers : [];
+    const members = membersRaw.map((s) => String(s).trim()).filter(Boolean);
+    if (!target && members.length === 0) return null;
+    const proxyList = Array.isArray(proxies) ? proxies : [];
+    const groupList = Array.isArray(groups) ? groups : [];
+    const proxyNames = new Set(proxyList.map((p) => String(p && p.name || "")));
+    const groupNames = new Set(groupList.map((g) => String(g && g.name || "")));
+    const groupName = target || MIHOMO_WG_DIALER_DEFAULT_GROUP;
+    if (members.length) {
+      if (proxyNames.has(groupName) || groupNames.has(groupName)) {
+        throw new Error(`Mihomo: dialer group name "${groupName}" conflicts with an existing proxy or group`);
+      }
+      const missing = members.filter((m) => m !== "DIRECT" && !proxyNames.has(m));
+      if (missing.length) {
+        throw new Error(`Mihomo: dialer group member(s) not found among proxies: ${missing.join(", ")}`);
+      }
+      return { target: groupName, members: new Set(members), group: { name: groupName, type: "select", proxies: members.slice() } };
+    }
+    if (target !== "DIRECT" && !proxyNames.has(target) && !groupNames.has(target)) {
+      throw new Error(`Mihomo: dialer-proxy target "${target}" not found among proxies or groups`);
+    }
+    return { target, members: /* @__PURE__ */ new Set(), group: null };
+  }
+  function applyMihomoWgDialer(proxies, dialer) {
+    if (!dialer) return proxies;
+    let applied = 0;
+    const out = (Array.isArray(proxies) ? proxies : []).map((p) => {
+      if (p && p.type === "wireguard" && p.name !== dialer.target && !dialer.members.has(String(p.name || ""))) {
+        applied++;
+        return Object.assign({}, p, { "dialer-proxy": dialer.target });
+      }
+      return p;
+    });
+    if (applied === 0) {
+      throw new Error(`Mihomo: dialer-proxy "${dialer.target}" applies to no wireguard proxy (self-named and member profiles are excluded)`);
+    }
+    return out;
+  }
   function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     opts = opts || {};
+    const wgDialer = resolveMihomoWgDialer(proxies, groups, opts);
+    if (wgDialer && wgDialer.group) groups = [wgDialer.group, ...groups];
+    if (wgDialer) proxies = applyMihomoWgDialer(proxies, wgDialer);
     const addSocks = opts.addSocks !== false;
     const webUI = opts.webUI === true;
     const tunOpt = opts.tun;
@@ -4456,6 +4500,8 @@
         addSocks: !!options.addSocks,
         webUI: !!options.webUI,
         webUiUrl: options.webUiUrl,
+        wgDialerProxy: options.wgDialerProxy,
+        wgDialerGroupMembers: options.wgDialerGroupMembers,
         tun: options.addTun ? { mode: "tun", stack: options.mihomoTunStack } : null
       }) };
     }
@@ -4552,6 +4598,8 @@
         addSocks,
         webUI,
         webUiUrl: options.webUiUrl,
+        wgDialerProxy: options.wgDialerProxy,
+        wgDialerGroupMembers: options.wgDialerGroupMembers,
         tun: mihomoTunOpts
       });
       return { kind: "yaml", data: yaml2 };
@@ -4562,6 +4610,8 @@
       addSocks,
       webUI,
       webUiUrl: options.webUiUrl,
+      wgDialerProxy: options.wgDialerProxy,
+      wgDialerGroupMembers: options.wgDialerGroupMembers,
       tun: mihomoTunOpts
     });
     return { kind: "yaml", data: yaml };
