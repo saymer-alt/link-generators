@@ -175,6 +175,14 @@
         <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
         <div id="wgDnsWarning" class="hint" style="color: #d9534f; display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
       </div>
+      <div style="margin-top: 15px;">
+        <label class="label" for="wgDialerInput" style="display: block; margin-bottom: 5px;">Промежуточный proxy / dialer-proxy:</label>
+        <input type="text" id="wgDialerInput" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Имя proxy или группы (пусто = выключено)">
+        <div class="hint" style="margin-top: 5px;">Туннель в туннеле: WireGuard/WARP подключается к своему серверу через указанный proxy или группу. Таргет обязан поддерживать UDP (подходит VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет). Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408).</div>
+        <label class="label" for="wgDialerMembers" style="display: block; margin-bottom: 5px; margin-top: 10px;">Транзитные узлы dialer-группы (по одному в строке, необязательно):</label>
+        <textarea id="wgDialerMembers" rows="3" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="VPS-DK&#10;VPS-EE&#10;VPS-SE"></textarea>
+        <div class="hint" style="margin-top: 5px;">Если заполнено — создается select-группа (имя из поля выше или WARP-DIALER), и нижний транспорт WARP можно менять без пересборки. Эти узлы сами не получают dialer-proxy (иначе цикл). Избегайте GLOBAL/⚡ Fastest как таргета — они содержат сам WARP.</div>
+      </div>
     </div>
 
     <div class="card">
@@ -939,6 +947,62 @@ function validateMihomoYaml(yaml) {
     }
   }
 
+  // --- dialer-proxy (туннель в туннеле) ---
+  // Mihomo v1.19.31 сам валидирует существование таргета и прямые циклы при
+  // загрузке конфига ("dialer-proxy [Y] not found" / "circular dialer-proxy
+  // dependency"), но НЕ ловит цикл через членство в группе (WARP -> группа,
+  // выбирающая WARP, рекурсирует на dial). Здесь дублируем статические проверки
+  // и добавляем предупреждения о членах группы и UDP/MTU.
+  if (Array.isArray(doc.proxies)) {
+    const groupByName = new Map();
+    if (Array.isArray(doc['proxy-groups'])) {
+      for (const g of doc['proxy-groups']) {
+        if (g && typeof g === 'object' && !Array.isArray(g) && typeof g.name === 'string') {
+          groupByName.set(g.name, g);
+        }
+      }
+    }
+    const dialerTargets = new Map(); // target -> [user proxy names], для прямых циклов
+    for (const p of doc.proxies) {
+      if (!p || typeof p !== 'object' || Array.isArray(p) || typeof p.name !== 'string') continue;
+      const dp = p['dialer-proxy'];
+      if (dp === undefined || dp === '') continue;
+      if (typeof dp !== 'string' || !dp.trim()) {
+        err(p.name, 'dialer-proxy', fmtVal(dp), 'должен быть непустой строкой — именем proxy или группы');
+        continue;
+      }
+      if (dp === p.name) {
+        err(p.name, 'dialer-proxy', dp, 'прокси не может вести сам через себя (self-reference)');
+        continue;
+      }
+      if (dp !== 'DIRECT' && !proxyNames.has(dp) && !groupNames.has(dp)) {
+        err(p.name, 'dialer-proxy', dp, 'таргет не найден среди proxies/proxy-groups (mihomo: "dialer-proxy [...] not found")');
+        continue;
+      }
+      const tg = dialerTargets.get(dp) || [];
+      tg.push(p.name);
+      dialerTargets.set(dp, tg);
+      const targetGroup = groupByName.get(dp);
+      if (targetGroup && Array.isArray(targetGroup.proxies) && targetGroup.proxies.includes(p.name)) {
+        warn(p.name, 'dialer-proxy', dp, 'группа-таргет содержит сам этот прокси — если группа выберет его, возникнет цикл при dial (Mihomo статически это не ловит). Используйте выделенную группу без этого узла.');
+      }
+      if (p.type === 'wireguard') {
+        if (typeof p.mtu !== 'number' || p.mtu > 1300) {
+          warn(p.name, 'dialer-proxy', dp, 'для WireGuard через dialer-proxy рекомендуется явный MTU 1200–1280 (без mtu Mihomo использует 1408 — возможна фрагментация во вложенном туннеле)');
+        }
+      }
+      const targetProxy = (doc.proxies || []).find(x => x && typeof x === 'object' && x.name === dp);
+      if (targetProxy && targetProxy.type === 'http') {
+        warn(p.name, 'dialer-proxy', dp, 'таргет типа http не передаёт UDP — WireGuard/hy2/tuic через него работать не будут');
+      }
+    }
+    for (const [target, users] of dialerTargets) {
+      if (users.includes(target)) {
+        err(users.find(u => u === target), 'dialer-proxy', target, 'прямая циклическая зависимость dialer-proxy (mihomo: "circular dialer-proxy dependency")');
+      }
+    }
+  }
+
 
   return { status: errors.length ? 'INVALID' : 'VALID', errors, warnings };
 }
@@ -1320,6 +1384,18 @@ function buildMihomo() {
     return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
   }
 
+  // dialer-proxy (туннель в туннеле): имя таргета + необязательные транзитные узлы
+  // авторской dialer-группы. Пустые поля — полная byte-parity прежнего output.
+  const wgDialer = document.getElementById('wgDialerInput').value.trim();
+  const wgDialerMembers = document.getElementById('wgDialerMembers').value.split('\n')
+    .map(s => s.trim()).filter(Boolean);
+  if (wgDialer && wgBeans.some(b => (b.wireguard && b.name) === wgDialer)) {
+    return showToast(`❌ dialer-proxy: профиль «${wgDialer}» не может вести сам через себя`, true);
+  }
+  if (wgDialerMembers.length && (wgDialer === 'GLOBAL' || wgDialer === '⚡ Fastest')) {
+    return showToast('❌ dialer-группа не может называться GLOBAL или ⚡ Fastest: они содержат сам WARP (цикл)', true);
+  }
+
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
     const realityModern = parseRealityModernLines();
@@ -1341,7 +1417,9 @@ function buildMihomo() {
         mihomoPerProxyTun: perProxyTun,
         mihomoTunStack: tunStack,
         perProxyPort: perProxySocks,
-        mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined
+        mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined,
+        wgDialerProxy: wgDialer || undefined,
+        wgDialerGroupMembers: wgDialerMembers.length ? wgDialerMembers : undefined
       }
     });
 

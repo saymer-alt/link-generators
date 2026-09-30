@@ -101,6 +101,16 @@ health-check не меняются; HTTP providers по-прежнему сох�
 не доказывает, какой HTTP-код возвращался в прежнем неудачном цикле. Для точного root
 cause при повторении нужны логи health-check/URLTest или ответ тестового endpoint.
 
+## WireGuard dialer-proxy (туннель в туннеле) — 2026-09-30
+
+Опции `wgDialerProxy` / `wgDialerGroupMembers`: WireGuard/WARP устанавливает соединение с сервером через другой proxy/группу. Контракт и схема — [MIHOMO.md](MIHOMO.md).
+
+- Source: `tools/tests/mihomo-wg-dialer.test.mjs` (13 тестов): byte-parity при пустых опциях, Variant A (имя proxy/группы), Variant B (авторская select-группа перед остальными, дефолт имени `WARP-DIALER`), отказы (неизвестный таргет/участник, конфликт имени, self-named без кандидатов), исключение транзитного WG-профиля (SE2-аналог Keenetic), проброс в subscription- и AWL-priority путях (таргет — ФИНАЛЬНОЕ имя прокси, AWL-пути префиксуют имена).
+- Consumer: `tests/runtime.cjs` — 6 dialer-кейсов (53→59).
+- Browser: поля `wgDialerInput`/`wgDialerMembers` → Build → `dialer-proxy` в YAML; валидатор: таргет-призрак/self-reference → INVALID, `GLOBAL`-таргет и MTU>1300/без mtu → предупреждения, UDP-only подсказка для http-таргета.
+- `mihomo -t` v1.19.31: позитивы (имя proxy; авторская группа) — successful; негативы (`dialer-proxy: GHOST`, self-reference) отвергаются ядром — Builder зеркалит статическую проверку ядра (`config/utils.go`).
+- Живая механическая цепочка (два инстанса v1.19.31 на одной машине): main-инстанс `TARGET` (socks5, `dialer-proxy: DIAL`) → dialer-инстанс; сквозной HTTPS-трафик проходит; негативный контроль (DIAL на мёртвом порту) блокирует трафик полностью. Полная WARP-цепочка через удалённый VPS — полевой тест (см. WARPSCOUT-VPS.md).
+
 ## Дополнительный runtime review #2588
 
 Подробно: [FALLBACK-REVIEW.md](FALLBACK-REVIEW.md). На v1.19.31 баг воспроизведён

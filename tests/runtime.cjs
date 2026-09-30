@@ -90,4 +90,41 @@ for (const sub of [false, true]) {
   assert.doesNotMatch(result, /listeners:/);
   cases++;
 }
+
+// WireGuard dialer-proxy (туннель в туннеле): opt-in, empty options keep output byte-identical.
+const wgDialerConf = [
+  '[Interface]',
+  'PrivateKey = AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
+  'Address = 172.16.0.2/32',
+  '[Peer]',
+  'PublicKey = AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=',
+  'AllowedIPs = 0.0.0.0/0, ::/0',
+  'Endpoint = 162.159.198.2:2408',
+].join('\n');
+const wgDialerBean = current.parseWireGuardConf(wgDialerConf, 'WARP');
+const dialerInput = 'vless://00000000-0000-4000-8000-0000000000b1@203.0.113.60:443#VPS-DK\ntrojan://p@203.0.113.61:443#VPS-EE';
+const dialerBase = current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false } }).data;
+assert.doesNotMatch(dialerBase, /dialer-proxy/);
+assert.equal(dialerBase, current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false, wgDialerProxy: '', wgDialerGroupMembers: [] } }).data);
+cases += 2;
+const dialerA = current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false, wgDialerProxy: 'VPS-DK' } }).data;
+assert.match(dialerA, /dialer-proxy: VPS-DK/);
+cases++;
+const dialerB = current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false, wgDialerProxy: 'WARP-DIALER', wgDialerGroupMembers: ['VPS-DK', 'VPS-EE'] } }).data;
+assert.match(dialerB, /- name: WARP-DIALER\s*\n\s*type: select/);
+assert.match(dialerB, /dialer-proxy: WARP-DIALER/);
+assert.ok(dialerB.indexOf('- name: WARP-DIALER') < dialerB.indexOf('⚡ Fastest'));
+cases++;
+assert.throws(() => current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false, wgDialerProxy: 'GHOST' } }),
+  /dialer-proxy target "GHOST" not found/);
+assert.throws(() => current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false, wgDialerProxy: 'WARP', wgDialerGroupMembers: [] } }),
+  /applies to no wireguard proxy/);
+cases += 2;
+
 console.log(`Runtime: ${cases} cases passed`);

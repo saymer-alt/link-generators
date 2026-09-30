@@ -68,6 +68,12 @@ AWG 3.1 проверен по всему UI pipeline: семь строковы�
   max-handshake-attempts, random-trailers, disable-cookies`;
 - `dns`/`remote-dns-resolve` в wireguard-прокси добавляет локальный `injectWgDns` из поля
   «WireGuard DNS» (детали — [DATAFLOW.md](DATAFLOW.md)).
+- **`dialer-proxy`** (opt-in через UI-поле «Промежуточный proxy / dialer-proxy», опции рантайма
+  `wgDialerProxy`/`wgDialerGroupMembers`): WireGuard-outbound устанавливает своё UDP-соединение
+  с сервером через другой proxy/группу («туннель в туннеле», WARP-over-VPS). Подробный контракт,
+  правила защиты от циклов и MTU — секция dialer-proxy в [MIHOMO.md](MIHOMO.md). AWG 3.1 осознанно
+  не входит в первую реализацию — поле применимо к `type: wireguard` одинаково, но полевой сценарий
+  первой версии — обычный WARP.
 
 ### Форматы значений AWG (1.5 / 2.0 / 3.1)
 

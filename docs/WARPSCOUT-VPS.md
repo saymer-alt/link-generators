@@ -802,6 +802,18 @@ warpscout scan -p awg -P -exclude-node ARN -gen-i1 quic
 не следует считать способом «вернуть FRA»: сначала ждите изменения внешней маршрутизации
 или проверяйте другой VPS/провайдера/ASN/локацию.
 
+Штатный обходной путь без смены серверной архитектуры — `dialer-proxy` Mihomo (секция «dialer-proxy»
+в [MIHOMO.md](MIHOMO.md)): WARP остаётся outbound текущего Mihomo, но его туннельное UDP-соединение
+устанавливается через промежуточный VPS другой сети. Полевой чек-лист:
+
+```text
+1. На SE-VPS: Mihomo с WARP (.conf, MTU 1200-1280) + dialer-proxy на proxy до DK/другой сети.
+2. curl -x socks5h://127.0.0.1:7890 https://www.cloudflare.com/cdn-cgi/trace  → baseline (ожид. ARN).
+3. Переключить узел в dialer-группе (дашборд/API) на DK-VPS → повторить trace.
+4. Зафиксировать ip/loc/colo/warp/NODE для: WARP direct vs WARP через dialer.
+5. Цель: direct → ARN, dialer via другой сети → FRA (или иная нода).
+```
+
 
 ## 16. Быстрый чек-лист для каждого VPS
 

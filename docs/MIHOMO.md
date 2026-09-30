@@ -23,6 +23,8 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 | 📡 Использовать URL-подписки | `cfgSubMode` | `mihomoSubscriptionMode` | ☑ | HTTP(S) URL → `proxy-providers`; обычные proxy-ссылки без подписок в стандартном сценарии удобнее обрабатывать с выключенным режимом |
 | 🌐 Modern REALITY | `realityModernInput` | `mihomoRealityModernHosts` | пусто | multiline `host` / `host:port` / `[ipv6]:port`: только REALITY-узлы этих серверов получают `support-x25519mlkem768: true` + chrome fp (если не задан) и override-expr у провайдеров; пусто — legacy; только для совместимых серверов: X25519MLKEM768 появился в Xray v25.5.16, но сама версия не гарантирует совместимость (решение владельца A2) |
 | 🚫 Exclude Filter | `excludeFilterInput` | `excludeFilter` | пусто | regexp/keyword `exclude-filter` в КАЖДЫЙ http-provider (upstream-паритет); только режим URL-подписок; пусто — поле не добавляется; сериализация цитирования покрыта source-тестами |
+| Промежуточный proxy / dialer-proxy | `wgDialerInput` | `wgDialerProxy` | пусто | `dialer-proxy` на всех wireguard-профилях (см. секцию ниже); пусто — поле не добавляется (byte-parity) |
+| Транзитные узлы dialer-группы | `wgDialerMembers` | `wgDialerGroupMembers` | пусто | авторская select-группа (имя из `wgDialerInput` или `WARP-DIALER`) перед остальными группами; узлы-участники сами не получают `dialer-proxy` |
 | 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default mips / снят чекбокс → gvisor, `auto-route: false`) |
 | ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☑ | `stack: mips`; снят → `gvisor`; Mihomo >= 1.19.31 (показывается в Compatibility Summary); требует `cfgTun`; продуктовый дефолт (NIGHT-09) |
 | ⚙ Расширенный TUN stack | `cfgTunStackAdvanced` + `cfgTunStackEx` | `mihomoTunStack` | ☐/— | `system`/`mixed` за крышкой; override снимает MIPS; невалидное значение → gvisor; Mihomo >= 1.19.31 |
@@ -151,6 +153,40 @@ Google (`google.com/generate_204`, 204), Cloudflare (`cp.cloudflare.com`, 204), 
 - Имена групп содержат emoji: `⚡ Fastest`, `🔒 <прокси>` — норма, не баг.
 - Правила: всегда ровно `MATCH,GLOBAL` — разделение трафика делает не конфиг, а
   потребитель (на роутере — MagiTrickle и т.п.).
+
+## dialer-proxy: туннель в туннеле (WireGuard/WARP через промежуточный proxy)
+
+Начиная с этой версии Builder умеет штатное поле Mihomo `dialer-proxy`: WireGuard/WARP-outbound устанавливает своё UDP-соединение с сервером (например, Cloudflare) **через другой proxy или группу**, оставаясь обычным outbound текущего конфига. Это программный аналог WireGuard-over-WireGuard, который уже работает на Keenetic (SE2 → WARP) с MTU ≈ 1200.
+
+```text
+Mihomo (VPS SE)
+  ├─ WARP (wireguard outbound) ──dialer-proxy──▶ WARP-DIALER (select: VPS-DK / VPS-EE / …)
+  └─ обычный трафик ──▶ GLOBAL
+WARP-dial → VPS-DK → [сеть DK] → Cloudflare WARP endpoint → Интернет
+```
+
+Отличие от обычного multi-hop: при multi-hop трафик идёт `VPS A → VPS B → Mihomo B → WARP B`, а здесь WARP остаётся outbound **текущего** Mihomo, и через промежуточный proxy идёт только его туннельное UDP-соединение. Сайты по-прежнему видят Cloudflare WARP; меняется только сеть, из которой WARP «выходит» на Cloudflare.
+
+### Режимы
+
+- **A — имя proxy/группы**: в поле `wgDialerInput` указывается существующее имя (`VPS-DK` или группа). Значение должно существовать в итоговом YAML — иначе runtime и валидатор отклоняют сборку (зеркалирует статическую проверку Mihomo: `dialer-proxy [Y] not found`).
+- **B — авторская группа**: заполняется список транзитных узлов; Builder сам создаёт `select`-группу (имя из поля выше или `WARP-DIALER`) и добавляет `dialer-proxy`. Транспорт WARP меняется выбором в группе/дашборде без пересборки WARP-outbound.
+
+### Правила применения и защита от циклов
+
+- `dialer-proxy` получают **все** wireguard-профили, кроме: (1) совпадающих по имени с таргетом (self) и (2) перечисленных в списке участников группы — транзитные узлы обязаны диалить напрямую, иначе возникает dial-цикл, который статический валидатор Mihomo **не** ловит (он проверяет только прямые рёбра `proxy → dialer`).
+- Self-reference, неизвестный таргет/участник и конфликт имени группы отклоняются с понятной ошибкой ещё на сборке; валидатор страницы дополнительно помечает `INVALID` таргет-призраки в итоговом YAML (в том числе после ручных правок).
+- Таргет `GLOBAL`/`⚡ Fastest` — предупреждение валидатора: эти группы содержат сам WARP, и при выборе WARP внутри группы возникает цикл на dial. Валидатор также предупреждает о TCP-only таргетах (`http`): WireGuard/hy2/tuic через них не работают — UDP-релей у таргета обязателен.
+
+### MTU
+
+Без явного `mtu` Mihomo использует **1408** (wireguard.go v1.19.31). Во вложенном туннеле добавляется overhead промежуточного транспорта, поэтому для WARP-over-dialer рекомендуется явный `MTU = 1200–1280` в .conf (на Keenetic-аналоге используется ≈1200). Генератор MTU не меняет сам — валидатор лишь предупреждает, если у wireguard с `dialer-proxy` MTU не задан или выше 1300.
+
+### Проверено
+
+- Исходники Mihomo **v1.19.31**: `dialer-proxy` — поле `BasicOption`, у wireguard применяется к bind-dialer (`adapter/outbound/base.go:199,212`, `wireguard.go:369`); UDP-хендшейк идёт через `proxyDialer.listenPacket` (UDP-релей таргета); статические проверки — `config/utils.go:148` (существование таргета + DFS по прямым рёбрам).
+- `mihomo -t`: позитивы (имя proxy и авторская группа) — successful; негативы (несуществующий таргет) отвергаются ядром — статическая валидация Builder зеркалит ядро.
+- Живая механическая цепочка двух локальных инстансов v1.19.31 (TARGET/socks5 через dialer-proxy → второй инстанс): сквозной HTTPS-трафик проходит; негативный контроль (dialer на мёртвом порту) блокирует трафик полностью. Полная WARP-цепочка (UDP-хендшейк через удалённый VPS) — полевой тест: см. WARPSCOUT-VPS.md.
 
 ## Сводка требований используемых функций
 
