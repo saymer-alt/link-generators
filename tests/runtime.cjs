@@ -127,4 +127,24 @@ assert.throws(() => current.buildFromRequest({ core: 'mihomo', input: dialerInpu
   /applies to no wireguard proxy/);
 cases += 2;
 
+// Variant C: provider-backed dialer group (use:) from existing URL subscriptions.
+const geoUrl = 'https://account.geodema.org/api/sub?token=test';
+const geoUrl2 = 'https://account.geodema.org/api/sub2?token=test';
+const subDialerInput = geoUrl + '\n' + geoUrl2 + '\ntrojan://p@203.0.113.20:443#VPS-SE';
+const subBase = (extraOpts) => current.buildFromRequest({ core: 'mihomo', input: subDialerInput, wgBeans: [wgDialerBean],
+  options: Object.assign({ addTun: false, webUI: false, mihomoSubscriptionMode: true }, extraOpts) }).data;
+const dialerC = subBase({ wgDialerProxy: 'WARP-DIALER', wgDialerProviders: [geoUrl] });
+assert.match(dialerC, /- name: WARP-DIALER\s*\n\s*type: select\s*\n\s*use:\s*\n\s*- account\.geodema\.org/);
+assert.match(dialerC, /dialer-proxy: WARP-DIALER/);
+cases++;
+const dialerC2 = subBase({ wgDialerProviders: [geoUrl, geoUrl2] });
+const c2Block = dialerC2.slice(dialerC2.indexOf('- name: WARP-DIALER'), dialerC2.indexOf('⚡ Fastest'));
+assert.equal((c2Block.match(/^\s+- account\.geodema\.org(-2)?$/gm) || []).length, 2);
+cases++;
+assert.throws(() => subBase({ wgDialerProxy: 'WARP-DIALER', wgDialerProviders: ['https://ghost.example.com/sub'] }),
+  /dialer provider URL not found/);
+assert.throws(() => subBase({ wgDialerProxy: 'VPS-SE', wgDialerProviders: [geoUrl] }),
+  /conflicts with an existing proxy or group/);
+cases += 2;
+
 console.log(`Runtime: ${cases} cases passed`);

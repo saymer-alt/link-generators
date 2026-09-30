@@ -25,6 +25,7 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 | 🚫 Exclude Filter | `excludeFilterInput` | `excludeFilter` | пусто | regexp/keyword `exclude-filter` в КАЖДЫЙ http-provider (upstream-паритет); только режим URL-подписок; пусто — поле не добавляется; сериализация цитирования покрыта source-тестами |
 | Промежуточный proxy / dialer-proxy | `wgDialerInput` | `wgDialerProxy` | пусто | `dialer-proxy` на всех wireguard-профилях (см. секцию ниже); пусто — поле не добавляется (byte-parity) |
 | Транзитные узлы dialer-группы | `wgDialerMembers` | `wgDialerGroupMembers` | пусто | авторская select-группа (имя из `wgDialerInput` или `WARP-DIALER`) перед остальными группами; узлы-участники сами не получают `dialer-proxy` |
+| URL-подписки для dialer-группы | `wgDialerProviders` | `wgDialerProviders` | пусто | группа получает `use:` на СУЩЕСТВУЮЩИЕ proxy-providers (URL должен совпадать с одной из URL-подписок); узлы не разворачиваются; режим C ниже |
 | 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default mips / снят чекбокс → gvisor, `auto-route: false`) |
 | ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☑ | `stack: mips`; снят → `gvisor`; Mihomo >= 1.19.31 (показывается в Compatibility Summary); требует `cfgTun`; продуктовый дефолт (NIGHT-09) |
 | ⚙ Расширенный TUN stack | `cfgTunStackAdvanced` + `cfgTunStackEx` | `mihomoTunStack` | ☐/— | `system`/`mixed` за крышкой; override снимает MIPS; невалидное значение → gvisor; Mihomo >= 1.19.31 |
@@ -171,6 +172,7 @@ WARP-dial → VPS-DK → [сеть DK] → Cloudflare WARP endpoint → Инте
 
 - **A — имя proxy/группы**: в поле `wgDialerInput` указывается существующее имя (`VPS-DK` или группа). Значение должно существовать в итоговом YAML — иначе runtime и валидатор отклоняют сборку (зеркалирует статическую проверку Mihomo: `dialer-proxy [Y] not found`).
 - **B — авторская группа**: заполняется список транзитных узлов; Builder сам создаёт `select`-группу (имя из поля выше или `WARP-DIALER`) и добавляет `dialer-proxy`. Транспорт WARP меняется выбором в группе/дашборде без пересборки WARP-outbound.
+- **C — provider-backed группа (`use:`)**: перечисляются URL уже введённых URL-подписок (строго те же строки) — Builder создаёт `select`-группу с `use:` на соответствующие proxy-providers (например `account.geodema.org`), не разворачивая содержимое подписки. Провайдер-ноды по построению не могут попасть в статические `proxies:` группы, поэтому группа не может содержать сам WARP. **Состав подписки на этапе генерации неизвестен — UDP-совместимость узлов не проверяется и не гарантируется**: для WireGuard dialer пользователь вручную выбирает в группе узел с поддержкой UDP relay; TCP-only узел приводит к ошибке соединения. Валидатор страницы предупреждает об этом для каждой provider-backed dialer-группы.
 
 ### Правила применения и защита от циклов
 
@@ -186,6 +188,7 @@ WARP-dial → VPS-DK → [сеть DK] → Cloudflare WARP endpoint → Инте
 
 - Исходники Mihomo **v1.19.31**: `dialer-proxy` — поле `BasicOption`, у wireguard применяется к bind-dialer (`adapter/outbound/base.go:199,212`, `wireguard.go:369`); UDP-хендшейк идёт через `proxyDialer.listenPacket` (UDP-релей таргета); статические проверки — `config/utils.go:148` (существование таргета + DFS по прямым рёбрам).
 - `mihomo -t`: позитивы (имя proxy и авторская группа) — successful; негативы (несуществующий таргет) отвергаются ядром — статическая валидация Builder зеркалит ядро.
+- `mihomo -t`: provider-backed группа (`use:`, один и два провайдера) — successful; `use:` с несуществующим провайдером отвергается ядром — статическая валидация Builder зеркалит ядро.
 - Живая механическая цепочка двух локальных инстансов v1.19.31 (TARGET/socks5 через dialer-proxy → второй инстанс): сквозной HTTPS-трафик проходит; негативный контроль (dialer на мёртвом порту) блокирует трафик полностью. Полная WARP-цепочка (UDP-хендшейк через удалённый VPS) — полевой тест: см. WARPSCOUT-VPS.md.
 
 ## Сводка требований используемых функций

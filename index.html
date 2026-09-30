@@ -182,6 +182,9 @@
         <label class="label" for="wgDialerMembers" style="display: block; margin-bottom: 5px; margin-top: 10px;">Транзитные узлы dialer-группы (по одному в строке, необязательно):</label>
         <textarea id="wgDialerMembers" rows="3" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="VPS-DK&#10;VPS-EE&#10;VPS-SE"></textarea>
         <div class="hint" style="margin-top: 5px;">Если заполнено — создается select-группа (имя из поля выше или WARP-DIALER), и нижний транспорт WARP можно менять без пересборки. Эти узлы сами не получают dialer-proxy (иначе цикл). Избегайте GLOBAL/⚡ Fastest как таргета — они содержат сам WARP.</div>
+        <label class="label" for="wgDialerProviders" style="display: block; margin-bottom: 5px; margin-top: 10px;">URL-подписки для dialer-группы (по одному в строке, необязательно):</label>
+        <textarea id="wgDialerProviders" rows="2" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="https://account.geodema.org/..."></textarea>
+        <div class="hint" style="margin-top: 5px;">URL должен совпадать с одной из включённых URL-подписок — группа получает <code>use:</code> на этот provider (узлы не разворачиваются). Для WireGuard dialer вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения — состав подписки заранее неизвестен, поэтому проверяется только выбором.</div>
       </div>
     </div>
 
@@ -986,6 +989,9 @@ function validateMihomoYaml(yaml) {
       if (targetGroup && Array.isArray(targetGroup.proxies) && targetGroup.proxies.includes(p.name)) {
         warn(p.name, 'dialer-proxy', dp, 'группа-таргет содержит сам этот прокси — если группа выберет его, возникнет цикл при dial (Mihomo статически это не ловит). Используйте выделенную группу без этого узла.');
       }
+      if (targetGroup && Array.isArray(targetGroup.use) && targetGroup.use.length) {
+        warn(p.name, 'dialer-proxy', dp, 'dialer-группа построена на proxy-provider: состав подписки заранее неизвестен и не проверяется на UDP. Для WireGuard вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения.');
+      }
       if (p.type === 'wireguard') {
         if (typeof p.mtu !== 'number' || p.mtu > 1300) {
           warn(p.name, 'dialer-proxy', dp, 'для WireGuard через dialer-proxy рекомендуется явный MTU 1200–1280 (без mtu Mihomo использует 1408 — возможна фрагментация во вложенном туннеле)');
@@ -1385,14 +1391,16 @@ function buildMihomo() {
   }
 
   // dialer-proxy (туннель в туннеле): имя таргета + необязательные транзитные узлы
-  // авторской dialer-группы. Пустые поля — полная byte-parity прежнего output.
+  // и/или URL-провайдеры авторской dialer-группы. Пустые поля — byte-parity прежнего output.
   const wgDialer = document.getElementById('wgDialerInput').value.trim();
   const wgDialerMembers = document.getElementById('wgDialerMembers').value.split('\n')
+    .map(s => s.trim()).filter(Boolean);
+  const wgDialerProviders = document.getElementById('wgDialerProviders').value.split('\n')
     .map(s => s.trim()).filter(Boolean);
   if (wgDialer && wgBeans.some(b => (b.wireguard && b.name) === wgDialer)) {
     return showToast(`❌ dialer-proxy: профиль «${wgDialer}» не может вести сам через себя`, true);
   }
-  if (wgDialerMembers.length && (wgDialer === 'GLOBAL' || wgDialer === '⚡ Fastest')) {
+  if ((wgDialerMembers.length || wgDialerProviders.length) && (wgDialer === 'GLOBAL' || wgDialer === '⚡ Fastest')) {
     return showToast('❌ dialer-группа не может называться GLOBAL или ⚡ Fastest: они содержат сам WARP (цикл)', true);
   }
 
@@ -1419,7 +1427,8 @@ function buildMihomo() {
         perProxyPort: perProxySocks,
         mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined,
         wgDialerProxy: wgDialer || undefined,
-        wgDialerGroupMembers: wgDialerMembers.length ? wgDialerMembers : undefined
+        wgDialerGroupMembers: wgDialerMembers.length ? wgDialerMembers : undefined,
+        wgDialerProviders: wgDialerProviders.length ? wgDialerProviders : undefined
       }
     });
 
