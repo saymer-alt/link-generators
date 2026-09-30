@@ -999,14 +999,40 @@ function validateMihomoYaml(yaml) {
         warn(p.name, 'dialer-proxy', dp, 'таргет типа http не передаёт UDP — WireGuard/hy2/tuic через него работать не будут');
       }
     }
-    // Полный dependency-graph детектор циклов (WireGuard-over-WireGuard support).
-    // Валидные цепочки (WG-A → WG-B → WG-C, через группы и провайдеры) разрешаются;
-    // запрещается только маршрут, возвращающийся к стартовому outbound. Рёбра:
-    // dialer-proxy (proxy → таргет), статическое членство в группах, provider-группы
-    // через use: (провайдер с override.dialer-proxy даёт ребро; без override — тупик,
-    // статически безопасный). Это строже статической проверки ядра, которая не ходит
-    // по членству в группах и пропускает такие циклы.
-    if (Array.isArray(doc.proxies) && dialerTargets.size > 0) {
+    // Полный dependency-graph детектор циклов — централизован в рантайме
+    // (web4core.analyzeDialerGraph): граф строится из итогового YAML единым кодом
+    // для движка и валидатора (dialer-рёбра, proxies:, use:, provider
+    // override.dialer-proxy; смешанные группы дают обе категории рёбер).
+    // Разрешены все ациклические цепочки (WG-over-WG, группы, провайдеры);
+    // INVALID — только маршрут, возвращающийся к исходному outbound, с полным
+    // путём в сообщении. Ветви provider-групп без override — dynamic/unknown:
+    // предупреждение, а не ложное «цикл невозможен» и не ложная ошибка.
+    // Fallback на локальную копию — только пока не доставлен новый рантайм.
+    if (Array.isArray(doc.proxies) && dialerTargets.size > 0 && typeof web4core.analyzeDialerGraph === 'function') {
+      const dialerOfValue = (name) => {
+        const p = (doc.proxies || []).find(x => x && typeof x === 'object' && x.name === name);
+        return p && typeof p['dialer-proxy'] === 'string' ? p['dialer-proxy'] : '';
+      };
+      const analysis = web4core.analyzeDialerGraph(doc);
+      for (const c of analysis.cycles) {
+        err(c.start, 'dialer-proxy', dialerOfValue(doc, c.start),
+          'циклическая зависимость dialer-proxy: маршрут ' + c.route.join(' → ') + ' возвращается к исходному outbound — хендшейк невозможен. Разрешены только цепочки без возврата (WG-over-WG и группы допустимы, если путь не замыкается).');
+      }
+      if (analysis.dynamicGroups.length && analysis.dynamicProviders.length) {
+        warn(analysis.dynamicGroups[0], 'dialer-proxy', analysis.dynamicProviders.join(', '),
+          'dialer-маршрут опирается на proxy-provider без статического override: содержимое подписки на этапе генерации неизвестно, поэтому ветвь помечена как dynamic/unknown — статически цикл не доказан и не исключён, а UDP-совместимость узлов не проверяется. Выбирайте узел с UDP relay вручную; runtime-совместимость — полевой тест.');
+      } else if (analysis.dynamicGroups.length) {
+        // provider-группы с только статическими членами не дают unknown-ветвей,
+        // но UDP-предупреждение для use-групп сохраняем
+        const useGroup = (doc['proxy-groups'] || []).find(g => g && Array.isArray(g.use) && g.use.length && analysis.dynamicGroups.includes(g.name));
+        if (useGroup) {
+          warn(useGroup.name, 'dialer-proxy', (useGroup.use || []).join(', '),
+            'dialer-группа построена на proxy-provider: состав подписки заранее неизвестен и не проверяется на UDP. Для WireGuard вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения.');
+        }
+      }
+    } else if (Array.isArray(doc.proxies) && dialerTargets.size > 0) {
+      // Fallback (старый рантайм): локальная копия детектора. Удаляется, когда
+      // web4core.runtime.js с analyzeDialerGraph доставлен всем.
       const dialerOf = new Map();
       for (const p of doc.proxies) {
         if (p && typeof p === 'object' && typeof p.name === 'string' && typeof p['dialer-proxy'] === 'string' && p['dialer-proxy'].trim()) {
@@ -1031,7 +1057,7 @@ function validateMihomoYaml(yaml) {
         const out = [];
         if (dialerOf.has(node)) out.push(dialerOf.get(node));
         if (groupStatic.has(node)) out.push(...groupStatic.get(node).filter(m => !deadEnds.has(m)));
-        else if (groupUse.has(node)) {
+        if (groupUse.has(node)) {
           for (const u of groupUse.get(node)) if (providerDialer.has(u)) out.push(providerDialer.get(u));
         }
         return out;
@@ -1040,19 +1066,16 @@ function validateMihomoYaml(yaml) {
         err(start, 'dialer-proxy', dialerOf.get(start),
           'циклическая зависимость dialer-proxy: маршрут ' + route.join(' → ') + ' возвращается к исходному outbound — хендшейк невозможен. Разрешены только цепочки без возврата (WG-over-WG и группы допустимы, если путь не замыкается).');
       };
-      const visitedGlobal = new Set();
       for (const start of dialerOf.keys()) {
         const path = [start];
         const visit = (node) => {
           if (node === start) return true;
           if (path.includes(node) || deadEnds.has(node)) return false;
-          if (visitedGlobal.has(node + '|' + start)) return false;
           path.push(node);
           for (const n of nextNodes(node)) {
             if (visit(n)) return true;
           }
           path.pop();
-          visitedGlobal.add(node + '|' + start);
           return false;
         };
         for (const n of nextNodes(start)) {
