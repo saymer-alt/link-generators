@@ -3699,25 +3699,47 @@
     return stack;
   }
   var MIHOMO_WG_DIALER_DEFAULT_GROUP = "WARP-DIALER";
-  function resolveMihomoWgDialer(proxies, groups, opts) {
+  function resolveMihomoWgDialer(proxies, groups, providers, opts) {
     const target = String(opts && opts.wgDialerProxy || "").trim();
     const membersRaw = opts && Array.isArray(opts.wgDialerGroupMembers) ? opts.wgDialerGroupMembers : [];
     const members = membersRaw.map((s) => String(s).trim()).filter(Boolean);
-    if (!target && members.length === 0) return null;
+    const providersRaw = opts && Array.isArray(opts.wgDialerProviders) ? opts.wgDialerProviders : [];
+    const providerUrls = providersRaw.map((s) => String(s).trim()).filter(Boolean);
+    if (!target && members.length === 0 && providerUrls.length === 0) return null;
     const proxyList = Array.isArray(proxies) ? proxies : [];
     const groupList = Array.isArray(groups) ? groups : [];
     const proxyNames = new Set(proxyList.map((p) => String(p && p.name || "")));
     const groupNames = new Set(groupList.map((g) => String(g && g.name || "")));
     const groupName = target || MIHOMO_WG_DIALER_DEFAULT_GROUP;
-    if (members.length) {
+    if (members.length || providerUrls.length) {
       if (proxyNames.has(groupName) || groupNames.has(groupName)) {
         throw new Error(`Mihomo: dialer group name "${groupName}" conflicts with an existing proxy or group`);
       }
-      const missing = members.filter((m) => m !== "DIRECT" && !proxyNames.has(m));
-      if (missing.length) {
-        throw new Error(`Mihomo: dialer group member(s) not found among proxies: ${missing.join(", ")}`);
+      if (members.length) {
+        const missing = members.filter((m) => m !== "DIRECT" && !proxyNames.has(m));
+        if (missing.length) {
+          throw new Error(`Mihomo: dialer group member(s) not found among proxies: ${missing.join(", ")}`);
+        }
       }
-      return { target: groupName, members: new Set(members), group: { name: groupName, type: "select", proxies: members.slice() } };
+      const providerNames = [];
+      if (providerUrls.length) {
+        const providerList = providers && typeof providers === "object" && !Array.isArray(providers) ? providers : {};
+        const urlToName = /* @__PURE__ */ new Map();
+        Object.entries(providerList).forEach(([name, provider]) => {
+          if (provider && typeof provider === "object" && provider.url) urlToName.set(String(provider.url), name);
+        });
+        for (const url of providerUrls) {
+          const name = urlToName.get(url);
+          if (!name) {
+            throw new Error(`Mihomo: dialer provider URL not found among proxy-providers (enable URL-\u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0438 mode and pass the same URL): ${url}`);
+          }
+          providerNames.push(name);
+        }
+      }
+      const group = { name: groupName, type: "select" };
+      if (members.length) group.proxies = members.slice();
+      if (providerNames.length) group.use = providerNames;
+      return { target: groupName, members: new Set(members), group };
     }
     if (target !== "DIRECT" && !proxyNames.has(target) && !groupNames.has(target)) {
       throw new Error(`Mihomo: dialer-proxy target "${target}" not found among proxies or groups`);
@@ -3741,7 +3763,7 @@
   }
   function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     opts = opts || {};
-    const wgDialer = resolveMihomoWgDialer(proxies, groups, opts);
+    const wgDialer = resolveMihomoWgDialer(proxies, groups, providers, opts);
     if (wgDialer && wgDialer.group) groups = [wgDialer.group, ...groups];
     if (wgDialer) proxies = applyMihomoWgDialer(proxies, wgDialer);
     const addSocks = opts.addSocks !== false;
@@ -4502,6 +4524,7 @@
         webUiUrl: options.webUiUrl,
         wgDialerProxy: options.wgDialerProxy,
         wgDialerGroupMembers: options.wgDialerGroupMembers,
+        wgDialerProviders: options.wgDialerProviders,
         tun: options.addTun ? { mode: "tun", stack: options.mihomoTunStack } : null
       }) };
     }
@@ -4600,6 +4623,7 @@
         webUiUrl: options.webUiUrl,
         wgDialerProxy: options.wgDialerProxy,
         wgDialerGroupMembers: options.wgDialerGroupMembers,
+        wgDialerProviders: options.wgDialerProviders,
         tun: mihomoTunOpts
       });
       return { kind: "yaml", data: yaml2 };
@@ -4612,6 +4636,7 @@
       webUiUrl: options.webUiUrl,
       wgDialerProxy: options.wgDialerProxy,
       wgDialerGroupMembers: options.wgDialerGroupMembers,
+      wgDialerProviders: options.wgDialerProviders,
       tun: mihomoTunOpts
     });
     return { kind: "yaml", data: yaml };
