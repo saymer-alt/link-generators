@@ -3761,14 +3761,14 @@
     }
     return out;
   }
-  function detectMihomoDialerCycles(proxies, groups, providers) {
+  var MIHOMO_DIALER_DEAD_ENDS = /* @__PURE__ */ new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"]);
+  function buildDialerDependencyGraph(proxies, groups, providers) {
     const dialerOf = /* @__PURE__ */ new Map();
     (Array.isArray(proxies) ? proxies : []).forEach((p) => {
       if (p && typeof p === "object" && typeof p.name === "string" && p["dialer-proxy"]) {
         dialerOf.set(p.name, String(p["dialer-proxy"]));
       }
     });
-    if (dialerOf.size === 0) return;
     const staticMembers = /* @__PURE__ */ new Map();
     const providerMembers = /* @__PURE__ */ new Map();
     (Array.isArray(groups) ? groups : []).forEach((g) => {
@@ -3784,36 +3784,76 @@
         if (typeof dp === "string" && dp.trim()) providerDialer.set(name, dp.trim());
       });
     }
-    const deadEnds = /* @__PURE__ */ new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"]);
-    const nextNodes = (node) => {
-      const out = [];
-      if (dialerOf.has(node)) out.push(dialerOf.get(node));
-      if (staticMembers.has(node)) out.push(...staticMembers.get(node).filter((m) => !deadEnds.has(m)));
-      else if (providerMembers.has(node)) {
-        for (const u of providerMembers.get(node)) {
-          if (providerDialer.has(u)) out.push(providerDialer.get(u));
-        }
+    return { dialerOf, staticMembers, providerMembers, providerDialer, deadEnds: MIHOMO_DIALER_DEAD_ENDS };
+  }
+  function nextDialerNodes(graph, node) {
+    const out = [];
+    if (graph.dialerOf.has(node)) out.push(graph.dialerOf.get(node));
+    if (graph.staticMembers.has(node)) out.push(...graph.staticMembers.get(node).filter((m) => !graph.deadEnds.has(m)));
+    if (graph.providerMembers.has(node)) {
+      for (const u of graph.providerMembers.get(node)) {
+        if (graph.providerDialer.has(u)) out.push(graph.providerDialer.get(u));
       }
-      return out;
-    };
-    for (const start of dialerOf.keys()) {
+    }
+    return out;
+  }
+  function findDialerCycles(graph) {
+    const cycles = [];
+    for (const start of graph.dialerOf.keys()) {
       const path = [start];
       const visit = (node) => {
-        if (node === start) return true;
-        if (path.includes(node) || deadEnds.has(node)) return false;
+        if (node === start) {
+          cycles.push({ start, route: path.slice().concat(start) });
+          return true;
+        }
+        if (path.includes(node) || graph.deadEnds.has(node)) return false;
         path.push(node);
-        for (const n of nextNodes(node)) {
+        for (const n of nextDialerNodes(graph, node)) {
           if (visit(n)) return true;
         }
         path.pop();
         return false;
       };
-      for (const n of nextNodes(start)) {
-        if (visit(n)) {
-          throw new Error(`Mihomo: circular dialer-proxy dependency for "${start}" (route: ${path.join(" -> ")}) \u2014 the handshake route returns to its own outbound`);
-        }
+      for (const n of nextDialerNodes(graph, start)) {
+        if (visit(n)) break;
       }
     }
+    return cycles;
+  }
+  function detectMihomoDialerCycles(proxies, groups, providers) {
+    const graph = buildDialerDependencyGraph(proxies, groups, providers);
+    if (graph.dialerOf.size === 0) return;
+    const cycles = findDialerCycles(graph);
+    if (cycles.length) {
+      const c = cycles[0];
+      throw new Error(`Mihomo: circular dialer-proxy dependency for "${c.start}" (route: ${c.route.join(" -> ")}) \u2014 the handshake route returns to its own outbound`);
+    }
+  }
+  function analyzeDialerGraph(doc) {
+    const d = doc && typeof doc === "object" && !Array.isArray(doc) ? doc : {};
+    const graph = buildDialerDependencyGraph(d.proxies, d["proxy-groups"], d["proxy-providers"]);
+    const cycles = findDialerCycles(graph);
+    const dynamicGroups = [];
+    const dynamicProviders = [];
+    const dialerRoots = [...graph.dialerOf.values()];
+    const seen = /* @__PURE__ */ new Set();
+    const visit = (node) => {
+      if (seen.has(node) || graph.deadEnds.has(node)) return;
+      seen.add(node);
+      if (graph.staticMembers.has(node)) {
+        graph.staticMembers.get(node).forEach(visit);
+      }
+      if (graph.providerMembers.has(node)) {
+        dynamicGroups.push(node);
+        for (const u of graph.providerMembers.get(node)) {
+          if (!graph.providerDialer.has(u) && !dynamicProviders.includes(u)) dynamicProviders.push(u);
+          if (graph.providerDialer.has(u)) visit(graph.providerDialer.get(u));
+        }
+      }
+    };
+    for (const root of dialerRoots) visit(root);
+    for (const start of graph.dialerOf.keys()) visit(start);
+    return { cycles, dynamicGroups: [...new Set(dynamicGroups)], dynamicProviders };
   }
   function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     opts = opts || {};
@@ -4714,6 +4754,7 @@
     buildMihomoPriorityConfig,
     buildMihomoSubscriptionConfig,
     buildMihomoYaml,
+    analyzeDialerGraph,
     parseWireGuardConf,
     fetchSubscription,
     buildFromRequest
