@@ -986,9 +986,6 @@ function validateMihomoYaml(yaml) {
       tg.push(p.name);
       dialerTargets.set(dp, tg);
       const targetGroup = groupByName.get(dp);
-      if (targetGroup && Array.isArray(targetGroup.proxies) && targetGroup.proxies.includes(p.name)) {
-        warn(p.name, 'dialer-proxy', dp, 'группа-таргет содержит сам этот прокси — если группа выберет его, возникнет цикл при dial (Mihomo статически это не ловит). Используйте выделенную группу без этого узла.');
-      }
       if (targetGroup && Array.isArray(targetGroup.use) && targetGroup.use.length) {
         warn(p.name, 'dialer-proxy', dp, 'dialer-группа построена на proxy-provider: состав подписки заранее неизвестен и не проверяется на UDP. Для WireGuard вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения.');
       }
@@ -1002,9 +999,65 @@ function validateMihomoYaml(yaml) {
         warn(p.name, 'dialer-proxy', dp, 'таргет типа http не передаёт UDP — WireGuard/hy2/tuic через него работать не будут');
       }
     }
-    for (const [target, users] of dialerTargets) {
-      if (users.includes(target)) {
-        err(users.find(u => u === target), 'dialer-proxy', target, 'прямая циклическая зависимость dialer-proxy (mihomo: "circular dialer-proxy dependency")');
+    // Полный dependency-graph детектор циклов (WireGuard-over-WireGuard support).
+    // Валидные цепочки (WG-A → WG-B → WG-C, через группы и провайдеры) разрешаются;
+    // запрещается только маршрут, возвращающийся к стартовому outbound. Рёбра:
+    // dialer-proxy (proxy → таргет), статическое членство в группах, provider-группы
+    // через use: (провайдер с override.dialer-proxy даёт ребро; без override — тупик,
+    // статически безопасный). Это строже статической проверки ядра, которая не ходит
+    // по членству в группах и пропускает такие циклы.
+    if (Array.isArray(doc.proxies) && dialerTargets.size > 0) {
+      const dialerOf = new Map();
+      for (const p of doc.proxies) {
+        if (p && typeof p === 'object' && typeof p.name === 'string' && typeof p['dialer-proxy'] === 'string' && p['dialer-proxy'].trim()) {
+          dialerOf.set(p.name, p['dialer-proxy'].trim());
+        }
+      }
+      const groupStatic = new Map(), groupUse = new Map();
+      for (const g of groupByName.values()) {
+        if (Array.isArray(g.proxies)) groupStatic.set(g.name, g.proxies.filter(m => typeof m === 'string'));
+        if (Array.isArray(g.use)) groupUse.set(g.name, g.use.filter(m => typeof m === 'string'));
+      }
+      const providerDialer = new Map();
+      if (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object' && !Array.isArray(doc['proxy-providers'])) {
+        for (const [name, provider] of Object.entries(doc['proxy-providers'])) {
+          const ov = provider && typeof provider === 'object' ? provider.override : undefined;
+          const odp = ov && typeof ov === 'object' ? ov['dialer-proxy'] : undefined;
+          if (typeof odp === 'string' && odp.trim()) providerDialer.set(name, odp.trim());
+        }
+      }
+      const deadEnds = new Set(['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE']);
+      const nextNodes = (node) => {
+        const out = [];
+        if (dialerOf.has(node)) out.push(dialerOf.get(node));
+        if (groupStatic.has(node)) out.push(...groupStatic.get(node).filter(m => !deadEnds.has(m)));
+        else if (groupUse.has(node)) {
+          for (const u of groupUse.get(node)) if (providerDialer.has(u)) out.push(providerDialer.get(u));
+        }
+        return out;
+      };
+      const reportCycle = (start, route) => {
+        err(start, 'dialer-proxy', dialerOf.get(start),
+          'циклическая зависимость dialer-proxy: маршрут ' + route.join(' → ') + ' возвращается к исходному outbound — хендшейк невозможен. Разрешены только цепочки без возврата (WG-over-WG и группы допустимы, если путь не замыкается).');
+      };
+      const visitedGlobal = new Set();
+      for (const start of dialerOf.keys()) {
+        const path = [start];
+        const visit = (node) => {
+          if (node === start) return true;
+          if (path.includes(node) || deadEnds.has(node)) return false;
+          if (visitedGlobal.has(node + '|' + start)) return false;
+          path.push(node);
+          for (const n of nextNodes(node)) {
+            if (visit(n)) return true;
+          }
+          path.pop();
+          visitedGlobal.add(node + '|' + start);
+          return false;
+        };
+        for (const n of nextNodes(start)) {
+          if (visit(n)) { reportCycle(start, path); break; }
+        }
       }
     }
   }
@@ -1397,9 +1450,6 @@ function buildMihomo() {
     .map(s => s.trim()).filter(Boolean);
   const wgDialerProviders = document.getElementById('wgDialerProviders').value.split('\n')
     .map(s => s.trim()).filter(Boolean);
-  if (wgDialer && wgBeans.some(b => (b.wireguard && b.name) === wgDialer)) {
-    return showToast(`❌ dialer-proxy: профиль «${wgDialer}» не может вести сам через себя`, true);
-  }
   if ((wgDialerMembers.length || wgDialerProviders.length) && (wgDialer === 'GLOBAL' || wgDialer === '⚡ Fastest')) {
     return showToast('❌ dialer-группа не может называться GLOBAL или ⚡ Fastest: они содержат сам WARP (цикл)', true);
   }
