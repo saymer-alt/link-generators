@@ -3761,11 +3761,66 @@
     }
     return out;
   }
+  function detectMihomoDialerCycles(proxies, groups, providers) {
+    const dialerOf = /* @__PURE__ */ new Map();
+    (Array.isArray(proxies) ? proxies : []).forEach((p) => {
+      if (p && typeof p === "object" && typeof p.name === "string" && p["dialer-proxy"]) {
+        dialerOf.set(p.name, String(p["dialer-proxy"]));
+      }
+    });
+    if (dialerOf.size === 0) return;
+    const staticMembers = /* @__PURE__ */ new Map();
+    const providerMembers = /* @__PURE__ */ new Map();
+    (Array.isArray(groups) ? groups : []).forEach((g) => {
+      if (!g || typeof g !== "object" || typeof g.name !== "string") return;
+      if (Array.isArray(g.proxies)) staticMembers.set(g.name, g.proxies.filter((m) => typeof m === "string"));
+      if (Array.isArray(g.use)) providerMembers.set(g.name, g.use.filter((m) => typeof m === "string"));
+    });
+    const providerDialer = /* @__PURE__ */ new Map();
+    if (providers && typeof providers === "object" && !Array.isArray(providers)) {
+      Object.entries(providers).forEach(([name, provider]) => {
+        const override = provider && typeof provider === "object" ? provider.override : void 0;
+        const dp = override && typeof override === "object" ? override["dialer-proxy"] : void 0;
+        if (typeof dp === "string" && dp.trim()) providerDialer.set(name, dp.trim());
+      });
+    }
+    const deadEnds = /* @__PURE__ */ new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"]);
+    const nextNodes = (node) => {
+      const out = [];
+      if (dialerOf.has(node)) out.push(dialerOf.get(node));
+      if (staticMembers.has(node)) out.push(...staticMembers.get(node).filter((m) => !deadEnds.has(m)));
+      else if (providerMembers.has(node)) {
+        for (const u of providerMembers.get(node)) {
+          if (providerDialer.has(u)) out.push(providerDialer.get(u));
+        }
+      }
+      return out;
+    };
+    for (const start of dialerOf.keys()) {
+      const path = [start];
+      const visit = (node) => {
+        if (node === start) return true;
+        if (path.includes(node) || deadEnds.has(node)) return false;
+        path.push(node);
+        for (const n of nextNodes(node)) {
+          if (visit(n)) return true;
+        }
+        path.pop();
+        return false;
+      };
+      for (const n of nextNodes(start)) {
+        if (visit(n)) {
+          throw new Error(`Mihomo: circular dialer-proxy dependency for "${start}" (route: ${path.join(" -> ")}) \u2014 the handshake route returns to its own outbound`);
+        }
+      }
+    }
+  }
   function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     opts = opts || {};
     const wgDialer = resolveMihomoWgDialer(proxies, groups, providers, opts);
     if (wgDialer && wgDialer.group) groups = [wgDialer.group, ...groups];
     if (wgDialer) proxies = applyMihomoWgDialer(proxies, wgDialer);
+    detectMihomoDialerCycles(proxies, groups, providers);
     const addSocks = opts.addSocks !== false;
     const webUI = opts.webUI === true;
     const tunOpt = opts.tun;
