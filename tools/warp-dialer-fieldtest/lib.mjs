@@ -15,6 +15,26 @@ export function nullDevice(platform = process.platform) {
   return platform === 'win32' ? 'NUL' : '/dev/null';
 }
 
+// Provider node names may carry significant leading/trailing spaces (field fact:
+// Geodema provider entries like " 🇩🇪 ⚡ Германия "). Resolve a possibly
+// user-trimmed request against the REAL names Mihomo reported:
+//   1. exact match wins;
+//   2. otherwise a unique trim()-normalized match resolves to the ORIGINAL
+//      name — the original, byte-for-byte, is what the API must receive;
+//   3. ambiguous normalized matches fail closed.
+export function resolveNodeName(requested, available) {
+  const req = String(requested ?? '');
+  const list = (Array.isArray(available) ? available : []).map(String);
+  if (!req.trim()) throw new Error('empty node name');
+  const exact = list.filter((n) => n === req);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) throw new Error(`node name "${req}" is ambiguous (duplicate exact entries in group)`);
+  const norm = list.filter((n) => n.trim() === req.trim());
+  if (norm.length === 1) return norm[0];
+  if (norm.length > 1) throw new Error(`node name "${req.trim()}" is ambiguous after trim normalization: ${JSON.stringify(norm)} — pass the exact name as Mihomo reported it`);
+  throw new Error(`node "${req}" not found among ${list.length} group nodes`);
+}
+
 // Parse a Cloudflare /cdn-cgi/trace body into its fields of interest.
 export function parseTrace(text) {
   const get = (k) => {
@@ -117,6 +137,7 @@ export function usage() {
     '  --socks URL           SOCKS egress for curl (SOCKS, default socks5h://127.0.0.1:7890)',
     '  --secret TOKEN        controller bearer token, never printed (MIHOMO_SECRET)',
     '  --out-dir DIR         report directory (OUT_DIR, default .)',
+    '  --fresh-handshake     after each node switch, reload the isolated test config (--main-conf) to force a fresh WG handshake; without it per-node transport results are path_freshness=unverified (WG tunnel persists >150s after switch)',
     '  --dry-run             same as mode list',
     '  --help                this text',
     '',
@@ -198,6 +219,7 @@ export function parseArgs(argv, env = {}) {
     nodesLimit,
     full: has('full'),
     closeConns: has('close-conns') || env.CLOSE_CONNS === '1',
+    freshHandshake: has('fresh-handshake') || env.FRESH_HANDSHAKE === '1',
     transfer: has('transfer') || env.TRANSFER === '1',
     dataBytes,
     mtus,
@@ -268,7 +290,8 @@ export function buildPlan(args, nodes) {
 // CSV is a derived view of the same row objects the JSON report stores — never
 // a separate data path. Fields in schema order; RFC-style quoting.
 export const CSV_FIELDS = ['timestamp', 'mode', 'node', 'pin', 'result', 'curl_exit', 'elapsed_ms',
-  'ip', 'loc', 'colo', 'warp', 'mtu', 'transfer_bps', 'http3', 'error_class', 'error_redacted', 'notes'];
+  'ip', 'loc', 'colo', 'warp', 'selection_changed', 'transport_fresh', 'path_freshness',
+  'mtu', 'transfer_bps', 'http3', 'error_class', 'error_redacted', 'notes'];
 
 export function resultsToCsv(rows) {
   const line = (vals) => vals.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');

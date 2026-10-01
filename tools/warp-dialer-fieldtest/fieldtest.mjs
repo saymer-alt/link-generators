@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import {
   parseArgs, usage, parseTrace, redactText, classifyPasses, errorClass,
   nullDevice, parseGroupResponse, replaceMtuInProfile, buildPlan, resultsToCsv,
+  resolveNodeName,
 } from './lib.mjs';
 
 const EXIT_OK = 0;
@@ -62,14 +63,48 @@ try {
   process.exit(EXIT_UNAVAILABLE);
 }
 
+// Switch a select group to a node. `node` may be a user-trimmed name; it is
+// resolved against the REAL names Mihomo reports (exact first, then unique
+// trim-normalized; the ORIGINAL name is what gets sent to the API).
+// Returns { real, selectionChanged }.
 const switchTo = async (group, node) => {
-  await apiFetch(`/proxies/${encodeURIComponent(group)}`, 'PUT', JSON.stringify({ name: node }));
+  const g0 = await apiFetch(`/proxies/${encodeURIComponent(group)}`);
+  const { all } = parseGroupResponse(g0);
+  const real = resolveNodeName(node, all);
+  await apiFetch(`/proxies/${encodeURIComponent(group)}`, 'PUT', JSON.stringify({ name: real }));
   const g = await apiFetch(`/proxies/${encodeURIComponent(group)}`);
-  if (!g || g.now !== node) throw new Error(`switch not confirmed: now=${g && g.now}`);
+  if (!g || g.now !== real) throw new Error(`switch not confirmed: now=${g && g.now}`);
+  const selectionChanged = g.now === real;
   if (args.closeConns) {
     try { await apiFetch('/connections', 'DELETE'); } catch { /* best effort */ }
   }
   await new Promise((r) => setTimeout(r, args.settleMs));
+  return { real, selectionChanged };
+};
+
+// Force a fresh WireGuard handshake by reloading the isolated test config
+// (PUT /configs?force=true with the payload). This recreates every outbound,
+// so the next trace goes through a NEW handshake via the currently selected
+// dialer node — the only reliable way to attribute a trace to a node, because
+// an established WG session kept its old transport path for >150s in the field.
+// After the reload: wait for API, then re-confirm the node selection (cache
+// restore may reset it); fail closed if the selection cannot be restored.
+const freshReload = async (group, real) => {
+  if (!args.mainConf) throw new Error('--fresh-handshake requires --main-conf (path to the isolated test config)');
+  const payload = readFileSync(args.mainConf, 'utf8');
+  await apiFetch('/configs?force=true', 'PUT', JSON.stringify({ payload }));
+  const deadline = Date.now() + 30000;
+  let up = false;
+  while (Date.now() < deadline) {
+    try { await apiFetch('/version'); up = true; break; } catch { await new Promise((r) => setTimeout(r, 1000)); }
+  }
+  if (!up) throw new Error('API unavailable after config reload');
+  const g = await apiFetch(`/proxies/${encodeURIComponent(group)}`);
+  if (!g || g.now !== real) {
+    await apiFetch(`/proxies/${encodeURIComponent(group)}`, 'PUT', JSON.stringify({ name: real }));
+    const g2 = await apiFetch(`/proxies/${encodeURIComponent(group)}`);
+    if (!g2 || g2.now !== real) throw new Error(`selection lost after reload: now=${g2 && g2.now}`);
+  }
 };
 
 const traceOnce = () => {
@@ -117,11 +152,15 @@ const groupNodes = async (group) => {
 };
 
 // One row per node, exactly the report schema (README documents the fields).
+// freshness: { selectionChanged, transportFresh, pathFreshness } — three distinct
+// facts: the API confirmed the new `now` vs the outbound was actually recreated
+// (fresh handshake) vs whether that has been proven at all for this row.
 const rowFor = (node, passes, extra) => {
   const result = classifyPasses(passes);
   const lastOk = passes.filter((p) => p.ok && p.warp === 'on').pop() || null;
   const lastSeen = passes.filter((p) => p.ok).pop() || null;
   const fails = passes.filter((p) => !p.ok);
+  const fr = extra.fresh || {};
   return {
     timestamp: new Date().toISOString(),
     mode: args.mode,
@@ -134,6 +173,9 @@ const rowFor = (node, passes, extra) => {
     loc: (lastOk || lastSeen || {}).loc || '',
     colo: (lastOk || lastSeen || {}).colo || '',
     warp: (lastOk || lastSeen || {}).warp || '',
+    selection_changed: fr.selectionChanged ?? null,
+    transport_fresh: fr.transportFresh ?? null,
+    path_freshness: fr.pathFreshness ?? 'unverified',
     mtu: extra.mtu || null,
     transfer_bps: extra.transfer && extra.transfer.ok ? extra.transfer.bps : null,
     http3: extra.http3 ?? null,
@@ -143,7 +185,7 @@ const rowFor = (node, passes, extra) => {
   };
 };
 
-const testNode = async (group, node, startedAt, mtu) => {
+const testNode = async (group, node, startedAt, mtu, fresh) => {
   const passes = [];
   for (let i = 0; i < args.passes; i++) {
     passes.push(traceOnce());
@@ -152,6 +194,7 @@ const testNode = async (group, node, startedAt, mtu) => {
   const result = classifyPasses(passes);
   const row = rowFor(node, passes, {
     mtu,
+    fresh,
     transfer: result === 'WARP_OK' && args.transfer ? transferOnce() : null,
     http3: result === 'WARP_OK' ? http3Probe() : null,
   });
@@ -190,21 +233,32 @@ try {
   }
 
   if (args.mode === 'sweep') {
+    if (!args.freshHandshake) {
+      console.error('WARNING: --fresh-handshake is NOT set. An established WireGuard tunnel kept its old transport path for >150s after a group switch in field tests, so per-node results are path_freshness=unverified and must not be used as node->colo proof.');
+    }
     const nodes = await groupNodes(args.group);
-    console.error(`group=${args.group} nodes=${nodes.length} passes=${args.passes} close=${args.closeConns}${args.full ? ' FULL' : ` limit=${args.nodesLimit}`}`);
+    console.error(`group=${args.group} nodes=${nodes.length} passes=${args.passes} close=${args.closeConns}${args.full ? ' FULL' : ` limit=${args.nodesLimit}`}${args.freshHandshake ? ' fresh-handshake' : ''}`);
     for (const node of nodes) {
       process.stderr.write(`[node] ${node} ... `);
       const t0 = Date.now();
       try {
-        await switchTo(args.group, node);
-        const row = await testNode(args.group, node, t0);
+        const { real } = await switchTo(args.group, node);
+        let transportFresh = false;
+        if (args.freshHandshake) {
+          await freshReload(args.group, real);
+          transportFresh = true;
+        }
+        const row = await testNode(args.group, real, t0, undefined, {
+          selectionChanged: true, transportFresh, pathFreshness: transportFresh ? 'fresh' : 'unverified',
+        });
         rows.push(row);
-        console.error(`${row.result}${row.colo ? ' colo=' + row.colo : ''}`);
+        console.error(`${row.result}${row.colo ? ' colo=' + row.colo : ''}${row.path_freshness === 'unverified' ? ' [stale-path?]' : ''}`);
       } catch (e) {
         rows.push({
           timestamp: new Date().toISOString(), mode: args.mode, node, pin: args.pin,
           result: 'UNKNOWN', curl_exit: null, elapsed_ms: Date.now() - t0, ip: '', loc: '',
-          colo: '', warp: '', mtu: null, transfer_bps: null, http3: null,
+          colo: '', warp: '', selection_changed: false, transport_fresh: false, path_freshness: 'unverified',
+          mtu: null, transfer_bps: null, http3: null,
           error_class: 'unknown', error_redacted: redactText(String(e.message || e)).slice(0, 200),
         });
         console.error('UNKNOWN (switch failed)');
@@ -218,12 +272,19 @@ try {
       process.stderr.write(`[switch] ${node} ... `);
       const t0 = Date.now();
       try {
-        await switchTo(args.group, node);
-        const row = await testNode(args.group, node, t0);
+        const { real } = await switchTo(args.group, node);
+        let transportFresh = false;
+        if (args.freshHandshake) {
+          await freshReload(args.group, real);
+          transportFresh = true;
+        }
+        const row = await testNode(args.group, real, t0, undefined, {
+          selectionChanged: true, transportFresh, pathFreshness: transportFresh ? 'fresh' : 'unverified',
+        });
         rows.push(row);
         console.error(`${row.result}${row.colo ? ' colo=' + row.colo : ''}`);
       } catch (e) {
-        rows.push({ timestamp: new Date().toISOString(), mode: args.mode, node, pin: args.pin, result: 'UNKNOWN', curl_exit: null, elapsed_ms: Date.now() - t0, ip: '', loc: '', colo: '', warp: '', mtu: null, transfer_bps: null, http3: null, error_class: 'unknown', error_redacted: redactText(String(e.message || e)).slice(0, 200) });
+        rows.push({ timestamp: new Date().toISOString(), mode: args.mode, node, pin: args.pin, result: 'UNKNOWN', curl_exit: null, elapsed_ms: Date.now() - t0, ip: '', loc: '', colo: '', warp: '', selection_changed: false, transport_fresh: false, path_freshness: 'unverified', mtu: null, transfer_bps: null, http3: null, error_class: 'unknown', error_redacted: redactText(String(e.message || e)).slice(0, 200) });
         console.error('UNKNOWN');
       }
     }
@@ -248,18 +309,24 @@ try {
     process.on('SIGINT', onInterrupt);
 
     try {
-      const candidates = args.sweepNodes.length ? args.sweepNodes : await groupNodes(args.group);
+      const allNodes = await groupNodes(args.group);
+      // resolve user (possibly trimmed) candidate names to the REAL provider names
+      const candidates = args.sweepNodes.length
+        ? args.sweepNodes.map((n) => resolveNodeName(n, allNodes))
+        : allNodes;
       const working = [];
       for (const node of candidates) {
         if (interrupted) break;
         const t0 = Date.now();
         try {
           await switchTo(args.group, node);
-          const row = await testNode(args.group, node, t0);
+          const row = await testNode(args.group, node, t0, undefined, {
+            selectionChanged: true, transportFresh: false, pathFreshness: 'unverified',
+          });
           rows.push(row);
           if (row.result === 'WARP_OK') working.push(node);
         } catch (e) {
-          rows.push({ timestamp: new Date().toISOString(), mode: args.mode, node, pin: args.pin, result: 'UNKNOWN', curl_exit: null, elapsed_ms: Date.now() - t0, ip: '', loc: '', colo: '', warp: '', mtu: null, transfer_bps: null, http3: null, error_class: 'unknown', error_redacted: redactText(String(e.message || e)).slice(0, 200) });
+          rows.push({ timestamp: new Date().toISOString(), mode: args.mode, node, pin: args.pin, result: 'UNKNOWN', curl_exit: null, elapsed_ms: Date.now() - t0, ip: '', loc: '', colo: '', warp: '', selection_changed: false, transport_fresh: false, path_freshness: 'unverified', mtu: null, transfer_bps: null, http3: null, error_class: 'unknown', error_redacted: redactText(String(e.message || e)).slice(0, 200) });
         }
         const maxN = parseInt(process.env.MAX_NODES || '1', 10);
         if (working.length >= maxN) break;
@@ -274,7 +341,11 @@ try {
           await new Promise((r) => setTimeout(r, args.settleMs));
           process.stderr.write(`[mtu] ${mtu} node=${node} ... `);
           const t0 = Date.now();
-          const row = await testNode(args.group, node, t0, mtu);
+          // the payload reload recreates every outbound: the next trace goes
+          // through a FRESH handshake via the selected dialer node
+          const row = await testNode(args.group, node, t0, mtu, {
+            selectionChanged: true, transportFresh: true, pathFreshness: 'fresh',
+          });
           rows.push(row);
           console.error(`${row.result}${row.transfer_bps ? ' ' + Math.round(row.transfer_bps / 1024) + 'KB/s' : ''}`);
         }

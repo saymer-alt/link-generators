@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  resolveNodeName,
   nullDevice, parseTrace, redactText, classifyPasses, errorClass,
   parseArgs, usage, parseGroupResponse, replaceMtuInProfile, buildPlan,
   resultsToCsv,
@@ -189,8 +190,43 @@ test('resultsToCsv: header order, quoting, derived from the same rows', () => {
   ];
   const csv = resultsToCsv(rows);
   const lines = csv.split('\n');
-  assert.equal(lines[0], '"timestamp","mode","node","pin","result","curl_exit","elapsed_ms","ip","loc","colo","warp","mtu","transfer_bps","http3","error_class","error_redacted","notes"');
+  assert.equal(lines[0], '"timestamp","mode","node","pin","result","curl_exit","elapsed_ms","ip","loc","colo","warp","selection_changed","transport_fresh","path_freshness","mtu","transfer_bps","http3","error_class","error_redacted","notes"');
   assert.ok(lines[1].startsWith('"2026-10-01T00:00:00.000Z","sweep","N""1"", 🚀",'));
   assert.ok(lines[1].includes('"3400000"'));
   assert.equal(lines[2], '');
+});
+
+// ---- exact provider node names: resolveNodeName (field defect #1) ----
+
+const GEO_NODES = [' 🇩🇪 ⚡ Германия ', '🇩🇪 Hysteria 2 | Германия', '🇩🇪 Германия Torrent ', '🇳🇱 ⚡ Нидерланды'];
+
+test('resolveNodeName: exact name without spaces wins as-is', () => {
+  assert.equal(resolveNodeName('🇩🇪 Hysteria 2 | Германия', GEO_NODES), '🇩🇪 Hysteria 2 | Германия');
+});
+test('resolveNodeName: leading-space provider name resolved from trimmed request', () => {
+  assert.equal(resolveNodeName('🇩🇪 ⚡ Германия', GEO_NODES), ' 🇩🇪 ⚡ Германия ');
+});
+test('resolveNodeName: trailing-space provider name resolved from trimmed request', () => {
+  assert.equal(resolveNodeName('🇩🇪 Германия Torrent', GEO_NODES), '🇩🇪 Германия Torrent ');
+});
+test('resolveNodeName: unique normalized match returns the ORIGINAL name', () => {
+  assert.equal(resolveNodeName(' 🇳🇱 ⚡ Нидерланды ', GEO_NODES), '🇳🇱 ⚡ Нидерланды');
+});
+test('resolveNodeName: ambiguous normalized match fails closed', () => {
+  const dup = ['Alpha ', ' Alpha'];
+  // request 'Alpha' has NO exact match, but both entries trim to 'Alpha'
+  assert.throws(() => resolveNodeName('Alpha', dup), /ambiguous after trim/);
+});
+test('resolveNodeName: unknown name fails closed with node count', () => {
+  assert.throws(() => resolveNodeName('GHOST', GEO_NODES), /not found among 4/);
+});
+test('resolveNodeName: empty request fails closed', () => {
+  assert.throws(() => resolveNodeName('  ', GEO_NODES), /empty node name/);
+});
+
+// ---- fresh-handshake flag ----
+test('parseArgs: --fresh-handshake and FRESH_HANDSHAKE=1 both enable the flag', () => {
+  assert.equal(parseArgs(['--fresh-handshake'], {}).freshHandshake, true);
+  assert.equal(parseArgs([], { FRESH_HANDSHAKE: '1' }).freshHandshake, true);
+  assert.equal(parseArgs([], {}).freshHandshake, false);
 });

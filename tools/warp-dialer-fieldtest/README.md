@@ -10,6 +10,48 @@
 Состав: `fieldtest.mjs` (CLI), `lib.mjs` (чистая логика), `fieldtest.test.mjs` (offline-тесты),
 `check-secrets.mjs` (сканер секретов), `example-config.yaml` (пример без реальных секретов).
 
+## Полевая находка: переключение группы ≠ свежий transport path (обязательно к прочтению)
+
+Переключение select-group меняет выбранный dialer node, но уже установленный
+WireGuard handshake может продолжать использовать **старый transport path**:
+в поле (SE VPS, Mihomo v1.19.31) старый путь сохранялся **более 150 секунд** после
+подтверждённого API переключения. Поэтому связка `PUT group → now changed → sleep 8s → trace`
+**не доказывает**, что trace прошёл через новый provider node — обычный sweep способен
+приписать предыдущий FRA/AMS path следующему узлу. Увеличивать обычный `--settle-ms`
+для этого бесполезно (фиксированный sleep недостаточен).
+
+Harness различает три разных факта (поля отчёта):
+
+- `selection_changed` — Mihomo API подтвердил новое `now` (переключение принято);
+- `transport_fresh` — outbound реально пересоздан (перезагрузка изолированного конфига)
+  и выбранный узел подтверждён повторно после reload;
+- `path_freshness` — `fresh` (доказан fresh handshake) или `unverified`
+  (результат потенциально stale).
+
+### `--fresh-handshake` — режим строгого per-node сравнения
+
+```bash
+node fieldtest.mjs sweep --group DIAL-FRA --pin "TEST-OUT=WARP-DIALED-FRA" --fresh-handshake --main-conf /etc/mihomo/config.yaml
+```
+
+После выбора provider node: подтверждение `now` → безопасный reload того же тестового
+конфига (`PUT /configs?force=true {"payload": …}`) → ожидание API → повторное
+подтверждение выбранного узла → только затем trace. Reload пересоздаёт все outbound
+(fresh WG handshake) — допустимо для изолированного userspace-стенда; process/systemd
+не рестартуются. Без `--main-conf` режим завершится ошибкой конфигурации.
+Без `--fresh-handshake` все строки получают `path_freshness: unverified` + предупреждение
+в CLI: такой sweep — research-данные, а не доказательство `node → colo`.
+
+### Field-test evidence (SE VPS, Mihomo v1.19.31, 2026-10-01)
+
+- direct WARP (два независимых профиля) → `colo=ARN`;
+- WARP через Geodema DE-транспорт (3 узла, vless-TCP и hysteria2) → `warp=on`, `colo=FRA`;
+- WARP через Geodema NL-транспорт (3 узла) → `warp=on`, `colo=AMS`;
+- MTU-лестница 1280→1200 на DE-маршруте — все ступени `WARP_OK`.
+
+Это **field-test evidence**, а не гарантия Cloudflare routing: colo выбирается Cloudflare
+и может меняться. Пример A→B→A с fresh reload: DE → FRA, NL → AMS, DE → FRA
+(каждый переход с новым хендшейком).
 ## Методика (рекомендуемый порядок)
 
 ```text
