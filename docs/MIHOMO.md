@@ -217,6 +217,7 @@ WARP-dial → VPS-DK → [сеть DK] → Cloudflare WARP endpoint → Инте
 - Исходники Mihomo **v1.19.31**: `dialer-proxy` — поле `BasicOption`, у wireguard применяется к bind-dialer (`adapter/outbound/base.go:199,212`, `wireguard.go:369`); UDP-хендшейк идёт через `proxyDialer.listenPacket` (UDP-релей таргета); статические проверки — `config/utils.go:148` (существование таргета + DFS по прямым рёбрам).
 - `mihomo -t`: позитивы (имя proxy и авторская группа) — successful; негативы (несуществующий таргет) отвергаются ядром — статическая валидация Builder зеркалит ядро.
 - `mihomo -t`: provider-backed группа (`use:`, один и два провайдера) — successful; `use:` с несуществующим провайдером отвергается ядром — статическая валидация Builder зеркалит ядро.
+- Полевые измерения: `tools/warp-dialer-fieldtest/` — автоматизированный harness (sweep узлов транспортной группы, switchtest, MTU-лестница, WARP-over-WARP); методика, ловушка PIN и ограничения — README инструмента.
 - Живая механическая цепочка двух локальных инстансов v1.19.31 (TARGET/socks5 через dialer-proxy → второй инстанс): сквозной HTTPS-трафик проходит; негативный контроль (dialer на мёртвом порту) блокирует трафик полностью. Полная WARP-цепочка (UDP-хендшейк через удалённый VPS) — полевой тест: см. WARPSCOUT-VPS.md.
 
 ## Сводка требований используемых функций

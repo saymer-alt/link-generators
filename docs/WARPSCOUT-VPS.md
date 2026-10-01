@@ -812,6 +812,7 @@ warpscout scan -p awg -P -exclude-node ARN -gen-i1 quic
 3. Переключить узел в dialer-группе (дашборд/API) на DK-VPS → повторить trace.
 4. Зафиксировать ip/loc/colo/warp/NODE для: WARP direct vs WARP через dialer.
 5. Цель: direct → ARN, dialer via другой сети → FRA (или иная нода).
+Автоматизирует эту методику harness `tools/warp-dialer-fieldtest/` (sweep узлов, switchtest, MTU-лестница, JSON/CSV-отчёты); инструкция и ловушка PIN — его README.
 
 Field-test конфиг для provider-варианта (Geodema как промежуточная сеть; BUILDER сам создаёт группу `WARP-DIALER` с `use:`, если в поле «URL-подписки для dialer-группы» указан тот же URL подписки, а WARP загружен .conf с MTU 1200–1280):
 

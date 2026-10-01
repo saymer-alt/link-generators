@@ -1,0 +1,43 @@
+name: fieldtest harness checks
+
+# Offline checks only: syntax, unit tests, secret scan. The harness itself is a
+# research tool for live VPS use — CI NEVER runs real field tests (they need
+# Mihomo, network, WARP credentials and provider subscriptions).
+on:
+  push:
+    branches: [main, stable]
+    paths:
+      - 'tools/warp-dialer-fieldtest/**'
+      - '.github/workflows/fieldtest-checks.yml'
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'tools/warp-dialer-fieldtest/**'
+      - '.github/workflows/fieldtest-checks.yml'
+
+jobs:
+  offline-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: syntax
+        run: |
+          node --check tools/warp-dialer-fieldtest/fieldtest.mjs
+          node --check tools/warp-dialer-fieldtest/lib.mjs
+          node --check tools/warp-dialer-fieldtest/check-secrets.mjs
+      - name: offline unit tests
+        run: node --test tools/warp-dialer-fieldtest/fieldtest.test.mjs
+      - name: secret scan
+        run: node tools/warp-dialer-fieldtest/check-secrets.mjs
+      - name: CI never runs real field tests
+        run: |
+          if grep -rnE "fieldtest\.mjs (sweep|switchtest|mtusweep)" .github/workflows/; then
+            echo "workflow invokes a mutating field-test mode"; exit 1
+          fi
+          if grep -rnE "MIHOMO_SECRET=[A-Za-z0-9]" tools/warp-dialer-fieldtest/; then
+            echo "literal controller token in tool sources"; exit 1
+          fi
