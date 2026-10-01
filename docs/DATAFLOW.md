@@ -153,6 +153,7 @@ DNS Amnezia Premium), поле подставляет `1.1.1.1, 8.8.8.8` и по
 ```text
 cfgTunMips → tunStack → options.mihomoTunStack → buildFromRequest
 policyCards → collectPolicyRouting() → options.mihomoDomainPolicy → buildFromRequest (inline rule-providers + policy groups + RULE-SET rules; выключено → byte-parity)
+#cfgProfile=vps + #vpsDnsEnabled → applyDeploymentProfile() → tun.dns-hijack + profile.store-fake-ip + sniffer (VPS Domain Detection Package; generic не затрагивается)
           → mihomoTunOpts.stack → opts.tun.stack в buildMihomoYaml
           → normal TUN / Per-Proxy listeners
 ```

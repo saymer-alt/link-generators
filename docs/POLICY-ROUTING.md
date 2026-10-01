@@ -122,13 +122,46 @@ rules:
 #2588, воспроизведён на v1.19.31). Существующий контракт БС не меняется;
 покрыто regression-тестами (`tests/policy-routing.cjs`, `mihomo-priority.test.mjs`).
 
-## VPS Gateway (статус)
+## VPS Gateway: Domain Detection Package (реализовано)
 
-Профиль VPS Gateway в этой арке не меняется. PoC доказал, что для полного
-DPR на gateway потребуются `tun.dns-hijack`, `sniffer` и
-`profile.store-fake-ip: true` (сегодня: `false`) — это отдельная последующая
-арка с согласованием межпроектного контракта `amnezia-mihomo-gateway`
-(`tun.device`, `dns.fake-ip-range` не трогаются).
+Профиль **vps-gateway** (после арки deployment profiles `router / vps-local /
+vps-gateway`) автоматически включает пакет домен-детекта (PoC 2026-10-01,
+production-like стенд, Mihomo 1.19.31; recommended/current — 1.19.32).
+Профили `router` и `vps-local` пакет НЕ получают: router — обычный контракт
+Keenetic, vps-local — локальный SOCKS-режим без TUN (hijack/fake-ip там
+семантически неприменимы):
+
+```yaml
+profile:
+  store-fake-ip: true      # при включённом fake-ip DNS (sub-toggle); false без него
+tun:
+  dns-hijack: [any:53, tcp://any:53]   # только при включённом fake-ip DNS
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  force-dns-mapping: true
+  override-destination: false   # hostname только для матчинга, dial-цель не меняется
+  sniff: {TLS: [443, 8443], QUIC: [443, 8443], HTTP: [80, 8080-8880]}
+```
+
+Режим включения — автоматический, без нового UI-toggle: пакет является
+инвариантом профиля (как `auto-route: false`); де-факто отказ возможен
+выключением fake-ip DNS (`vpsDnsEnabled`), тогда hijack и persistence
+семантически не имеют смысла. От DPR пакет не зависит (полезен и без политик).
+Live-проверено: hijack внешнего :53 DNS, DoH/pure-IP/HTTP-host/QUIC
+классификация, рестарт с восстановлением fake-ip mapping без мисатрибуции,
+cold-start провайдера. Инварианты (`auto-route: false`, `device`,
+`fake-ip-range`, MIPS/gVisor, mixed-port/controller) не тронуты.
+
+**Межпроектный контракт:** `amnezia-mihomo-gateway` до ветки
+`feat/domain-detection-store-fake-ip` принудительно переписывал
+`profile.store-fake-ip` в `false` при установке (патчер §2.7) — ветка/PR
+меняет патчер на сохранение значения генератора (при отсутствии ключа
+по-прежнему дописывается `false`). Неизвестные ключи (`tun.dns-hijack`,
+`sniffer`) патчер и раньше пропускал дословно — покрыто его тестом.
+Восстановление fake-ip маршрута после рестартов принадлежит gateway
+(`check-warp-routing.timer` ≤1 мин, `routing_ok` проверяет
+`ip route show <fake-ip-range> dev tun-mihomo`) и не меняется.
 
 ## Security / privacy
 

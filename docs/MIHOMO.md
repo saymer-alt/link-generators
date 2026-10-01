@@ -12,6 +12,17 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 Факты по коду, включая MIPS TUN (2026-09-15): настройки UI → опции → секции YAML; в конце — краткое
 описание pre-copy валидатора (полностью — [VALIDATION.md](VALIDATION.md)).
 
+## VPS Gateway: Domain Detection Package (2026-10-01)
+
+Профиль «VPS Gateway» автоматически генерирует пакет домен-детекта:
+`tun.dns-hijack` + `profile.store-fake-ip: true` (вместе с fake-ip DNS,
+sub-toggle) и пассивный `sniffer` (TLS/QUIC/HTTP, `override-destination:
+false`). Включение автоматическое — без нового toggle (пакет = инвариант
+профиля); от DPR не зависит. Инварианты gateway не тронуты; контракт с
+`amnezia-mihomo-gateway` (сохранение `store-fake-ip` в патчере
+установщика) — ветка `feat/domain-detection-store-fake-ip`. Подробности:
+[POLICY-ROUTING.md](POLICY-ROUTING.md), [VPS-GATEWAY.md](VPS-GATEWAY.md).
+
 ## Политики по доменам (Domain Policy Routing, Variant B)
 
 Опциональный чекбокс «🚦 Политики по доменам»: карточки «имя + домены» превращаются

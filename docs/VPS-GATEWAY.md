@@ -182,6 +182,40 @@ Per-proxy TUN listeners используют другой config path, где `i
 До отдельного расходного VPS автоматический rollback в gateway остаётся непроверенным; это не
 причина менять значения VPS-профиля генератора без отдельного доказательства.
 
+## Domain Detection Package (2026-10-01)
+
+Профиль **vps-gateway** (модель профилей `router / vps-local / vps-gateway`)
+дополняет gateway-вид конфига пакетом домен-детекта (см.; профили `router` и
+`vps-local` пакет не получают). Версии: minimum Mihomo 1.19.31, проверен
+1.19.32 (recommended/current).
+[POLICY-ROUTING.md](POLICY-ROUTING.md)): `profile.store-fake-ip: true` (при
+включённом fake-ip DNS), `tun.dns-hijack: [any:53, tcp://any:53]` (там же) и
+пассивный `sniffer` (всегда). Это не меняет четыре точки сцепки выше: device,
+fake-ip-range, `auto-route: false` и effective IPv4 TUN остаются прежними.
+
+Два межпроектных следствия:
+
+1. **Патчер install.sh**: до ветки `feat/domain-detection-store-fake-ip`
+   патчер §2.7 принудительно нормализовал `store-fake-ip` в `false` — для
+   DPR-конфигов это ломало mapping при рестарте (stale fake-ip + мисатрибуция,
+   PoC 2026-10-01). Ветка меняет патчер: существующее значение сохраняется,
+   `false` дописывается только при отсутствии ключа. `tun.dns-hijack` и
+   `sniffer` патчер не трогает (неизвестные ключи проходят дословно; тест
+   `tests/test-mihomo-config-patch.sh` фиксирует оба случая).
+2. **Восстановление маршрута**: TUN-устройство при рестарте Mihomo исчезает
+   вместе с kernel-маршрутом `FAKE_IP_RANGE dev tun-mihomo`. Восстановление —
+   ответственность gateway: `check-warp-routing.timer` (≤1 мин) проверяет
+   `routing_ok` (включая `ip route show <fake-ip-range>`) и перезапускает
+   `warp-docker-routing.service`, который пересоздаёт маршрут. До 2026-10-01
+   это подтверждалось live: рестарт тестового Mihomo на gateway-хосте
+   восстанавливал маршрутизацию в пределах минутного тика. Генератор никаких
+   маршрутов не создаёт и не должен.
+
+`cache.db` (fake-ip mapping) живёт в каталоге `-d` Mihomo (`/etc/mihomo`),
+создаётся при первом старте, переживает рестарты; отсутствие/повреждение
+обрабатывается ядром штатно (пустой mapping → новые выдачи; повреждённый файл
+Mihomo 1.19.31 пересоздаёт). Права — как у остальных файлов каталога конфига.
+
 ## Что генератор НЕ делает (никогда)
 
 Docker, AmneziaWG, `ip rule`/policy routing, iptables, MASQUERADE, fwmark, TCPMSS,
