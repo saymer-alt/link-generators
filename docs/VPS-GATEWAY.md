@@ -184,7 +184,10 @@ Per-proxy TUN listeners используют другой config path, где `i
 
 ## Domain Detection Package (2026-10-01)
 
-VPS-профиль дополняет gateway-вид конфига пакетом домен-детекта (см.
+Профиль **vps-gateway** (модель профилей `router / vps-local / vps-gateway`)
+дополняет gateway-вид конфига пакетом домен-детекта (см.; профили `router` и
+`vps-local` пакет не получают). Версии: minimum Mihomo 1.19.31, проверен
+1.19.32 (recommended/current).
 [POLICY-ROUTING.md](POLICY-ROUTING.md)): `profile.store-fake-ip: true` (при
 включённом fake-ip DNS), `tun.dns-hijack: [any:53, tcp://any:53]` (там же) и
 пассивный `sniffer` (всегда). Это не меняет четыре точки сцепки выше: device,

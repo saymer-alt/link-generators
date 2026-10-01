@@ -124,8 +124,12 @@ rules:
 
 ## VPS Gateway: Domain Detection Package (реализовано)
 
-VPS-профиль автоматически включает пакет домен-детекта (PoC 2026-10-01,
-production-like стенд, Mihomo 1.19.31):
+Профиль **vps-gateway** (после арки deployment profiles `router / vps-local /
+vps-gateway`) автоматически включает пакет домен-детекта (PoC 2026-10-01,
+production-like стенд, Mihomo 1.19.31; recommended/current — 1.19.32).
+Профили `router` и `vps-local` пакет НЕ получают: router — обычный контракт
+Keenetic, vps-local — локальный SOCKS-режим без TUN (hijack/fake-ip там
+семантически неприменимы):
 
 ```yaml
 profile:

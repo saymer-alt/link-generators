@@ -25,7 +25,7 @@ const root = path.resolve(__dirname, '..');
     await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
     await page.locator('#mihomoInput').fill('https://subs.example.invalid/token');
     await page.locator('#cfgSubMode').check();
-    await page.locator('#cfgProfile').selectOption('vps');
+    await page.locator('#cfgProfile').selectOption('vps-gateway');
     await page.locator('#vpsDnsEnabled').check();
 
     // 1. VPS + DNS on + DPR OFF: полный пакет
@@ -73,23 +73,42 @@ const root = path.resolve(__dirname, '..');
     ok(doc.sniffer !== undefined && doc.sniffer.enable === true, 'sniffer stays (passive, useful without fake-ip)');
     pass += 4;
 
+    // 3b. vps-local: gateway-only DDP keys не появляются (TUN off, mixed on)
+    await page.locator('#cfgProfile').selectOption('vps-local');
+    await page.evaluate(() => buildMihomo());
+    await page.waitForTimeout(300);
+    let localYaml = await page.locator('#mihomoOutput').inputValue();
+    ok(!localYaml.includes('sniffer:') && !localYaml.includes('dns-hijack') && !localYaml.includes('dns:'), 'vps-local: no DDP keys, no dns');
+    ok(!localYaml.includes('tun:'), 'vps-local: no tun');
+    ok(localYaml.includes('mixed-port: 7890'), 'vps-local: mixed-port present');
+    pass += 3;
+
+    // 3c. router: DDP keys отсутствуют, ручное состояние сохраняется
+    await page.locator('#cfgProfile').selectOption('router');
+    await page.evaluate(() => buildMihomo());
+    await page.waitForTimeout(300);
+    const routerYaml = await page.locator('#mihomoOutput').inputValue();
+    ok(!routerYaml.includes('sniffer:') && !routerYaml.includes('dns-hijack'), 'router: no DDP keys');
+    pass += 1;
+
     // 4. Generic profile: package keys не появляются (store-fake-ip в шаблоне
     // рантайма существовал до пакета — это не ключ пакета); x-hwid нормируем.
+    // 4. Router: byte-детерминизм вывода (x-hwid нормируем) — non-VPS parity
     await page.locator('#cfgAutoWhitelist').uncheck();
-    await page.locator('#cfgProfile').selectOption('generic');
+    await page.locator('#cfgProfile').selectOption('router');
     await page.evaluate(() => buildMihomo());
     await page.waitForTimeout(300);
     const scrub = (s) => s.replace(/^\s+- [0-9a-f]{32}$/gm, 'HWID');
-    const genericYaml = scrub(await page.locator('#mihomoOutput').inputValue());
-    ok(!genericYaml.includes('sniffer:') && !genericYaml.includes('dns-hijack'), 'generic output has no package keys');
-    ok(genericYaml.includes('store-fake-ip: true'), 'generic keeps legacy template store-fake-ip (untouched by package)');
+    const routerYamlScrubbed = scrub(await page.locator('#mihomoOutput').inputValue());
+    ok(!routerYamlScrubbed.includes('sniffer:') && !routerYamlScrubbed.includes('dns-hijack'), 'router output has no package keys');
+    ok(routerYamlScrubbed.includes('store-fake-ip: true'), 'router keeps legacy runtime template store-fake-ip (untouched by package)');
     await page.evaluate(() => buildMihomo());
     await page.waitForTimeout(200);
-    ok(scrub(await page.locator('#mihomoOutput').inputValue()) === genericYaml, 'generic build deterministic (hwid-normalized)');
+    ok(scrub(await page.locator('#mihomoOutput').inputValue()) === routerYamlScrubbed, 'router build deterministic (hwid-normalized)');
     pass += 3;
 
     // 5. Валидатор признаёт vps+package конфиг VALID
-    await page.locator('#cfgProfile').selectOption('vps');
+    await page.locator('#cfgProfile').selectOption('vps-gateway');
     await page.locator('#vpsDnsEnabled').check();
     await page.evaluate(() => buildMihomo());
     await page.waitForTimeout(300);

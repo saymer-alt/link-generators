@@ -479,7 +479,11 @@ runtime `dcc16b68…` (Source: `saymer-alt/web4core@2daf383bde5257c1d8bd15a0f4c7
 - Реальный `mihomo -t` v1.19.31 (Windows-бинар) на 5 пробах из поставляемого
   runtime: dpr-subscription (GEOSITE/KEYWORD/CIDR), dpr-static, dpr-aw,
   dpr-off-parity, dpr-cyrillic — все successful; per-proxy+DPR отклонён
-  движком как задумано. Живой PoC маршрутизации — тестовый VPS, 2026-10-01
+  движком как задумано. После интеграции с deployment profiles
+  (`router / vps-local / vps-gateway`): 9/9 combined-проб на 1.19.31
+  (router/vps-local/vps-gateway × DPR on/off, vps-gateway DNS-off,
+  MIPS, gVisor) и 5/5 ключевых на **1.19.32** (recommended/current;
+  minimum остаётся 1.19.31). Живой PoC маршрутизации — тестовый VPS, 2026-10-01
   (журнал владельца): DOMAIN→POLICY→PROVIDER→NODE доказан на обеих версиях.
 
 ## VPS Domain Detection Package — 2026-10-01

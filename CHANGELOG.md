@@ -37,6 +37,8 @@
 
 - Добавлен **VPS Domain Detection Package** для профиля «VPS Gateway»: `tun.dns-hijack` (any:53/tcp:any:53), пассивный `sniffer` (TLS/QUIC/HTTP, `parse-pure-ip`, `force-dns-mapping`, `override-destination: false` — hostname только для матчинга) и `profile.store-fake-ip: true` (при включённом fake-ip DNS). Пакет включается автоматически как инвариант профиля (без нового UI-toggle), не зависит от Domain Policy Routing; non-VPS вывод — byte-parity. Контракт подтверждён live-стендом (Mihomo 1.19.31): hijack внешнего :53 DNS, классификация DoH/pure-IP TLS/HTTP-Host/QUIC по SNI (негативный контроль: тот же IP + другой SNI → GLOBAL), рестарт с восстановлением fake-ip mapping без мисатрибуции, cold-start провайдера. Требуется синхронный патч `amnezia-mihomo-gateway` (ветка `feat/domain-detection-store-fake-ip`): установочный патчер больше не перезаписывает `store-fake-ip` значением генератора. IPv6 остаётся выключенным (fake-ip-range6 — follow-up).
 
+- Интеграция VPS Domain Detection Package с новой моделью deployment profiles: DDP (`dns-hijack` + `sniffer` + `store-fake-ip: true`) привязан строго к профилю **vps-gateway**; `router` и `vps-local` (локальный Mihomo/SOCKS для Xray/3X-UI, TUN off) gateway-инфраструктуру не получают. Версионный контракт: minimum Mihomo **1.19.31**, recommended/current — **1.19.32** (combined-пробы зелёные на обеих версиях).
+
 ## [1.5.0] - 2026-09-28
 
 ### Added
