@@ -1,4 +1,6 @@
 # VPS-GATEWAY — опциональный профиль генерации для amnezia-mihomo-gateway
+> Не путать с профилем «VPS — локальный Mihomo / SOCKS для Xray / 3X-UI»: тот не создаёт TUN вообще (только локальный вход 127.0.0.1:7890 для локальных приложений) и не требует policy routing/iptables. Этот профиль — именно transparent-gateway.
+
 
 С ревизии v1.19.31 `applyDeploymentProfile(yaml, profile, tunStack)` сохраняет явный
 выбор MIPS из Builder. С 2026-09-17 (NIGHT-09) продукт по умолчанию шлёт `mips`

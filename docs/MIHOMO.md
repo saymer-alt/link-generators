@@ -181,6 +181,8 @@ Google (`google.com/generate_204`, 204), Cloudflare (`cp.cloudflare.com`, 204), 
 
 ## dialer-proxy: туннель в туннеле (WireGuard/WARP через промежуточный proxy)
 
+> Короткая пользовательская инструкция: [GENERATOR-GUIDE.md](GENERATOR-GUIDE.md). Автоматизированные полевые измерения: `tools/warp-dialer-fieldtest/`.
+
 Начиная с этой версии Builder умеет штатное поле Mihomo `dialer-proxy`: WireGuard/WARP-outbound устанавливает своё UDP-соединение с сервером (например, Cloudflare) **через другой proxy или группу**, оставаясь обычным outbound текущего конфига. Это программный аналог WireGuard-over-WireGuard, который уже работает на Keenetic (SE2 → WARP) с MTU ≈ 1200.
 
 ```text
@@ -242,6 +244,7 @@ WARP-dial → VPS-DK → [сеть DK] → Cloudflare WARP endpoint → Инте
 - `mihomo -t`: позитивы (имя proxy и авторская группа) — successful; негативы (несуществующий таргет) отвергаются ядром — статическая валидация Builder зеркалит ядро.
 - `mihomo -t`: provider-backed группа (`use:`, один и два провайдера) — successful; `use:` с несуществующим провайдером отвергается ядром — статическая валидация Builder зеркалит ядро.
 - Полевые измерения: `tools/warp-dialer-fieldtest/` — автоматизированный harness (sweep узлов транспортной группы, switchtest, MTU-лестница, WARP-over-WARP); методика, ловушка PIN и ограничения — README инструмента.
+- Переключение узла в dialer-группе не пересоздаёт установленный WG-хендшейк немедленно: в поле старый transport path сохранялся более 150 секунд (SE VPS, 2026-10-01). Чистая смена пути — reload конфига (fresh handshake); учтено в harness (`--fresh-handshake`) и в UI-подсказке.
 - Живая механическая цепочка двух локальных инстансов v1.19.31 (TARGET/socks5 через dialer-proxy → второй инстанс): сквозной HTTPS-трафик проходит; негативный контроль (dialer на мёртвом порту) блокирует трафик полностью. Полная WARP-цепочка (UDP-хендшейк через удалённый VPS) — полевой тест: см. WARPSCOUT-VPS.md.
 
 ## Сводка требований используемых функций
