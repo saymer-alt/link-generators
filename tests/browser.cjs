@@ -102,6 +102,9 @@ const expectedAwg = {
       }
       return result;
     }
+    const openAdvancedDetails = async () => {
+      await page.evaluate(() => { document.getElementById('perProxyAdvancedDetails').open = true; });
+    };
     const defaultOutput = await build('default');
     assert.equal(defaultOutput.doc.tun.stack, 'mips'); // продуктовый дефолт (NIGHT-09)
     assert.equal(await page.locator('#mihomoCompatBox').isVisible(), true);
@@ -118,6 +121,7 @@ const expectedAwg = {
     assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
     const mips = await build('mips');
     assert.equal(mips.doc.tun.stack, 'mips');
+    await openAdvancedDetails();
     await page.locator('#cfgPerProxyMaster').check(); // защитная крышка advanced-режима
     await page.locator('#cfgPerProxyTun').check();
     const per = await build('per-proxy-mips');
@@ -126,7 +130,7 @@ const expectedAwg = {
     assert.ok(per.doc['proxy-groups'].some(g => g.name === '🌐 static-health' && g.hidden === true));
     for (const perTun of [true, false]) {
       await page.locator('#cfgPerProxyTun').setChecked(perTun);
-      await page.locator('#cfgProfile').selectOption('vps');
+      await page.locator('#cfgProfile').selectOption('vps-gateway');
       const vps = await build(perTun ? 'vps-per-proxy-mips' : 'vps-mips');
       assert.equal(vps.doc.tun.stack, 'mips');
       assert.equal(vps.doc.tun['auto-route'], false);
@@ -138,26 +142,28 @@ const expectedAwg = {
       await page.locator('#vpsDnsEnabled').uncheck();
       assert.equal((await build()).doc.dns, undefined);
       await page.locator('#vpsDnsEnabled').check();
-      await page.locator('#cfgProfile').selectOption('generic');
+      await page.locator('#cfgProfile').selectOption('router');
     }
     await page.locator('#cfgTunMips').uncheck();
     assert.equal((await build()).yaml, gvisor.yaml); // uncheck -> тот же gvisor-вывод
 
     // VPS must preserve an explicitly selected experimental stack instead of
     // silently rewriting system/mixed to gVisor.
+    await openAdvancedDetails();
     await page.locator('#cfgPerProxyMaster').uncheck();
     await page.locator('#cfgTunStackAdvanced').check();
     for (const stack of ['system', 'mixed']) {
       await page.locator('#cfgTunStackEx').selectOption(stack);
-      await page.locator('#cfgProfile').selectOption('vps');
+      await page.locator('#cfgProfile').selectOption('vps-gateway');
       const vpsExperimental = await build('vps-' + stack);
       assert.equal(vpsExperimental.doc.tun.stack, stack);
       assert.equal(vpsExperimental.doc.tun['inet4-address'], undefined);
       assert.equal(vpsExperimental.doc.tun['auto-route'], false);
-      await page.locator('#cfgProfile').selectOption('generic');
+      await page.locator('#cfgProfile').selectOption('router');
     }
     await page.locator('#cfgTunStackAdvanced').uncheck();
     await page.locator('#cfgTunMips').uncheck();
+    await openAdvancedDetails();
     await page.locator('#cfgPerProxyMaster').check();
 
     // Selective modern REALITY: поле не ломает advanced-контролы (guard фикса 927c446).
@@ -255,7 +261,7 @@ const expectedAwg = {
     assert.match(inlineComments.text, /DisableCookies = 0 ; keep disabled/);
     assert.match(inlineComments.text, /PersistentKeepalive = 25 # use lower bound/);
     await page.locator('#cfgTunMips').check();
-    await page.locator('#cfgProfile').selectOption('vps');
+    await page.locator('#cfgProfile').selectOption('vps-gateway');
     const awgVps = await build('awg31-vps-mips');
     assert.deepEqual(awgVps.doc.proxies[0]['amnezia-wg-option'], proxy['amnezia-wg-option']);
     assert.equal(awgVps.doc.tun.stack, 'mips');
@@ -270,7 +276,7 @@ const expectedAwg = {
       await oldPage.addScriptTag({ content: fs.readFileSync(process.env.JS_YAML_PATH, 'utf8') });
       await oldPage.addScriptTag({ content: oldRuntime });
       await oldPage.addScriptTag({ content: [...oldHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1] });
-      for (const profile of ['generic', 'vps']) for (const useAwg of [false, true]) {
+      for (const profile of ['router', 'vps-gateway']) for (const useAwg of [false, true]) {
         const setup = ({ input, fixture, profile, useAwg }) => {
           document.getElementById('cfgSubMode').checked = false;
           document.getElementById('cfgWebUI').checked = false;
@@ -288,7 +294,7 @@ const expectedAwg = {
       await oldPage.close();
     }
     await page.locator('#wgFile').setInputFiles([]);
-    await page.locator('#cfgProfile').selectOption('generic');
+    await page.locator('#cfgProfile').selectOption('router');
     await page.locator('#mihomoInput').fill('mieru://test:test@192.0.2.4:20000?transport=TPC#TEST');
     await page.locator('button[onclick="buildMihomo()"]').click();
     await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'INVALID');
@@ -414,5 +420,130 @@ const expectedAwg = {
     console.log(`Validator: ${validator.length} cases passed`);
     assert.deepEqual(errors, []);
     console.log('Browser: MIPS, VPS, AWG 3.1 pipeline, baseline and validator passed');
+
+    // === DEPLOYMENT PROFILES: router / vps-local / vps-gateway ===
+    // чистая страница: reload без накопленного состояния прошлых секций
+    await page.reload();
+    await page.waitForFunction(() => globalThis.jsyaml && globalThis.web4core);
+    await page.locator('button.tab').filter({ hasText: 'Mihomo' }).click();
+    const checked2 = async id => page.locator(id).isChecked();
+    const vis2 = async id => page.locator(id).isVisible();
+    const disabled2 = async id => page.locator(id).isDisabled();
+    const build2 = async () => {
+      await page.locator('button[onclick="buildMihomo()"]').click();
+      await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID', null, { timeout: 15000 }).catch(() => {});
+      return page.evaluate(() => document.getElementById('mihomoOutput').value);
+    };
+
+    // Defaults: router, TUN/MIPS/Mixed/LAN ON, gateway panel скрыт
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'router');
+    assert.equal(await checked2('#cfgTun'), true);
+    assert.equal(await checked2('#cfgTunMips'), true);
+    assert.equal(await checked2('#cfgSocks'), true);
+    assert.equal(await checked2('#cfgLan'), true);
+    assert.equal(await vis2('#vpsPanel'), false, 'gateway panel скрыт в router');
+    assert.match(await page.locator('#profileHint').innerText(), /роутер|TUN/i);
+
+    // Независимые пользовательские данные (не принадлежат профилю);
+    // dialer-поля заполняются отдельно ниже: dialer-proxy применяется
+    // только к WireGuard-профилям, для чистых сборок они не нужны.
+    const INDEP = {
+      input: 'trojan://independent-pass@203.0.113.77:443#KEEP-ME\ntrojan://p1@203.0.113.78:443#KEEP-M1\ntrojan://p2@203.0.113.79:443#KEEP-M2\nhttps://keep.example.example/sub',
+      exclude: '(?i)keep|keep2',
+      device: 'SE-Fieldtest-2026',
+      reality: 'pan3.example\npan4.example:8443',
+      dns: '9.9.9.9',
+      dialer: 'KEEP-DIALER',
+      members: 'KEEP-M1\nKEEP-M2',
+      providers: 'https://keep.example.example/sub',
+    };
+    await page.locator('#mihomoInput').fill(INDEP.input);
+    await page.locator('#excludeFilterInput').fill(INDEP.exclude);
+    await page.locator('#deviceModelInput').fill(INDEP.device);
+    await page.locator('#realityModernInput').fill(INDEP.reality);
+    await page.locator('#wgCustomDns').fill(INDEP.dns);
+
+    // Спойлер ADVANCED: закрыт по умолчанию; раскрытие не включает master;
+    // закрытие не сбрасывает.
+    assert.equal(await page.evaluate(() => document.getElementById('perProxyAdvancedDetails').open), false, 'спойлер закрыт по умолчанию');
+    await page.locator('#perProxyAdvancedSummary').click();
+    assert.equal(await page.evaluate(() => document.getElementById('perProxyAdvancedDetails').open), true, 'раскрытие работает');
+    assert.equal(await checked2('#cfgPerProxyMaster'), false, 'раскрытие НЕ включает master');
+    await page.locator('#perProxyAdvancedSummary').click();
+    assert.equal(await page.evaluate(() => document.getElementById('perProxyAdvancedDetails').open), false, 'закрытие работает');
+    assert.equal(await checked2('#cfgPerProxyMaster'), false);
+    await page.locator('#perProxyAdvancedSummary').click(); // открыт для round trip
+
+    // router: ручное изменение router-owned параметра перед уходом
+    await page.locator('#cfgTunMips').uncheck();
+
+    // vps-local: контракт + DOM tamper
+    await page.locator('#cfgProfile').selectOption('vps-local');
+    assert.equal(await checked2('#cfgTun'), false, 'vps-local: TUN off');
+    assert.equal(await disabled2('#cfgTun'), true, 'vps-local: TUN disabled');
+    assert.equal(await checked2('#cfgTunMips'), false);
+    assert.equal(await disabled2('#cfgTunMips'), true);
+    assert.equal(await disabled2('#cfgTunStackAdvanced'), true, 'advanced stack недоступен');
+    assert.equal(await checked2('#cfgSocks'), true, 'vps-local: Mixed ON');
+    assert.equal(await disabled2('#cfgSocks'), true, 'vps-local: Mixed locked');
+    assert.equal(await checked2('#cfgLan'), false, 'vps-local: LAN off');
+    assert.equal(await disabled2('#cfgLan'), true, 'vps-local: LAN disabled');
+    assert.equal(await vis2('#vpsPanel'), false, 'gateway panel скрыт');
+    // DOM tamper: подмена checked/disabled напрямую — Build обязан выдать контракт
+    await page.evaluate(() => {
+      document.getElementById('cfgTun').checked = true;
+      document.getElementById('cfgTun').disabled = false;
+      document.getElementById('cfgLan').checked = true;
+    });
+    const tamperedYaml = await build2();
+    assert.doesNotMatch(tamperedYaml, /^tun:/m, 'tamper: TUN-блока нет');
+    assert.match(tamperedYaml, /^mixed-port: 7890$/m, 'tamper: mixed-port на месте');
+    assert.match(tamperedYaml, /^allow-lan: false$/m, 'tamper: allow-lan false');
+    assert.doesNotMatch(tamperedYaml, /bind-address: "\*"/, 'tamper: без bind-address *');
+
+    // vps-gateway: TUN ON locked, panel, auto-route false
+    await page.locator('#cfgProfile').selectOption('vps-gateway');
+    assert.equal(await checked2('#cfgTun'), true, 'gateway: TUN on');
+    assert.equal(await disabled2('#cfgTun'), true, 'gateway: TUN locked');
+    assert.equal(await vis2('#vpsPanel'), true, 'gateway panel виден');
+    assert.equal(await page.locator('#vpsDevice').inputValue(), 'tun-mihomo');
+    const gwYaml = await build2();
+    assert.match(gwYaml, /device: tun-mihomo/);
+    assert.match(gwYaml, /auto-route: false/);
+    assert.doesNotMatch(gwYaml, /auto-route: true/);
+
+    // Round trip в router: независимые данные живы
+    await page.locator('#cfgProfile').selectOption('router');
+    for (const [id, want] of [
+      ['#mihomoInput', INDEP.input], ['#excludeFilterInput', INDEP.exclude],
+      ['#deviceModelInput', INDEP.device], ['#realityModernInput', INDEP.reality],
+      ['#wgCustomDns', INDEP.dns],
+    ]) assert.equal(await page.locator(id).inputValue(), want, 'независимое поле пережило round trip: ' + id);
+    assert.equal(await checked2('#cfgTunMips'), false, 'router: ручное состояние MIPS восстановлено');
+
+    // dialer-proxy поля: заполняются и переживают mini round trip
+    await page.locator('#wgDialerInput').fill(INDEP.dialer);
+    await page.locator('#wgDialerMembers').fill(INDEP.members);
+    await page.locator('#wgDialerProviders').fill(INDEP.providers);
+    await page.locator('#cfgProfile').selectOption('vps-local');
+    await page.locator('#cfgProfile').selectOption('router');
+    for (const [id, want] of [['#wgDialerInput', INDEP.dialer], ['#wgDialerMembers', INDEP.members], ['#wgDialerProviders', INDEP.providers]])
+      assert.equal(await page.locator(id).inputValue(), want, 'dialer поле пережило переключение: ' + id);
+
+    // БС × профили: ON/OFF без залипания
+    for (const profileValue of ['router', 'vps-local', 'vps-gateway']) {
+      await page.locator('#cfgProfile').selectOption(profileValue);
+      const bs = page.locator('#cfgAutoWhitelist');
+      await bs.check();
+      assert.equal(await page.locator('#cfgProfile').inputValue(), 'router', 'БС: профиль router');
+      assert.equal(await disabled2('#cfgProfile'), true, 'БС: выбор заблокирован');
+      assert.equal(await vis2('#vpsPanel'), false, 'БС: gateway panel скрыт');
+      assert.equal(await checked2('#cfgPerProxyTun'), false, 'БС: Per-Proxy TUN off');
+      await bs.uncheck();
+      assert.equal(await page.locator('#cfgProfile').inputValue(), profileValue, 'БС off: профиль восстановлен');
+      assert.equal(await disabled2('#cfgProfile'), false, 'БС off: разблокирован');
+    }
+    console.log('Profiles: router/vps-local/vps-gateway contract, round trip, spoiler, БС — passed');
+
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

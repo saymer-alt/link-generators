@@ -30,14 +30,15 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     await page.waitForFunction(() => globalThis.jsyaml && globalThis.web4core);
     await page.locator('button.tab').filter({ hasText: 'Mihomo' }).click();
     assert.equal(await page.locator('#cfgAutoWhitelist').isChecked(), false);
+    await page.evaluate(() => { document.getElementById('perProxyAdvancedDetails').open = true; });
     await page.locator('#cfgPerProxyMaster').check();
     await page.locator('#cfgPerProxyTun').check();
     await page.locator('#cfgPerProxySocks').check();
-    await page.locator('#cfgProfile').selectOption('vps');
+    await page.locator('#cfgProfile').selectOption('vps-gateway');
     await page.locator('#cfgAutoWhitelist').check();
     for (const id of ['cfgPerProxyTun', 'cfgPerProxySocks', 'cfgProfile', 'vpsPanel', 'cfgPerProxyMaster']) assert.equal(await page.locator('#' + id).isVisible(), false);
     for (const id of ['cfgTun', 'cfgTunMips', 'cfgLan', 'cfgSocks', 'cfgWebUI', 'cfgSubMode']) assert.equal(await page.locator('#' + id).isVisible(), true);
-    assert.equal(await page.locator('#cfgProfile').inputValue(), 'generic');
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'router');
     assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), false);
     assert.equal(await page.locator('#cfgPerProxySocks').isChecked(), false);
     for (const [name, primary, fallback, sub] of [
@@ -85,7 +86,7 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     const guarded = await page.evaluate(() => {
       document.getElementById('cfgPerProxyTun').checked = true;
       document.getElementById('cfgPerProxySocks').checked = true;
-      document.getElementById('cfgProfile').value = 'vps';
+      document.getElementById('cfgProfile').value = 'vps-gateway';
       buildMihomo();
       return jsyaml.load(document.getElementById('mihomoOutput').value);
     });
@@ -103,13 +104,13 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     await page.locator('button[onclick="buildMihomo()"]').click();
     assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
     await page.locator('#cfgAutoWhitelist').uncheck();
-    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps');
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway');
     assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), true);
     assert.equal(await page.locator('#cfgPerProxySocks').isChecked(), true);
     assert.equal(await page.locator('#cfgTun').isDisabled(), true);
     // Зависимости UI (реальные клики): выключение родителя отключает и сбрасывает
     // зависимые чекбоксы; включение родителя возвращает доступность.
-    await page.locator('#cfgProfile').selectOption('generic');
+    await page.locator('#cfgProfile').selectOption('router');
     await page.locator('#cfgTun').uncheck();
     for (const id of ['cfgTunMips', 'cfgPerProxyTun']) {
       assert.equal(await page.locator('#' + id).isDisabled(), true, id);
@@ -133,7 +134,7 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     await page.locator('#cfgPerProxyMaster').check();
     assert.equal(await page.locator('#cfgPerProxyTun').isDisabled(), false);
     assert.equal(await page.locator('#cfgPerProxySocks').isDisabled(), false);
-    // Позитив-контроль крышки: master ON + оба child + generic — в выводе
+    // Позитив-контроль крышки: master ON + оба child + роутер (router) — в выводе
     // per-proxy listeners и скрытый static health checker.
     const masterOn = await page.evaluate(async () => {
       document.getElementById('cfgSubMode').checked = false;
@@ -406,7 +407,7 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
           }
           const masterEl = document.getElementById('cfgPerProxyMaster');
           if (masterEl) masterEl.checked = !!(mask & 4 || mask & 8);
-          document.getElementById('cfgProfile').value = mask & 128 ? 'vps' : 'generic';
+          document.getElementById('cfgProfile').value = mask & 128 ? 'vps-gateway' : 'router';
           document.getElementById('mihomoInput').value = (mask & 1 ? 'https://example.invalid/sub\n' : '') + a + '\n' + b;
           buildMihomo();
           while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
