@@ -20,7 +20,7 @@ sub-toggle) и пассивный `sniffer` (TLS/QUIC/HTTP, `override-destinatio
 false`). Включение автоматическое — без нового toggle (пакет = инвариант
 профиля); от DPR не зависит. Инварианты gateway не тронуты; контракт с
 `amnezia-mihomo-gateway` (сохранение `store-fake-ip` в патчере
-установщика) — ветка `feat/domain-detection-store-fake-ip`. Подробности:
+установщика) — PR #33 (`8f41759`), merged в `main` gateway 2026-10-01. Подробности:
 [POLICY-ROUTING.md](POLICY-ROUTING.md), [VPS-GATEWAY.md](VPS-GATEWAY.md).
 
 ## Политики по доменам (Domain Policy Routing, Variant B)
@@ -57,7 +57,7 @@ select `[⚡ Fastest, GLOBAL, DIRECT]`; в БС-режиме — select `[GLOBAL
 | 🔒 TUN на каждый прокси | `cfgPerProxyTun` | `mihomoPerProxyTun` | ☐ | TUN-листенеры по одному на прокси/группу; требует `cfgPerProxyMaster` + `cfgTun`; скрыт в БС-режиме |
 | 🔌 SOCKS-порт на каждый прокси | `cfgPerProxySocks` | `perProxyPort` | ☐ | `listeners: socks-<имя>` на портах 7890+i, `mixed-port` убирается; требует `cfgPerProxyMaster` + `cfgSocks`; скрыт в БС-режиме; static-листья чекаются скрытой группой «🌐 static-health» |
 | 🏓 Ping server | `pingSelect` | `urlTest` | Google | `url`/`expected-status` url-test группы и health-check провайдеров |
-| 🎯 Профиль развёртывания | `cfgProfile` | — (пост-патч страницы) | Универсальный | при «VPS Gateway» — gateway-постпатч YAML; подробно [VPS-GATEWAY.md](VPS-GATEWAY.md) |
+| 🎯 Профиль развёртывания | `cfgProfile` | — (пост-патч страницы) | Роутер / обычный TUN (Keenetic) | три профиля `router` / `vps-local` / `vps-gateway`; при vps-gateway — gateway-постпатч YAML; подробно [VPS-GATEWAY.md](VPS-GATEWAY.md) |
 
 Для Selective Modern REALITY реальная handshake-матрица (Xray + Mihomo + ML-KEM-capable TLS target)
 описана в [TESTING.md](TESTING.md#selective-modern-reality-реальный-handshake-e2e--2026-09-18).

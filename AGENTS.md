@@ -16,9 +16,11 @@ only for an explicit owner task.
 
 ## What this is
 
-A static single-page web tool, "WARP & Mihomo Unified Generator", published
+A static web tool, "WARP & Mihomo Unified Generator", published
 on GitHub Pages: https://saymer-alt.github.io/link-generators/ . Everything runs client-side:
-two tabs — a generator for WARP `masque://` links and a `config.yaml` builder for Mihomo.
+`index.html` has two tabs — a generator for WARP `masque://` links and a `config.yaml` builder for Mihomo;
+`quick-start.html` is a static user help page (plain HTML, readable without JS). Note: `.nojekyll` means
+`.md` files are served as raw text on Pages — user-facing help must live in `quick-start.html`, not in Markdown.
 
 What the project DOES NOT have (do not invent it): an application build system, package.json,
 application npm dependencies, a linter, or a backend. Since 2026-09-15 there are Node regression tests
@@ -45,7 +47,8 @@ HTML file, compact hand-written JS without frameworks, section-marker comments l
 
 | File | Role | Edit |
 |---|---|---|
-| `index.html` | Entire application: inline CSS + inline JS; the only page | Yes — primary file |
+| `index.html` | Main application page: inline CSS + inline JS | Yes — primary file |
+| `quick-start.html` | Static user help / quick-start page (no frameworks, no JS required to read); linked from the Builder header | Yes — keep in sync when user-facing features change |
 | `web4core.runtime.js` | Vendored build artifact from saymer-alt/web4core@link-generators | NO — see below |
 | `tests/` | Node/browser regression tests and fixtures | Yes — in sync with the contracts they verify |
 | `docs/` | Internal knowledge base: ARCHITECTURE, DATAFLOW, MIHOMO, PROTOCOLS, VALIDATION, UPDATES, DEVELOPMENT, TESTING | Yes — in sync with behavior changes |
@@ -174,7 +177,7 @@ use them, but they are part of the public `globalThis.web4core` API.
 
 ### File relationships
 
-`index.html` (the only page) loads `./web4core.runtime.js` as a normal
+`index.html` (the main page) loads `./web4core.runtime.js` as a normal
 (classic) `<script>`, not a module, so the page also works with `file://`. If
 the runtime does not load, all builder actions show the toast "web4core.runtime is not loaded".
 
@@ -222,19 +225,22 @@ Consequences for the agent:
 ## README and code: source of truth
 
 Historical note: README once described three tabs, a "Warpscout Parser", and
-"WARP-in-WARP" mode (checkbox + `dialer-proxy`). These features were added to
-`index.html` on 2026-08-19 and removed the same evening — the page returned to
-the two-tab version; do not restore them (see rules below). On 2026-09-08,
+"WARP-in-WARP" mode (checkbox + `dialer-proxy`). Those were added to
+`index.html` on 2026-08-19 and removed the same evening. On 2026-09-08,
 README was rewritten as a user-facing landing page; detailed technical documentation
-lives in `docs/`, and agent rules live in this file.
+lives in `docs/`, and agent rules live in this file. WARP-in-WARP later returned as a
+designed feature (2026-10-01): WireGuard `dialer-proxy` with static member lists,
+provider-backed dialer groups, and WireGuard-over-WireGuard chains via the web4core
+`analyzeDialerGraph` cycle detector — it must not be removed or treated as the old
+accidental experiment.
 
 Principle: CODE is the source of truth. If README disagrees with code, README is stale,
 not the code. Rules:
 
 - current code has NO warpscout parser or `warpscout-account.json`. Do not "restore" them
   independently — not from the old README and not from Git history (revisions ed835e8/74a3f24).
-  WARP-in-WARP via `dialer-proxy` was added as a full feature (2026-10-01, merged to main):
-  see "Deployment profiles" section and docs/MIHOMO.md for the current contract;
+  WARP-in-WARP via `dialer-proxy` is a current, supported feature (see above and
+  docs/MIHOMO.md for the contract);
 - if the task says "fix/restore warpscout", stop and clarify with the owner whether it should
   actually be restored or the request is stale;
 - code changes that alter the set of tabs/features must include a synchronized README update;
@@ -295,15 +301,19 @@ Mihomo core defaults: `webUI=true`, `addSocks=true`, `addTun=false`; at least on
 inbound (TUN or SOCKS) is required, otherwise error "Mihomo: enable at least one inbound".
 Empty input with empty wgBeans → error "No valid links or profiles provided".
 
-### "VPS Gateway" deployment profile (opt-in, 2026-09-09)
+### Deployment profiles `router` / `vps-local` / `vps-gateway` (since PR #79, 2026-10-01)
 
-Additional post-processing scenario for amnezia-mihomo-gateway (the Mihomo half of
-the gateway config). Details: docs/VPS-GATEWAY.md. Invariants that must not be violated:
+Selector `#cfgProfile` (default `router`) picks one of three user-facing deployment
+profiles; the profile drives scenario switches only (TUN/MIPS/Mixed/allow-LAN and the
+gateway panel) with fail-safe clamps in `buildMihomo()` and never touches user data
+(proxies, subscriptions, WireGuard, filters, dialer-proxy). Details: docs/VPS-GATEWAY.md,
+docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md, user-facing docs/GENERATOR-GUIDE.md.
+The `vps-gateway` profile is the Mihomo half of amnezia-mihomo-gateway. Invariants:
 
-- selector `#cfgProfile` defaults to `router`; the three user-facing profiles are
-  `router` / `vps-local` / `vps-gateway`. When `router`, the gateway post-patch
-  (`applyDeploymentProfile()`) is NOT called — router and vps-local output stays
-  byte-for-byte identical to non-profile behaviour;
+- when `router` or `vps-local`, the gateway post-patch (`applyDeploymentProfile()`)
+  is NOT called — their output stays byte-for-byte identical to non-profile behaviour
+  (the function's internal second argument is still the literal `'vps'`; that is an
+  implementation detail meaning "gateway-family patch", not a profile id);
 
 - mandatory regression contract: docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md;
 
@@ -311,13 +321,33 @@ the gateway config). Details: docs/VPS-GATEWAY.md. Invariants that must not be v
 - profile defaults = variables from the current amnezia-mihomo-gateway `install.sh`
   (`PROXY_IF`/`TUN_INET_ADDR`/`FAKE_IP_RANGE`, package v2.0); anchor is constant
   `VPS_GATEWAY_DEFAULTS` in `index.html`; synchronize it when the gateway repo changes;
-- the DNS block exists only inside the vps profile (sub-toggle `#vpsDnsEnabled`);
-  disabling it removes `dns` entirely; generic never gets `dns`;
-- post-processing order: `injectWgDns` → `applyDeploymentProfile` (vps only) →
+- the DNS block exists only inside the `vps-gateway` profile (sub-toggle `#vpsDnsEnabled`);
+  disabling it removes `dns` entirely; `router` and `vps-local` never get `dns`;
+- VPS Domain Detection Package (PR #80): when `vps-gateway` DNS is enabled, the
+  profile adds `tun.dns-hijack: [any:53, tcp://any:53]`, a passive `sniffer`
+  (`override-destination: false`) and `profile.store-fake-ip: true` automatically —
+  no UI toggle; with DNS off, hijack/persistence are omitted and the sniffer remains;
+- Domain Policy Routing (PR #78, `cfgPolicyRouting`): domain categories → inline
+  `rule-providers` (`policy-<slug>`, classical) + category groups + `RULE-SET`
+  rules before the unchanged `MATCH,GLOBAL`; HTTP providers carry `proxy: DIRECT`
+  (cold-start deadlock otherwise); mode OFF = byte parity. Details: docs/POLICY-ROUTING.md;
+- post-processing order: `injectWgDns` → `applyDeploymentProfile` (vps-gateway only) →
   allow-lan regex patch; re-dump only with
   `jsyaml.dump(doc, { lineWidth: -1 })`;
 - the Linux side of the gateway (policy routing, iptables, Docker, AWG, systemd, watchdog)
   is not generated here — that belongs to amnezia-mihomo-gateway.
+
+### Mihomo version contract (current)
+
+- **Minimum supported / compatibility floor: Mihomo 1.19.31** (MIPS TUN stack,
+  DDP acceptance, combined profile probes);
+- **Recommended / current tested: Mihomo 1.19.32** (combined probes green on both
+  1.19.31 and 1.19.32; the 1.19.32 *Windows* binary segfault is an upstream build
+  anomaly, not a project blocker — Linux builds are fine);
+- feature floors are separate and historical: AWG 3.1 ≥ 1.19.30, `override-expr` ≥ 1.19.29,
+  DPR needs ≥ 1.19.27 (empty-fallback) / ≥ 1.19.1 (inline rule-providers);
+- dated lab/field records (e.g. docs/AUDIT-MIHOMO-1.19.31.md) remain historical
+  evidence — do not rewrite them to claim they ran on a newer version.
 
 ## Change rules
 
@@ -325,8 +355,8 @@ the gateway config). Details: docs/VPS-GATEWAY.md. Invariants that must not be v
    existing format and contracts above; do not change behavior "for improvement" without
    a task for it. Users paste generated link/YAML formats into their routers —
    silent changes break other people's configs.
-2. Edit `index.html` — it is the only application page (the historical mirror
-   `mihomo.html` was removed; see the file table above).
+2. Edit `index.html` — the main application page (`quick-start.html` is a static
+   help page; if a user-facing feature set changes, update it in the same task).
 3. Never edit `web4core.runtime.js` by hand (auto-update will overwrite it).
 4. Keep diffs minimal; do not reformat untouched sections; preserve the existing
    inline style and Russian UI text. Do not introduce a build system, npm, ES modules,
@@ -405,8 +435,8 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
   impossible DOM states become reachable again; the 256-mask baseline in
   `tests/whitelist.cjs` is normalized by these dependencies, while valid combinations
   outside the matrix (`socks=0+perSocks=1`) are covered by a bypass test.
-- Enable VPS Gateway profile by default or call `applyDeploymentProfile()` for
-  `generic` — changes the main scenario output (violates the profile's primary invariant).
+- Enable the vps-gateway profile by default or call `applyDeploymentProfile()` for
+  `router` or `vps-local` — changes the main scenario output (violates the profile's primary invariant).
 - Change VPS profile defaults without checking amnezia-mihomo-gateway `install.sh` —
   config stops matching the routing script. The current Mihomo 1.19.31 contract uses the TUN
   device plus `dns.fake-ip-range`; top-level `tun.inet4-address` is intentionally absent.
@@ -419,13 +449,14 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
 - "Fix" a non-working AWG 3.1 tunnel in the generator when the device core is older than
   Mihomo 1.19.30 — all 3.1 keys in `amnezia-wg-option` are silently ignored by the core
   (bidirectional `HeaderProtectionKey`/`RandomTrailers` → tunnel will not come up).
-  AWG 3.1 support starts at Mihomo 1.19.30; the project's current tested target is
-  Mihomo v1.19.31. Start diagnosis with `mihomo -v` on the device — the opkg package
+  AWG 3.1 support starts at Mihomo 1.19.30; the project version contract is
+  minimum 1.19.31 / recommended-current 1.19.32 (see "Mihomo version contract" above). Start diagnosis with `mihomo -v` on the device — the opkg package
   version may differ from the actual binary
   (update-mihomo.sh replaces the binary directly, bypassing opkg), and `PKG_VERSION` in the
   entware-go Makefile is the upstream sync version, not necessarily production.
-- "Restore" warpscout / WARP-in-WARP / `dialer-proxy` — they were intentionally removed
-  (2026-08-19), see "README and code".
+- "Remove" WARP-in-WARP / `dialer-proxy` as if it were still the 2026-08 removal —
+  it was re-added as a full supported feature (2026-10-01, merged to main; see
+  "README and code" above). Only the warpscout parser itself remains deliberately absent.
 - Switch runtime loading to ES modules — breaks `file://` opening.
 
 ## Technical debt

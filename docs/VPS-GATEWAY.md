@@ -27,17 +27,21 @@ TUN и fake-ip DNS; обычный вывод генератора (TUN `mitun0`
 Профиль готовит **только Mihomo-половину** такой конфигурации. Генератор **не является
 VPS-инсталлятором** и никогда им не станет.
 
-## Generic-режим от него не зависит
+## Профили router и vps-local от него не зависят
 
 Основной сценарий проекта (Keenetic и обычные конфиги) — превалирующий и защищён
 инвариантом:
 
-- селектор «Профиль развёртывания» (`#cfgProfile`) по умолчанию = **Универсальный**;
-- при `generic` функция `applyDeploymentProfile()` **не вызывается вовсе** (в `buildMihomo()`
-  стоит guard `if (deploymentProfile === 'vps')`) — нет ни одного лишнего
-  `jsyaml.load/dump`, вывод **байт-в-байт** совпадает с прежним;
-- при переключении на VPS и обратно состояние `cfgTun` восстанавливается, панель VPS
-  скрывается, «мусора» в YAML не остаётся.
+- селектор «Профиль развёртывания» (`#cfgProfile`) по умолчанию = **«Роутер / обычный
+  TUN (Keenetic)»** (id `router`); пользовательская модель — три профиля
+  `router` / `vps-local` / `vps-gateway` (PR #79);
+- при `router` и `vps-local` функция `applyDeploymentProfile()` **не вызывается вовсе** —
+  нет ни одного лишнего `jsyaml.load/dump`, вывод **байт-в-байт** совпадает с обычной
+  генерацией (второй аргумент функции внутри кода по-прежнему литерал `'vps'` — это
+  внутреннее имя «gateway-семейства», а не идентификатор профиля);
+- при переключении профилей соответствующий UI-state применяется заново
+  (path-independent), панель gateway видна только у `vps-gateway`, «мусора» в YAML
+  не остаётся.
 
 ## Архитектура и граница ответственности
 
@@ -76,7 +80,7 @@ Docker / AmneziaWG / Linux policy routing / iptables
 | `tun.auto-detect-interface` | `true` | «критично для upload» (install.sh); корректный egress-интерфейс |
 | `tun.gso` | `true` | эмпирическая оптимизация v2.0 (замеры install.sh) |
 | `find-process-mode` (корень) | `off` | не тратить время на process-matching форвардед-трафика |
-| `profile.store-selected` / `store-fake-ip` | `false` / `false` | детерминизм при пересоздании правил; merge — прочие ключи `profile` сохраняются |
+| `profile.store-selected` / `store-fake-ip` | `false` / `false` без fake-ip DNS; **`store-fake-ip: true` при включённом fake-ip DNS** (Domain Detection Package, см. ниже) | детерминизм при пересоздании правил; persistence fake-ip mapping; merge — прочие ключи `profile` сохраняются |
 
 **Editable (редактируемые поля с боевыми дефолтами):**
 
@@ -185,23 +189,25 @@ Per-proxy TUN listeners используют другой config path, где `i
 ## Domain Detection Package (2026-10-01)
 
 Профиль **vps-gateway** (модель профилей `router / vps-local / vps-gateway`)
-дополняет gateway-вид конфига пакетом домен-детекта (см.; профили `router` и
-`vps-local` пакет не получают). Версии: minimum Mihomo 1.19.31, проверен
-1.19.32 (recommended/current).
-[POLICY-ROUTING.md](POLICY-ROUTING.md)): `profile.store-fake-ip: true` (при
+дополняет gateway-вид конфига пакетом домен-детекта (подробности —
+[POLICY-ROUTING.md](POLICY-ROUTING.md)); профили `router` и
+`vps-local` пакет не получают. Версии: minimum Mihomo 1.19.31, проверен
+1.19.32 (recommended/current). Состав: `profile.store-fake-ip: true` (при
 включённом fake-ip DNS), `tun.dns-hijack: [any:53, tcp://any:53]` (там же) и
 пассивный `sniffer` (всегда). Это не меняет четыре точки сцепки выше: device,
 fake-ip-range, `auto-route: false` и effective IPv4 TUN остаются прежними.
 
 Два межпроектных следствия:
 
-1. **Патчер install.sh**: до ветки `feat/domain-detection-store-fake-ip`
+1. **Патчер install.sh**: до PR #33 (`feat/domain-detection-store-fake-ip`,
+   `8f41759`, merged в `main` amnezia-mihomo-gateway 2026-10-01)
    патчер §2.7 принудительно нормализовал `store-fake-ip` в `false` — для
    DPR-конфигов это ломало mapping при рестарте (stale fake-ip + мисатрибуция,
-   PoC 2026-10-01). Ветка меняет патчер: существующее значение сохраняется,
+   PoC 2026-10-01). С PR #33 патчер сохраняет существующее значение генератора,
    `false` дописывается только при отсутствии ключа. `tun.dns-hijack` и
    `sniffer` патчер не трогает (неизвестные ключи проходят дословно; тест
-   `tests/test-mihomo-config-patch.sh` фиксирует оба случая).
+   `tests/test-mihomo-config-patch.sh` фиксирует оба случая). В stable-канал
+   установщика патч попадёт после promotion `main → stable` в том репозитории.
 2. **Восстановление маршрута**: TUN-устройство при рестарте Mihomo исчезает
    вместе с kernel-маршрутом `FAKE_IP_RANGE dev tun-mihomo`. Восстановление —
    ответственность gateway: `check-warp-routing.timer` (≤1 мин) проверяет
@@ -226,7 +232,8 @@ sysctl, systemd, watchdog, firewall, любую настройку самого 
 ## Заметки для агентов
 
 - Порядок постобработки в `buildMihomo()`: `injectWgDns` → `applyDeploymentProfile`
-  → allow-lan регэксп-патч. Профильный шаг вызывается **только** при `vps`.
+  → allow-lan регэксп-патч. Профильный шаг вызывается **только** для профиля
+  `vps-gateway` (внутренний аргумент функции — литерал `'vps'`, см. выше).
 - Повторная сериализация — только `jsyaml.dump(doc, { lineWidth: -1 })`, иначе рвутся
   длинные AWG base64-строки (тот же гочай, что в `injectWgDns`).
 - jsyaml квотит строку `off` (защита от YAML 1.1 bool): в выводе будет

@@ -345,15 +345,24 @@ node tests/runtime.cjs
    из `on`/`off` присутствуют как booleans).
 4. Allow LAN: `allow-lan: true` + `bind-address: "*"` в выводе (регэксп-патч не сломан).
 5. `web4core.runtime.js` воспроизводится сборкой fork; функциональные регрессии проходят.
-6. Профиль развёртывания: generic-вывод посимвольно равен эталону; при vps —
-   контракт из раздела «Профиль VPS Gateway» (auto-route false, dns-тумблер,
-   find-process-mode, store-*).
+6. Профиль развёртывания: вывод router/vps-local посимвольно равен эталону; при
+   vps-gateway — контракт из раздела «Профиль VPS Gateway» (auto-route false,
+   dns-тумблер, find-process-mode, store-*, DDP). Полный обязательный набор для
+   profile/UX-правок — [DEPLOYMENT-PROFILES-TEST-CONTRACT.md](DEPLOYMENT-PROFILES-TEST-CONTRACT.md) §9.
 
 ## Профиль VPS Gateway (opt-in; добавлен 2026-09-09)
 
-Селектор «Профиль развёртывания» (`#cfgProfile`), дефолт `generic`. Реализация —
-`applyDeploymentProfile()` в `index.html`, вызывается **только** при `vps` (после
-`injectWgDns`, до allow-lan патча). Прогон 2026-09-09 (базовый HEAD `b7af2b1`, до
+> **Историческая запись.** Этот раздел описывает прогоны 2026-09-09, когда модель
+> профилей называлась `generic`/`vps`. С PR #79 (2026-10-01) пользовательская модель —
+> `router` / `vps-local` / `vps-gateway` (дефолт `router`); «generic» в записях ниже
+> соответствует нынешнему router/vps-local-выводу, «vps» — профилю `vps-gateway`.
+> Актуальные прогоны новой модели — см. «Domain Policy Routing» и «VPS Domain
+> Detection Package» в конце файла.
+
+Селектор «Профиль развёртывания» (`#cfgProfile`); на момент прогона дефолт был
+`generic`. Реализация —
+`applyDeploymentProfile()` в `index.html`, вызывается **только** для gateway-профиля
+(после `injectWgDns`, до allow-lan патча). Прогон 2026-09-09 (базовый HEAD `b7af2b1`, до
 коммита): **все проверки зелёные**.
 
 Фикстуры: синтетическая vless-ссылка, trojan-ссылка, URL подписки, синтетический AWG 3.1
@@ -514,3 +523,22 @@ runtime `dcc16b68…` (Source: `saymer-alt/web4core@2daf383bde5257c1d8bd15a0f4c7
   (journal PID нового процесса), мисатрибуции нет; cold-start провайдера
   с пустым cache.db — 99 узлов (proxy: DIRECT контракт).
 
+
+## Docs/help reconciliation — 2026-10-01 (pre-release audit)
+
+Документационно-UX арка (без изменений генерации): речонсиляция доков под модель
+профилей `router / vps-local / vps-gateway`, версионный контракт (minimum 1.19.31 /
+recommended 1.19.32), merged-статус gateway-патчера (PR #33), исторические заголовки
+у датированных аудитов; новая страница [quick-start.html](../quick-start.html) и
+контекстная help-система `?` (`.ctx-help`) в Builder.
+
+- Новый `tests/help-ux-browser.cjs`: ссылка «❓ Помощь / Быстрый старт» ведёт на
+  существующий `quick-start.html`; обратная ссылка на генератор; страница без
+  `fetch`/`XMLHttpRequest`/`localStorage`/telemetry; help-маркеры `?` присутствуют,
+  открываются кликом и с клавиатуры (Enter/Escape), `aria-expanded` переключается;
+  клик по `?` НЕ меняет состояние чекбокса; YAML до/после help-взаимодействия
+  идентичен (x-hwid-нормализация); DPR-подсказка видна в выключенном состоянии;
+  gateway-подсказки присутствуют в панели vps-gateway.
+- Полная батарея перезапущена на ветке арки — см. финальный отчёт PR.
+- Generated YAML: byte/semantic parity с `origin/main` на представительных сценариях
+  (router/vps-local/vps-gateway ± DNS, DPR, БС, WG+dialer) — требование контракта §24.
