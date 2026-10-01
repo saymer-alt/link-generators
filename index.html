@@ -210,8 +210,8 @@
       </div>
       <div id="excludeFilterRow" style="margin-top:10px">
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
-        <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia">
-        <div class="hint">Regexp/keyword-фильтр Mihomo <code>exclude-filter</code>: узлы provider, чьи имена совпали, исключаются. Применяется ко всем подпискам. Пусто — поле не добавляется.</div>
+        <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
+        <div class="hint">Regexp/keyword-фильтр Mihomo <code>exclude-filter</code>: узлы provider, чьи фактические имена совпали, исключаются. Например, латинский <code>ru|russia</code> не совпадёт с кириллическим именем <code>Россия</code>, поэтому для таких подписок добавляйте кириллический вариант. Применяется ко всем подпискам. Пусто — поле не добавляется.</div>
       </div>
       <div id="deviceModelRow" style="margin-top:10px">
         <label for="deviceModelInput">📱 Device Model (необязательно)</label>
