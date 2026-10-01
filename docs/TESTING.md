@@ -514,3 +514,20 @@ runtime `dcc16b68…` (Source: `saymer-alt/web4core@2daf383bde5257c1d8bd15a0f4c7
   (journal PID нового процесса), мисатрибуции нет; cold-start провайдера
   с пустым cache.db — 99 узлов (proxy: DIRECT контракт).
 
+
+
+## ADVANCED container reorg — 2026-10-02 (UI-only)
+
+Блок «⚙ Расширенный TUN stack» перенесён внутрь ADVANCED-контейнера; контейнер
+переименован в «ADVANCED — Расширенные настройки»; внутри две подсекции
+(TUN stack / Отдельный вход на каждый прокси). TUN Interface и MIPS остались
+снаружи. IDs, JS-логика, fail-safe клампы и DOM-tamper защита не менялись.
+
+- browser.cjs: расширена регрессия спойлера — в закрытом ADVANCED стек-контролы
+  скрыты, подсекции присутствуют внутри details, значения (master, advanced
+  stack, system) переживают open/close, YAML байт-идентичен до/после цикла;
+  состояния восстанавливаются для последующих фаз.
+- Battery: runtime 63/63, whitelist 10, masque 7, policy-routing 33+14,
+  browser 47+, vps-detection 54/54, failover 3/3, AWL PASS.
+- YAML parity vs `origin/main` (3680b5c): router/vps-gateway с расширенными
+  состояниями — byte-identical (перенос UI не меняет генерацию).

@@ -51,7 +51,7 @@ WARP-конфиги: вкладка **⚡ WARP MASQUE Links** генерируе
 | 🔌 Mixed Port 7890 | Локальный HTTP+SOCKS вход Mihomo. |
 | 🌐 Allow LAN | Доступ к Mihomo из локальной сети (добавляет `bind-address: "*"`). На VPS — выключать. |
 | 🖥️ Web UI | Веб-дашборд управления (MetaCubeXD) на порту 9090. |
-| ⚙ Расширенный TUN stack | `system`/`mixed` — экспериментальные; обычно достаточно MIPS/gVisor. |
+| ⚙ Расширенный TUN stack | `system`/`mixed` — экспериментальные (внутри ADVANCED-секции); обычно достаточно MIPS/gVisor. |
 
 ## 4. Подписки
 
