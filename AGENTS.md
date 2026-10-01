@@ -424,8 +424,11 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
   version may differ from the actual binary
   (update-mihomo.sh replaces the binary directly, bypassing opkg), and `PKG_VERSION` in the
   entware-go Makefile is the upstream sync version, not necessarily production.
-- "Restore" warpscout / WARP-in-WARP / `dialer-proxy` — they were intentionally removed
-  (2026-08-19), see "README and code".
+- "Restore" warpscout — intentionally removed (2026-08-19), see "README and code".
+  The reverse applies to WARP-in-WARP / `dialer-proxy`: since the WG/AWG profile
+  manager (2026-10-01) each loaded profile has its own connection mode
+  (direct / via dialer target, bean-level `wireguard.dialerProxy` + `wgDialerGroupOnly`),
+  and removing that mechanism would be a regression.
 - Switch runtime loading to ES modules — breaks `file://` opening.
 
 ## Technical debt
