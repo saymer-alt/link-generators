@@ -152,6 +152,7 @@ DNS Amnezia Premium), поле подставляет `1.1.1.1, 8.8.8.8` и по
 
 ```text
 cfgTunMips → tunStack → options.mihomoTunStack → buildFromRequest
+policyCards → collectPolicyRouting() → options.mihomoDomainPolicy → buildFromRequest (inline rule-providers + policy groups + RULE-SET rules; выключено → byte-parity)
           → mihomoTunOpts.stack → opts.tun.stack в buildMihomoYaml
           → normal TUN / Per-Proxy listeners
 ```

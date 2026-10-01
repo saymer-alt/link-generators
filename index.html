@@ -223,6 +223,27 @@
         <textarea id="realityModernInput" rows="3" placeholder="pan.example&#10;pan2.example:8443&#10;[2001:db8::1]:443"></textarea>
         <div class="hint">Только для REALITY-узлов этих серверов добавляется ML-KEM (X25519MLKEM768) и client-fingerprint chrome, если не задан; обычные VLESS/TLS и другие серверы не затрагиваются. X25519MLKEM768 появился в Xray v25.5.16; применяйте только к серверам, совместимость которых подтверждена — сама версия не гарантирует совместимость. Пусто — legacy-вывод без изменений.</div>
       </div>
+      <div class="toggle-row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label><input type="checkbox" id="cfgPolicyRouting"> 🚦 Политики по доменам (Domain Policy Routing)</label>
+      </div>
+      <div id="policyRoutingPanel" style="display:none">
+        <div class="hint">Доменное правило → стабильная логическая группа → <code>proxy-provider</code> подписки → текущий живой узел. Правила ссылаются на группы, а не на серверы: состав подписки может меняться — правила не требуют пересборки. Порядок политик = порядок правил; завершающее <code>MATCH,GLOBAL</code> остаётся правилом по умолчанию. Требуется Mihomo ≥ 1.19.27 (empty-fallback), инлайн rule-провайдеры ≥ 1.19.1.</div>
+        <div id="policyCards"></div>
+        <div style="margin-top:8px">
+          <button class="btn btn-gray" id="btnPolicyAdd" type="button">➕ Добавить политику</button>
+          <span style="margin-left:8px">
+            <label class="label" for="policyPresetSelect" style="display:inline">Шаблон для новой политики:</label>
+            <select id="policyPresetSelect">
+              <option value="ai">🤖 AI</option>
+              <option value="media">📺 YouTube / Media</option>
+              <option value="telegram">✈️ Telegram</option>
+              <option value="google">🔎 Google</option>
+              <option value="direct">⬇️ Direct (свои домены мимо прокси)</option>
+            </select>
+          </span>
+        </div>
+        <div class="hint" id="policyRoutingHint"></div>
+      </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
         <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
@@ -950,6 +971,80 @@ function validateMihomoYaml(yaml) {
     }
   }
 
+  // --- rule-providers (Domain Policy Routing и другие наборы правил) ---
+  const RULE_PROVIDER_TYPES = new Set(['http', 'file', 'inline']);
+  const RULE_PROVIDER_BEHAVIORS = new Set(['domain', 'ipcidr', 'classical']);
+  const RULE_PROVIDER_FORMATS = new Set(['yaml', 'text', 'mrs']);
+  const ruleProviderNames = new Set();
+  if (doc['rule-providers'] !== undefined && (typeof doc['rule-providers'] !== 'object' || doc['rule-providers'] === null || Array.isArray(doc['rule-providers']))) {
+    err('', 'rule-providers', fmtVal(doc['rule-providers']), 'поле должно быть словарём');
+  } else if (doc['rule-providers'] && typeof doc['rule-providers'] === 'object') {
+    for (const [name, rp] of Object.entries(doc['rule-providers'])) {
+      ruleProviderNames.add(name);
+      const at = 'rule-providers[' + name + ']';
+      // имена провайдеров в диагностике безопасны: URL и заголовки не выводятся
+      if (!rp || typeof rp !== 'object' || Array.isArray(rp)) { err(at, '', '', 'должен быть словарём'); continue; }
+      if (typeof rp.type !== 'string' || !RULE_PROVIDER_TYPES.has(rp.type)) {
+        err(at, 'type', fmtVal(rp.type), 'ожидается http, file или inline');
+      }
+      if (rp.behavior !== undefined && (typeof rp.behavior !== 'string' || !RULE_PROVIDER_BEHAVIORS.has(rp.behavior))) {
+        err(at, 'behavior', fmtVal(rp.behavior), 'ожидается domain, ipcidr или classical');
+      }
+      if (rp.format !== undefined && (typeof rp.format !== 'string' || !RULE_PROVIDER_FORMATS.has(rp.format))) {
+        err(at, 'format', fmtVal(rp.format), 'ожидается yaml, text или mrs');
+      }
+      if (rp.type === 'http' && (typeof rp.url !== 'string' || !rp.url.trim())) {
+        err(at, 'url', '', 'обязателен для type: http');
+      }
+      if (rp.payload !== undefined && !Array.isArray(rp.payload)) {
+        err(at, 'payload', fmtVal(rp.payload), 'должен быть списком строк');
+      } else if (Array.isArray(rp.payload)) {
+        rp.payload.forEach((entry, j) => {
+          if (typeof entry !== 'string' || !entry.trim()) {
+            err(at, 'payload[' + j + ']', fmtVal(entry), 'элемент payload должен быть непустой строкой');
+          }
+        });
+        if (!rp.payload.length) warn(at, 'payload', '', 'payload пуст — набор не совпадёт ни с одним запросом');
+      }
+    }
+  }
+
+  // --- правила: цели и ссылки RULE-SET ---
+  if (Array.isArray(doc.rules) && doc.rules.length) {
+    const DOMAIN_RULE_TYPES = new Set(['DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-WILDCARD', 'DOMAIN-REGEX', 'GEOSITE', 'IP-CIDR', 'IP-CIDR6', 'IP-ASN', 'MATCH']);
+    const knownTarget = (t) => proxyNames.has(t) || groupNames.has(t) || MIHOMO_BUILTIN_TARGETS.has(t);
+    doc.rules.forEach((r, i) => {
+      if (typeof r !== 'string' || !r.trim()) return; // структурная проверка была выше
+      const parts = r.split(',').map((s) => s.trim());
+      const type = (parts[0] || '').toUpperCase();
+      if (type === 'RULE-SET') {
+        if (parts.length < 3) { err('rules[' + i + ']', '', r, 'формат: RULE-SET,<rule-provider>,<цель>'); return; }
+        if (!ruleProviderNames.has(parts[1])) {
+          err('rules[' + i + ']', 'RULE-SET', parts[1], 'rule-provider не найден (mihomo: "rule set [x] not found")');
+        }
+        if (!knownTarget(parts[2])) {
+          err('rules[' + i + ']', 'цель', parts[2], 'цель не найдена среди proxies/proxy-groups/встроенных');
+        }
+      } else if (DOMAIN_RULE_TYPES.has(type)) {
+        if (type === 'MATCH') {
+          if (parts.length >= 2 && !knownTarget(parts[1])) {
+            err('rules[' + i + ']', 'цель', parts[1], 'цель не найдена среди proxies/proxy-groups/встроенных');
+          }
+          return;
+        }
+        if (parts.length < 3) { err('rules[' + i + ']', '', r, 'неполное правило (нужен тип, значение и цель)'); return; }
+        const target = parts[parts.length - 1];
+        if (!knownTarget(target)) {
+          err('rules[' + i + ']', 'цель', target, 'цель не найдена среди proxies/proxy-groups/встроенных');
+        }
+      }
+    });
+    // DPR-контракт: последнее правило — правило по умолчанию MATCH,GLOBAL
+    if (ruleProviderNames.size && doc.rules[doc.rules.length - 1] !== 'MATCH,GLOBAL') {
+      err('rules', '', fmtVal(doc.rules[doc.rules.length - 1]), 'последнее правило должно быть MATCH,GLOBAL (DEFAULT-правило)');
+    }
+  }
+
   // --- dialer-proxy (туннель в туннеле) ---
   // Mihomo v1.19.31 сам валидирует существование таргета и прямые циклы при
   // загрузке конфига ("dialer-proxy [Y] not found" / "circular dialer-proxy
@@ -1400,6 +1495,12 @@ function updateMihomoOptionStates() {
   masterEl.disabled = bsOn;
   perTun.disabled = !master || !tun || bsOn;
   perSocks.disabled = !master || !socks || bsOn;
+  // DPR несовместим с per-proxy listeners (движок тоже отклоняет); с БС и
+  // статикой совместим (цели урезаются движком).
+  const policyEl = document.getElementById('cfgPolicyRouting');
+  policyEl.disabled = master;
+  if (master) policyEl.checked = false;
+  updatePolicyRoutingVisibility();
 }
 
 // UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
@@ -1430,6 +1531,87 @@ function onWhitelistChange() {
   document.getElementById('whitelistPanel').style.display = on ? 'block' : 'none';
 }
 
+// === DOMAIN POLICY ROUTING (UI) ===
+// Карточки политик — только ввод. Разбор строк, слаги, группы и правила
+// генерирует движок web4core (mihomoDomainPolicy); страница ничего не пост-
+// процессит. Списки шаблонов — публичные домены, только заполняют textarea.
+const POLICY_PRESETS = {
+  ai: { name: 'AI', domains: 'openai.com\nchatgpt.com\noaistatic.com\nanthropic.com\ngemini.google.com' },
+  media: { name: 'MEDIA', domains: 'youtube.com\nyoutu.be\ngooglevideo.com\nytimg.com' },
+  telegram: { name: 'TELEGRAM', domains: 'telegram.org\nt.me\ntelegram.me\ntelegram.dog\ntelesco.pe' },
+  google: { name: 'GOOGLE', domains: 'google.com\ngstatic.com\ngoogleapis.com\ngoogleusercontent.com' },
+  direct: { name: 'DIRECT-LIST', domains: '# домены, которые пойдут мимо прокси (DIRECT)\nexample.com' }
+};
+
+function policyCardDom(card, index) {
+  const wrap = document.createElement('div');
+  wrap.className = 'policy-card';
+  wrap.style.cssText = 'border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:10px';
+  const title = document.createElement('div');
+  title.style.cssText = 'display:flex;gap:8px;align-items:center';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'policy-name';
+  nameInput.placeholder = 'Имя политики (например: AI)';
+  nameInput.value = card.name || '';
+  nameInput.style.cssText = 'flex:1;padding:8px;box-sizing:border-box';
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'btn btn-gray policy-del';
+  del.textContent = '✕ Удалить';
+  del.addEventListener('click', () => wrap.remove());
+  title.append(nameInput, del);
+  const domainsLabel = document.createElement('label');
+  domainsLabel.className = 'label';
+  domainsLabel.style.cssText = 'display:block;margin-top:8px';
+  domainsLabel.textContent = 'Домены / правила (по одному в строке):';
+  const domains = document.createElement('textarea');
+  domains.className = 'policy-domains';
+  domains.rows = 4;
+  domains.style.cssText = 'width:100%;padding:8px;box-sizing:border-box;font-family:monospace';
+  domains.value = card.domains || '';
+  domains.placeholder = 'example.com\nDOMAIN-SUFFIX,example.com\nDOMAIN,exact.example.com\n192.0.2.0/24';
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = 'Голый домен = DOMAIN-SUFFIX (с поддоменами). Поддерживаются: DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, DOMAIN-REGEX, GEOSITE, CIDR (→ IP-CIDR,no-resolve). Нераспознанные строки пропускаются с предупреждением.';
+  wrap.append(title, domainsLabel, domains, hint);
+  return wrap;
+}
+
+function addPolicyCard(card) {
+  document.getElementById('policyCards').appendChild(policyCardDom(card || {}));
+}
+
+function collectPolicyRouting() {
+  const cards = Array.from(document.querySelectorAll('#policyCards .policy-card'));
+  const policies = [];
+  const seen = new Set();
+  for (let i = 0; i < cards.length; i++) {
+    const name = cards[i].querySelector('.policy-name').value.trim();
+    const domains = cards[i].querySelector('.policy-domains').value;
+    if (!name && !domains.trim()) continue; // пустая карточка — не политика
+    if (!name) throw new Error('Политика #' + (i + 1) + ': укажите имя политики');
+    if (seen.has(name)) throw new Error('Дублирующееся имя политики: «' + name + '»');
+    seen.add(name);
+    policies.push({ name, domains });
+  }
+  return policies;
+}
+
+function updatePolicyRoutingVisibility() {
+  const on = document.getElementById('cfgPolicyRouting').checked;
+  const bsOn = document.getElementById('cfgAutoWhitelist').checked;
+  const master = document.getElementById('cfgPerProxyMaster') && document.getElementById('cfgPerProxyMaster').checked;
+  const subMode = document.getElementById('cfgSubMode').checked;
+  document.getElementById('policyRoutingPanel').style.display = on ? 'block' : 'none';
+  const hints = [];
+  if (bsOn) hints.push('Режим белых списков: категории указывают на GLOBAL (плоский fallback PRIMARY→FALLBACK) или DIRECT; AUTO-группы категорий не создаются.');
+  else if (subMode) hints.push('URL-подписки: каждая категория получает AUTO url-test-группу над общим provider (use:) и select [AUTO, ⚡ Fastest, GLOBAL, DIRECT].');
+  else hints.push('Без URL-подписок: категории — select [⚡ Fastest, GLOBAL, DIRECT]; AUTO-группы возможны только над подписками.');
+  if (master) hints.push('⚠ Режим «на каждый прокси» несовместим с политиками — при сборке политики будут проигнорированы.');
+  document.getElementById('policyRoutingHint').textContent = hints.join(' ');
+}
+
 // === MIHOMO BUILDER (via web4core) ===
 function buildMihomo() {
   if (wgUploadPending) {
@@ -1458,6 +1640,17 @@ function buildMihomo() {
   const advancedStack = (addTun && stackAdvEl && stackAdvEl.checked === true && stackExEl && (stackExEl.value === 'system' || stackExEl.value === 'mixed')) ? stackExEl.value : null;
   const tunStack = advancedStack ? advancedStack : ((addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor');
   const perProxySocks = (master && !autoWhitelist && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
+
+  // Domain Policy Routing: карточки политик. Кламп: per-proxy активен —
+  // политики игнорируются (движок отклонил бы сборку; UI не доводит до ошибки).
+  let domainPolicy;
+  try {
+    if (document.getElementById('cfgPolicyRouting').checked && !perProxyTun && !perProxySocks) {
+      domainPolicy = collectPolicyRouting();
+    }
+  } catch (e) {
+    return showToast('❌ ' + (e && e.message ? e.message : e), true);
+  }
 
   const webUiEnabled = document.getElementById('cfgWebUI').checked;
   const webUiChoice = document.getElementById('webUiSelect').value;
@@ -1499,6 +1692,7 @@ function buildMihomo() {
         mihomoTunStack: tunStack,
         perProxyPort: perProxySocks,
         mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined,
+        mihomoDomainPolicy: domainPolicy && domainPolicy.length ? domainPolicy : undefined,
         wgDialerProxy: wgDialer || undefined,
         wgDialerGroupMembers: wgDialerMembers.length ? wgDialerMembers : undefined,
         wgDialerProviders: wgDialerProviders.length ? wgDialerProviders : undefined
@@ -1529,6 +1723,11 @@ function buildMihomo() {
     showToast('✅ Mihomo config built!');
     if (realityModern.invalid > 0) {
       showToast('⚠ Modern REALITY: пропущено некорректных строк: ' + realityModern.invalid);
+    }
+    if (Array.isArray(result.warnings) && result.warnings.length) {
+      const head = result.warnings.slice(0, 2).join(' | ');
+      const tail = result.warnings.length > 2 ? ' …и ещё ' + (result.warnings.length - 2) : '';
+      showToast('⚠ Политики: ' + head + tail);
     }
     // Автоматическая проверка итогового YAML (после всех патчей), до Copy
     runMihomoValidation(yaml);
@@ -1576,6 +1775,13 @@ document.getElementById('cfgSubMode').addEventListener('change', () => {
 });
 document.getElementById('cfgWebUI').addEventListener('change', updateWebUiVisibility);
 document.getElementById('webUiSelect').addEventListener('change', updateWebUiVisibility);
+document.getElementById('cfgPolicyRouting').addEventListener('change', updatePolicyRoutingVisibility);
+document.getElementById('cfgAutoWhitelist').addEventListener('change', updatePolicyRoutingVisibility);
+document.getElementById('cfgSubMode').addEventListener('change', updatePolicyRoutingVisibility);
+document.getElementById('btnPolicyAdd').addEventListener('click', () => {
+  const preset = POLICY_PRESETS[document.getElementById('policyPresetSelect').value] || {};
+  addPolicyCard(preset);
+});
 updateExcludeFilterVisibility();
 updateSubModeHint();
 updateWebUiVisibility();
