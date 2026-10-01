@@ -286,29 +286,37 @@ Deployment profile владеет только deployment/inbound state. Он н
 
 ## 9. Mandatory test battery
 
-Точный набор всегда сверять с актуальным `AGENTS.md` и `docs/TESTING.md`. Если там появились новые обязательные проверки, они имеют приоритет.
+Точный набор всегда сверять с актуальным `AGENTS.md`, `docs/TESTING.md` и фактическим содержимым `tests/`. Если появились новые обязательные проверки, они имеют приоритет.
 
-Для profile/UX изменений минимум:
+### 9.1. Базовый UI/runtime battery для profile/UX change
 
 ```bash
 node tests/browser.cjs
 node tests/whitelist.cjs
 node tests/runtime.cjs web4core.runtime.js
-```
-
-Плюс существующие релевантные suites проекта, включая на текущем дереве:
-
-```bash
 node tests/masque-dpi-regression.cjs
+node tests/policy-routing.cjs
+node tests/policy-routing-browser.cjs
 ```
 
-и real-Mihomo failover suite с требуемыми env (`MIHOMO_BIN`, `JS_YAML_PATH`, `TEST_OUTPUT_DIR`) согласно `docs/TESTING.md`:
+### 9.2. Реальный Mihomo для БС/failover
+
+С обязательными env (`MIHOMO_BIN`, `JS_YAML_PATH`, `TEST_OUTPUT_DIR`) согласно `docs/TESTING.md`:
 
 ```text
 tests/mihomo-failover.cjs
+tests/mihomo-awl-priority.cjs
 ```
 
-Если актуальный `AGENTS.md` требует дополнительные AWL/runtime/source tests, их также запускать.
+`mihomo-awl-priority.cjs` особенно важен для изменений, затрагивающих Auto-Whitelist или profile/БС state machine: browser UI может быть правильным, а фактический priority/failback contract — сломан.
+
+### 9.3. Manual suites — только когда затронута их семантика
+
+Не запускать тяжёлые лаборатории «для галочки», но запускать, если задача меняет соответствующий механизм:
+
+- `tests/mihomo-awl-soak.manual.cjs` — если менялись production intervals, health-check/failback timing, keep-warm или поведение AWL на длительном интервале;
+- `tests/mihomo-reality-handshake.manual.cjs` — если менялась selective Modern REALITY/ML-KEM генерация или совместимость;
+- `tools/warp-dialer-fieldtest/` — если менялись dialer-proxy, WG/WARP transport switching, fresh-handshake, MTU/endpoint semantics.
 
 ### Почему эти уровни разные
 
@@ -316,9 +324,12 @@ tests/mihomo-failover.cjs
 - `whitelist.cjs` — закрывает БС, dependency matrix и её взаимодействие с профилями;
 - `runtime.cjs` — ловит несовпадение UI assumptions с vendored web4core runtime;
 - `masque-dpi-regression.cjs` — защищает независимую load-bearing WARP/MASQUE стратегию от случайной побочной регрессии в большом `index.html`;
-- `mihomo-failover.cjs` — проверяет живую failover-семантику реальным Mihomo, чего YAML parser/browser validator доказать не могут.
+- `policy-routing.cjs` — фиксирует DPR/domain-policy генерацию и правила;
+- `policy-routing-browser.cjs` — доказывает, что browser UI и профильные переходы не ломают DPR-поля/сборку;
+- `mihomo-failover.cjs` — проверяет живую failover-семантику реальным Mihomo, чего YAML parser/browser validator доказать не могут;
+- `mihomo-awl-priority.cjs` — проверяет priority/failback семантику Auto-Whitelist реальным Mihomo.
 
-Зелёный GitHub Actions runtime workflow **не заменяет** browser/whitelist/real-Mihomo regression battery: workflow проверяет другой слой.
+Зелёный GitHub Actions runtime workflow **не заменяет** browser/whitelist/DPR/real-Mihomo regression battery: workflow проверяет другой слой.
 
 ---
 
@@ -368,7 +379,7 @@ mihomo -t -f <config.yaml>
 
 1. проверить, не изменился ли `origin/main`;
 2. проверить, не появился ли runtime bot commit;
-3. если runtime изменился — интегрировать свежий `main` и повторить как минимум runtime/browser/whitelist и реальные проверки, зависимые от генерации;
+3. если runtime изменился — интегрировать свежий `main` и повторить как минимум runtime/browser/whitelist/DPR и реальные проверки, зависимые от генерации;
 4. проверить provenance через CI workflow;
 5. не откатывать runtime просто потому, что candidate начинался от старого SHA.
 
@@ -402,7 +413,8 @@ git diff origin/main... -- index.html
 - `origin/main` SHA перед финалом;
 - candidate HEAD;
 - изменённые файлы и diff-stat;
-- результаты `browser`, `whitelist`, `runtime`, остальных mandatory suites;
+- результаты `browser`, `whitelist`, `runtime`, `masque-dpi`, `policy-routing`, `policy-routing-browser`;
+- результаты real-Mihomo `mihomo-failover` и `mihomo-awl-priority`, когда задача затрагивает БС/profile interaction;
 - `mihomo -t` для `router`, `vps-local`, `vps-gateway`;
 - PASS всех 6 прямых profile transitions;
 - PASS router snapshot через `vps-local + БС ON/OFF + router`;
