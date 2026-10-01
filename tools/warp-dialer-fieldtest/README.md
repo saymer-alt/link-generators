@@ -10,7 +10,35 @@
 Состав: `fieldtest.mjs` (CLI), `lib.mjs` (чистая логика), `fieldtest.test.mjs` (offline-тесты),
 `check-secrets.mjs` (сканер секретов), `example-config.yaml` (пример без реальных секретов).
 
-## Полевая находка: переключение группы ≠ свежий transport path (обязательно к прочтению)
+## Полевая находка 1: Geodema/Remnawave требует HWID (иначе «App not supported»)
+
+Подписка Geodema — панель Remnawave. Запрос subscription URL даже с «правильным»
+User-Agent, но **без заголовков устройства**, возвращает намеренную заглушку:
+`x-hwid-not-supported: true` + единственный узел `App not supported` (vless 0.0.0.0:1).
+Это НЕ означает, что у аккаунта нет серверов.
+
+С корректными заголовками тот же endpoint отдаёт полную подписку
+(в поле: 195 узлов Clash YAML / 97 sing-box outbound):
+
+```yaml
+proxy-providers:
+  account.geodema.org:
+    type: http
+    header:
+      x-hwid:
+        - <DEVICE_HWID>          # 10-64 символов [A-Za-z0-9=-]
+      x-device-os:
+        - Linux
+      x-device-model:
+        - <device-model>
+```
+
+Диагностика: явные эндпоинты `<subscription>/mihomo`, `/clash`, `/singbox`, `/json`;
+ответные заголовки `x-hwid-active` / `x-hwid-not-supported` /
+`x-hwid-max-devices-reached` / `x-hwid-limit`, плюс `subscription-userinfo` и
+`profile-title` (квота/срок/имя профиля).
+
+## Полевая находка 2: переключение группы ≠ свежий transport path (обязательно к прочтению)
 
 Переключение select-group меняет выбранный dialer node, но уже установленный
 WireGuard handshake может продолжать использовать **старый transport path**:
@@ -44,14 +72,16 @@ node fieldtest.mjs sweep --group DIAL-FRA --pin "TEST-OUT=WARP-DIALED-FRA" --fre
 
 ### Field-test evidence (SE VPS, Mihomo v1.19.31, 2026-10-01)
 
-- direct WARP (два независимых профиля) → `colo=ARN`;
-- WARP через Geodema DE-транспорт (3 узла, vless-TCP и hysteria2) → `warp=on`, `colo=FRA`;
-- WARP через Geodema NL-транспорт (3 узла) → `warp=on`, `colo=AMS`;
-- MTU-лестница 1280→1200 на DE-маршруте — все ступени `WARP_OK`.
+```text
+SE direct WARP       → ARN
+SE → Geodema DE → WARP → FRA
+SE → Geodema NL → WARP → AMS
+```
 
-Это **field-test evidence**, а не гарантия Cloudflare routing: colo выбирается Cloudflare
-и может меняться. Пример A→B→A с fresh reload: DE → FRA, NL → AMS, DE → FRA
-(каждый переход с новым хендшейком).
+DE-транспорт проверен на 3 узлах (vless-TCP и hysteria2); MTU-лестница 1280→1200 —
+все ступени `WARP_OK` (transfer 6.9–7.6 MB/s). Это **field-test evidence**, а не
+гарантия Cloudflare routing: colo выбирается Cloudflare и может меняться.
+A→B→A с fresh reload (DE → FRA, NL → AMS, DE → FRA) воспроизведён этим harness.
 ## Методика (рекомендуемый порядок)
 
 ```text
