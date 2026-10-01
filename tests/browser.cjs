@@ -293,7 +293,7 @@ const expectedAwg = {
       }
       await oldPage.close();
     }
-    await page.locator('#wgFile').setInputFiles([]);
+    await page.locator('#wgClear').click(); // явная очистка профилей (отмена picker'а теперь no-op)
     await page.locator('#cfgProfile').selectOption('router');
     await page.locator('#mihomoInput').fill('mieru://test:test@192.0.2.4:20000?transport=TPC#TEST');
     await page.locator('button[onclick="buildMihomo()"]').click();

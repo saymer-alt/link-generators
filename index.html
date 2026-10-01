@@ -43,6 +43,13 @@
   .file-upload input[type=file]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
   .wg-status{font-size:.8rem;color:var(--muted)}
   .wg-status.loaded{color:var(--green)}
+  .wg-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+  .wg-list li{display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;word-break:break-all}
+  .wg-list-ok{color:var(--green)}
+  .wg-list-name{flex:1}
+  .wg-list-tag{color:var(--muted);font-size:.75rem}
+  .wg-list-del{width:22px;height:22px;line-height:20px;padding:0;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer}
+  .wg-list-del:hover,.wg-list-del:focus-visible{color:var(--red);border-color:var(--red);outline:none}
   .checkbox-grid{display:flex;flex-wrap:wrap;gap:12px 20px;margin-top:8px}
   .checkbox-grid label{display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;font-size:.85rem;color:var(--text)}
   label > input[type="checkbox"]{width:16px;height:16px;padding:0;flex:0 0 auto;accent-color:var(--accent)}
@@ -201,20 +208,23 @@
       <div class="card-title">📂 WireGuard / AmneziaWG</div>
       <div class="file-upload-wrapper">
         <div class="file-upload">
-          <button class="btn btn-gray" id="btnWg" title="Загрузить WireGuard/AmneziaWG конфиг — каждый файл станет отдельным proxy в YAML">📂 Загрузить .conf / .awg</button>
+          <button class="btn btn-gray" id="btnWg" title="Добавляет WireGuard/AmneziaWG конфиги к уже загруженным (каждый файл — отдельный proxy в YAML). Список и удаление — ниже.">📂 Загрузить .conf / .awg</button>
           <input type="file" id="wgFile" accept=".conf,.wg,.awg,text/plain" multiple>
         </div>
         <span class="wg-status" id="wgStatus"></span>
       </div>
+      <ul class="wg-list" id="wgList" role="list" hidden></ul>
+      <button class="btn btn-gray" id="wgClear" type="button" style="display:none;margin-top:6px" onclick="clearWgProfiles()">🧹 Очистить все WG/AWG</button>
       <div style="margin-top: 15px;">
         <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">WireGuard DNS:</label>
         <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
+        <div class="hint" style="margin-top: 5px;">Общий DNS для ВСЕХ загруженных WG/AWG-профилей (добавляет <code>dns</code>/<code>remote-dns-resolve</code> в каждый wireguard-outbound). Пусто — DNS удаляется из профилей.</div>
         <div id="wgDnsWarning" class="hint" style="color: #d9534f; display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
       </div>
       <div style="margin-top: 15px;">
         <label class="label" for="wgDialerInput" style="display: block; margin-bottom: 5px;">Промежуточный proxy / dialer-proxy:</label>
         <input type="text" id="wgDialerInput" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Имя proxy или группы (пусто = выключено)">
-        <div class="hint" style="margin-top: 5px;">Туннель в туннеле: WireGuard/WARP подключается к своему серверу через указанный proxy или группу. Таргет обязан поддерживать UDP (подходит VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет). Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408).</div>
+        <div class="hint" style="margin-top: 5px;">Туннель в туннеле: WireGuard/WARP подключается к своему серверу через указанный proxy или группу. Таргет обязан поддерживать UDP (подходит VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет). Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408). <b>Действует на ВСЕ загруженные WG/AWG-профили</b>, кроме профиля с именем таргета и узлов dialer-группы; исключить отдельный профиль сейчас нельзя.</div>
         <label class="label" for="wgDialerMembers" style="display: block; margin-bottom: 5px; margin-top: 10px;">Транзитные узлы dialer-группы (по одному в строке, необязательно):</label>
         <textarea id="wgDialerMembers" rows="3" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="VPS-DK&#10;VPS-EE&#10;VPS-SE"></textarea>
         <div class="hint" style="margin-top: 5px;">Если заполнено — создается select-группа (имя из поля выше или WARP-DIALER), и нижний транспорт WARP можно менять без пересборки. Эти узлы сами не получают dialer-proxy (иначе цикл). Избегайте GLOBAL/⚡ Fastest как таргета — они содержат сам WARP.</div>
@@ -600,6 +610,7 @@ function initPingSelector() {
 
 // === WIREGUARD UPLOAD ===
 let wgBeans = [];
+let wgFiles = [];   // исходные имена файлов, параллельно wgBeans (для списка загрузки)
 let wgUploadSeq = 0;
 let wgUploadPending = false;
 
@@ -687,6 +698,23 @@ function injectWgDns(result, beans) {
   return result;
 }
 
+// Стабильный отпечаток содержимого WG-бина (без имени): для fail-safe дедупликации
+// при добавлении. Совпадает по смыслу с рантайм-дедупом buildFromRequest (транспорт
+// без имени), но срабатывает раньше — на этапе загрузки, с честным предупреждением.
+function wgBeanKey(bean) {
+  const seen = (value) => {
+    if (value === null) return 'null';
+    if (Array.isArray(value)) return '[' + value.map(seen).join(',') + ']';
+    if (typeof value === 'object') {
+      return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + seen(value[k])).join(',') + '}';
+    }
+    return JSON.stringify(value);
+  };
+  const copy = JSON.parse(JSON.stringify(bean || {}));
+  delete copy.name;
+  return seen(copy);
+}
+
 function initWgUpload() {
   const fileInput = document.getElementById('wgFile');
   const statusEl = document.getElementById('wgStatus');
@@ -695,16 +723,9 @@ function initWgUpload() {
   fileInput.addEventListener('change', async () => {
     const requestId = ++wgUploadSeq;
     const files = Array.from(fileInput.files || []);
-    if (!files.length) {
-      wgUploadPending = false;
-      wgBeans = [];
-      const dnsInput = document.getElementById('wgCustomDns');
-      const dnsWarn = document.getElementById('wgDnsWarning');
-      if (dnsInput) dnsInput.value = '';
-      if (dnsWarn) dnsWarn.style.display = 'none';
-      updateWgStatus();
-      return;
-    }
+    // Отмена picker'а (0 файлов) — осознанный no-op: ранее это молча стирало
+    // все загруженные профили. Очистка — только явная кнопка «🧹 Очистить все».
+    if (!files.length) return;
 
     const api = globalThis.web4core;
     if (!api?.parseWireGuardConf) {
@@ -720,14 +741,22 @@ function initWgUpload() {
     statusEl.classList.remove('loaded');
     btnEl.textContent = '📂 WG/AWG (чтение...)';
 
-    const nextBeans = [];
+    const fresh = [];
+    const freshNames = [];
+    const seen = new Set(wgBeans.map(wgBeanKey));
+    let skippedDup = 0;
     for (const file of files) {
       try {
         const raw = await file.text();
         if (requestId !== wgUploadSeq) return;
         const text = normalizeWgText(raw);
         const bean = api.parseWireGuardConf(text, file.name);
-        if (bean) nextBeans.push(bean);
+        if (!bean) continue;
+        const key = wgBeanKey(bean);
+        if (seen.has(key)) { skippedDup++; continue; }
+        seen.add(key);
+        fresh.push(bean);
+        freshNames.push(file.name);
       } catch (e) {
         if (requestId !== wgUploadSeq) return;
         showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true);
@@ -738,14 +767,18 @@ function initWgUpload() {
     // менять wgBeans/status/validation state.
     if (requestId !== wgUploadSeq) return;
 
-    wgBeans = nextBeans;
+    // APPEND-модель: повторное открытие picker'а добавляет профили к существующим,
+    // а не молча заменяет их (прежнее поведение теряло ранее загруженные файлы).
+    wgBeans = wgBeans.concat(fresh);
+    wgFiles = wgFiles.concat(freshNames);
     wgUploadPending = false;
 
-    // Перехват нестабильного DNS
+    // Перехват нестабильного DNS: поле общее для всех WG-профилей; при добавлении
+    // заполняем ТОЛЬКО пустое поле (ручное значение пользователя не затираем).
     const customDnsInput = document.getElementById('wgCustomDns');
     const dnsWarning = document.getElementById('wgDnsWarning');
-    if (wgBeans && wgBeans.length > 0 && customDnsInput) {
-      const bean = wgBeans[0];
+    if (wgBeans && wgBeans.length > 0 && customDnsInput && !customDnsInput.value.trim() && fresh.length > 0) {
+      const bean = fresh.find(b => b.wireguard && Array.isArray(b.wireguard.dns)) || fresh[0];
       if (bean.wireguard && Array.isArray(bean.wireguard.dns)) {
         if (bean.wireguard.dns.includes('100.64.0.1')) {
           customDnsInput.value = '1.1.1.1, 8.8.8.8';
@@ -754,12 +787,10 @@ function initWgUpload() {
           customDnsInput.value = bean.wireguard.dns.join(', ');
           if (dnsWarning) dnsWarning.style.display = 'none';
         }
-      } else {
-        customDnsInput.value = '';
-        if (dnsWarning) dnsWarning.style.display = 'none';
       }
     }
     updateWgStatus();
+    if (skippedDup > 0) showToast(`Дубликат(ов) пропущено: ${skippedDup} — идентичный конфиг уже загружен`);
 
     // File input change invalidated state when selection started. This second
     // invalidation is required because a build may have completed while an old
@@ -779,7 +810,78 @@ function initWgUpload() {
       statusEl.classList.remove('loaded');
       btnEl.textContent = '📂 Загрузить .conf / .awg';
     }
+    renderWgList();
   }
+}
+
+// Список загруженных профилей: filename + тип + имя proxy. Только публичные
+// атрибуты — ни ключей, ни PSK (DOM собирается через createElement/textContent).
+function renderWgList() {
+  const list = document.getElementById('wgList');
+  const clearBtn = document.getElementById('wgClear');
+  if (!list) return;
+  list.textContent = '';
+  wgBeans.forEach((bean, i) => {
+    const li = document.createElement('li');
+    const mark = document.createElement('span');
+    mark.textContent = '✓ ';
+    mark.className = 'wg-list-ok';
+    const name = document.createElement('span');
+    name.textContent = (wgFiles[i] || bean.name || 'profile') + ' — ' + (bean.name || '?');
+    name.className = 'wg-list-name';
+    const tag = document.createElement('span');
+    const isAwg = !!(bean.wireguard && bean.wireguard['amnezia-wg-option']);
+    tag.textContent = isAwg ? ' [AWG]' : ' [WG]';
+    tag.className = 'wg-list-tag';
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'wg-list-del';
+    del.textContent = '✕';
+    del.setAttribute('aria-label', 'Удалить ' + (wgFiles[i] || bean.name || 'профиль'));
+    del.addEventListener('click', () => removeWgProfile(i));
+    li.append(mark, name, tag, del);
+    list.appendChild(li);
+  });
+  list.hidden = wgBeans.length === 0;
+  clearBtn.style.display = wgBeans.length > 0 ? '' : 'none';
+}
+
+function removeWgProfile(index) {
+  if (!(index >= 0 && index < wgBeans.length)) return;
+  wgBeans = wgBeans.filter((_, i) => i !== index);
+  wgFiles = wgFiles.filter((_, i) => i !== index);
+  mihomoValidationSeq++;
+  resetCompatSummary();
+  setMihomoValidationState('NOT_BUILT');
+  updateWgStatusTextOnly();
+}
+
+function clearWgProfiles() {
+  wgBeans = [];
+  wgFiles = [];
+  const dnsInput = document.getElementById('wgCustomDns');
+  const dnsWarn = document.getElementById('wgDnsWarning');
+  if (dnsInput) dnsInput.value = '';
+  if (dnsWarn) dnsWarn.style.display = 'none';
+  mihomoValidationSeq++;
+  resetCompatSummary();
+  setMihomoValidationState('NOT_BUILT');
+  updateWgStatusTextOnly();
+}
+
+function updateWgStatusTextOnly() {
+  const btnEl = document.getElementById('btnWg');
+  const statusEl = document.querySelector('#wgStatus');
+  if (wgBeans.length > 0) {
+    statusEl.textContent = `✅ Загружено: ${wgBeans.length} конфиг(ов)`;
+    statusEl.classList.add('loaded');
+    btnEl.textContent = `📂 WG/AWG (${wgBeans.length})`;
+  } else {
+    statusEl.textContent = '';
+    statusEl.classList.remove('loaded');
+    btnEl.textContent = '📂 Загрузить .conf / .awg';
+  }
+  renderWgList();
 }
 
 // === MIHOMO BASIC VALIDATION ===
