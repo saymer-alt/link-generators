@@ -473,6 +473,23 @@ const expectedAwg = {
     assert.equal(await page.evaluate(() => document.getElementById('perProxyAdvancedDetails').open), false, 'закрытие работает');
     assert.equal(await checked2('#cfgPerProxyMaster'), false);
     await page.locator('#perProxyAdvancedSummary').click(); // открыт для round trip
+    // badge/marker: несколько open/close циклов — разметка не разрушается
+    await page.evaluate(() => { document.getElementById('perProxyAdvancedDetails').open = false; });
+    for (let cycle = 0; cycle < 3; cycle++) {
+      await page.locator('#perProxyAdvancedSummary').click();
+      assert.equal(await page.evaluate(() => document.getElementById('perProxyAdvancedDetails').open), true, 'open cycle ' + cycle);
+      await page.waitForTimeout(50);
+      assert.equal(await page.evaluate(() => document.getElementById('perProxyDisclosureMarker').textContent), '▼', 'marker ▼ cycle ' + cycle);
+      const badge = await page.evaluate(() => {
+        const el = document.querySelector('#perProxyAdvancedSummary .advanced-badge');
+        return el ? el.textContent : null;
+      });
+      assert.equal(badge, 'ADVANCED', 'badge сохранён cycle ' + cycle);
+      await page.locator('#perProxyAdvancedSummary').click();
+      assert.equal(await page.evaluate(() => document.getElementById('perProxyAdvancedDetails').open), false, 'close cycle ' + cycle);
+      await page.waitForTimeout(50);
+      assert.equal(await page.evaluate(() => document.getElementById('perProxyDisclosureMarker').textContent), '▶', 'marker ▶ cycle ' + cycle);
+    }
 
     // router: ручное изменение router-owned параметра перед уходом
     await page.locator('#cfgTunMips').uncheck();
@@ -535,7 +552,7 @@ const expectedAwg = {
       await page.locator('#cfgProfile').selectOption(profileValue);
       const bs = page.locator('#cfgAutoWhitelist');
       await bs.check();
-      assert.equal(await page.locator('#cfgProfile').inputValue(), 'router', 'БС: профиль router');
+      assert.equal(await page.locator('#cfgProfile').inputValue(), profileValue, 'БС: выбранный профиль сохранён (temporary router)');
       assert.equal(await disabled2('#cfgProfile'), true, 'БС: выбор заблокирован');
       assert.equal(await vis2('#vpsPanel'), false, 'БС: gateway panel скрыт');
       assert.equal(await checked2('#cfgPerProxyTun'), false, 'БС: Per-Proxy TUN off');

@@ -297,7 +297,7 @@
       </div>
       <div id="perProxyAdvancedPanel" class="advanced-panel">
         <details id="perProxyAdvancedDetails">
-          <summary id="perProxyAdvancedSummary">▶ <span class="advanced-badge">ADVANCED</span> Отдельный вход на каждый прокси</summary>
+          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Отдельный вход на каждый прокси</span></summary>
           <div class="advanced-master">
             <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
           </div>
@@ -1417,13 +1417,19 @@ const PROFILE_HINTS = {
   'vps-local': 'Для VPS, где Xray/3X-UI или другое локальное приложение отправляет трафик в Mihomo через 127.0.0.1:7890. TUN и системная маршрутизация VPS не используются.',
   'vps-gateway': 'Только для transparent-gateway с Linux policy routing / iptables / Docker/AWG. Генератор создаёт Mihomo-часть, но не Linux routing/firewall. Для обычного VPS с Xray/3X-UI используйте профиль «VPS — локальный Mihomo / SOCKS».',
 };
-let profileCurrent = 'router';
-let routerOwnedSnapshot = null; // UI-state router-owned чекбоксов на время ухода из router
 const PROFILE_OWNED_IDS = ['cfgTun', 'cfgTunMips', 'cfgTunStackAdvanced', 'cfgTunStackEx', 'cfgSocks', 'cfgLan'];
 
-function applyDeploymentProfileUi() {
+// effectiveProfile = профиль, чей UI-state сейчас применён.
+// БС навязывает router-контракт временно, не трогая выбранный пользователем профиль.
+let selectedProfile = 'router';   // пользовательский выбор (select value)
+let effectiveProfile = 'router';  // профиль, чей UI-state применён сейчас
+let bsTemporaryRouter = false;    // БС навязал router временно
+let routerOwnedSnapshot = null;   // ручное состояние router-owned чекбоксов
+
+// Применяет UI-state профиля. Path-independent: результат зависит ТОЛЬКО от
+// целевого профиля, не от пути перехода. snapshot не потребляет и не восстанавливает.
+function applyProfileUiState(target) {
   const bsOn = document.getElementById('cfgAutoWhitelist').checked;
-  const profile = document.getElementById('cfgProfile').value;
   const tun = document.getElementById('cfgTun');
   const mips = document.getElementById('cfgTunMips');
   const socks = document.getElementById('cfgSocks');
@@ -1432,39 +1438,51 @@ function applyDeploymentProfileUi() {
   const stackEx = document.getElementById('cfgTunStackEx');
   const panel = document.getElementById('vpsPanel');
   const hint = document.getElementById('profileHint');
-  hint.textContent = PROFILE_HINTS[profile] || '';
-  panel.style.display = profile === 'vps-gateway' && !bsOn ? 'block' : 'none';
-  if (profile === 'router') {
+  hint.textContent = PROFILE_HINTS[target] || '';
+  panel.style.display = target === 'vps-gateway' && !bsOn ? 'block' : 'none';
+  if (target === 'router') {
     for (const id of PROFILE_OWNED_IDS) document.getElementById(id).disabled = false;
-    if (routerOwnedSnapshot) {
-      tun.checked = routerOwnedSnapshot.tun;
-      mips.checked = routerOwnedSnapshot.mips;
-      stackAdv.checked = routerOwnedSnapshot.stackAdv;
-      stackEx.value = routerOwnedSnapshot.stackEx || '';
-      socks.checked = routerOwnedSnapshot.socks;
-      lan.checked = routerOwnedSnapshot.lan;
-      routerOwnedSnapshot = null;
-    }
-  } else if (profile === 'vps-local') {
+  } else if (target === 'vps-local') {
     tun.checked = false; tun.disabled = true;
     mips.checked = false; mips.disabled = true;
     stackAdv.checked = false; stackAdv.disabled = true; stackEx.value = '';
     socks.checked = true; socks.disabled = true;
     lan.checked = false; lan.disabled = true;
   } else { // vps-gateway
-    tun.checked = true; tun.disabled = true; // TUN обязателен, gateway-панель управляет деталями
+    tun.checked = true; tun.disabled = true;
+    mips.disabled = false;
+    stackAdv.disabled = false;
+    socks.disabled = false;
+    lan.disabled = false;
   }
   updateMihomoOptionStates();
   updateVpsDnsFields();
 }
 
+function applyDeploymentProfileUi(opts) {
+  const temporary = !!(opts && opts.temporary);
+  const target = bsTemporaryRouter ? 'router' : selectedProfile;
+  effectiveProfile = target;
+  if (temporary) {
+    // временный router-state: чекбоксы не трогаем (пользователь может настроить
+    // router-профиль под БС), только disabled-state и hint. snapshot не трогаем.
+    // vpsPanel скрывается: эффективный контракт — router, gateway-настройки игнорируются.
+    for (const id of PROFILE_OWNED_IDS) document.getElementById(id).disabled = false;
+    document.getElementById('vpsPanel').style.display = 'none';
+    document.getElementById('profileHint').textContent = PROFILE_HINTS.router + ' (временно: режим Auto-Whitelist)';
+    updateMihomoOptionStates();
+    return;
+  }
+  applyProfileUiState(target);
+}
+
 function onProfileChange() {
   const select = document.getElementById('cfgProfile');
-  const prev = profileCurrent;
+  const prev = selectedProfile;
   const next = select.value;
   if (prev === next) { applyDeploymentProfileUi(); return; }
   if (prev === 'router') {
-    // snapshot router-owned ручного состояния (восстанавливается при возврате)
+    // реальный пользовательский уход из router — сохранить ручное состояние
     routerOwnedSnapshot = {
       tun: document.getElementById('cfgTun').checked,
       mips: document.getElementById('cfgTunMips').checked,
@@ -1474,8 +1492,22 @@ function onProfileChange() {
       lan: document.getElementById('cfgLan').checked,
     };
   }
-  profileCurrent = next;
-  applyDeploymentProfileUi();
+  selectedProfile = next;
+  effectiveProfile = next;
+  applyProfileUiState(next);
+  updateVpsDnsFields();
+  // восстановление router-owned ручного состояния при ВОЗВРАТЕ в router
+  if (next === 'router' && routerOwnedSnapshot) {
+    const snap = routerOwnedSnapshot;
+    document.getElementById('cfgTun').checked = snap.tun;
+    document.getElementById('cfgTunMips').checked = snap.mips;
+    document.getElementById('cfgTunStackAdvanced').checked = snap.stackAdv;
+    document.getElementById('cfgTunStackEx').value = snap.stackEx || '';
+    document.getElementById('cfgSocks').checked = snap.socks;
+    document.getElementById('cfgLan').checked = snap.lan;
+    routerOwnedSnapshot = null;
+    updateMihomoOptionStates();
+  }
 }
 
 // Зависимости inbound-опций: дочерние чекбоксы включаемы только при активном
@@ -1573,19 +1605,18 @@ function onWhitelistChange() {
   const perSocks = document.getElementById('cfgPerProxySocks');
   const profile = document.getElementById('cfgProfile');
   if (on && !whitelistUiState) {
-    whitelistUiState = { perTun: perTun.checked, perSocks: perSocks.checked, profile: profile.value };
+    whitelistUiState = { perTun: perTun.checked, perSocks: perSocks.checked };
     perTun.checked = perSocks.checked = false;
-    // БС-режим живёт на router-контракте (обычный TUN/SOCKS); выбор профиля
-    // блокируется, строка профиля скрывается; предыдущий выбор восстанавливается
-    // при выключении БС вместе с применением state machine профиля.
-    profile.value = 'router';
-    profileCurrent = 'router';
-    applyDeploymentProfileUi();
+    // БС навязывает router-контракт ВРЕМЕННО: выбранный пользователем профиль
+    // сохраняется, router-owned snapshot не потребляется. effectiveProfile
+    // становится 'router' через buildMihomo-клампы (autoWhitelist → router),
+    // UI показывает router-подсказку; при выключении БС UI восстанавливается.
+    bsTemporaryRouter = true;
+    applyDeploymentProfileUi({ temporary: true });
   } else if (!on && whitelistUiState) {
     perTun.checked = whitelistUiState.perTun;
     perSocks.checked = whitelistUiState.perSocks;
-    profile.value = whitelistUiState.profile;
-    profileCurrent = whitelistUiState.profile;
+    bsTemporaryRouter = false;
     applyDeploymentProfileUi();
     whitelistUiState = null;
   }
@@ -1847,10 +1878,11 @@ document.getElementById('cfgProfile').addEventListener('change', onProfileChange
 // закрытие не сбрасывает настройки — состояние master/children отдельно.
 (function () {
   const d = document.getElementById('perProxyAdvancedDetails');
-  const sum = document.getElementById('perProxyAdvancedSummary');
-  if (!d || !sum) return;
-  const base = () => sum.textContent.replace(/^[▼▶]s*/, '');
-  const sync = () => { sum.textContent = (d.open ? '▼ ' : '▶ ') + base(); };
+  const marker = document.getElementById('perProxyDisclosureMarker');
+  if (!d || !marker) return;
+  // маркер — отдельный span: badge-разметка summary не разрушается,
+  // повторные open/close не накапливают пробелы
+  const sync = () => { marker.textContent = d.open ? '▼' : '▶'; };
   d.addEventListener('toggle', sync);
   sync();
 })();

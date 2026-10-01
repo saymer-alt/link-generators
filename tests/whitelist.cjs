@@ -38,7 +38,7 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     await page.locator('#cfgAutoWhitelist').check();
     for (const id of ['cfgPerProxyTun', 'cfgPerProxySocks', 'cfgProfile', 'vpsPanel', 'cfgPerProxyMaster']) assert.equal(await page.locator('#' + id).isVisible(), false);
     for (const id of ['cfgTun', 'cfgTunMips', 'cfgLan', 'cfgSocks', 'cfgWebUI', 'cfgSubMode']) assert.equal(await page.locator('#' + id).isVisible(), true);
-    assert.equal(await page.locator('#cfgProfile').inputValue(), 'router');
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway', 'БС сохраняет выбранный профиль');
     assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), false);
     assert.equal(await page.locator('#cfgPerProxySocks').isChecked(), false);
     for (const [name, primary, fallback, sub] of [
