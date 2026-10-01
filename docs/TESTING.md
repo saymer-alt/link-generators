@@ -481,3 +481,32 @@ runtime `dcc16b68…` (Source: `saymer-alt/web4core@2daf383bde5257c1d8bd15a0f4c7
   dpr-off-parity, dpr-cyrillic — все successful; per-proxy+DPR отклонён
   движком как задумано. Живой PoC маршрутизации — тестовый VPS, 2026-10-01
   (журнал владельца): DOMAIN→POLICY→PROVIDER→NODE доказан на обеих версиях.
+
+## VPS Domain Detection Package — 2026-10-01
+
+Ветка lg `feat/vps-domain-detection` (index.html: `applyDeploymentProfile`
+плюс пакет; без изменений web4core/runtime), gateway-ветка
+`feat/domain-detection-store-fake-ip` (`8f41759`): патчер сохраняет
+`store-fake-ip` генератора; тест `tests/test-mihomo-config-patch.sh`
+расширен (preserved `true` + сквозной DDP-фикстура) — 5/5 gateway-тестов
+в WSL.
+
+- `tests/vps-detection-browser.cjs` (новый): 46 кейсов — точные формы
+  dns-hijack/sniffer/store-fake-ip (dns on), удаление с dns off
+  (sniffer остаётся), DPR on/off coexistence, generic byte-parity
+  (hwid-нормализация), валидатор VALID.
+- Регресс после пакета: runtime 63/63, browser 47, whitelist 10,
+  masque 7, policy-routing 33/14 — PASS (non-VPS untouched).
+- `mihomo -t` v1.19.31: 4/4 (vps+package mips/gvisor/DPR/dns-off) +
+  6/6 интеграционных DPR-проб.
+- Live staging (тестовый VPS, Saymer, production-like generated config):
+  normal DNS fake-ip; dns-hijack внешнего :53 (9.9.9.9 → fake-ip); DoH →
+  sniffer; pure-IP TLS → sniffer; HTTP Host → sniffer; YouTube QUIC —
+  полный handshake через TUN; DPR: chatgpt→RuleSet(policy-ai)→AI,
+  youtube (fake-ip/pure-IP/:80)→RuleSet(policy-media)→MEDIA,
+  example.com→Match→GLOBAL; QUIC negative: тот же IP + SNI example.com →
+  GLOBAL; restart gate: fake-ip (youtube=.4/openai=.5/chatgpt=.6)
+  восстановлен 1:1 после рестарта, потоки в правильные политики
+  (journal PID нового процесса), мисатрибуции нет; cold-start провайдера
+  с пустым cache.db — 99 узлов (proxy: DIRECT контракт).
+

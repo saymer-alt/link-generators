@@ -1358,6 +1358,7 @@ function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') {
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return yaml;
 
   const mtu = parseInt(vpsField('vpsMtu', String(VPS_GATEWAY_DEFAULTS.mtu)), 10) || VPS_GATEWAY_DEFAULTS.mtu;
+  const dnsOn = document.getElementById('vpsDnsEnabled').checked;
 
   doc.tun = Object.assign({}, doc.tun, {
     'enable': true,
@@ -1375,10 +1376,33 @@ function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') {
   // merge: прочие ключи profile (если появятся) не затирать
   doc.profile = Object.assign({}, doc.profile, {
     'store-selected': false,
-    'store-fake-ip': false
+    // Domain Detection: fake-ip mapping обязан переживать рестарт Mihomo
+    // (PoC 2026-10-01: без persistence — stale fake-ip и live-мисатрибуция;
+    // amnezia-mihomo-gateway патчер должен сохранять это значение, см. PR).
+    'store-fake-ip': dnsOn ? true : false
   });
 
-  if (document.getElementById('vpsDnsEnabled').checked) {
+  // Domain Detection Package (vps-профиль, PoC-проверено на 1.19.31/1.19.32):
+  // 1) dns-hijack перехватывает plaintext :53, вошедший в TUN (клиент с внешним DNS);
+  // 2) пассивный sniffer восстанавливает домен для pure-IP TLS/QUIC/HTTP
+  //    (override-destination:false — hostname только для матчинга, dial-цель не меняется).
+  if (dnsOn) {
+    doc.tun['dns-hijack'] = ['any:53', 'tcp://any:53']; // действует только на трафик, вошедший в TUN
+  }
+
+  doc.sniffer = {
+    'enable': true,
+    'parse-pure-ip': true,
+    'force-dns-mapping': true,
+    'override-destination': false,
+    'sniff': {
+      'TLS': { 'ports': [443, 8443] },
+      'QUIC': { 'ports': [443, 8443] },
+      'HTTP': { 'ports': [80, '8080-8880'] }
+    }
+  };
+
+  if (dnsOn) {
     doc.dns = {
       'enable': true,
       'ipv6': false,
