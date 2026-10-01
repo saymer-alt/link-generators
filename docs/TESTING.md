@@ -531,3 +531,14 @@ runtime `dcc16b68…` (Source: `saymer-alt/web4core@2daf383bde5257c1d8bd15a0f4c7
   browser 47+, vps-detection 54/54, failover 3/3, AWL PASS.
 - YAML parity vs `origin/main` (3680b5c): router/vps-gateway с расширенными
   состояниями — byte-identical (перенос UI не меняет генерацию).
+
+
+## Contrast/readability pass — 2026-10-02 (CSS-only)
+
+Палитра централизована: `--link`/`--link-hover` (ссылки, заголовок, валидация-в-процессе),
+`--text`/`--muted` подняты; active-вкладка — светлый текст + синий underline; hints
+переведены с #484f58 на var(--muted); посещённые ссылки закреплены за --link
+(без фиолетового). WCAG-контраст на карточке: hint 2.09 → 7.11:1; ссылки 1.84 → 8.89:1;
+hover 11.25:1. Семантические green/yellow/red не менялись; разрозненные hex
+(#e3b341/#b8860b/#d9534f/#a5d6ff) переведены на переменные. Сгенерированный YAML
+не затронут (CSS-only). Полная батарея зелёная; browser.cjs 9/9 прогонов подряд.
