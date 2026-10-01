@@ -52,7 +52,9 @@
   .advanced-stack-control label{display:flex;align-items:center;gap:8px;margin:0;cursor:pointer;color:var(--text)}
   .advanced-stack-control select{margin-top:8px}
   .advanced-panel{margin-top:12px;padding:12px 14px;border:1px solid rgba(210,153,34,.55);border-radius:10px;background:rgba(210,153,34,.06)}
-  .advanced-panel-title{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;color:var(--text)}
+  .advanced-panel summary{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;color:var(--text);cursor:pointer;list-style:none;padding:2px 0}
+  .advanced-panel summary::-webkit-details-marker{display:none}
+  .advanced-panel summary .advanced-badge{flex:none}
   .advanced-badge{display:inline-block;padding:2px 7px;border:1px solid rgba(210,153,34,.7);border-radius:999px;color:#e3b341;background:rgba(210,153,34,.10);font-size:.68rem;letter-spacing:.05em}
   .advanced-master{margin-top:10px;padding:10px 12px;border:1px solid rgba(210,153,34,.45);border-radius:8px;background:rgba(210,153,34,.08)}
   .advanced-master label{display:flex;align-items:center;gap:10px;margin:0;cursor:pointer;color:var(--text);font-weight:600}
@@ -147,6 +149,40 @@
 
   <!-- TAB 2: MIHOMO BUILDER -->
   <div id="tab-mihomo" class="tab-content active">
+    <div class="hint" style="margin-bottom:10px"><a href="docs/GENERATOR-GUIDE.md">📖 Короткая инструкция по генератору</a></div>
+    <div class="card" id="profileRow">
+      <div class="card-title">🎯 Где будет работать Mihomo?</div>
+      <select id="cfgProfile">
+        <option value="router" selected>Роутер / обычный TUN (Keenetic)</option>
+        <option value="vps-local">VPS — локальный Mihomo / SOCKS для Xray / 3X-UI</option>
+        <option value="vps-gateway">VPS Transparent Gateway (amnezia-mihomo-gateway)</option>
+      </select>
+      <div id="profileHint" class="hint"></div>
+      <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <div class="row">
+          <div><label>TUN device</label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div><label>MTU</label><input type="text" id="vpsMtu" value="1420"></div>
+          <div><label>fake-ip-range</label><input type="text" id="vpsFakeIp" value="198.18.0.0/16"></div>
+        </div>
+        <div class="toggle-row">
+          <label><input type="checkbox" id="vpsDnsEnabled" checked> 🌐 DNS-перехват (fake-ip) — часть VPS-профиля</label>
+        </div>
+        <div id="vpsDnsFields">
+          <div class="row">
+            <div><label>DNS listen</label><input type="text" id="vpsDnsListen" value="0.0.0.0:53"></div>
+            <div><label>Nameservers (через запятую)</label><input type="text" id="vpsDnsNs" value="1.1.1.1, 8.8.8.8"></div>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <div><label>proxy-server-nameserver</label><input type="text" id="vpsProxyNs" value="1.1.1.1"></div>
+          </div>
+          <div id="vpsDnsWarn" class="hint" style="color:#d9534f;margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
+        </div>
+        <div class="hint" style="margin-top:8px">⚠️ Для Mihomo 1.19.31 top-level tun.inet4-address не управляет адресом TUN: IPv4-префикс вычисляется из dns.fake-ip-range и приводится к /30. Поэтому VPS-профиль задаёт device + fake-ip-range, но не обещает отдельный inet4-address. Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
+      </div>
+      <div class="hint">Профиль задаёт только сценарий развёртывания: вход (TUN/SOCKS), базовые переключатели и gateway-настройки. Прокси, подписки, WireGuard, фильтры и остальные данные не затрагиваются. Подробно: <a href="docs/GENERATOR-GUIDE.md">GENERATOR-GUIDE.md</a>, <a href="docs/VPS-GATEWAY.md">VPS-GATEWAY.md</a>.</div>
+    </div>
     <div class="card">
       <div class="card-title">📋 Входные данные</div>
       <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
@@ -165,7 +201,7 @@
       <div class="card-title">📂 WireGuard / AmneziaWG</div>
       <div class="file-upload-wrapper">
         <div class="file-upload">
-          <button class="btn btn-gray" id="btnWg">📂 Загрузить .conf / .awg</button>
+          <button class="btn btn-gray" id="btnWg" title="Загрузить WireGuard/AmneziaWG конфиг — каждый файл станет отдельным proxy в YAML">📂 Загрузить .conf / .awg</button>
           <input type="file" id="wgFile" accept=".conf,.wg,.awg,text/plain" multiple>
         </div>
         <span class="wg-status" id="wgStatus"></span>
@@ -185,15 +221,16 @@
         <label class="label" for="wgDialerProviders" style="display: block; margin-bottom: 5px; margin-top: 10px;">URL-подписки для dialer-группы (по одному в строке, необязательно):</label>
         <textarea id="wgDialerProviders" rows="2" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="https://account.geodema.org/..."></textarea>
         <div class="hint" style="margin-top: 5px;">URL должен совпадать с одной из включённых URL-подписок — группа получает <code>use:</code> на этот provider (узлы не разворачиваются). Для WireGuard dialer вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения — состав подписки заранее неизвестен, поэтому проверяется только выбором.</div>
+        <div class="hint" style="color:#b8860b;margin-top:5px">⚠️ Переключение узла в dialer-группе не означает мгновенную смену уже установленного WireGuard-пути: в полевых тестах старый transport сохранялся более 150 секунд. Для гарантированной немедленной смены пути требуется пересоздание WireGuard outbound (reload/restart Mihomo). Смена colo (FRA/AMS) — наблюдение, не гарантия: Cloudflare выбирает ingress сам.</div>
       </div>
     </div>
 
     <div class="card">
       <div class="card-title">⚙️ Настройки Mihomo</div>
       <div class="checkbox-grid">
-        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
-        <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
-        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
+        <label title="Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Для домашнего роутера обычно включено; для VPS с локальным Xray/3X-UI выключите."><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
+        <label title="Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo."><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
+        <label title="Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090."><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки</label>
       </div>
       <div id="subModeHint" class="hint"></div>
@@ -245,8 +282,8 @@
         <div class="hint" id="policyRoutingHint"></div>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
-        <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
+        <label title="Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo»."><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
+        <label title="TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor."><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
       </div>
       <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
       <div class="advanced-stack-control">
@@ -259,59 +296,29 @@
         <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
       </div>
       <div id="perProxyAdvancedPanel" class="advanced-panel">
-        <div class="advanced-panel-title"><span class="advanced-badge">ADVANCED</span><span>Отдельный вход на каждый прокси</span></div>
-        <div class="advanced-master">
-          <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
-        </div>
-        <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен.</div>
-        <div class="checkbox-grid">
-          <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
-          <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
-        </div>
+        <details id="perProxyAdvancedDetails">
+          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Отдельный вход на каждый прокси</span></summary>
+          <div class="advanced-master">
+            <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
+          </div>
+          <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен. Раскрытие секции само по себе ничего не включает и не сбрасывает.</div>
+          <div class="checkbox-grid">
+            <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
+            <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
+          </div>
+        </details>
       </div>
       <div class="hint">Обычный TUN и MIPS включены по умолчанию. Режимы отдельного входа на каждый прокси — за крышкой расширенного режима; system/mixed — за крышкой расширенного TUN stack.</div>
       <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
       <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
 
-      <label style="margin-top:16px">🏓 Ping server (health-check)</label>
+      <label style="margin-top:16px" title="URL, по которому Mihomo проверяет доступность узлов (url-test и health-check провайдеров). Обычно достаточно Google generate_204.">🏓 Ping server (health-check)</label>
       <select id="pingSelect"></select>
 
       <div class="btn-group">
-        <button class="btn" onclick="buildMihomo()">⚡ Build Config</button>
-        <button class="btn btn-gray" id="copyYamlBtn" onclick="copyMihomo()">📋 Copy YAML</button>
+        <button class="btn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" onclick="buildMihomo()">⚡ Build Config</button>
+        <button class="btn btn-gray" id="copyYamlBtn" title="Скопировать итоговый YAML (доступно только после успешной проверки)" onclick="copyMihomo()">📋 Copy YAML</button>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">🎯 Профиль развёртывания</div>
-      <select id="cfgProfile">
-        <option value="generic" selected>Универсальный (по умолчанию — обычная генерация)</option>
-        <option value="vps">VPS Gateway — Mihomo-конфиг для amnezia-mihomo-gateway</option>
-      </select>
-      <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
-        <div class="row">
-          <div><label>TUN device</label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
-        </div>
-        <div class="row" style="margin-top:12px">
-          <div><label>MTU</label><input type="text" id="vpsMtu" value="1420"></div>
-          <div><label>fake-ip-range</label><input type="text" id="vpsFakeIp" value="198.18.0.0/16"></div>
-        </div>
-        <div class="toggle-row">
-          <label><input type="checkbox" id="vpsDnsEnabled" checked> 🌐 DNS-перехват (fake-ip) — часть VPS-профиля</label>
-        </div>
-        <div id="vpsDnsFields">
-          <div class="row">
-            <div><label>DNS listen</label><input type="text" id="vpsDnsListen" value="0.0.0.0:53"></div>
-            <div><label>Nameservers (через запятую)</label><input type="text" id="vpsDnsNs" value="1.1.1.1, 8.8.8.8"></div>
-          </div>
-          <div class="row" style="margin-top:12px">
-            <div><label>proxy-server-nameserver</label><input type="text" id="vpsProxyNs" value="1.1.1.1"></div>
-          </div>
-          <div id="vpsDnsWarn" class="hint" style="color:#d9534f;margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
-        </div>
-        <div class="hint" style="margin-top:8px">⚠️ Для Mihomo 1.19.31 top-level tun.inet4-address не управляет адресом TUN: IPv4-префикс вычисляется из dns.fake-ip-range и приводится к /30. Поэтому VPS-профиль задаёт device + fake-ip-range, но не обещает отдельный inet4-address. Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
-      </div>
-      <div class="hint">VPS Gateway выключен по умолчанию и не влияет на обычную генерацию. Подробно — docs/VPS-GATEWAY.md.</div>
     </div>
 
     <div class="card">
@@ -1400,19 +1407,106 @@ function updateVpsDnsFields() {
   document.getElementById('vpsDnsFields').style.display = on ? 'block' : 'none';
 }
 
-function onProfileChange() {
-  const isVps = !document.getElementById('cfgAutoWhitelist').checked && document.getElementById('cfgProfile').value === 'vps';
-  const panel = document.getElementById('vpsPanel');
+// === DEPLOYMENT PROFILES: router / vps-local / vps-gateway ===
+// Профиль владеет ТОЛЬКО сценарными переключателями (TUN/MIPS/stack/Mixed/LAN
+// и gateway-панелью). Прокси, подписки, WireGuard, фильтры, dialer, Web UI,
+// health-check и DPR-политики профилем не затрагиваются. Ручное состояние
+// router-профиля сохраняется в snapshot и восстанавливается при возврате.
+const PROFILE_HINTS = {
+  router: 'Домашний роутер / обычный TUN: Mihomo поднимает TUN-интерфейс (MIPS stack), слушает Mixed Port 7890, разрешает доступ из локальной сети. Все параметры ниже можно менять вручную.',
+  'vps-local': 'Для VPS, где Xray/3X-UI или другое локальное приложение отправляет трафик в Mihomo через 127.0.0.1:7890. TUN и системная маршрутизация VPS не используются.',
+  'vps-gateway': 'Только для transparent-gateway с Linux policy routing / iptables / Docker/AWG. Генератор создаёт Mihomo-часть, но не Linux routing/firewall. Для обычного VPS с Xray/3X-UI используйте профиль «VPS — локальный Mihomo / SOCKS».',
+};
+const PROFILE_OWNED_IDS = ['cfgTun', 'cfgTunMips', 'cfgTunStackAdvanced', 'cfgTunStackEx', 'cfgSocks', 'cfgLan'];
+
+// effectiveProfile = профиль, чей UI-state сейчас применён.
+// БС навязывает router-контракт временно, не трогая выбранный пользователем профиль.
+let selectedProfile = 'router';   // пользовательский выбор (select value)
+let effectiveProfile = 'router';  // профиль, чей UI-state применён сейчас
+let bsTemporaryRouter = false;    // БС навязал router временно
+let routerOwnedSnapshot = null;   // ручное состояние router-owned чекбоксов
+
+// Применяет UI-state профиля. Path-independent: результат зависит ТОЛЬКО от
+// целевого профиля, не от пути перехода. snapshot не потребляет и не восстанавливает.
+function applyProfileUiState(target) {
+  const bsOn = document.getElementById('cfgAutoWhitelist').checked;
   const tun = document.getElementById('cfgTun');
-  panel.style.display = isVps ? 'block' : 'none';
-  if (isVps) {
-    panel.dataset.prevTun = tun.checked ? '1' : '0';
-    tun.checked = true; // TUN обязателен для gateway-сценария
-    tun.disabled = true;
-    updateVpsDnsFields();
-  } else {
-    tun.disabled = false;
-    tun.checked = panel.dataset.prevTun !== '0'; // восстановить прежнее состояние
+  const mips = document.getElementById('cfgTunMips');
+  const socks = document.getElementById('cfgSocks');
+  const lan = document.getElementById('cfgLan');
+  const stackAdv = document.getElementById('cfgTunStackAdvanced');
+  const stackEx = document.getElementById('cfgTunStackEx');
+  const panel = document.getElementById('vpsPanel');
+  const hint = document.getElementById('profileHint');
+  hint.textContent = PROFILE_HINTS[target] || '';
+  panel.style.display = target === 'vps-gateway' && !bsOn ? 'block' : 'none';
+  if (target === 'router') {
+    for (const id of PROFILE_OWNED_IDS) document.getElementById(id).disabled = false;
+  } else if (target === 'vps-local') {
+    tun.checked = false; tun.disabled = true;
+    mips.checked = false; mips.disabled = true;
+    stackAdv.checked = false; stackAdv.disabled = true; stackEx.value = '';
+    socks.checked = true; socks.disabled = true;
+    lan.checked = false; lan.disabled = true;
+  } else { // vps-gateway
+    tun.checked = true; tun.disabled = true;
+    mips.disabled = false;
+    stackAdv.disabled = false;
+    socks.disabled = false;
+    lan.disabled = false;
+  }
+  updateMihomoOptionStates();
+  updateVpsDnsFields();
+}
+
+function applyDeploymentProfileUi(opts) {
+  const temporary = !!(opts && opts.temporary);
+  const target = bsTemporaryRouter ? 'router' : selectedProfile;
+  effectiveProfile = target;
+  if (temporary) {
+    // временный router-state: чекбоксы не трогаем (пользователь может настроить
+    // router-профиль под БС), только disabled-state и hint. snapshot не трогаем.
+    // vpsPanel скрывается: эффективный контракт — router, gateway-настройки игнорируются.
+    for (const id of PROFILE_OWNED_IDS) document.getElementById(id).disabled = false;
+    document.getElementById('vpsPanel').style.display = 'none';
+    document.getElementById('profileHint').textContent = PROFILE_HINTS.router + ' (временно: режим Auto-Whitelist)';
+    updateMihomoOptionStates();
+    return;
+  }
+  applyProfileUiState(target);
+}
+
+function onProfileChange() {
+  const select = document.getElementById('cfgProfile');
+  const prev = selectedProfile;
+  const next = select.value;
+  if (prev === next) { applyDeploymentProfileUi(); return; }
+  if (prev === 'router') {
+    // реальный пользовательский уход из router — сохранить ручное состояние
+    routerOwnedSnapshot = {
+      tun: document.getElementById('cfgTun').checked,
+      mips: document.getElementById('cfgTunMips').checked,
+      stackAdv: document.getElementById('cfgTunStackAdvanced').checked,
+      stackEx: document.getElementById('cfgTunStackEx').value,
+      socks: document.getElementById('cfgSocks').checked,
+      lan: document.getElementById('cfgLan').checked,
+    };
+  }
+  selectedProfile = next;
+  effectiveProfile = next;
+  applyProfileUiState(next);
+  updateVpsDnsFields();
+  // восстановление router-owned ручного состояния при ВОЗВРАТЕ в router
+  if (next === 'router' && routerOwnedSnapshot) {
+    const snap = routerOwnedSnapshot;
+    document.getElementById('cfgTun').checked = snap.tun;
+    document.getElementById('cfgTunMips').checked = snap.mips;
+    document.getElementById('cfgTunStackAdvanced').checked = snap.stackAdv;
+    document.getElementById('cfgTunStackEx').value = snap.stackEx || '';
+    document.getElementById('cfgSocks').checked = snap.socks;
+    document.getElementById('cfgLan').checked = snap.lan;
+    routerOwnedSnapshot = null;
+    updateMihomoOptionStates();
   }
 }
 
@@ -1511,23 +1605,26 @@ function onWhitelistChange() {
   const perSocks = document.getElementById('cfgPerProxySocks');
   const profile = document.getElementById('cfgProfile');
   if (on && !whitelistUiState) {
-    whitelistUiState = { perTun: perTun.checked, perSocks: perSocks.checked, profile: profile.value };
+    whitelistUiState = { perTun: perTun.checked, perSocks: perSocks.checked };
     perTun.checked = perSocks.checked = false;
-    const wasVps = profile.value === 'vps';
-    profile.value = 'generic';
-    if (wasVps) onProfileChange();
+    // БС навязывает router-контракт ВРЕМЕННО: выбранный пользователем профиль
+    // сохраняется, router-owned snapshot не потребляется. effectiveProfile
+    // становится 'router' через buildMihomo-клампы (autoWhitelist → router),
+    // UI показывает router-подсказку; при выключении БС UI восстанавливается.
+    bsTemporaryRouter = true;
+    applyDeploymentProfileUi({ temporary: true });
   } else if (!on && whitelistUiState) {
     perTun.checked = whitelistUiState.perTun;
     perSocks.checked = whitelistUiState.perSocks;
-    profile.value = whitelistUiState.profile;
-    if (profile.value === 'vps') onProfileChange();
+    bsTemporaryRouter = false;
+    applyDeploymentProfileUi();
     whitelistUiState = null;
   }
   profile.disabled = on;
   updateMihomoOptionStates();
   const perProxyPanel = document.getElementById('perProxyAdvancedPanel');
   if (perProxyPanel) perProxyPanel.style.display = on ? 'none' : '';
-  profile.closest('.card').style.display = on ? 'none' : '';
+  document.getElementById('profileRow').style.display = on ? 'none' : '';
   document.getElementById('whitelistPanel').style.display = on ? 'block' : 'none';
 }
 
@@ -1627,9 +1724,22 @@ function buildMihomo() {
   if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
 
   const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
-  const addTun = document.getElementById('cfgTun').checked;
-  const addSocks = document.getElementById('cfgSocks').checked;
+  let addTun = document.getElementById('cfgTun').checked;
+  let addSocks = document.getElementById('cfgSocks').checked;
   const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
+  // Deployment profile: router | vps-local | vps-gateway.
+  // БС-режим живёт на router-контракте (см. onWhitelistChange).
+  const deploymentProfile = autoWhitelist ? 'router' : document.getElementById('cfgProfile').value;
+  // Fail-safe клампы профиля: не доверяем checked/disabled в DOM (могут быть
+  // подменены расширением/консолью) — контракт профиля применяется здесь,
+  // до передачи опций в runtime и до пост-патчей YAML.
+  if (deploymentProfile === 'vps-local') {
+    addTun = false;
+    addSocks = true;
+  } else if (deploymentProfile === 'vps-gateway') {
+    addTun = true; // gateway без TUN невозможен; auto-route: false остаётся в пост-патче
+  }
+  const lanChecked = document.getElementById('cfgLan').checked && deploymentProfile !== 'vps-local';
   // Fail-safe: не доверяем прямой подмене DOM — повторно проверяем зависимости
   // (MIPS и Per-Proxy TUN требуют TUN, Per-Proxy SOCKS требует Mixed Port);
   // БС-режим принудительно исключает Per-Proxy и VPS.
@@ -1705,13 +1815,13 @@ function buildMihomo() {
 
     // PATCH: Deployment profile — только при opt-in профиле VPS Gateway.
     // При 'generic' пост-патч не выполняется вовсе (инвариант byte-for-byte).
-    const deploymentProfile = autoWhitelist ? 'generic' : document.getElementById('cfgProfile').value;
-    if (deploymentProfile === 'vps') {
-      yaml = applyDeploymentProfile(yaml, deploymentProfile, tunStack);
+
+    if (deploymentProfile === 'vps-gateway') {
+      yaml = applyDeploymentProfile(yaml, 'vps', tunStack);
     }
 
     // PATCH: Allow LAN
-    if (document.getElementById('cfgLan').checked) {
+    if (lanChecked) {
       yaml = yaml.replace(/^allow-lan:\s*false\s*$/m, 'allow-lan: true');
       if (!yaml.includes('bind-address')) {
         yaml = yaml.replace(/^(allow-lan:\s*true\s*)$/m, '$1\nbind-address: "*"');
@@ -1763,6 +1873,19 @@ initPingSelector();
 initWgUpload();
 document.getElementById('cfgAutoWhitelist').addEventListener('change', onWhitelistChange);
 document.getElementById('cfgProfile').addEventListener('change', onProfileChange);
+
+// ADVANCED-спойлер: маркер раскрытия. Раскрытие не включает master,
+// закрытие не сбрасывает настройки — состояние master/children отдельно.
+(function () {
+  const d = document.getElementById('perProxyAdvancedDetails');
+  const marker = document.getElementById('perProxyDisclosureMarker');
+  if (!d || !marker) return;
+  // маркер — отдельный span: badge-разметка summary не разрушается,
+  // повторные open/close не накапливают пробелы
+  const sync = () => { marker.textContent = d.open ? '▼' : '▶'; };
+  d.addEventListener('toggle', sync);
+  sync();
+})();
 document.getElementById('vpsDnsEnabled').addEventListener('change', updateVpsDnsFields);
 document.getElementById('cfgTun').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgSocks').addEventListener('change', updateMihomoOptionStates);
@@ -1786,6 +1909,7 @@ updateExcludeFilterVisibility();
 updateSubModeHint();
 updateWebUiVisibility();
 updateMihomoOptionStates();
+applyDeploymentProfileUi(); // заполнить hint и применить состояние профиля при загрузке
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
 // результат проверки недействительным — старый VALID не сохраняется
 ['input', 'change'].forEach(ev => document.addEventListener(ev, () => {
