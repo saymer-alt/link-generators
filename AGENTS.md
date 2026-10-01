@@ -231,9 +231,10 @@ lives in `docs/`, and agent rules live in this file.
 Principle: CODE is the source of truth. If README disagrees with code, README is stale,
 not the code. Rules:
 
-- current code has NO warpscout parser, `warpscout-account.json`, WARP-in-WARP checkbox,
-  or `dialer-proxy` (0 occurrences in HTML and runtime). Do not "restore" them
-  independently — not from the old README and not from Git history (revisions ed835e8/74a3f24);
+- current code has NO warpscout parser or `warpscout-account.json`. Do not "restore" them
+  independently — not from the old README and not from Git history (revisions ed835e8/74a3f24).
+  WARP-in-WARP via `dialer-proxy` was added as a full feature (2026-10-01, merged to main):
+  see "Deployment profiles" section and docs/MIHOMO.md for the current contract;
 - if the task says "fix/restore warpscout", stop and clarify with the owner whether it should
   actually be restored or the request is stale;
 - code changes that alter the set of tabs/features must include a synchronized README update;
@@ -299,9 +300,13 @@ Empty input with empty wgBeans → error "No valid links or profiles provided".
 Additional post-processing scenario for amnezia-mihomo-gateway (the Mihomo half of
 the gateway config). Details: docs/VPS-GATEWAY.md. Invariants that must not be violated:
 
-- selector `#cfgProfile` defaults to `generic`; when `generic`, function
-  `applyDeploymentProfile()` is NOT called (guard in `buildMihomo()`) — output stays
-  byte-for-byte identical to the previous behavior, without extra `jsyaml.load/dump`;
+- selector `#cfgProfile` defaults to `router`; the three user-facing profiles are
+  `router` / `vps-local` / `vps-gateway`. When `router`, the gateway post-patch
+  (`applyDeploymentProfile()`) is NOT called — router and vps-local output stays
+  byte-for-byte identical to non-profile behaviour;
+
+- mandatory regression contract: docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md;
+
 - `tun.auto-route: false` is a hard invariant and is not configurable in the UI;
 - profile defaults = variables from the current amnezia-mihomo-gateway `install.sh`
   (`PROXY_IF`/`TUN_INET_ADDR`/`FAKE_IP_RANGE`, package v2.0); anchor is constant
@@ -333,6 +338,10 @@ the gateway config). Details: docs/VPS-GATEWAY.md. Invariants that must not be v
 7. Commit only targeted changes; before committing, check `git status` / `git diff`:
    the diff must contain nothing except the intended change (especially no accidental
    changes to `web4core.runtime.js`).
+
+## Deployment profiles test contract
+
+Mandatory profile/regression contract: [docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md](docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md).
 
 ## Checks after changing HTML/JS
 

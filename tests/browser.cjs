@@ -562,5 +562,90 @@ const expectedAwg = {
     }
     console.log('Profiles: router/vps-local/vps-gateway contract, round trip, spoiler, БС — passed');
 
+    // === Router snapshot через БС (vps-local) ===
+    await page.locator('#cfgProfile').selectOption('router');
+    await page.locator('#cfgTun').check();
+    await page.locator('#cfgTunMips').uncheck();
+    await page.locator('#cfgLan').uncheck();
+    await page.locator('#cfgProfile').selectOption('vps-local');
+    await page.locator('#cfgAutoWhitelist').check();
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-local', 'БС: выбранное сохранено (vps-local)');
+    await page.locator('#cfgAutoWhitelist').uncheck();
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-local', 'БС off: профиль восстановлен');
+    await page.locator('#cfgProfile').selectOption('router');
+    assert.equal(await checked2('#cfgTun'), true, 'snapshot: TUN=ON восстановлен');
+    assert.equal(await checked2('#cfgTunMips'), false, 'snapshot: MIPS=OFF восстановлен');
+    assert.equal(await checked2('#cfgLan'), false, 'snapshot: LAN=OFF восстановлен');
+    console.log('Router snapshot через vps-local + БС — passed');
+
+    // === Router snapshot через БС (vps-gateway) ===
+    await page.locator('#cfgProfile').selectOption('vps-gateway');
+    await page.locator('#cfgAutoWhitelist').check();
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway', 'БС: выбранное сохранено (vps-gateway)');
+    await page.locator('#cfgAutoWhitelist').uncheck();
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway', 'БС off: профиль восстановлен');
+    await page.locator('#cfgProfile').selectOption('router');
+    assert.equal(await checked2('#cfgTun'), true, 'snapshot через gateway: TUN=ON восстановлен');
+    assert.equal(await checked2('#cfgTunMips'), false, 'snapshot через gateway: MIPS=OFF');
+    assert.equal(await checked2('#cfgLan'), false, 'snapshot через gateway: LAN=OFF');
+    console.log('Router snapshot через vps-gateway + БС — passed');
+
+    // === 6 прямых profile transitions (path-independent UI-state) ===
+    const PROFILE_STATE = {
+      // router: checked значения path-dependent (пользовательские, сохраняются)
+      // vps-local/vps-gateway: profile forces checked+disabled deterministically
+      router:       { tun: null,  tunDisabled: false, mips: null,  mipsDisabled: false, socks: null,  socksDisabled: false, lan: null,  lanDisabled: false, panel: false },
+      'vps-local':  { tun: false, tunDisabled: true,  mips: false, mipsDisabled: true,  socks: true,  socksDisabled: true,  lan: false, lanDisabled: true,  panel: false },
+      'vps-gateway':{ tun: true,  tunDisabled: true,  mips: null,  mipsDisabled: false, socks: null,  socksDisabled: false, lan: null,  lanDisabled: false, panel: true  },
+    };
+    const transitions = [
+      ['router', 'vps-local'],
+      ['router', 'vps-gateway'],
+      ['vps-local', 'router'],
+      ['vps-local', 'vps-gateway'],
+      ['vps-gateway', 'router'],
+      ['vps-gateway', 'vps-local'],
+    ];
+    for (const [from, to] of transitions) {
+      await page.locator('#cfgProfile').selectOption(from);
+      await page.locator('#cfgProfile').selectOption(to);
+      const st = PROFILE_STATE[to];
+      if (st.tun !== null) assert.equal(await checked2('#cfgTun'), st.tun, `${from}→${to}: TUN checked`);
+      assert.equal(await disabled2('#cfgTun'), st.tunDisabled, `${from}→${to}: TUN disabled`);
+      if (st.mips !== null) assert.equal(await checked2('#cfgTunMips'), st.mips, `${from}→${to}: MIPS checked`);
+      assert.equal(await disabled2('#cfgTunMips'), st.mipsDisabled, `${from}→${to}: MIPS disabled`);
+      if (st.socks !== null) assert.equal(await checked2('#cfgSocks'), st.socks, `${from}→${to}: SOCKS checked`);
+      assert.equal(await disabled2('#cfgSocks'), st.socksDisabled, `${from}→${to}: SOCKS disabled`);
+      assert.equal(await vis2('#vpsPanel'), st.panel, `${from}→${to}: gateway panel`);
+    }
+    console.log('6 прямых profile transitions — passed (path-independent)');
+
+    // === vps-gateway DOM tamper ===
+    await page.locator('#cfgProfile').selectOption('vps-gateway');
+    await page.evaluate(() => {
+      const tun = document.getElementById('cfgTun');
+      tun.checked = false; tun.disabled = false;
+    });
+    const gwTamperYaml = await build2();
+    assert.match(gwTamperYaml, /tun:/, 'gateway tamper: tun присутствует');
+    assert.match(gwTamperYaml, /device: tun-mihomo/, 'gateway tamper: device');
+    assert.match(gwTamperYaml, /auto-route: false/, 'gateway tamper: auto-route false');
+    assert.doesNotMatch(gwTamperYaml, /auto-route: true/, 'gateway tamper: auto-route true отсутствует');
+    console.log('vps-gateway DOM tamper — passed');
+
+    // === DPR field survival ===
+    await page.locator('#cfgPolicyRouting').check();
+    await page.locator('#btnPolicyAdd').click();
+    await page.locator('.policy-card .policy-name').first().fill('KEEP-DPR');
+    await page.locator('.policy-card .policy-domains').first().fill('keep.example\nDOMAIN-SUFFIX,keep2.example');
+    await page.locator('#cfgPolicyRouting').uncheck();
+    await page.locator('#cfgProfile').selectOption('vps-local');
+    await page.locator('#cfgProfile').selectOption('router');
+    await page.locator('#cfgPolicyRouting').check();
+    assert.equal(await page.locator('.policy-card .policy-name').first().inputValue(), 'KEEP-DPR', 'DPR: имя политики пережило переключение');
+    assert.match(await page.locator('.policy-card .policy-domains').first().inputValue(), /keep\.example/, 'DPR: домены пережили переключение');
+    await page.locator('#cfgPolicyRouting').uncheck();
+    console.log('DPR field survival — passed');
+
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
