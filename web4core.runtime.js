@@ -2740,6 +2740,157 @@
     }
     return proxies;
   }
+  var DOMAIN_POLICY_RESERVED_NAMES = /* @__PURE__ */ new Set([
+    GLOBAL_GROUP_NAME,
+    FASTEST_GROUP_NAME,
+    STATIC_HEALTH_GROUP_NAME,
+    "DIRECT",
+    "REJECT",
+    "REJECT-DROP",
+    "PASS",
+    "COMPATIBLE"
+  ]);
+  var DOMAIN_POLICY_RULE_TYPES = /* @__PURE__ */ new Set(["DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-WILDCARD", "DOMAIN-REGEX", "GEOSITE", "IP-CIDR", "IP-CIDR6"]);
+  var DOMAIN_POLICY_HOSTNAME_RE = /^(\*\.)?(?:[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\.?$/i;
+  var DOMAIN_IPV4_CIDR_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+  function normalizeDomainPolicyCidr(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const slash = raw.indexOf("/");
+    const addr = (slash === -1 ? raw : raw.slice(0, slash)).trim().toLowerCase();
+    const prefixRaw = slash === -1 ? "" : raw.slice(slash + 1).trim();
+    const prefix = prefixRaw === "" ? void 0 : Number(prefixRaw);
+    if (prefix !== void 0 && (!Number.isInteger(prefix) || prefix < 0)) return "";
+    if (DOMAIN_IPV4_CIDR_RE.test(addr)) {
+      const octets = addr.split(".").map(Number);
+      if (octets.some((o) => o > 255)) return "";
+      if (prefix !== void 0 && prefix > 32) return "";
+      return `${addr}/${prefix === void 0 ? 32 : prefix}`;
+    }
+    if (addr.includes(":") && /^[0-9a-f:]+$/i.test(addr) && (addr.match(/::/g) || []).length <= 1) {
+      if (prefix !== void 0 && prefix > 128) return "";
+      return `${addr}/${prefix === void 0 ? 128 : prefix}`;
+    }
+    return "";
+  }
+  function parseDomainPolicyLine(raw) {
+    const line = String(raw || "").trim();
+    if (!line || line.startsWith("#")) return { skip: true };
+    const comma = line.indexOf(",");
+    if (comma !== -1) {
+      const type = line.slice(0, comma).trim().toUpperCase();
+      const value = line.slice(comma + 1).trim();
+      if (DOMAIN_POLICY_RULE_TYPES.has(type)) {
+        if (type === "IP-CIDR" || type === "IP-CIDR6") {
+          const cidr2 = normalizeDomainPolicyCidr(value);
+          if (!cidr2) return { invalid: line };
+          return { rule: `IP-CIDR,${cidr2},no-resolve` };
+        }
+        if (type === "GEOSITE") {
+          if (!/^[a-z0-9!@._-]+$/i.test(value)) return { invalid: line };
+          return { rule: `GEOSITE,${value}` };
+        }
+        if (type === "DOMAIN-KEYWORD" || type === "DOMAIN-REGEX") {
+          if (!value || !/^[a-z0-9._*?+|^$()\[\]{}\\-]+$/i.test(value)) return { invalid: line };
+          return { rule: `${type},${value}` };
+        }
+        if (!value || !DOMAIN_POLICY_HOSTNAME_RE.test(value)) return { invalid: line };
+        return { rule: `${type},${value.toLowerCase()}` };
+      }
+      return { invalid: line };
+    }
+    const cidr = normalizeDomainPolicyCidr(line);
+    if (cidr) return { rule: `IP-CIDR,${cidr},no-resolve` };
+    if (!DOMAIN_POLICY_HOSTNAME_RE.test(line)) return { invalid: line };
+    return { rule: `DOMAIN-SUFFIX,${line.toLowerCase().replace(/^\*\./, "")}` };
+  }
+  function domainPolicySlug(name, index, used) {
+    let base = String(name).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
+    if (!base) base = `n${index + 1}`;
+    let slug = `policy-${base}`;
+    let i = 2;
+    while (used.has(slug)) slug = `policy-${base}-${i++}`;
+    used.add(slug);
+    return slug;
+  }
+  function buildDomainPolicyArtifacts(policies, ctx) {
+    const warnings = [];
+    const ruleProviders = {};
+    const groups = [];
+    const rules = [];
+    const usedSlugs = /* @__PURE__ */ new Set();
+    const existingGroups = new Set(ctx.existingGroupNames || []);
+    policies.forEach((policy, index) => {
+      const name = String(policy?.name || "").trim();
+      if (DOMAIN_POLICY_RESERVED_NAMES.has(name)) {
+        throw new Error(`Mihomo: domain policy name "${name}" is reserved`);
+      }
+      if (existingGroups.has(name)) {
+        throw new Error(`Mihomo: domain policy name "${name}" conflicts with an existing group`);
+      }
+      const lines = Array.isArray(policy.domains) ? policy.domains : String(policy.domains || "").split(/\r?\n/);
+      const seen = /* @__PURE__ */ new Set();
+      const payload = [];
+      lines.forEach((raw) => {
+        const parsed = parseDomainPolicyLine(raw);
+        if (parsed.skip) return;
+        if (parsed.invalid) {
+          warnings.push(`\u041F\u043E\u043B\u0438\u0442\u0438\u043A\u0430 \xAB${name}\xBB: \u0441\u0442\u0440\u043E\u043A\u0430 \xAB${parsed.invalid}\xBB \u043D\u0435 \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u0430 \u0438 \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u0430`);
+          return;
+        }
+        if (!seen.has(parsed.rule)) {
+          seen.add(parsed.rule);
+          payload.push(parsed.rule);
+        }
+      });
+      if (!payload.length) {
+        warnings.push(`\u041F\u043E\u043B\u0438\u0442\u0438\u043A\u0430 \xAB${name}\xBB: \u043D\u0435\u0442 \u043D\u0438 \u043E\u0434\u043D\u043E\u0433\u043E \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u043E\u0433\u043E \u0434\u043E\u043C\u0435\u043D\u0430 \u2014 \u043F\u043E\u043B\u0438\u0442\u0438\u043A\u0430 \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u0430`);
+        return;
+      }
+      const slug = domainPolicySlug(name, index, usedSlugs);
+      ruleProviders[slug] = { type: "inline", behavior: "classical", format: "yaml", payload };
+      rules.push(`RULE-SET,${slug},${name}`);
+      if (ctx.mode === "subscription") {
+        groups.push({
+          name: `${name}-AUTO`,
+          type: "url-test",
+          use: ctx.providerNames.slice(),
+          url: ctx.urlTest,
+          interval: PROXY_FETCH_INTERVAL,
+          tolerance: 50,
+          "expected-status": ctx.urlTestExpectedStatus,
+          "empty-fallback": "REJECT"
+        });
+        groups.push({
+          name,
+          type: "select",
+          proxies: [`${name}-AUTO`, FASTEST_GROUP_NAME, GLOBAL_GROUP_NAME, "DIRECT"]
+        });
+        existingGroups.add(`${name}-AUTO`);
+      } else if (ctx.mode === "static") {
+        groups.push({
+          name,
+          type: "select",
+          proxies: [FASTEST_GROUP_NAME, GLOBAL_GROUP_NAME, "DIRECT"]
+        });
+      } else {
+        groups.push({
+          name,
+          type: "select",
+          proxies: [GLOBAL_GROUP_NAME, "DIRECT"]
+        });
+      }
+      existingGroups.add(name);
+    });
+    return { ruleProviders, groups, rules, warnings };
+  }
+  function getDomainPolicyPolicies(opts) {
+    const policies = opts && Array.isArray(opts.domainPolicy) ? opts.domainPolicy : [];
+    if (policies.length && isPerProxyListenerMode(opts)) {
+      throw new Error("Mihomo: domain policy routing does not support per-proxy listeners");
+    }
+    return policies;
+  }
   function buildMihomoProxy(bean) {
     const s = bean.stream || {};
     const base = { name: bean.name || computeTag(bean, /* @__PURE__ */ new Set()), type: "", server: bean.host, port: bean.port };
@@ -3260,6 +3411,7 @@
   function buildMihomoConfig(beans, opts) {
     const urlTest = getUrlTest(opts);
     const urlTestExpectedStatus = getUrlTestExpectedStatus(opts);
+    const policies = getDomainPolicyPolicies(opts);
     const dedupedBeans = deduplicateProxies(beans);
     const proxies = dedupedBeans.map((b) => buildMihomoProxy(b));
     const usePerProxyListeners = isPerProxyListenerMode(opts);
@@ -3325,6 +3477,13 @@
         });
       }
     }
+    const policyArtifacts = policies.length ? buildDomainPolicyArtifacts(policies, {
+      mode: "static",
+      existingGroupNames: groups.map((g) => g.name),
+      urlTest,
+      urlTestExpectedStatus
+    }) : null;
+    if (policyArtifacts) groups.push(...policyArtifacts.groups);
     const basePort = opts && opts.basePort || 7890;
     const listeners = [];
     if (addSocks && usePerProxyPort && proxies.length > 0) {
@@ -3345,8 +3504,12 @@
       "log-level": "warning",
       proxies,
       "proxy-groups": groups,
-      rules: [`MATCH,${GLOBAL_GROUP_NAME}`]
+      rules: [...policyArtifacts ? policyArtifacts.rules : [], `MATCH,${GLOBAL_GROUP_NAME}`]
     };
+    if (policyArtifacts) {
+      config["rule-providers"] = policyArtifacts.ruleProviders;
+      config.warnings = policyArtifacts.warnings;
+    }
     if (addSocks && !usePerProxyPort) {
       config["mixed-port"] = basePort;
     } else if (listeners.length > 0) {
@@ -3357,6 +3520,7 @@
   function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
     const urlTest = getUrlTest(opts);
     const urlTestExpectedStatus = getUrlTestExpectedStatus(opts);
+    const policies = getDomainPolicyPolicies(opts);
     if (!Array.isArray(subscriptionUrls) || subscriptionUrls.length === 0) {
       throw new Error("At least one subscription URL is required");
     }
@@ -3466,6 +3630,7 @@
         }
       });
     }
+    let subscriptionPolicyArtifacts = null;
     if (usePerProxyListeners) {
       if (extraProxies.length > 0) {
         groups.push({
@@ -3491,6 +3656,17 @@
       });
     } else {
       const fastestTargets = fastestGroup && Array.isArray(fastestGroup.proxies) ? [...fastestGroup.proxies] : [];
+      const policyArtifacts = policies.length ? buildDomainPolicyArtifacts(policies, {
+        mode: "subscription",
+        providerNames,
+        urlTest,
+        urlTestExpectedStatus,
+        existingGroupNames: groups.map((g) => g.name)
+      }) : null;
+      if (policyArtifacts) {
+        groups.push(...policyArtifacts.groups);
+        subscriptionPolicyArtifacts = policyArtifacts;
+      }
       groups.push({
         name: GLOBAL_GROUP_NAME,
         type: "select",
@@ -3516,8 +3692,18 @@
         listeners.push(buildSocksListener(p.name, targetGroup, basePort + portIdx++));
       });
     }
-    const rules = [`MATCH,${GLOBAL_GROUP_NAME}`];
-    return { providers, groups, rules, proxies: extraProxies, listeners };
+    const rules = [
+      ...subscriptionPolicyArtifacts ? subscriptionPolicyArtifacts.rules : [],
+      `MATCH,${GLOBAL_GROUP_NAME}`
+    ];
+    return {
+      providers,
+      groups,
+      rules,
+      proxies: extraProxies,
+      listeners,
+      ...subscriptionPolicyArtifacts ? { ruleProviders: subscriptionPolicyArtifacts.ruleProviders, warnings: subscriptionPolicyArtifacts.warnings } : {}
+    };
   }
   function buildMihomoPriorityConfig(primary, fallback, opts) {
     const proxies = [];
@@ -3555,7 +3741,20 @@
       timeout: FALLBACK_DIAL_FAILURE_WINDOW_MS,
       "max-failed-times": FALLBACK_MAX_DIAL_FAILURES
     }];
-    return { proxies, providers, groups, rules: [`MATCH,${GLOBAL_GROUP_NAME}`] };
+    const policies = getDomainPolicyPolicies(opts);
+    const policyArtifacts = policies.length ? buildDomainPolicyArtifacts(policies, {
+      mode: "priority",
+      existingGroupNames: groups.map((g) => g.name),
+      urlTest: probe.url
+    }) : null;
+    if (policyArtifacts) groups.push(...policyArtifacts.groups);
+    return {
+      proxies,
+      providers,
+      groups,
+      rules: [...policyArtifacts ? policyArtifacts.rules : [], `MATCH,${GLOBAL_GROUP_NAME}`],
+      ...policyArtifacts ? { ruleProviders: policyArtifacts.ruleProviders, warnings: policyArtifacts.warnings } : {}
+    };
   }
 
   // src/core/yaml.js
@@ -3644,7 +3843,7 @@
       lines.splice(start, end - start, ...inject);
     }
   }
-  function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules, listeners) {
+  function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules, listeners, ruleProviders) {
     const text = (baseYamlText || "").replace(/\r\n/g, "\n");
     const lines = text.split("\n");
     if (Array.isArray(proxies) && proxies.length > 0) {
@@ -3655,6 +3854,9 @@
     }
     if (providers && typeof providers === "object" && Object.keys(providers).length > 0) {
       upsertSection(lines, "proxy-providers", providers);
+    }
+    if (ruleProviders && typeof ruleProviders === "object" && Object.keys(ruleProviders).length > 0) {
+      upsertSection(lines, "rule-providers", ruleProviders);
     }
     if (Array.isArray(rules) && rules.length > 0) {
       upsertSection(lines, "rules", rules);
@@ -3698,8 +3900,169 @@
     }
     return stack;
   }
+  var MIHOMO_WG_DIALER_DEFAULT_GROUP = "WARP-DIALER";
+  function resolveMihomoWgDialer(proxies, groups, providers, opts) {
+    const target = String(opts && opts.wgDialerProxy || "").trim();
+    const membersRaw = opts && Array.isArray(opts.wgDialerGroupMembers) ? opts.wgDialerGroupMembers : [];
+    const members = membersRaw.map((s) => String(s).trim()).filter(Boolean);
+    const providersRaw = opts && Array.isArray(opts.wgDialerProviders) ? opts.wgDialerProviders : [];
+    const providerUrls = providersRaw.map((s) => String(s).trim()).filter(Boolean);
+    if (!target && members.length === 0 && providerUrls.length === 0) return null;
+    const proxyList = Array.isArray(proxies) ? proxies : [];
+    const groupList = Array.isArray(groups) ? groups : [];
+    const proxyNames = new Set(proxyList.map((p) => String(p && p.name || "")));
+    const groupNames = new Set(groupList.map((g) => String(g && g.name || "")));
+    const groupName = target || MIHOMO_WG_DIALER_DEFAULT_GROUP;
+    if (members.length || providerUrls.length) {
+      if (proxyNames.has(groupName) || groupNames.has(groupName)) {
+        throw new Error(`Mihomo: dialer group name "${groupName}" conflicts with an existing proxy or group`);
+      }
+      if (members.length) {
+        const missing = members.filter((m) => m !== "DIRECT" && !proxyNames.has(m));
+        if (missing.length) {
+          throw new Error(`Mihomo: dialer group member(s) not found among proxies: ${missing.join(", ")}`);
+        }
+      }
+      const providerNames = [];
+      if (providerUrls.length) {
+        const providerList = providers && typeof providers === "object" && !Array.isArray(providers) ? providers : {};
+        const urlToName = /* @__PURE__ */ new Map();
+        Object.entries(providerList).forEach(([name, provider]) => {
+          if (provider && typeof provider === "object" && provider.url) urlToName.set(String(provider.url), name);
+        });
+        for (const url of providerUrls) {
+          const name = urlToName.get(url);
+          if (!name) {
+            throw new Error(`Mihomo: dialer provider URL not found among proxy-providers (enable URL-\u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0438 mode and pass the same URL): ${url}`);
+          }
+          providerNames.push(name);
+        }
+      }
+      const group = { name: groupName, type: "select" };
+      if (members.length) group.proxies = members.slice();
+      if (providerNames.length) group.use = providerNames;
+      return { target: groupName, members: new Set(members), group };
+    }
+    if (target !== "DIRECT" && !proxyNames.has(target) && !groupNames.has(target)) {
+      throw new Error(`Mihomo: dialer-proxy target "${target}" not found among proxies or groups`);
+    }
+    return { target, members: /* @__PURE__ */ new Set(), group: null };
+  }
+  function applyMihomoWgDialer(proxies, dialer) {
+    if (!dialer) return proxies;
+    let applied = 0;
+    const out = (Array.isArray(proxies) ? proxies : []).map((p) => {
+      if (p && p.type === "wireguard" && p.name !== dialer.target && !dialer.members.has(String(p.name || ""))) {
+        applied++;
+        return Object.assign({}, p, { "dialer-proxy": dialer.target });
+      }
+      return p;
+    });
+    if (applied === 0) {
+      throw new Error(`Mihomo: dialer-proxy "${dialer.target}" applies to no wireguard proxy (self-named and member profiles are excluded)`);
+    }
+    return out;
+  }
+  var MIHOMO_DIALER_DEAD_ENDS = /* @__PURE__ */ new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"]);
+  function buildDialerDependencyGraph(proxies, groups, providers) {
+    const dialerOf = /* @__PURE__ */ new Map();
+    (Array.isArray(proxies) ? proxies : []).forEach((p) => {
+      if (p && typeof p === "object" && typeof p.name === "string" && p["dialer-proxy"]) {
+        dialerOf.set(p.name, String(p["dialer-proxy"]));
+      }
+    });
+    const staticMembers = /* @__PURE__ */ new Map();
+    const providerMembers = /* @__PURE__ */ new Map();
+    (Array.isArray(groups) ? groups : []).forEach((g) => {
+      if (!g || typeof g !== "object" || typeof g.name !== "string") return;
+      if (Array.isArray(g.proxies)) staticMembers.set(g.name, g.proxies.filter((m) => typeof m === "string"));
+      if (Array.isArray(g.use)) providerMembers.set(g.name, g.use.filter((m) => typeof m === "string"));
+    });
+    const providerDialer = /* @__PURE__ */ new Map();
+    if (providers && typeof providers === "object" && !Array.isArray(providers)) {
+      Object.entries(providers).forEach(([name, provider]) => {
+        const override = provider && typeof provider === "object" ? provider.override : void 0;
+        const dp = override && typeof override === "object" ? override["dialer-proxy"] : void 0;
+        if (typeof dp === "string" && dp.trim()) providerDialer.set(name, dp.trim());
+      });
+    }
+    return { dialerOf, staticMembers, providerMembers, providerDialer, deadEnds: MIHOMO_DIALER_DEAD_ENDS };
+  }
+  function nextDialerNodes(graph, node) {
+    const out = [];
+    if (graph.dialerOf.has(node)) out.push(graph.dialerOf.get(node));
+    if (graph.staticMembers.has(node)) out.push(...graph.staticMembers.get(node).filter((m) => !graph.deadEnds.has(m)));
+    if (graph.providerMembers.has(node)) {
+      for (const u of graph.providerMembers.get(node)) {
+        if (graph.providerDialer.has(u)) out.push(graph.providerDialer.get(u));
+      }
+    }
+    return out;
+  }
+  function findDialerCycles(graph) {
+    const cycles = [];
+    for (const start of graph.dialerOf.keys()) {
+      const path = [start];
+      const visit = (node) => {
+        if (node === start) {
+          cycles.push({ start, route: path.slice().concat(start) });
+          return true;
+        }
+        if (path.includes(node) || graph.deadEnds.has(node)) return false;
+        path.push(node);
+        for (const n of nextDialerNodes(graph, node)) {
+          if (visit(n)) return true;
+        }
+        path.pop();
+        return false;
+      };
+      for (const n of nextDialerNodes(graph, start)) {
+        if (visit(n)) break;
+      }
+    }
+    return cycles;
+  }
+  function detectMihomoDialerCycles(proxies, groups, providers) {
+    const graph = buildDialerDependencyGraph(proxies, groups, providers);
+    if (graph.dialerOf.size === 0) return;
+    const cycles = findDialerCycles(graph);
+    if (cycles.length) {
+      const c = cycles[0];
+      throw new Error(`Mihomo: circular dialer-proxy dependency for "${c.start}" (route: ${c.route.join(" -> ")}) \u2014 the handshake route returns to its own outbound`);
+    }
+  }
+  function analyzeDialerGraph(doc) {
+    const d = doc && typeof doc === "object" && !Array.isArray(doc) ? doc : {};
+    const graph = buildDialerDependencyGraph(d.proxies, d["proxy-groups"], d["proxy-providers"]);
+    const cycles = findDialerCycles(graph);
+    const dynamicGroups = [];
+    const dynamicProviders = [];
+    const dialerRoots = [...graph.dialerOf.values()];
+    const seen = /* @__PURE__ */ new Set();
+    const visit = (node) => {
+      if (seen.has(node) || graph.deadEnds.has(node)) return;
+      seen.add(node);
+      if (graph.staticMembers.has(node)) {
+        graph.staticMembers.get(node).forEach(visit);
+      }
+      if (graph.providerMembers.has(node)) {
+        dynamicGroups.push(node);
+        for (const u of graph.providerMembers.get(node)) {
+          if (!graph.providerDialer.has(u) && !dynamicProviders.includes(u)) dynamicProviders.push(u);
+          if (graph.providerDialer.has(u)) visit(graph.providerDialer.get(u));
+        }
+      }
+    };
+    for (const root of dialerRoots) visit(root);
+    for (const start of graph.dialerOf.keys()) visit(start);
+    return { cycles, dynamicGroups: [...new Set(dynamicGroups)], dynamicProviders };
+  }
   function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     opts = opts || {};
+    const wgDialer = resolveMihomoWgDialer(proxies, groups, providers, opts);
+    if (wgDialer && wgDialer.group) groups = [wgDialer.group, ...groups];
+    if (wgDialer) proxies = applyMihomoWgDialer(proxies, wgDialer);
+    detectMihomoDialerCycles(proxies, groups, providers);
     const addSocks = opts.addSocks !== false;
     const webUI = opts.webUI === true;
     const tunOpt = opts.tun;
@@ -3803,7 +4166,7 @@
         template = lines.join("\n");
       }
     }
-    return overlayMihomoYaml(template, proxies, groups, providers, rules, listeners);
+    return overlayMihomoYaml(template, proxies, groups, providers, rules, listeners, opts.ruleProviders);
   }
 
   // src/core/subscription.js
@@ -4409,6 +4772,24 @@
       if (!bean.stream.fp) bean.stream.fp = "chrome";
     }
   }
+  function normalizeDomainPolicy(raw) {
+    if (raw === void 0 || raw === null || raw === "") return [];
+    if (!Array.isArray(raw)) throw new Error("Mihomo: domain policy must be an array of {name, domains}");
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const item of raw) {
+      if (!item || typeof item !== "object") throw new Error("Mihomo: domain policy entry must be an object");
+      const name = String(item.name || "").trim();
+      if (!name) throw new Error("Mihomo: domain policy name must not be empty");
+      if (name.includes(",")) throw new Error(`Mihomo: domain policy name must not contain commas: "${name}"`);
+      if (name.length > 64) throw new Error(`Mihomo: domain policy name is too long: "${name.slice(0, 32)}\u2026"`);
+      if (seen.has(name)) throw new Error(`Mihomo: duplicate domain policy name: "${name}"`);
+      seen.add(name);
+      const domains = typeof item.domains === "string" ? item.domains.split(/\r?\n/) : Array.isArray(item.domains) ? item.domains.map((s) => String(s)) : [];
+      out.push({ name, domains });
+    }
+    return out;
+  }
   function buildFromRequest(req) {
     const core = String(req?.core || "").toLowerCase();
     const input = String(req?.input || "");
@@ -4420,6 +4801,7 @@
     options.webUiUrl = effectiveWebUi ? resolveWebUiUrl(options) : void 0;
     const modernHosts = normalizeRealityModernHosts(options.mihomoRealityModernHosts);
     options.modernHosts = modernHosts;
+    options.domainPolicy = normalizeDomainPolicy(options.mihomoDomainPolicy);
     if (!core) throw new Error("Missing core");
     if (core !== "singbox" && core !== "xray" && core !== "mihomo") throw new Error("Invalid core: " + core);
     if (core === "singbox") {
@@ -4452,12 +4834,17 @@
       applyRealityModernHosts(primarySide.beans, modernHosts2);
       applyRealityModernHosts(fallbackSide.beans, modernHosts2);
       const cfg2 = buildMihomoPriorityConfig(primarySide, fallbackSide, options);
-      return { kind: "yaml", data: buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, [], {
+      const yaml2 = buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, [], {
         addSocks: !!options.addSocks,
         webUI: !!options.webUI,
         webUiUrl: options.webUiUrl,
-        tun: options.addTun ? { mode: "tun", stack: options.mihomoTunStack } : null
-      }) };
+        wgDialerProxy: options.wgDialerProxy,
+        wgDialerGroupMembers: options.wgDialerGroupMembers,
+        wgDialerProviders: options.wgDialerProviders,
+        tun: options.addTun ? { mode: "tun", stack: options.mihomoTunStack } : null,
+        ruleProviders: cfg2.ruleProviders
+      });
+      return { kind: "yaml", data: yaml2, warnings: cfg2.warnings };
     }
     const beans = input.trim() ? buildBeansFromInput(input.trim()) : [];
     const allBeans = beans.slice();
@@ -4547,24 +4934,32 @@
       extraBeans.forEach(validateBean);
       assertCoreSupports(extraBeans, core, "Mihomo", options);
       applyRealityModernHosts(extraBeans, modernHosts);
-      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter, modernHosts, deviceModel: options.deviceModel });
+      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter, modernHosts, deviceModel: options.deviceModel, domainPolicy: options.domainPolicy });
       const yaml2 = buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, cfg2.listeners, {
         addSocks,
         webUI,
         webUiUrl: options.webUiUrl,
-        tun: mihomoTunOpts
+        wgDialerProxy: options.wgDialerProxy,
+        wgDialerGroupMembers: options.wgDialerGroupMembers,
+        wgDialerProviders: options.wgDialerProviders,
+        tun: mihomoTunOpts,
+        ruleProviders: cfg2.ruleProviders
       });
-      return { kind: "yaml", data: yaml2 };
+      return { kind: "yaml", data: yaml2, warnings: cfg2.warnings };
     }
     const outBeans = allBeans.filter((b) => b.proto !== "sdns");
-    const cfg = buildMihomoConfig(outBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest });
+    const cfg = buildMihomoConfig(outBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, domainPolicy: options.domainPolicy });
     const yaml = buildMihomoYaml(cfg.proxies, cfg["proxy-groups"], null, cfg.rules, cfg.listeners, {
       addSocks,
       webUI,
       webUiUrl: options.webUiUrl,
-      tun: mihomoTunOpts
+      wgDialerProxy: options.wgDialerProxy,
+      wgDialerGroupMembers: options.wgDialerGroupMembers,
+      wgDialerProviders: options.wgDialerProviders,
+      tun: mihomoTunOpts,
+      ruleProviders: cfg["rule-providers"]
     });
-    return { kind: "yaml", data: yaml };
+    return { kind: "yaml", data: yaml, warnings: cfg.warnings };
   }
 
   // src/entry-web4core.js
@@ -4584,6 +4979,7 @@
     buildMihomoPriorityConfig,
     buildMihomoSubscriptionConfig,
     buildMihomoYaml,
+    analyzeDialerGraph,
     parseWireGuardConf,
     fetchSubscription,
     buildFromRequest

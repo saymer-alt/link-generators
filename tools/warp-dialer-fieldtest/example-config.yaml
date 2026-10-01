@@ -1,0 +1,85 @@
+# Example mihomo config for the field-test harness: WARP profiles + a
+# provider-backed WARP-DIALER group + a WARP-over-WARP experiment profile.
+# ALL keys below are public project fixtures — replace with your own test
+# credentials OUTSIDE of git. Subscription URLs are placeholders.
+mixed-port: 7896
+external-controller: 127.0.0.1:9095
+mode: rule
+log-level: warning
+allow-lan: false
+
+proxy-providers:
+  provider-sub:                 # placeholder — put your own subscription source
+    type: http
+    url: https://provider.example/YOUR_SUBSCRIPTION_PATH
+    interval: 86400
+    # Remnawave-style panels (e.g. Geodema) require a device HWID header;
+    # without it they may return an "App not supported" placeholder:
+    header:
+      x-hwid:
+        - YOUR_DEVICE_HWID
+      x-device-os:
+        - Linux
+      x-device-model:
+        - your-device-model
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 600
+
+proxy-groups:
+  - name: WARP-DIALER           # transport group: select the provider node that
+    type: select                # will carry the WARP handshake (UDP relay needed)
+    use:
+      - provider-sub
+  - name: TEST-OUT              # egress selector under test
+    type: select
+    proxies:
+      - WARP-A
+      - WARP-B
+      - WARP-A-VIA-B
+      - WARP-DIALED
+      - DIRECT
+
+proxies:
+  - name: WARP-A                # baseline WARP profile (direct)
+    type: wireguard
+    server: 162.159.198.2
+    port: 2408
+    private-key: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+    public-key: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=
+    ip: 172.16.0.2
+    mtu: 1280
+    udp: true
+  - name: WARP-B                # second independent profile (compare colo)
+    type: wireguard
+    server: 162.159.198.1
+    port: 2408
+    private-key: AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=
+    public-key: bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
+    ip: 172.16.0.2
+    mtu: 1280
+    udp: true
+  - name: WARP-A-VIA-B          # WARP-over-WARP experiment (outer dials via inner)
+    type: wireguard
+    server: 162.159.198.2
+    port: 2408
+    private-key: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+    public-key: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=
+    ip: 172.16.0.2
+    mtu: 1280
+    udp: true
+    dialer-proxy: WARP-B
+  - name: WARP-DIALED           # WARP transported through the provider group
+    type: wireguard
+    server: 162.159.198.2
+    port: 2408
+    private-key: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+    public-key: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=
+    ip: 172.16.0.2
+    mtu: 1280
+    udp: true
+    dialer-proxy: WARP-DIALER
+
+rules:
+  - MATCH,TEST-OUT

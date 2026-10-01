@@ -19,12 +19,13 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 ## Что это
 
 «WARP & Mihomo Unified Generator» — статический одностраничный веб-инструмент на GitHub
-Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки:
+Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки; по умолчанию открывается
+**⚙️ Mihomo Config Builder**:
 
-1. **⚡ WARP MASQUE Links** — генератор пар `masque://`-ссылок (QUIC + HTTP/2) из ключей
-   WARP с анти-DPI стратегией портов/IP.
-2. **⚙️ Mihomo Config Builder** — сборка `config.yaml` для Mihomo (Clash Meta) из ссылок,
+1. **⚙️ Mihomo Config Builder** — сборка `config.yaml` для Mihomo (Clash Meta) из ссылок,
    подписок и WireGuard/AmneziaWG-файлов + pre-copy базовая валидация результата.
+2. **⚡ WARP MASQUE Links** — генератор пар `masque://`-ссылок (QUIC + HTTP/2) из ключей
+   WARP с анти-DPI стратегией портов/IP.
 
 ## Чего в проекте нет (принципиально)
 
@@ -34,7 +35,9 @@ Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки:
   готовым файлом (см. [UPDATES.md](UPDATES.md)).
 - ES-модулей. Подключение классическое (`<script src>`), поэтому страница работает и с `file://` — это фича.
 
-Каждый push в `main` немедленно публикуется на Pages: **main = прод**. Язык проекта — русский.
+`main` — integration/development. Production-канал GitHub Pages — `stable`; пользовательское
+состояние попадает туда только через явный promotion `main → stable` после CI и требуемых
+functional/field checks. Язык проекта — русский.
 
 В `tests/` есть Node/browser regression tests и fixtures. Единственный workflow —
 автообновление runtime; он запускает source tests, build, `node --check` и runtime test перед
@@ -44,8 +47,8 @@ Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки:
 
 | Файл | Природа | Роль |
 |---|---|---|
-| `index.html` | **handwritten** | Единственная страница приложения: inline CSS + inline JS (~880 строк) |
-| `web4core.runtime.js` | **generated/vendor** | IIFE-бандл fork saymer-alt/web4core@link-generators (~4380 строк). Руками не редактировать |
+| `index.html` | **handwritten** | Единственная страница приложения: inline CSS + inline JS |
+| `web4core.runtime.js` | **generated/vendor** | IIFE-бандл fork saymer-alt/web4core@link-generators. Руками не редактировать |
 | `tests/` | regression tests | Node runtime tests, внешний Playwright browser test и синтетические fixtures |
 | `.github/workflows/update-web4core-runtime.yml` | handwritten (automation) | Сборка fork с read-only правами; отдельный job коммитит runtime в `main` |
 | `README.md` | документация | Пользовательская документация (обновляется вручную) |

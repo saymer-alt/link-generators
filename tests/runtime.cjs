@@ -90,4 +90,61 @@ for (const sub of [false, true]) {
   assert.doesNotMatch(result, /listeners:/);
   cases++;
 }
+
+// WireGuard dialer-proxy (туннель в туннеле): opt-in, empty options keep output byte-identical.
+const wgDialerConf = [
+  '[Interface]',
+  'PrivateKey = AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
+  'Address = 172.16.0.2/32',
+  '[Peer]',
+  'PublicKey = AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=',
+  'AllowedIPs = 0.0.0.0/0, ::/0',
+  'Endpoint = 162.159.198.2:2408',
+].join('\n');
+const wgDialerBean = current.parseWireGuardConf(wgDialerConf, 'WARP');
+const dialerInput = 'vless://00000000-0000-4000-8000-0000000000b1@203.0.113.60:443#VPS-DK\ntrojan://p@203.0.113.61:443#VPS-EE';
+const dialerBase = current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false } }).data;
+assert.doesNotMatch(dialerBase, /dialer-proxy/);
+assert.equal(dialerBase, current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false, wgDialerProxy: '', wgDialerGroupMembers: [] } }).data);
+cases += 2;
+const dialerA = current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false, wgDialerProxy: 'VPS-DK' } }).data;
+assert.match(dialerA, /dialer-proxy: VPS-DK/);
+cases++;
+const dialerB = current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false, wgDialerProxy: 'WARP-DIALER', wgDialerGroupMembers: ['VPS-DK', 'VPS-EE'] } }).data;
+assert.match(dialerB, /- name: WARP-DIALER\s*\n\s*type: select/);
+assert.match(dialerB, /dialer-proxy: WARP-DIALER/);
+assert.ok(dialerB.indexOf('- name: WARP-DIALER') < dialerB.indexOf('⚡ Fastest'));
+cases++;
+assert.throws(() => current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false, wgDialerProxy: 'GHOST' } }),
+  /dialer-proxy target "GHOST" not found/);
+assert.throws(() => current.buildFromRequest({ core: 'mihomo', input: dialerInput, wgBeans: [wgDialerBean],
+  options: { addTun: false, webUI: false, mihomoSubscriptionMode: false, wgDialerProxy: 'WARP', wgDialerGroupMembers: [] } }),
+  /applies to no wireguard proxy/);
+cases += 2;
+
+// Variant C: provider-backed dialer group (use:) from existing URL subscriptions.
+const geoUrl = 'https://account.geodema.org/api/sub?token=test';
+const geoUrl2 = 'https://account.geodema.org/api/sub2?token=test';
+const subDialerInput = geoUrl + '\n' + geoUrl2 + '\ntrojan://p@203.0.113.20:443#VPS-SE';
+const subBase = (extraOpts) => current.buildFromRequest({ core: 'mihomo', input: subDialerInput, wgBeans: [wgDialerBean],
+  options: Object.assign({ addTun: false, webUI: false, mihomoSubscriptionMode: true }, extraOpts) }).data;
+const dialerC = subBase({ wgDialerProxy: 'WARP-DIALER', wgDialerProviders: [geoUrl] });
+assert.match(dialerC, /- name: WARP-DIALER\s*\n\s*type: select\s*\n\s*use:\s*\n\s*- account\.geodema\.org/);
+assert.match(dialerC, /dialer-proxy: WARP-DIALER/);
+cases++;
+const dialerC2 = subBase({ wgDialerProviders: [geoUrl, geoUrl2] });
+const c2Block = dialerC2.slice(dialerC2.indexOf('- name: WARP-DIALER'), dialerC2.indexOf('⚡ Fastest'));
+assert.equal((c2Block.match(/^\s+- account\.geodema\.org(-2)?$/gm) || []).length, 2);
+cases++;
+assert.throws(() => subBase({ wgDialerProxy: 'WARP-DIALER', wgDialerProviders: ['https://ghost.example.com/sub'] }),
+  /dialer provider URL not found/);
+assert.throws(() => subBase({ wgDialerProxy: 'VPS-SE', wgDialerProviders: [geoUrl] }),
+  /conflicts with an existing proxy or group/);
+cases += 2;
+
 console.log(`Runtime: ${cases} cases passed`);

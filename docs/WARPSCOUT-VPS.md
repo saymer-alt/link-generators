@@ -323,7 +323,7 @@ ip: 172.16.0.2
 
 и **не будет** `network: h2`.
 
-YAML можно вставить в первую вкладку `link-generators` и нажать **«Распарсить»**. Текущий
+YAML можно вставить во вкладку **WARP MASQUE Links** и нажать **«Распарсить»**. Текущий
 контракт проекта: импортируются MASQUE identity-поля, а transport endpoint/port затем выбирает
 наш собственный генератор.
 
@@ -763,8 +763,90 @@ timestamp
 повести себя по-разному. Один хороший WG endpoint ещё не доказывает, что H2/H3 будут иметь
 тот же Cloudflare path.
 
+### Подтверждённый routing drift: FRA → ARN, 2026-09-30
 
-## 15. Быстрый чек-лист для каждого VPS
+На ранее проверенной сети VPS, где до этого удавалось получать `FRA`, 2026-09-30 повторная
+проверка показала, что `FRA` перестал находиться, а доступные WG/AWG-маршруты сходятся в `ARN`.
+Контрольный прогон на `Saymer2` дал:
+
+```text
+warpscout scan -p wg -P -node FRA
+→ no endpoint landed on node FRA
+
+warpscout scan -p wg -P -node FRA -n 20
+→ no endpoint landed on node FRA
+
+warpscout scan -p awg -P -exclude-node ARN -gen-i1 quic
+→ every endpoint was excluded by node ARN
+```
+
+По сообщению хостера, Cloudflare к этому моменту также перестал выдавать его сети `FRA`.
+Это согласуется с измерениями WARPSCOUT, но само сообщение хостера фиксируется как отдельный
+источник наблюдения, а не как замена собственным тестам.
+
+Практический вывод: ранее подтверждённый `FRA` **не является постоянным свойством VPS**.
+Без смены конфигурации, IP-адреса или самого сервера текущий сетевой путь может измениться так,
+что прежний node исчезнет из доступной выборки. Поэтому Cloudflare node надо проверять не только
+при покупке/приёмке VPS, но и периодически в эксплуатации, а также при внезапном изменении
+поведения сервисов вроде Gemini.
+
+Для быстрой повторной проверки целевого `FRA` и отсутствия альтернативы `ARN`:
+
+```bash
+warpscout scan -p wg -P -node FRA -n 20
+warpscout scan -p awg -P -exclude-node ARN -gen-i1 quic
+```
+
+Если первый тест снова не находит `FRA`, а второй отвечает
+`every endpoint was excluded by node ARN`, дальнейший перебор обычных endpoint IP/портов
+не следует считать способом «вернуть FRA»: сначала ждите изменения внешней маршрутизации
+или проверяйте другой VPS/провайдера/ASN/локацию.
+
+Штатный обходной путь без смены серверной архитектуры — `dialer-proxy` Mihomo (секция «dialer-proxy»
+в [MIHOMO.md](MIHOMO.md)): WARP остаётся outbound текущего Mihomo, но его туннельное UDP-соединение
+устанавливается через промежуточный VPS другой сети. Полевой чек-лист:
+
+```text
+1. На SE-VPS: Mihomo с WARP (.conf, MTU 1200-1280) + dialer-proxy на proxy до DK/другой сети.
+2. curl -x socks5h://127.0.0.1:7890 https://www.cloudflare.com/cdn-cgi/trace  → baseline (ожид. ARN).
+3. Переключить узел в dialer-группе (дашборд/API) на DK-VPS → повторить trace.
+4. Зафиксировать ip/loc/colo/warp/NODE для: WARP direct vs WARP через dialer.
+5. Цель: direct → ARN, dialer via другой сети → FRA (или иная нода).
+Автоматизирует эту методику harness `tools/warp-dialer-fieldtest/` (sweep узлов, switchtest, MTU-лестница, JSON/CSV-отчёты); инструкция и ловушка PIN — его README.
+
+Field-test конфиг для provider-варианта (Geodema как промежуточная сеть; BUILDER сам создаёт группу `WARP-DIALER` с `use:`, если в поле «URL-подписки для dialer-группы» указан тот же URL подписки, а WARP загружен .conf с MTU 1200–1280):
+
+```yaml
+proxy-groups:
+  - name: WARP-DIALER
+    type: select
+    use:
+      - account.geodema.org
+proxies:
+  - name: WARP
+    type: wireguard
+    # ...identity из .conf...
+    mtu: 1280
+    dialer-proxy: WARP-DIALER
+```
+
+Протокол сравнения (все три состояния, подряд, без смены машины):
+
+```text
+A. WARP direct (поле dialer пусто):            curl -x socks5h://127.0.0.1:7890 https://www.cloudflare.com/cdn-cgi/trace
+B. WARP + dialer на Geodema (узел по умолчанию): та же команда после Build с заполненным полем
+C. В MetaCubeXD вручную перебирать узлы в WARP-DIALER (только те, что живут как UDP relay),
+   после каждого выбора повторять trace и speed.cloudflare.com/meta
+Фиксировать: ip / loc / colo / warp / NODE для A, B, C; ожидание: A → ARN (текущий дрифт),
+B/C → colo меняется вместе с сетью выбранного узла; warp=on во всех состояниях.
+Узлы подписки, не передающие UDP, дадут таймаут WARP-хендшейка — такие узлы исключать из выбора.
+
+Дополнительный сценарий — **WARP-over-WARP** (второй independent WARP-профиль как транзит): в Builder загрузите оба .conf (разные ключи/endpoint/tunnel IP), в поле dialer укажите имя внутреннего профиля (например `WARP-INNER`) — внешний получит `dialer-proxy: WARP-INNER`. Цепочки через группы/провайдеры также валидны; генератор и валидатор отклоняют только маршруты, замыкающиеся на исходный outbound. Сравнить trace: WARP direct / WARP-over-WARP / provider-backed WARP.
+```
+```
+
+
+## 16. Быстрый чек-лист для каждого VPS
 
 ```bash
 cd ~/warpscout-data

@@ -175,6 +175,12 @@ validateMihomoYaml(yaml)      [чистая функция: jsyaml.load + стр
 
 ## WARNING — предупреждения (Copy не блокируют)
 
+- **dialer-циклы (ERROR)** и **dynamic provider-ветви (WARNING)** — анализ через единый
+  dependency-graph рантайма `web4core.analyzeDialerGraph`: см. «Конфигурация Mihomo как
+  ориентированный граф» в [MIHOMO.md](MIHOMO.md). Цикл (маршрут, возвращающийся к исходному
+  outbound) — ERROR с полным путём; провайдер dialer-группы без `override.dialer-proxy` —
+  WARNING dynamic/unknown (статически цикл не доказан и не исключён, содержимое подписки
+  неизвестно; UDP-совместимость не проверяется).
 - имя группы совпадает с именем прокси (пересечение пространств имён);
 - у группы пустой список `proxies`;
 - Compatibility-требования (например, MIPS/AWG/Modern REALITY) вынесены в отдельный неблокирующий блок после Build и не считаются warning валидатора.

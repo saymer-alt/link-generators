@@ -101,6 +101,20 @@ health-check не меняются; HTTP providers по-прежнему сох�
 не доказывает, какой HTTP-код возвращался в прежнем неудачном цикле. Для точного root
 cause при повторении нужны логи health-check/URLTest или ответ тестового endpoint.
 
+## WireGuard dialer-proxy (туннель в туннеле) — 2026-09-30
+
+Опции `wgDialerProxy` / `wgDialerGroupMembers`: WireGuard/WARP устанавливает соединение с сервером через другой proxy/группу. Контракт и схема — [MIHOMO.md](MIHOMO.md).
+
+- Source: `tools/tests/mihomo-wg-dialer.test.mjs` (13 тестов): byte-parity при пустых опциях, Variant A (имя proxy/группы), Variant B (авторская select-группа перед остальными, дефолт имени `WARP-DIALER`), отказы (неизвестный таргет/участник, конфликт имени, self-named без кандидатов), исключение транзитного WG-профиля (SE2-аналог Keenetic), проброс в subscription- и AWL-priority путях (таргет — ФИНАЛЬНОЕ имя прокси, AWL-пути префиксуют имена).
+- Consumer: `tests/runtime.cjs` — 6 dialer-кейсов (53→59).
+- Variant C (provider-backed, 2026-09-30): source `mihomo-wg-dialer.test.mjs` — 8 кейсов (13→21): группа `use:` на существующие провайдеры, несколько провайдеров, комбинированная группа proxies+use, дефолт `WARP-DIALER`, неизвестный URL → fail-closed, без subscription-режима → fail-closed, конфликт имени, provider-группа не может содержать WG-прокси по построению. Consumer: 4 кейса (59→63). Browser: поля `wgDialerProviders` → `use:`-группа + UDP-предупреждение валидатора; `mihomo -t`: 1 и 2 провайдера — successful, `use:`-призрак отвергнут ядром.
+- Browser: поля `wgDialerInput`/`wgDialerMembers` → Build → `dialer-proxy` в YAML; валидатор: таргет-призрак/self-reference → INVALID, `GLOBAL`-таргет и MTU>1300/без mtu → предупреждения, UDP-only подсказка для http-таргета.
+- `mihomo -t` v1.19.31: позитивы (имя proxy; авторская группа) — successful; негативы (`dialer-proxy: GHOST`, self-reference) отвергаются ядром — Builder зеркалит статическую проверку ядра (`config/utils.go`).
+- **Централизация (2026-09-30)**: детектор перенесён в рантайм (`web4core.analyzeDialerGraph` — циклы с полными маршрутами + `dynamicGroups`/`dynamicProviders`); валидатор страницы вызывает его, локальная копия — только fallback до доставки нового runtime. Mixed-группы (`proxies:` + `use:` одновременно) вносят обе категории рёбер (регрессии: валидная mixed-группа, цикл через static-члена, цикл через provider override — source + build gate + браузер). Провайдер без override — dynamic/unknown (warning), не «доказанный тупик».
+- **Полевой harness `tools/warp-dialer-fieldtest/` (2026-10-01)**: автоматизированные полевые измерения dialer-proxy/provider-схем (sweep узлов, switchtest A→B→A, MTU-лестница с восстановлением конфига, WARP-over-WARP). Offline-тесты harness — 22 кейса (аргументы, redaction, классификация по curl-кодам, CSV, null-device, MTU-редактирование, план, нормализация API); CI проверяет только синтаксис/offline-тесты/отсутствие секретов — реальные field tests в CI не запускаются. Методика и ловушка PIN — README инструмента.
+- **Dependency-graph цикл-детектор (2026-09-30, WG-over-WG)**: source `mihomo-wg-dialer.test.mjs` — 9 кейсов (21→30): валидные `WG-A→WG-B`, `WG-A→WG-B→WG-C`, группа-медиированные цепочки; self-loop, 2-node loop, loop через группу, loop через две группы, цикл через provider `override.dialer-proxy` — отвергаются; provider без override — тупик (валидно). Consumer/browser probe: 11 сценариев (валидные цепочки не блокируются, `GLOBAL`-таргет — ошибка). `mihomo -t`: generated `WARP-OUTER → WARP-INNER` и ручная 3-node цепочка — successful; group-loop ядро пропускает (наш валидатор строже). Механический runtime-прогон: запрос маршрутизируется в `WARP-OUTER`, ядро поднимает цепочку и уходит в WG-handshake-таймаут на synthetic-ключах (dialer-механика между двумя WG-outbound живая; реальный handshake — field-test).
+- Живая механическая цепочка (два инстанса v1.19.31 на одной машине): main-инстанс `TARGET` (socks5, `dialer-proxy: DIAL`) → dialer-инстанс; сквозной HTTPS-трафик проходит; негативный контроль (DIAL на мёртвом порту) блокирует трафик полностью. Полная WARP-цепочка через удалённый VPS — полевой тест (см. WARPSCOUT-VPS.md).
+
 ## Дополнительный runtime review #2588
 
 Подробно: [FALLBACK-REVIEW.md](FALLBACK-REVIEW.md). На v1.19.31 баг воспроизведён
@@ -363,8 +377,9 @@ node tests/runtime.cjs
 
 ### VPS-контракт
 
-- все fixed-поля: `tun.{enable, device: tun-mihomo, stack: gvisor, auto-route: false,
-  auto-detect-interface: true, inet4-address: 10.255.255.1/30, mtu: 1420, gso: true}` — ✅
+- текущий default UI-path даёт `tun.{enable, device: tun-mihomo, stack: mips,
+  auto-route: false, auto-detect-interface: true, mtu: 1420, gso: true}`; top-level
+  `tun.inet4-address` отсутствует — ✅
 - `endpoint-independent-nat` отсутствует; при ручной инъекции в YAML удаляется
   (юнит-прогон `applyDeploymentProfile`) — ✅
 - `find-process-mode: 'off'` в корне (jsyaml квотит строку `off` — YAML 1.1 bool
@@ -372,8 +387,11 @@ node tests/runtime.cjs
 - `profile.store-selected/store-fake-ip = false`, merge без замены секции — ✅
 - `auto-route: false` в выводе; `auto-route: true` нигде; в DOM нет контрола
   управления auto-route — ✅
-- passthrough редактируемых полей: device / inet4-address / mtu / fake-ip-range /
-  listen реально пробрасываются в YAML — ✅
+- passthrough редактируемых полей: `device` и `mtu` идут в `tun`, а
+  `fake-ip-range` / `listen` — в включённую секцию `dns`; отдельного редактируемого
+  top-level `inet4-address` в текущем VPS-профиле нет — ✅
+- явно выбранные experimental stack `system` / `mixed` сохраняются, а не переписываются
+  молча в gVisor; при MIPS checkbox off используется gVisor — ✅
 - DNS sub-toggle: off → `dns` отсутствует целиком (без частичных остатков) — ✅
 - пустые поля → боевые дефолты (device=tun-mihomo, nameserver=1.1.1.1/8.8.8.8) — ✅
 - Sub Mode + VPS: `proxy-providers` на месте + gateway-tun — ✅
@@ -442,3 +460,57 @@ Workflow автоматически запускает source Mihomo tests, сб
 self-hosted 3.1 сервера и поведение конкретной сборки ядра (требование mihomo ≥ 1.19.30
 для 3.1-ключей — см. [PROTOCOLS.md](PROTOCOLS.md)). Успешная структурная валидация ≠
 работающий туннель.
+
+## Domain Policy Routing (Variant B) — 2026-10-01
+
+Коммиты: web4core `2daf383` (эмиссия: `src/core/mihomo.js`, `src/build.js`,
+`src/core/yaml.js`, `tools/tests/mihomo-policy-routing.test.mjs`), consumer —
+runtime `dcc16b68…` (Source: `saymer-alt/web4core@2daf383bde5257c1d8bd15a0f4c719c6b3f8e5d8`).
+
+- Source-тесты форка: `node --test tools/tests/mihomo-policy-routing.test.mjs` — 12/12;
+  полный набор форка 158/158; `test:amnezia` 12/12.
+- Consumer node-регресс: `JS_YAML_PATH=… node tests/policy-routing.cjs` — 33 кейса
+  (parity off, basic, shared provider, `proxy: DIRECT`, AW-совместимость, static,
+  предупреждения, структурные ошибки).
+- Браузерный UI: `node tests/policy-routing-browser.cjs` — 14 кейсов (панель,
+  карточки add/remove, пресеты, сборка, дубликат имён, кламп per-proxy, VALID).
+- Полный потребительский набор после изменений: `runtime.cjs` 63/63,
+  `whitelist.cjs` 10 кейсов, `browser.cjs` 47 валидатор + pipeline — PASS.
+- Реальный `mihomo -t` v1.19.31 (Windows-бинар) на 5 пробах из поставляемого
+  runtime: dpr-subscription (GEOSITE/KEYWORD/CIDR), dpr-static, dpr-aw,
+  dpr-off-parity, dpr-cyrillic — все successful; per-proxy+DPR отклонён
+  движком как задумано. После интеграции с deployment profiles
+  (`router / vps-local / vps-gateway`): 9/9 combined-проб на 1.19.31
+  (router/vps-local/vps-gateway × DPR on/off, vps-gateway DNS-off,
+  MIPS, gVisor) и 5/5 ключевых на **1.19.32** (recommended/current;
+  minimum остаётся 1.19.31). Живой PoC маршрутизации — тестовый VPS, 2026-10-01
+  (журнал владельца): DOMAIN→POLICY→PROVIDER→NODE доказан на обеих версиях.
+
+## VPS Domain Detection Package — 2026-10-01
+
+Ветка lg `feat/vps-domain-detection` (index.html: `applyDeploymentProfile`
+плюс пакет; без изменений web4core/runtime), gateway-ветка
+`feat/domain-detection-store-fake-ip` (`8f41759`): патчер сохраняет
+`store-fake-ip` генератора; тест `tests/test-mihomo-config-patch.sh`
+расширен (preserved `true` + сквозной DDP-фикстура) — 5/5 gateway-тестов
+в WSL.
+
+- `tests/vps-detection-browser.cjs` (новый): 46 кейсов — точные формы
+  dns-hijack/sniffer/store-fake-ip (dns on), удаление с dns off
+  (sniffer остаётся), DPR on/off coexistence, generic byte-parity
+  (hwid-нормализация), валидатор VALID.
+- Регресс после пакета: runtime 63/63, browser 47, whitelist 10,
+  masque 7, policy-routing 33/14 — PASS (non-VPS untouched).
+- `mihomo -t` v1.19.31: 4/4 (vps+package mips/gvisor/DPR/dns-off) +
+  6/6 интеграционных DPR-проб.
+- Live staging (тестовый VPS, Saymer, production-like generated config):
+  normal DNS fake-ip; dns-hijack внешнего :53 (9.9.9.9 → fake-ip); DoH →
+  sniffer; pure-IP TLS → sniffer; HTTP Host → sniffer; YouTube QUIC —
+  полный handshake через TUN; DPR: chatgpt→RuleSet(policy-ai)→AI,
+  youtube (fake-ip/pure-IP/:80)→RuleSet(policy-media)→MEDIA,
+  example.com→Match→GLOBAL; QUIC negative: тот же IP + SNI example.com →
+  GLOBAL; restart gate: fake-ip (youtube=.4/openai=.5/chatgpt=.6)
+  восстановлен 1:1 после рестарта, потоки в правильные политики
+  (journal PID нового процесса), мисатрибуции нет; cold-start провайдера
+  с пустым cache.db — 99 узлов (proxy: DIRECT контракт).
+

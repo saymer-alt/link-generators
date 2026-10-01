@@ -4,6 +4,41 @@
 
 ## [Unreleased]
 
+### Added
+- Mihomo Builder: три понятных профиля развёртывания вместо абстрактного селектора — «Роутер / обычный TUN (Keenetic)» (по умолчанию), «VPS — локальный Mihomo / SOCKS для Xray / 3X-UI» и «VPS Transparent Gateway (amnezia-mihomo-gateway)». Профиль управляет только сценарными переключателями (TUN/MIPS/Mixed/Allow LAN/gateway-панель) с fail-safe клампами в Build; пользовательские данные (прокси, подписки, WireGuard, фильтры, dialer-proxy) не затрагиваются.
+- Секция «ADVANCED — Отдельный вход на каждый прокси» свёрнута в спойлер по умолчанию; раскрытие ничего не включает.
+- docs/GENERATOR-GUIDE.md — короткая человеческая инструкция; ссылка на неё — вверху Builder.
+
+- Добавлена штатная поддержка `dialer-proxy` Mihomo для WireGuard/WARP («туннель в туннеле»): можно указать существующий proxy/группу, собрать собственную `select`-группу из транзитных узлов или использовать provider-backed dialer-группу через `use:` на уже подключённые URL-подписки. Поддерживаются ациклические WireGuard-over-WireGuard цепочки; UDP-совместимость динамических provider-узлов заранее не предполагается и проверяется полевым тестом.
+- Добавлен централизованный dependency-graph анализатор `web4core.analyzeDialerGraph(doc)`: учитываются `dialer-proxy`, статические `proxies:`, provider `use:` и `override.dialer-proxy`; смешанные группы учитывают обе ветви. Циклы, возвращающие маршрут к исходному outbound, отклоняются с полным путём; provider без статического override помечается как dynamic/unknown, а не как доказанно безопасный или ошибочный.
+- Добавлен воспроизводимый полевой harness `tools/warp-dialer-fieldtest/` для WARP direct / WARP-over-dialer / WARP-over-WARP, sweep/switchtest, MTU-лестницы, transfer/trace измерений и UDP-capability классификации. Harness умеет redaction секретов, JSON/CSV отчёты, fail-closed PIN проверки и строгий `--fresh-handshake` режим для per-node транспортных измерений.
+- Документированы полевые особенности Geodema/Remnawave: subscription endpoint требует корректный HWID-контекст и без него может намеренно отдавать `App not supported`; пример provider header добавлен в field-test документацию. Добавлена отдельная практическая заметка по `exclude-filter` и фактическим именам узлов подписок.
+
+### Changed
+- UI Mihomo Builder дополнен подсказками (tooltip/inline) к основным переключателям и кнопкам; около dialer-proxy явно задокументированы требования UDP relay и персистентность WireGuard-хендшейка при переключении узлов (>150 с в полевых замерах).
+
+- UI-подсказка `Exclude Filter` больше не предлагает только латинский `(?i)ru|russia`: пример расширен кириллическим вариантом, а текст явно объясняет, что Mihomo сопоставляет regexp с фактическими именами provider-узлов. Это важно для подписок, где страны/города названы кириллицей.
+- Field-test отчётность разделяет три независимых факта: `selection_changed` (API подтвердил выбранный узел), `transport_fresh` (outbound пересоздан) и `path_freshness` (`fresh` / `unverified`). Обычный короткий `settle-ms` больше не трактуется как доказательство смены транспортного пути WireGuard.
+
+### Fixed
+
+- Исправлен выбор provider-узлов с ведущими/хвостовыми пробелами в имени: resolver сначала ищет exact match, затем единственный `trim()`-эквивалент, а в Mihomo API всегда передаёт оригинальное имя byte-for-byte; неоднозначность и отсутствие совпадения завершаются ошибкой.
+- Исправлена методология sweep/switchtest для персистентных WireGuard-хендшейков: полевые измерения показали, что после переключения dialer-группы старый транспорт может сохраняться более 150 секунд. `--fresh-handshake` выполняет reload изолированного тестового конфига через `PUT /configs?force=true`, ждёт API, повторно подтверждает выбранный узел и только затем снимает trace; без этого режима результат честно помечается как `unverified`.
+
+### Verified
+
+- Offline suite полевого harness расширен с **23 до 31 теста**: добавлены регрессии exact/leading/trailing provider names, unique normalized resolution, ambiguous/unknown/empty fail-closed кейсы и fresh-handshake контракт. CI проверяет синтаксис, offline-тесты, secret scan и runtime provenance.
+- На изолированном SE VPS с Mihomo **v1.19.31** подтверждены direct WARP → **ARN**, WireGuard-over-WireGuard → WARP_OK и provider-backed nested WARP через Geodema: транспорт DE → **FRA**, NL → **AMS**, SE → **ARN**. Строгий fresh-handshake A→B→A дал **FRA → AMS → FRA**; это зафиксировано как field evidence, а не как гарантия будущего Cloudflare routing.
+- На FRA-маршруте nested WARP прошёл MTU **1280 / 1260 / 1240 / 1220 / 1200**, все ступени WARP_OK; transfer в полевых прогонах оставался рабочим. Production Mihomo, маршруты, firewall/systemd и прочие сервисы VPS тестами не изменялись.
+- Geodema/Remnawave HWID-поведение подтверждено HTTP-матрицей: без HWID `/mihomo` возвращал placeholder с `x-hwid-not-supported: true`, а с корректным HWID — реальную подписку; provider-backed dialer-группы получили рабочие UDP-capable DE/NL/SE узлы.
+- `exclude-filter` проверен на реальном Geodema provider: baseline **99** узлов; фактический RU-pattern удалил **6/6** RU без false positives/false negatives, Germany control — **3/3**, exact-name — **1/1**, RU+DE — **9/9**, снятие фильтра восстановило baseline. Старый пример `(?i)ru|russia` не удалял кириллические RU-имена; reload применял новый provider-level фильтр сразу, без обязательного чистого cache/home.
+
+- Добавлен режим **🚦 Политики по доменам (Domain Policy Routing, Variant B)**: доменные категории (имя + список доменов, шаблоны AI/YouTube/Telegram/Google/Direct) генерируют inline `rule-providers` (`policy-<slug>`, classical), категории-группы и `RULE-SET`-правила перед неизменным `MATCH,GLOBAL`. Правила ссылаются на стабильные группы, группы — на provider подписки через `use:`: изменение состава подписки не требует пересборки правил (живой PoC на Mihomo v1.19.31/v1.19.32). В режиме URL-подписок каждая категория получает `NAME-AUTO` url-test над общим provider (несколько групп на один провайдер) и select `[AUTO, ⚡ Fastest, GLOBAL, DIRECT]`; без подписок — select без AUTO; в режиме белых списков — select `[GLOBAL, DIRECT]` без вложенности (#2588); с «на каждый прокси» несовместим (кламп UI + отклонение движком). Контракт `proxy: DIRECT` у провайдеров подписки закреплён regression-тестами (холодный старт без него дедлочит фетч). Нераспознанные строки пользователя пропускаются с неблокирующим предупреждением; валидатор проверяет rule-providers/RULE-SET/цели и завершающий `MATCH,GLOBAL`. Выключенный режим — byte-parity прежнего вывода. Подробности — docs/POLICY-ROUTING.md.
+
+- Добавлен **VPS Domain Detection Package** для профиля «VPS Gateway»: `tun.dns-hijack` (any:53/tcp:any:53), пассивный `sniffer` (TLS/QUIC/HTTP, `parse-pure-ip`, `force-dns-mapping`, `override-destination: false` — hostname только для матчинга) и `profile.store-fake-ip: true` (при включённом fake-ip DNS). Пакет включается автоматически как инвариант профиля (без нового UI-toggle), не зависит от Domain Policy Routing; non-VPS вывод — byte-parity. Контракт подтверждён live-стендом (Mihomo 1.19.31): hijack внешнего :53 DNS, классификация DoH/pure-IP TLS/HTTP-Host/QUIC по SNI (негативный контроль: тот же IP + другой SNI → GLOBAL), рестарт с восстановлением fake-ip mapping без мисатрибуции, cold-start провайдера. Требуется синхронный патч `amnezia-mihomo-gateway` (ветка `feat/domain-detection-store-fake-ip`): установочный патчер больше не перезаписывает `store-fake-ip` значением генератора. IPv6 остаётся выключенным (fake-ip-range6 — follow-up).
+
+- Интеграция VPS Domain Detection Package с новой моделью deployment profiles: DDP (`dns-hijack` + `sniffer` + `store-fake-ip: true`) привязан строго к профилю **vps-gateway**; `router` и `vps-local` (локальный Mihomo/SOCKS для Xray/3X-UI, TUN off) gateway-инфраструктуру не получают. Версионный контракт: minimum Mihomo **1.19.31**, recommended/current — **1.19.32** (combined-пробы зелёные на обеих версиях).
+
 ## [1.5.0] - 2026-09-28
 
 ### Added
@@ -37,7 +72,7 @@
 - Финальная интеграция проверена на официальном **Mihomo v1.19.31**; SHA-256 release asset: `d5e74bbddbdfff49a1aef7775bf5911da59f0d7196ed509a0ac914b3653dd5f1`.
 - Перед production promotion: web4core source **106/106**, consumer runtime **53/53**, validator **47/47**, MASQUE/DPI **7/7 групп**, browser suite и whitelist — PASS.
 - Реальный Mihomo failover: static / providers / mixed — **3/3 P→F→P**; AWL priority-over-speed и возврат к более медленному primary — PASS.
-- Финальный независимый smoke Z CODE прошёл браузерную матрицу A–M и `mihomo -t` на 10 probe YAML — **10/10 PASS**; воспроизведённых дефектов продукта не найдено.
+- Финальный независимый smoke-прогон прошёл браузерную матрицу A–M и `mihomo -t` на 10 probe YAML — **10/10 PASS**; воспроизведённых дефектов продукта не найдено.
 - Long production-interval AWL soak остаётся отдельным manual observation и намеренно не является CI/release gate.
 
 ## [1.4.2] - 2026-09-21

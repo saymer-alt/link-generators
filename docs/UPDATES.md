@@ -21,6 +21,11 @@ MIPS реализован в `src/build.js` (`buildFromRequest`) и `src/core/ya
 Textual bundle patch удалён: `web4core.runtime.js` никогда не редактируется вручную.
 Разрешён только результат штатной сборки fork после проверок. При первоначальном
 переносе runtime побайтово совпал с runtime из commit `6b3368e` (см. [TESTING.md](TESTING.md)).
+Исторически первый runtime попал в consumer раньше этой source-level схемы: он был сохранён
+вместе с опубликованной страницей upstream и использовался как готовый browser bundle,
+пока provenance не был разобран и сборка не была перенесена в настоящий fork. Полная
+история и различие между bootstrap и текущим контрактом — в разделе
+[«Историческое происхождение runtime»](WEB4CORE-FORK.md#историческое-происхождение-runtime).
 Приложение не имеет package.json/npm dependencies/build step и работает с `file://`;
 Node/npm нужны для сборки отдельного source-репозитория и проверок.
 
@@ -33,11 +38,10 @@ Node/npm нужны для сборки отдельного source-репози
 
 ## Workflow автообновления
 
-`.github/workflows/update-web4core-runtime.yml`: push в `main`, cron `17 4 * * 1`,
-ручной dispatch и `pull_request` в `main`. PR-trigger запускает только read-only
-build/test job; write-job жёстко gated на `refs/heads/main`, поэтому PR не может
-обновить `web4core.runtime.js` или записать commit. Обновления из проверенной custom
-branch остаются автоматическими.
+`.github/workflows/update-web4core-runtime.yml`: push в `main`/`stable`, cron `17 4 * * 1`,
+ручной dispatch и `pull_request` в `main`/`stable`. PR-trigger запускает только read-only
+build/test job; write-job жёстко gated на `refs/heads/main`, поэтому PR и `stable` не могут
+записать runtime commit. Обновления из проверенной custom branch остаются автоматическими.
 
 1. `build-runtime`, `contents: read`, свежий GitHub-hosted runner, `timeout-minutes: 15`:
    - checkout consumer и `saymer-alt/web4core@link-generators`, оба без сохранения credentials;
@@ -47,6 +51,9 @@ branch остаются автоматическими.
      (новый test file подхватывается без правки workflow);
    - штатный build runtime; `node --check`, `node tests/runtime.cjs` на собранном
      файле, SHA-256 в лог;
+   - provenance-gate: tracked `web4core.runtime.js` сравнивается с freshly built runtime
+     от записанного source SHA после нормализации CRLF→LF; mismatch блокирует PR и `stable`;
+     на прямом `main` run mismatch допускается только как вход в write-back job;
    - upload единственного runtime artifact текущего run (срок хранения 7 дней).
 2. `update-runtime`, отдельный свежий runner, `contents: write`, `timeout-minutes: 10`,
    только для `main`:

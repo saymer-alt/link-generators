@@ -196,14 +196,17 @@ The bundle has a single export point at the end: `globalThis.web4core = { … }`
 
 ## GitHub Actions: runtime auto-update
 
-`.github/workflows/update-web4core-runtime.yml`: push to `main`, weekly
-cron `17 4 * * 1`, manual dispatch. Checkout this repo and
+`.github/workflows/update-web4core-runtime.yml`: push to `main`/`stable`, weekly
+cron `17 4 * * 1`, manual dispatch, and pull requests targeting `main`/`stable`. Checkout this repo and
 `saymer-alt/web4core@link-generators` → Node 22 → npm ci → source Mihomo tests
 → upstream build command → node --check → tests/runtime.cjs → artifact.
-Build and tests run with `contents: read`, without persisted Git credentials.
-A separate fresh job with `contents: write` only compares/copies the runtime and, if
-different, creates "Update web4core runtime from upstream" in `main`. Artifact code
-is not executed there. If main changes after verification, it fails; force-push is forbidden.
+Build and tests run with `contents: read`, without persisted Git credentials. The build job
+also compares the tracked `web4core.runtime.js` with the freshly built runtime from the exact
+recorded fork SHA (LF-normalized). A mismatch is a hard failure for PR validation and for
+`stable`; on a direct `main` run it is the only case allowed to continue into the write-back job.
+A separate fresh job with `contents: write` only compares/copies the already checked runtime and,
+if different, creates "Update web4core runtime from upstream" in `main`. Artifact code is not
+executed there. If main changes after verification, it fails; force-push is forbidden.
 Upstream synchronization into the custom branch is a controlled merge with review and tests,
 not an automatic merge of external code (see `docs/UPDATES.md`).
 
@@ -228,9 +231,10 @@ lives in `docs/`, and agent rules live in this file.
 Principle: CODE is the source of truth. If README disagrees with code, README is stale,
 not the code. Rules:
 
-- current code has NO warpscout parser, `warpscout-account.json`, WARP-in-WARP checkbox,
-  or `dialer-proxy` (0 occurrences in HTML and runtime). Do not "restore" them
-  independently — not from the old README and not from Git history (revisions ed835e8/74a3f24);
+- current code has NO warpscout parser or `warpscout-account.json`. Do not "restore" them
+  independently — not from the old README and not from Git history (revisions ed835e8/74a3f24).
+  WARP-in-WARP via `dialer-proxy` was added as a full feature (2026-10-01, merged to main):
+  see "Deployment profiles" section and docs/MIHOMO.md for the current contract;
 - if the task says "fix/restore warpscout", stop and clarify with the owner whether it should
   actually be restored or the request is stale;
 - code changes that alter the set of tabs/features must include a synchronized README update;
@@ -296,9 +300,13 @@ Empty input with empty wgBeans → error "No valid links or profiles provided".
 Additional post-processing scenario for amnezia-mihomo-gateway (the Mihomo half of
 the gateway config). Details: docs/VPS-GATEWAY.md. Invariants that must not be violated:
 
-- selector `#cfgProfile` defaults to `generic`; when `generic`, function
-  `applyDeploymentProfile()` is NOT called (guard in `buildMihomo()`) — output stays
-  byte-for-byte identical to the previous behavior, without extra `jsyaml.load/dump`;
+- selector `#cfgProfile` defaults to `router`; the three user-facing profiles are
+  `router` / `vps-local` / `vps-gateway`. When `router`, the gateway post-patch
+  (`applyDeploymentProfile()`) is NOT called — router and vps-local output stays
+  byte-for-byte identical to non-profile behaviour;
+
+- mandatory regression contract: docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md;
+
 - `tun.auto-route: false` is a hard invariant and is not configurable in the UI;
 - profile defaults = variables from the current amnezia-mihomo-gateway `install.sh`
   (`PROXY_IF`/`TUN_INET_ADDR`/`FAKE_IP_RANGE`, package v2.0); anchor is constant
@@ -330,6 +338,10 @@ the gateway config). Details: docs/VPS-GATEWAY.md. Invariants that must not be v
 7. Commit only targeted changes; before committing, check `git status` / `git diff`:
    the diff must contain nothing except the intended change (especially no accidental
    changes to `web4core.runtime.js`).
+
+## Deployment profiles test contract
+
+Mandatory profile/regression contract: [docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md](docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md).
 
 ## Checks after changing HTML/JS
 
@@ -365,9 +377,9 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
   is required.
 - User input is untrusted (bot YAML, links, files): parse inside try/catch and show
   a clear toast error, as currently implemented.
-- Be careful with `innerHTML`: `generateWarp()` inserts generated links through
-  `innerHTML` (links contain user keys/SNI). Do not expand the existing surface;
-  when refactoring, prefer `textContent`.
+- Treat user-derived WARP values as untrusted text. `generateWarp()` may clear its output
+  container with `innerHTML = ''`, but generated labels/links are created with DOM nodes and
+  assigned through `textContent`; do not regress this to HTML-string assembly or inline handlers.
 - Mask/truncate keys in links when quoting them in issues, commit messages, or logs.
 
 ## Common dangerous regressions
@@ -396,8 +408,8 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
 - Enable VPS Gateway profile by default or call `applyDeploymentProfile()` for
   `generic` — changes the main scenario output (violates the profile's primary invariant).
 - Change VPS profile defaults without checking amnezia-mihomo-gateway `install.sh` —
-  config stops matching the routing script (the installer overwrites or fails to find
-  device/fake-ip-range/inet4-address).
+  config stops matching the routing script. The current Mihomo 1.19.31 contract uses the TUN
+  device plus `dns.fake-ip-range`; top-level `tun.inet4-address` is intentionally absent.
 - Forget `lineWidth: -1` in `applyDeploymentProfile()` — jsyaml wraps long AWG
   base64 strings (I1–I5/H) and silently corrupts the config.
 - Expand `AWG_INT_KEYS` in `normalizeWgBeans` to string range fields (`h1-h4`,

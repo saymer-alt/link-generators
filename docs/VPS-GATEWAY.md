@@ -1,4 +1,6 @@
 # VPS-GATEWAY — опциональный профиль генерации для amnezia-mihomo-gateway
+> Не путать с профилем «VPS — локальный Mihomo / SOCKS для Xray / 3X-UI»: тот не создаёт TUN вообще (только локальный вход 127.0.0.1:7890 для локальных приложений) и не требует policy routing/iptables. Этот профиль — именно transparent-gateway.
+
 
 С ревизии v1.19.31 `applyDeploymentProfile(yaml, profile, tunStack)` сохраняет явный
 выбор MIPS из Builder. С 2026-09-17 (NIGHT-09) продукт по умолчанию шлёт `mips`
@@ -114,9 +116,12 @@ VPS. Это боевой дефолт схемы (потребители — к�
 ## Правило синхронизации с routing-скриптом
 
 Изменение `device` или `fake-ip-range` **обязано** соответствовать
-переменным routing-скрипта gateway (`PROXY_IF` / `TUN_INET_ADDR` / `FAKE_IP_RANGE`).
-Установщик при следующем запуске приводит `fake-ip-range` к своему контракту; отдельный top-level `inet4-address` для Mihomo 1.19.31 больше не считается рабочим параметром
-своими значениями (sed-патчи в §2.7 install.sh) — рассинхрон бесполезен и вреден.
+переменным routing-скрипта gateway (`PROXY_IF` / `TUN_INET_ADDR` / `FAKE_IP_RANGE`):
+`device` соответствует `PROXY_IF`, `fake-ip-range` — gateway/routing-контракту.
+Установщик при следующем запуске приводит `fake-ip-range` к своему контракту
+своими значениями (sed-патчи в §2.7 install.sh). Отдельный top-level
+`inet4-address` для Mihomo 1.19.31 больше не является рабочим способом задания
+IPv4 TUN, поэтому рассинхрон generator/gateway бесполезен и вреден.
 
 ## Cross-project contract: generator -> gateway -> bootstrap
 
@@ -176,6 +181,40 @@ Per-proxy TUN listeners используют другой config path, где `i
 [`amnezia-mihomo-gateway/docs/LIVE_AUDIT_2026-09-23.md`](https://github.com/saymer-alt/amnezia-mihomo-gateway/blob/stable/docs/LIVE_AUDIT_2026-09-23.md).
 До отдельного расходного VPS автоматический rollback в gateway остаётся непроверенным; это не
 причина менять значения VPS-профиля генератора без отдельного доказательства.
+
+## Domain Detection Package (2026-10-01)
+
+Профиль **vps-gateway** (модель профилей `router / vps-local / vps-gateway`)
+дополняет gateway-вид конфига пакетом домен-детекта (см.; профили `router` и
+`vps-local` пакет не получают). Версии: minimum Mihomo 1.19.31, проверен
+1.19.32 (recommended/current).
+[POLICY-ROUTING.md](POLICY-ROUTING.md)): `profile.store-fake-ip: true` (при
+включённом fake-ip DNS), `tun.dns-hijack: [any:53, tcp://any:53]` (там же) и
+пассивный `sniffer` (всегда). Это не меняет четыре точки сцепки выше: device,
+fake-ip-range, `auto-route: false` и effective IPv4 TUN остаются прежними.
+
+Два межпроектных следствия:
+
+1. **Патчер install.sh**: до ветки `feat/domain-detection-store-fake-ip`
+   патчер §2.7 принудительно нормализовал `store-fake-ip` в `false` — для
+   DPR-конфигов это ломало mapping при рестарте (stale fake-ip + мисатрибуция,
+   PoC 2026-10-01). Ветка меняет патчер: существующее значение сохраняется,
+   `false` дописывается только при отсутствии ключа. `tun.dns-hijack` и
+   `sniffer` патчер не трогает (неизвестные ключи проходят дословно; тест
+   `tests/test-mihomo-config-patch.sh` фиксирует оба случая).
+2. **Восстановление маршрута**: TUN-устройство при рестарте Mihomo исчезает
+   вместе с kernel-маршрутом `FAKE_IP_RANGE dev tun-mihomo`. Восстановление —
+   ответственность gateway: `check-warp-routing.timer` (≤1 мин) проверяет
+   `routing_ok` (включая `ip route show <fake-ip-range>`) и перезапускает
+   `warp-docker-routing.service`, который пересоздаёт маршрут. До 2026-10-01
+   это подтверждалось live: рестарт тестового Mihomo на gateway-хосте
+   восстанавливал маршрутизацию в пределах минутного тика. Генератор никаких
+   маршрутов не создаёт и не должен.
+
+`cache.db` (fake-ip mapping) живёт в каталоге `-d` Mihomo (`/etc/mihomo`),
+создаётся при первом старте, переживает рестарты; отсутствие/повреждение
+обрабатывается ядром штатно (пустой mapping → новые выдачи; повреждённый файл
+Mihomo 1.19.31 пересоздаёт). Права — как у остальных файлов каталога конфига.
 
 ## Что генератор НЕ делает (никогда)
 

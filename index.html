@@ -52,7 +52,9 @@
   .advanced-stack-control label{display:flex;align-items:center;gap:8px;margin:0;cursor:pointer;color:var(--text)}
   .advanced-stack-control select{margin-top:8px}
   .advanced-panel{margin-top:12px;padding:12px 14px;border:1px solid rgba(210,153,34,.55);border-radius:10px;background:rgba(210,153,34,.06)}
-  .advanced-panel-title{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;color:var(--text)}
+  .advanced-panel summary{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;color:var(--text);cursor:pointer;list-style:none;padding:2px 0}
+  .advanced-panel summary::-webkit-details-marker{display:none}
+  .advanced-panel summary .advanced-badge{flex:none}
   .advanced-badge{display:inline-block;padding:2px 7px;border:1px solid rgba(210,153,34,.7);border-radius:999px;color:#e3b341;background:rgba(210,153,34,.10);font-size:.68rem;letter-spacing:.05em}
   .advanced-master{margin-top:10px;padding:10px 12px;border:1px solid rgba(210,153,34,.45);border-radius:8px;background:rgba(210,153,34,.08)}
   .advanced-master label{display:flex;align-items:center;gap:10px;margin:0;cursor:pointer;color:var(--text);font-weight:600}
@@ -147,115 +149,15 @@
 
   <!-- TAB 2: MIHOMO BUILDER -->
   <div id="tab-mihomo" class="tab-content active">
-    <div class="card">
-      <div class="card-title">📋 Входные данные</div>
-      <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
-      <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
-      <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Если используете HTTP(S) URL подписки, оставьте включённым режим «URL-подписки» ниже. Если в поле только обычные proxy-ссылки — режим URL-подписок лучше выключить.</div>
-      <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> Автоматический режим белых списков</label></div>
-      <div id="whitelistPanel" style="display:none">
-        <label for="whitelistInput">Резерв для белых списков (ссылки / подписки)</label>
-        <textarea id="whitelistInput" placeholder="vless://...&#10;https://sub.url/..."></textarea>
-        <div class="hint">Верхний набор — основной, этот — резерв. GLOBAL сначала использует обычные выходы, затем БС. Обе стороны обязательны. Ссылки можно смешивать с подписками при включённом режиме «URL-подписки». Плановая проверка доступности — каждые 300 секунд; при неудачных подключениях (2 за 60 секунд) проверка запускается сразу. Переключение и возврат на основной — не мгновенные. WG-файлы входят в основной набор.</div>
-      </div>
-      <div class="hint">Поддерживает: vless, vmess, trojan, anytls, ss, socks/socks4/socks4a/socks5/socks5h, http/https, hy2/hysteria2, tuic, mieru/mierus, tt, masque, WG (.conf/.awg), HTTP(S) подписки</div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">📂 WireGuard / AmneziaWG</div>
-      <div class="file-upload-wrapper">
-        <div class="file-upload">
-          <button class="btn btn-gray" id="btnWg">📂 Загрузить .conf / .awg</button>
-          <input type="file" id="wgFile" accept=".conf,.wg,.awg,text/plain" multiple>
-        </div>
-        <span class="wg-status" id="wgStatus"></span>
-      </div>
-      <div style="margin-top: 15px;">
-        <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">WireGuard DNS:</label>
-        <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
-        <div id="wgDnsWarning" class="hint" style="color: #d9534f; display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">⚙️ Настройки Mihomo</div>
-      <div class="checkbox-grid">
-        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
-        <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
-        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
-        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки</label>
-      </div>
-      <div id="subModeHint" class="hint"></div>
-      <div id="webUiRow" style="margin-top:10px">
-        <label for="webUiSelect">🖥️ Дашборд Web UI</label>
-        <select id="webUiSelect">
-          <option value="metacubexd" selected>MetaCubeXD (по умолчанию)</option>
-          <option value="yacd">Yacd-meta</option>
-          <option value="zashboard">Zashboard</option>
-          <option value="custom">Custom URL…</option>
-        </select>
-        <input type="text" id="webUiCustomUrl" placeholder="https://example.com/dashboard.zip" style="display:none;margin-left:8px">
-        <div class="hint">Архив дашборда, который Mihomo скачает в каталог external-ui. MetaCubeXD — по умолчанию. Custom: абсолютный http/https URL архива (.zip/.tgz); URL только генерируется в конфиг, не проверяется из браузера.</div>
-      </div>
-      <div id="excludeFilterRow" style="margin-top:10px">
-        <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
-        <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia">
-        <div class="hint">Regexp/keyword-фильтр Mihomo <code>exclude-filter</code>: узлы provider, чьи имена совпали, исключаются. Применяется ко всем подпискам. Пусто — поле не добавляется.</div>
-      </div>
-      <div id="deviceModelRow" style="margin-top:10px">
-        <label for="deviceModelInput">📱 Device Model (необязательно)</label>
-        <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
-        <div class="hint">Передаётся серверу подписки как HTTP-заголовок <code>x-device-model</code> для каждого provider. Может использоваться панелью подписки для идентификации устройства. Пусто — заголовок не добавляется.</div>
-      </div>
-      <div id="realityModernRow" style="margin-top:10px">
-        <label for="realityModernInput">🌐 Modern REALITY (X25519+ML-KEM) — только для совместимых серверов (host или host:port, по одному в строке)</label>
-        <textarea id="realityModernInput" rows="3" placeholder="pan.example&#10;pan2.example:8443&#10;[2001:db8::1]:443"></textarea>
-        <div class="hint">Только для REALITY-узлов этих серверов добавляется ML-KEM (X25519MLKEM768) и client-fingerprint chrome, если не задан; обычные VLESS/TLS и другие серверы не затрагиваются. X25519MLKEM768 появился в Xray v25.5.16; применяйте только к серверам, совместимость которых подтверждена — сама версия не гарантирует совместимость. Пусто — legacy-вывод без изменений.</div>
-      </div>
-      <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
-        <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
-      </div>
-      <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
-      <div class="advanced-stack-control">
-        <label><input type="checkbox" id="cfgTunStackAdvanced"> ⚙ Расширенный TUN stack (system / mixed)</label>
-        <select id="cfgTunStackEx" style="display:none">
-          <option value="system">system</option>
-          <option value="mixed">mixed</option>
-        </select>
-        <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
-        <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
-      </div>
-      <div id="perProxyAdvancedPanel" class="advanced-panel">
-        <div class="advanced-panel-title"><span class="advanced-badge">ADVANCED</span><span>Отдельный вход на каждый прокси</span></div>
-        <div class="advanced-master">
-          <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
-        </div>
-        <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен.</div>
-        <div class="checkbox-grid">
-          <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
-          <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
-        </div>
-      </div>
-      <div class="hint">Обычный TUN и MIPS включены по умолчанию. Режимы отдельного входа на каждый прокси — за крышкой расширенного режима; system/mixed — за крышкой расширенного TUN stack.</div>
-      <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
-      <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
-
-      <label style="margin-top:16px">🏓 Ping server (health-check)</label>
-      <select id="pingSelect"></select>
-
-      <div class="btn-group">
-        <button class="btn" onclick="buildMihomo()">⚡ Build Config</button>
-        <button class="btn btn-gray" id="copyYamlBtn" onclick="copyMihomo()">📋 Copy YAML</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">🎯 Профиль развёртывания</div>
+    <div class="hint" style="margin-bottom:10px"><a href="docs/GENERATOR-GUIDE.md">📖 Короткая инструкция по генератору</a></div>
+    <div class="card" id="profileRow">
+      <div class="card-title">🎯 Где будет работать Mihomo?</div>
       <select id="cfgProfile">
-        <option value="generic" selected>Универсальный (по умолчанию — обычная генерация)</option>
-        <option value="vps">VPS Gateway — Mihomo-конфиг для amnezia-mihomo-gateway</option>
+        <option value="router" selected>Роутер / обычный TUN (Keenetic)</option>
+        <option value="vps-local">VPS — локальный Mihomo / SOCKS для Xray / 3X-UI</option>
+        <option value="vps-gateway">VPS Transparent Gateway (amnezia-mihomo-gateway)</option>
       </select>
+      <div id="profileHint" class="hint"></div>
       <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
         <div class="row">
           <div><label>TUN device</label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
@@ -279,7 +181,144 @@
         </div>
         <div class="hint" style="margin-top:8px">⚠️ Для Mihomo 1.19.31 top-level tun.inet4-address не управляет адресом TUN: IPv4-префикс вычисляется из dns.fake-ip-range и приводится к /30. Поэтому VPS-профиль задаёт device + fake-ip-range, но не обещает отдельный inet4-address. Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
       </div>
-      <div class="hint">VPS Gateway выключен по умолчанию и не влияет на обычную генерацию. Подробно — docs/VPS-GATEWAY.md.</div>
+      <div class="hint">Профиль задаёт только сценарий развёртывания: вход (TUN/SOCKS), базовые переключатели и gateway-настройки. Прокси, подписки, WireGuard, фильтры и остальные данные не затрагиваются. Подробно: <a href="docs/GENERATOR-GUIDE.md">GENERATOR-GUIDE.md</a>, <a href="docs/VPS-GATEWAY.md">VPS-GATEWAY.md</a>.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 Входные данные</div>
+      <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
+      <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
+      <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Если используете HTTP(S) URL подписки, оставьте включённым режим «URL-подписки» ниже. Если в поле только обычные proxy-ссылки — режим URL-подписок лучше выключить.</div>
+      <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> Автоматический режим белых списков</label></div>
+      <div id="whitelistPanel" style="display:none">
+        <label for="whitelistInput">Резерв для белых списков (ссылки / подписки)</label>
+        <textarea id="whitelistInput" placeholder="vless://...&#10;https://sub.url/..."></textarea>
+        <div class="hint">Верхний набор — основной, этот — резерв. GLOBAL сначала использует обычные выходы, затем БС. Обе стороны обязательны. Ссылки можно смешивать с подписками при включённом режиме «URL-подписки». Плановая проверка доступности — каждые 300 секунд; при неудачных подключениях (2 за 60 секунд) проверка запускается сразу. Переключение и возврат на основной — не мгновенные. WG-файлы входят в основной набор.</div>
+      </div>
+      <div class="hint">Поддерживает: vless, vmess, trojan, anytls, ss, socks/socks4/socks4a/socks5/socks5h, http/https, hy2/hysteria2, tuic, mieru/mierus, tt, masque, WG (.conf/.awg), HTTP(S) подписки</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📂 WireGuard / AmneziaWG</div>
+      <div class="file-upload-wrapper">
+        <div class="file-upload">
+          <button class="btn btn-gray" id="btnWg" title="Загрузить WireGuard/AmneziaWG конфиг — каждый файл станет отдельным proxy в YAML">📂 Загрузить .conf / .awg</button>
+          <input type="file" id="wgFile" accept=".conf,.wg,.awg,text/plain" multiple>
+        </div>
+        <span class="wg-status" id="wgStatus"></span>
+      </div>
+      <div style="margin-top: 15px;">
+        <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">WireGuard DNS:</label>
+        <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
+        <div id="wgDnsWarning" class="hint" style="color: #d9534f; display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
+      </div>
+      <div style="margin-top: 15px;">
+        <label class="label" for="wgDialerInput" style="display: block; margin-bottom: 5px;">Промежуточный proxy / dialer-proxy:</label>
+        <input type="text" id="wgDialerInput" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Имя proxy или группы (пусто = выключено)">
+        <div class="hint" style="margin-top: 5px;">Туннель в туннеле: WireGuard/WARP подключается к своему серверу через указанный proxy или группу. Таргет обязан поддерживать UDP (подходит VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет). Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408).</div>
+        <label class="label" for="wgDialerMembers" style="display: block; margin-bottom: 5px; margin-top: 10px;">Транзитные узлы dialer-группы (по одному в строке, необязательно):</label>
+        <textarea id="wgDialerMembers" rows="3" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="VPS-DK&#10;VPS-EE&#10;VPS-SE"></textarea>
+        <div class="hint" style="margin-top: 5px;">Если заполнено — создается select-группа (имя из поля выше или WARP-DIALER), и нижний транспорт WARP можно менять без пересборки. Эти узлы сами не получают dialer-proxy (иначе цикл). Избегайте GLOBAL/⚡ Fastest как таргета — они содержат сам WARP.</div>
+        <label class="label" for="wgDialerProviders" style="display: block; margin-bottom: 5px; margin-top: 10px;">URL-подписки для dialer-группы (по одному в строке, необязательно):</label>
+        <textarea id="wgDialerProviders" rows="2" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="https://account.geodema.org/..."></textarea>
+        <div class="hint" style="margin-top: 5px;">URL должен совпадать с одной из включённых URL-подписок — группа получает <code>use:</code> на этот provider (узлы не разворачиваются). Для WireGuard dialer вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения — состав подписки заранее неизвестен, поэтому проверяется только выбором.</div>
+        <div class="hint" style="color:#b8860b;margin-top:5px">⚠️ Переключение узла в dialer-группе не означает мгновенную смену уже установленного WireGuard-пути: в полевых тестах старый transport сохранялся более 150 секунд. Для гарантированной немедленной смены пути требуется пересоздание WireGuard outbound (reload/restart Mihomo). Смена colo (FRA/AMS) — наблюдение, не гарантия: Cloudflare выбирает ingress сам.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⚙️ Настройки Mihomo</div>
+      <div class="checkbox-grid">
+        <label title="Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Для домашнего роутера обычно включено; для VPS с локальным Xray/3X-UI выключите."><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
+        <label title="Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo."><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
+        <label title="Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090."><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки</label>
+      </div>
+      <div id="subModeHint" class="hint"></div>
+      <div id="webUiRow" style="margin-top:10px">
+        <label for="webUiSelect">🖥️ Дашборд Web UI</label>
+        <select id="webUiSelect">
+          <option value="metacubexd" selected>MetaCubeXD (по умолчанию)</option>
+          <option value="yacd">Yacd-meta</option>
+          <option value="zashboard">Zashboard</option>
+          <option value="custom">Custom URL…</option>
+        </select>
+        <input type="text" id="webUiCustomUrl" placeholder="https://example.com/dashboard.zip" style="display:none;margin-left:8px">
+        <div class="hint">Архив дашборда, который Mihomo скачает в каталог external-ui. MetaCubeXD — по умолчанию. Custom: абсолютный http/https URL архива (.zip/.tgz); URL только генерируется в конфиг, не проверяется из браузера.</div>
+      </div>
+      <div id="excludeFilterRow" style="margin-top:10px">
+        <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
+        <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
+        <div class="hint">Regexp/keyword-фильтр Mihomo <code>exclude-filter</code>: узлы provider, чьи фактические имена совпали, исключаются. Например, латинский <code>ru|russia</code> не совпадёт с кириллическим именем <code>Россия</code>, поэтому для таких подписок добавляйте кириллический вариант. Применяется ко всем подпискам. Пусто — поле не добавляется.</div>
+      </div>
+      <div id="deviceModelRow" style="margin-top:10px">
+        <label for="deviceModelInput">📱 Device Model (необязательно)</label>
+        <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
+        <div class="hint">Передаётся серверу подписки как HTTP-заголовок <code>x-device-model</code> для каждого provider. Может использоваться панелью подписки для идентификации устройства. Пусто — заголовок не добавляется.</div>
+      </div>
+      <div id="realityModernRow" style="margin-top:10px">
+        <label for="realityModernInput">🌐 Modern REALITY (X25519+ML-KEM) — только для совместимых серверов (host или host:port, по одному в строке)</label>
+        <textarea id="realityModernInput" rows="3" placeholder="pan.example&#10;pan2.example:8443&#10;[2001:db8::1]:443"></textarea>
+        <div class="hint">Только для REALITY-узлов этих серверов добавляется ML-KEM (X25519MLKEM768) и client-fingerprint chrome, если не задан; обычные VLESS/TLS и другие серверы не затрагиваются. X25519MLKEM768 появился в Xray v25.5.16; применяйте только к серверам, совместимость которых подтверждена — сама версия не гарантирует совместимость. Пусто — legacy-вывод без изменений.</div>
+      </div>
+      <div class="toggle-row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label><input type="checkbox" id="cfgPolicyRouting"> 🚦 Политики по доменам (Domain Policy Routing)</label>
+      </div>
+      <div id="policyRoutingPanel" style="display:none">
+        <div class="hint">Доменное правило → стабильная логическая группа → <code>proxy-provider</code> подписки → текущий живой узел. Правила ссылаются на группы, а не на серверы: состав подписки может меняться — правила не требуют пересборки. Порядок политик = порядок правил; завершающее <code>MATCH,GLOBAL</code> остаётся правилом по умолчанию. Требуется Mihomo ≥ 1.19.27 (empty-fallback), инлайн rule-провайдеры ≥ 1.19.1.</div>
+        <div id="policyCards"></div>
+        <div style="margin-top:8px">
+          <button class="btn btn-gray" id="btnPolicyAdd" type="button">➕ Добавить политику</button>
+          <span style="margin-left:8px">
+            <label class="label" for="policyPresetSelect" style="display:inline">Шаблон для новой политики:</label>
+            <select id="policyPresetSelect">
+              <option value="ai">🤖 AI</option>
+              <option value="media">📺 YouTube / Media</option>
+              <option value="telegram">✈️ Telegram</option>
+              <option value="google">🔎 Google</option>
+              <option value="direct">⬇️ Direct (свои домены мимо прокси)</option>
+            </select>
+          </span>
+        </div>
+        <div class="hint" id="policyRoutingHint"></div>
+      </div>
+      <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label title="Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo»."><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
+        <label title="TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor."><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
+      </div>
+      <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
+      <div class="advanced-stack-control">
+        <label><input type="checkbox" id="cfgTunStackAdvanced"> ⚙ Расширенный TUN stack (system / mixed)</label>
+        <select id="cfgTunStackEx" style="display:none">
+          <option value="system">system</option>
+          <option value="mixed">mixed</option>
+        </select>
+        <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
+        <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
+      </div>
+      <div id="perProxyAdvancedPanel" class="advanced-panel">
+        <details id="perProxyAdvancedDetails">
+          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Отдельный вход на каждый прокси</span></summary>
+          <div class="advanced-master">
+            <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
+          </div>
+          <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен. Раскрытие секции само по себе ничего не включает и не сбрасывает.</div>
+          <div class="checkbox-grid">
+            <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
+            <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
+          </div>
+        </details>
+      </div>
+      <div class="hint">Обычный TUN и MIPS включены по умолчанию. Режимы отдельного входа на каждый прокси — за крышкой расширенного режима; system/mixed — за крышкой расширенного TUN stack.</div>
+      <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
+      <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
+
+      <label style="margin-top:16px" title="URL, по которому Mihomo проверяет доступность узлов (url-test и health-check провайдеров). Обычно достаточно Google generate_204.">🏓 Ping server (health-check)</label>
+      <select id="pingSelect"></select>
+
+      <div class="btn-group">
+        <button class="btn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" onclick="buildMihomo()">⚡ Build Config</button>
+        <button class="btn btn-gray" id="copyYamlBtn" title="Скопировать итоговый YAML (доступно только после успешной проверки)" onclick="copyMihomo()">📋 Copy YAML</button>
+      </div>
     </div>
 
     <div class="card">
@@ -939,6 +978,215 @@ function validateMihomoYaml(yaml) {
     }
   }
 
+  // --- rule-providers (Domain Policy Routing и другие наборы правил) ---
+  const RULE_PROVIDER_TYPES = new Set(['http', 'file', 'inline']);
+  const RULE_PROVIDER_BEHAVIORS = new Set(['domain', 'ipcidr', 'classical']);
+  const RULE_PROVIDER_FORMATS = new Set(['yaml', 'text', 'mrs']);
+  const ruleProviderNames = new Set();
+  if (doc['rule-providers'] !== undefined && (typeof doc['rule-providers'] !== 'object' || doc['rule-providers'] === null || Array.isArray(doc['rule-providers']))) {
+    err('', 'rule-providers', fmtVal(doc['rule-providers']), 'поле должно быть словарём');
+  } else if (doc['rule-providers'] && typeof doc['rule-providers'] === 'object') {
+    for (const [name, rp] of Object.entries(doc['rule-providers'])) {
+      ruleProviderNames.add(name);
+      const at = 'rule-providers[' + name + ']';
+      // имена провайдеров в диагностике безопасны: URL и заголовки не выводятся
+      if (!rp || typeof rp !== 'object' || Array.isArray(rp)) { err(at, '', '', 'должен быть словарём'); continue; }
+      if (typeof rp.type !== 'string' || !RULE_PROVIDER_TYPES.has(rp.type)) {
+        err(at, 'type', fmtVal(rp.type), 'ожидается http, file или inline');
+      }
+      if (rp.behavior !== undefined && (typeof rp.behavior !== 'string' || !RULE_PROVIDER_BEHAVIORS.has(rp.behavior))) {
+        err(at, 'behavior', fmtVal(rp.behavior), 'ожидается domain, ipcidr или classical');
+      }
+      if (rp.format !== undefined && (typeof rp.format !== 'string' || !RULE_PROVIDER_FORMATS.has(rp.format))) {
+        err(at, 'format', fmtVal(rp.format), 'ожидается yaml, text или mrs');
+      }
+      if (rp.type === 'http' && (typeof rp.url !== 'string' || !rp.url.trim())) {
+        err(at, 'url', '', 'обязателен для type: http');
+      }
+      if (rp.payload !== undefined && !Array.isArray(rp.payload)) {
+        err(at, 'payload', fmtVal(rp.payload), 'должен быть списком строк');
+      } else if (Array.isArray(rp.payload)) {
+        rp.payload.forEach((entry, j) => {
+          if (typeof entry !== 'string' || !entry.trim()) {
+            err(at, 'payload[' + j + ']', fmtVal(entry), 'элемент payload должен быть непустой строкой');
+          }
+        });
+        if (!rp.payload.length) warn(at, 'payload', '', 'payload пуст — набор не совпадёт ни с одним запросом');
+      }
+    }
+  }
+
+  // --- правила: цели и ссылки RULE-SET ---
+  if (Array.isArray(doc.rules) && doc.rules.length) {
+    const DOMAIN_RULE_TYPES = new Set(['DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-WILDCARD', 'DOMAIN-REGEX', 'GEOSITE', 'IP-CIDR', 'IP-CIDR6', 'IP-ASN', 'MATCH']);
+    const knownTarget = (t) => proxyNames.has(t) || groupNames.has(t) || MIHOMO_BUILTIN_TARGETS.has(t);
+    doc.rules.forEach((r, i) => {
+      if (typeof r !== 'string' || !r.trim()) return; // структурная проверка была выше
+      const parts = r.split(',').map((s) => s.trim());
+      const type = (parts[0] || '').toUpperCase();
+      if (type === 'RULE-SET') {
+        if (parts.length < 3) { err('rules[' + i + ']', '', r, 'формат: RULE-SET,<rule-provider>,<цель>'); return; }
+        if (!ruleProviderNames.has(parts[1])) {
+          err('rules[' + i + ']', 'RULE-SET', parts[1], 'rule-provider не найден (mihomo: "rule set [x] not found")');
+        }
+        if (!knownTarget(parts[2])) {
+          err('rules[' + i + ']', 'цель', parts[2], 'цель не найдена среди proxies/proxy-groups/встроенных');
+        }
+      } else if (DOMAIN_RULE_TYPES.has(type)) {
+        if (type === 'MATCH') {
+          if (parts.length >= 2 && !knownTarget(parts[1])) {
+            err('rules[' + i + ']', 'цель', parts[1], 'цель не найдена среди proxies/proxy-groups/встроенных');
+          }
+          return;
+        }
+        if (parts.length < 3) { err('rules[' + i + ']', '', r, 'неполное правило (нужен тип, значение и цель)'); return; }
+        const target = parts[parts.length - 1];
+        if (!knownTarget(target)) {
+          err('rules[' + i + ']', 'цель', target, 'цель не найдена среди proxies/proxy-groups/встроенных');
+        }
+      }
+    });
+    // DPR-контракт: последнее правило — правило по умолчанию MATCH,GLOBAL
+    if (ruleProviderNames.size && doc.rules[doc.rules.length - 1] !== 'MATCH,GLOBAL') {
+      err('rules', '', fmtVal(doc.rules[doc.rules.length - 1]), 'последнее правило должно быть MATCH,GLOBAL (DEFAULT-правило)');
+    }
+  }
+
+  // --- dialer-proxy (туннель в туннеле) ---
+  // Mihomo v1.19.31 сам валидирует существование таргета и прямые циклы при
+  // загрузке конфига ("dialer-proxy [Y] not found" / "circular dialer-proxy
+  // dependency"), но НЕ ловит цикл через членство в группе (WARP -> группа,
+  // выбирающая WARP, рекурсирует на dial). Здесь дублируем статические проверки
+  // и добавляем предупреждения о членах группы и UDP/MTU.
+  if (Array.isArray(doc.proxies)) {
+    const groupByName = new Map();
+    if (Array.isArray(doc['proxy-groups'])) {
+      for (const g of doc['proxy-groups']) {
+        if (g && typeof g === 'object' && !Array.isArray(g) && typeof g.name === 'string') {
+          groupByName.set(g.name, g);
+        }
+      }
+    }
+    const dialerTargets = new Map(); // target -> [user proxy names], для прямых циклов
+    for (const p of doc.proxies) {
+      if (!p || typeof p !== 'object' || Array.isArray(p) || typeof p.name !== 'string') continue;
+      const dp = p['dialer-proxy'];
+      if (dp === undefined || dp === '') continue;
+      if (typeof dp !== 'string' || !dp.trim()) {
+        err(p.name, 'dialer-proxy', fmtVal(dp), 'должен быть непустой строкой — именем proxy или группы');
+        continue;
+      }
+      if (dp === p.name) {
+        err(p.name, 'dialer-proxy', dp, 'прокси не может вести сам через себя (self-reference)');
+        continue;
+      }
+      if (dp !== 'DIRECT' && !proxyNames.has(dp) && !groupNames.has(dp)) {
+        err(p.name, 'dialer-proxy', dp, 'таргет не найден среди proxies/proxy-groups (mihomo: "dialer-proxy [...] not found")');
+        continue;
+      }
+      const tg = dialerTargets.get(dp) || [];
+      tg.push(p.name);
+      dialerTargets.set(dp, tg);
+      const targetGroup = groupByName.get(dp);
+      if (targetGroup && Array.isArray(targetGroup.use) && targetGroup.use.length) {
+        warn(p.name, 'dialer-proxy', dp, 'dialer-группа построена на proxy-provider: состав подписки заранее неизвестен и не проверяется на UDP. Для WireGuard вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения.');
+      }
+      if (p.type === 'wireguard') {
+        if (typeof p.mtu !== 'number' || p.mtu > 1300) {
+          warn(p.name, 'dialer-proxy', dp, 'для WireGuard через dialer-proxy рекомендуется явный MTU 1200–1280 (без mtu Mihomo использует 1408 — возможна фрагментация во вложенном туннеле)');
+        }
+      }
+      const targetProxy = (doc.proxies || []).find(x => x && typeof x === 'object' && x.name === dp);
+      if (targetProxy && targetProxy.type === 'http') {
+        warn(p.name, 'dialer-proxy', dp, 'таргет типа http не передаёт UDP — WireGuard/hy2/tuic через него работать не будут');
+      }
+    }
+    // Полный dependency-graph детектор циклов — централизован в рантайме
+    // (web4core.analyzeDialerGraph): граф строится из итогового YAML единым кодом
+    // для движка и валидатора (dialer-рёбра, proxies:, use:, provider
+    // override.dialer-proxy; смешанные группы дают обе категории рёбер).
+    // Разрешены все ациклические цепочки (WG-over-WG, группы, провайдеры);
+    // INVALID — только маршрут, возвращающийся к исходному outbound, с полным
+    // путём в сообщении. Ветви provider-групп без override — dynamic/unknown:
+    // предупреждение, а не ложное «цикл невозможен» и не ложная ошибка.
+    // Fallback на локальную копию — только пока не доставлен новый рантайм.
+    if (Array.isArray(doc.proxies) && dialerTargets.size > 0 && typeof web4core.analyzeDialerGraph === 'function') {
+      const dialerOfValue = (name) => {
+        const p = (doc.proxies || []).find(x => x && typeof x === 'object' && x.name === name);
+        return p && typeof p['dialer-proxy'] === 'string' ? p['dialer-proxy'] : '';
+      };
+      const analysis = web4core.analyzeDialerGraph(doc);
+      for (const c of analysis.cycles) {
+        err(c.start, 'dialer-proxy', dialerOfValue(doc, c.start),
+          'циклическая зависимость dialer-proxy: маршрут ' + c.route.join(' → ') + ' возвращается к исходному outbound — хендшейк невозможен. Разрешены только цепочки без возврата (WG-over-WG и группы допустимы, если путь не замыкается).');
+      }
+      if (analysis.dynamicGroups.length && analysis.dynamicProviders.length) {
+        warn(analysis.dynamicGroups[0], 'dialer-proxy', analysis.dynamicProviders.join(', '),
+          'dialer-маршрут опирается на proxy-provider без статического override: содержимое подписки на этапе генерации неизвестно, поэтому ветвь помечена как dynamic/unknown — статически цикл не доказан и не исключён, а UDP-совместимость узлов не проверяется. Выбирайте узел с UDP relay вручную; runtime-совместимость — полевой тест.');
+      } else if (analysis.dynamicGroups.length) {
+        // provider-группы с только статическими членами не дают unknown-ветвей,
+        // но UDP-предупреждение для use-групп сохраняем
+        const useGroup = (doc['proxy-groups'] || []).find(g => g && Array.isArray(g.use) && g.use.length && analysis.dynamicGroups.includes(g.name));
+        if (useGroup) {
+          warn(useGroup.name, 'dialer-proxy', (useGroup.use || []).join(', '),
+            'dialer-группа построена на proxy-provider: состав подписки заранее неизвестен и не проверяется на UDP. Для WireGuard вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения.');
+        }
+      }
+    } else if (Array.isArray(doc.proxies) && dialerTargets.size > 0) {
+      // Fallback (старый рантайм): локальная копия детектора. Удаляется, когда
+      // web4core.runtime.js с analyzeDialerGraph доставлен всем.
+      const dialerOf = new Map();
+      for (const p of doc.proxies) {
+        if (p && typeof p === 'object' && typeof p.name === 'string' && typeof p['dialer-proxy'] === 'string' && p['dialer-proxy'].trim()) {
+          dialerOf.set(p.name, p['dialer-proxy'].trim());
+        }
+      }
+      const groupStatic = new Map(), groupUse = new Map();
+      for (const g of groupByName.values()) {
+        if (Array.isArray(g.proxies)) groupStatic.set(g.name, g.proxies.filter(m => typeof m === 'string'));
+        if (Array.isArray(g.use)) groupUse.set(g.name, g.use.filter(m => typeof m === 'string'));
+      }
+      const providerDialer = new Map();
+      if (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object' && !Array.isArray(doc['proxy-providers'])) {
+        for (const [name, provider] of Object.entries(doc['proxy-providers'])) {
+          const ov = provider && typeof provider === 'object' ? provider.override : undefined;
+          const odp = ov && typeof ov === 'object' ? ov['dialer-proxy'] : undefined;
+          if (typeof odp === 'string' && odp.trim()) providerDialer.set(name, odp.trim());
+        }
+      }
+      const deadEnds = new Set(['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE']);
+      const nextNodes = (node) => {
+        const out = [];
+        if (dialerOf.has(node)) out.push(dialerOf.get(node));
+        if (groupStatic.has(node)) out.push(...groupStatic.get(node).filter(m => !deadEnds.has(m)));
+        if (groupUse.has(node)) {
+          for (const u of groupUse.get(node)) if (providerDialer.has(u)) out.push(providerDialer.get(u));
+        }
+        return out;
+      };
+      const reportCycle = (start, route) => {
+        err(start, 'dialer-proxy', dialerOf.get(start),
+          'циклическая зависимость dialer-proxy: маршрут ' + route.join(' → ') + ' возвращается к исходному outbound — хендшейк невозможен. Разрешены только цепочки без возврата (WG-over-WG и группы допустимы, если путь не замыкается).');
+      };
+      for (const start of dialerOf.keys()) {
+        const path = [start];
+        const visit = (node) => {
+          if (node === start) return true;
+          if (path.includes(node) || deadEnds.has(node)) return false;
+          path.push(node);
+          for (const n of nextNodes(node)) {
+            if (visit(n)) return true;
+          }
+          path.pop();
+          return false;
+        };
+        for (const n of nextNodes(start)) {
+          if (visit(n)) { reportCycle(start, path); break; }
+        }
+      }
+    }
+  }
+
 
   return { status: errors.length ? 'INVALID' : 'VALID', errors, warnings };
 }
@@ -1117,6 +1365,7 @@ function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') {
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return yaml;
 
   const mtu = parseInt(vpsField('vpsMtu', String(VPS_GATEWAY_DEFAULTS.mtu)), 10) || VPS_GATEWAY_DEFAULTS.mtu;
+  const dnsOn = document.getElementById('vpsDnsEnabled').checked;
 
   doc.tun = Object.assign({}, doc.tun, {
     'enable': true,
@@ -1134,10 +1383,33 @@ function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') {
   // merge: прочие ключи profile (если появятся) не затирать
   doc.profile = Object.assign({}, doc.profile, {
     'store-selected': false,
-    'store-fake-ip': false
+    // Domain Detection: fake-ip mapping обязан переживать рестарт Mihomo
+    // (PoC 2026-10-01: без persistence — stale fake-ip и live-мисатрибуция;
+    // amnezia-mihomo-gateway патчер должен сохранять это значение, см. PR).
+    'store-fake-ip': dnsOn ? true : false
   });
 
-  if (document.getElementById('vpsDnsEnabled').checked) {
+  // Domain Detection Package (vps-профиль, PoC-проверено на 1.19.31/1.19.32):
+  // 1) dns-hijack перехватывает plaintext :53, вошедший в TUN (клиент с внешним DNS);
+  // 2) пассивный sniffer восстанавливает домен для pure-IP TLS/QUIC/HTTP
+  //    (override-destination:false — hostname только для матчинга, dial-цель не меняется).
+  if (dnsOn) {
+    doc.tun['dns-hijack'] = ['any:53', 'tcp://any:53']; // действует только на трафик, вошедший в TUN
+  }
+
+  doc.sniffer = {
+    'enable': true,
+    'parse-pure-ip': true,
+    'force-dns-mapping': true,
+    'override-destination': false,
+    'sniff': {
+      'TLS': { 'ports': [443, 8443] },
+      'QUIC': { 'ports': [443, 8443] },
+      'HTTP': { 'ports': [80, '8080-8880'] }
+    }
+  };
+
+  if (dnsOn) {
     doc.dns = {
       'enable': true,
       'ipv6': false,
@@ -1159,19 +1431,106 @@ function updateVpsDnsFields() {
   document.getElementById('vpsDnsFields').style.display = on ? 'block' : 'none';
 }
 
-function onProfileChange() {
-  const isVps = !document.getElementById('cfgAutoWhitelist').checked && document.getElementById('cfgProfile').value === 'vps';
-  const panel = document.getElementById('vpsPanel');
+// === DEPLOYMENT PROFILES: router / vps-local / vps-gateway ===
+// Профиль владеет ТОЛЬКО сценарными переключателями (TUN/MIPS/stack/Mixed/LAN
+// и gateway-панелью). Прокси, подписки, WireGuard, фильтры, dialer, Web UI,
+// health-check и DPR-политики профилем не затрагиваются. Ручное состояние
+// router-профиля сохраняется в snapshot и восстанавливается при возврате.
+const PROFILE_HINTS = {
+  router: 'Домашний роутер / обычный TUN: Mihomo поднимает TUN-интерфейс (MIPS stack), слушает Mixed Port 7890, разрешает доступ из локальной сети. Все параметры ниже можно менять вручную.',
+  'vps-local': 'Для VPS, где Xray/3X-UI или другое локальное приложение отправляет трафик в Mihomo через 127.0.0.1:7890. TUN и системная маршрутизация VPS не используются.',
+  'vps-gateway': 'Только для transparent-gateway с Linux policy routing / iptables / Docker/AWG. Генератор создаёт Mihomo-часть, но не Linux routing/firewall. Для обычного VPS с Xray/3X-UI используйте профиль «VPS — локальный Mihomo / SOCKS».',
+};
+const PROFILE_OWNED_IDS = ['cfgTun', 'cfgTunMips', 'cfgTunStackAdvanced', 'cfgTunStackEx', 'cfgSocks', 'cfgLan'];
+
+// effectiveProfile = профиль, чей UI-state сейчас применён.
+// БС навязывает router-контракт временно, не трогая выбранный пользователем профиль.
+let selectedProfile = 'router';   // пользовательский выбор (select value)
+let effectiveProfile = 'router';  // профиль, чей UI-state применён сейчас
+let bsTemporaryRouter = false;    // БС навязал router временно
+let routerOwnedSnapshot = null;   // ручное состояние router-owned чекбоксов
+
+// Применяет UI-state профиля. Path-independent: результат зависит ТОЛЬКО от
+// целевого профиля, не от пути перехода. snapshot не потребляет и не восстанавливает.
+function applyProfileUiState(target) {
+  const bsOn = document.getElementById('cfgAutoWhitelist').checked;
   const tun = document.getElementById('cfgTun');
-  panel.style.display = isVps ? 'block' : 'none';
-  if (isVps) {
-    panel.dataset.prevTun = tun.checked ? '1' : '0';
-    tun.checked = true; // TUN обязателен для gateway-сценария
-    tun.disabled = true;
-    updateVpsDnsFields();
-  } else {
-    tun.disabled = false;
-    tun.checked = panel.dataset.prevTun !== '0'; // восстановить прежнее состояние
+  const mips = document.getElementById('cfgTunMips');
+  const socks = document.getElementById('cfgSocks');
+  const lan = document.getElementById('cfgLan');
+  const stackAdv = document.getElementById('cfgTunStackAdvanced');
+  const stackEx = document.getElementById('cfgTunStackEx');
+  const panel = document.getElementById('vpsPanel');
+  const hint = document.getElementById('profileHint');
+  hint.textContent = PROFILE_HINTS[target] || '';
+  panel.style.display = target === 'vps-gateway' && !bsOn ? 'block' : 'none';
+  if (target === 'router') {
+    for (const id of PROFILE_OWNED_IDS) document.getElementById(id).disabled = false;
+  } else if (target === 'vps-local') {
+    tun.checked = false; tun.disabled = true;
+    mips.checked = false; mips.disabled = true;
+    stackAdv.checked = false; stackAdv.disabled = true; stackEx.value = '';
+    socks.checked = true; socks.disabled = true;
+    lan.checked = false; lan.disabled = true;
+  } else { // vps-gateway
+    tun.checked = true; tun.disabled = true;
+    mips.disabled = false;
+    stackAdv.disabled = false;
+    socks.disabled = false;
+    lan.disabled = false;
+  }
+  updateMihomoOptionStates();
+  updateVpsDnsFields();
+}
+
+function applyDeploymentProfileUi(opts) {
+  const temporary = !!(opts && opts.temporary);
+  const target = bsTemporaryRouter ? 'router' : selectedProfile;
+  effectiveProfile = target;
+  if (temporary) {
+    // временный router-state: чекбоксы не трогаем (пользователь может настроить
+    // router-профиль под БС), только disabled-state и hint. snapshot не трогаем.
+    // vpsPanel скрывается: эффективный контракт — router, gateway-настройки игнорируются.
+    for (const id of PROFILE_OWNED_IDS) document.getElementById(id).disabled = false;
+    document.getElementById('vpsPanel').style.display = 'none';
+    document.getElementById('profileHint').textContent = PROFILE_HINTS.router + ' (временно: режим Auto-Whitelist)';
+    updateMihomoOptionStates();
+    return;
+  }
+  applyProfileUiState(target);
+}
+
+function onProfileChange() {
+  const select = document.getElementById('cfgProfile');
+  const prev = selectedProfile;
+  const next = select.value;
+  if (prev === next) { applyDeploymentProfileUi(); return; }
+  if (prev === 'router') {
+    // реальный пользовательский уход из router — сохранить ручное состояние
+    routerOwnedSnapshot = {
+      tun: document.getElementById('cfgTun').checked,
+      mips: document.getElementById('cfgTunMips').checked,
+      stackAdv: document.getElementById('cfgTunStackAdvanced').checked,
+      stackEx: document.getElementById('cfgTunStackEx').value,
+      socks: document.getElementById('cfgSocks').checked,
+      lan: document.getElementById('cfgLan').checked,
+    };
+  }
+  selectedProfile = next;
+  effectiveProfile = next;
+  applyProfileUiState(next);
+  updateVpsDnsFields();
+  // восстановление router-owned ручного состояния при ВОЗВРАТЕ в router
+  if (next === 'router' && routerOwnedSnapshot) {
+    const snap = routerOwnedSnapshot;
+    document.getElementById('cfgTun').checked = snap.tun;
+    document.getElementById('cfgTunMips').checked = snap.mips;
+    document.getElementById('cfgTunStackAdvanced').checked = snap.stackAdv;
+    document.getElementById('cfgTunStackEx').value = snap.stackEx || '';
+    document.getElementById('cfgSocks').checked = snap.socks;
+    document.getElementById('cfgLan').checked = snap.lan;
+    routerOwnedSnapshot = null;
+    updateMihomoOptionStates();
   }
 }
 
@@ -1254,6 +1613,12 @@ function updateMihomoOptionStates() {
   masterEl.disabled = bsOn;
   perTun.disabled = !master || !tun || bsOn;
   perSocks.disabled = !master || !socks || bsOn;
+  // DPR несовместим с per-proxy listeners (движок тоже отклоняет); с БС и
+  // статикой совместим (цели урезаются движком).
+  const policyEl = document.getElementById('cfgPolicyRouting');
+  policyEl.disabled = master;
+  if (master) policyEl.checked = false;
+  updatePolicyRoutingVisibility();
 }
 
 // UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
@@ -1264,24 +1629,108 @@ function onWhitelistChange() {
   const perSocks = document.getElementById('cfgPerProxySocks');
   const profile = document.getElementById('cfgProfile');
   if (on && !whitelistUiState) {
-    whitelistUiState = { perTun: perTun.checked, perSocks: perSocks.checked, profile: profile.value };
+    whitelistUiState = { perTun: perTun.checked, perSocks: perSocks.checked };
     perTun.checked = perSocks.checked = false;
-    const wasVps = profile.value === 'vps';
-    profile.value = 'generic';
-    if (wasVps) onProfileChange();
+    // БС навязывает router-контракт ВРЕМЕННО: выбранный пользователем профиль
+    // сохраняется, router-owned snapshot не потребляется. effectiveProfile
+    // становится 'router' через buildMihomo-клампы (autoWhitelist → router),
+    // UI показывает router-подсказку; при выключении БС UI восстанавливается.
+    bsTemporaryRouter = true;
+    applyDeploymentProfileUi({ temporary: true });
   } else if (!on && whitelistUiState) {
     perTun.checked = whitelistUiState.perTun;
     perSocks.checked = whitelistUiState.perSocks;
-    profile.value = whitelistUiState.profile;
-    if (profile.value === 'vps') onProfileChange();
+    bsTemporaryRouter = false;
+    applyDeploymentProfileUi();
     whitelistUiState = null;
   }
   profile.disabled = on;
   updateMihomoOptionStates();
   const perProxyPanel = document.getElementById('perProxyAdvancedPanel');
   if (perProxyPanel) perProxyPanel.style.display = on ? 'none' : '';
-  profile.closest('.card').style.display = on ? 'none' : '';
+  document.getElementById('profileRow').style.display = on ? 'none' : '';
   document.getElementById('whitelistPanel').style.display = on ? 'block' : 'none';
+}
+
+// === DOMAIN POLICY ROUTING (UI) ===
+// Карточки политик — только ввод. Разбор строк, слаги, группы и правила
+// генерирует движок web4core (mihomoDomainPolicy); страница ничего не пост-
+// процессит. Списки шаблонов — публичные домены, только заполняют textarea.
+const POLICY_PRESETS = {
+  ai: { name: 'AI', domains: 'openai.com\nchatgpt.com\noaistatic.com\nanthropic.com\ngemini.google.com' },
+  media: { name: 'MEDIA', domains: 'youtube.com\nyoutu.be\ngooglevideo.com\nytimg.com' },
+  telegram: { name: 'TELEGRAM', domains: 'telegram.org\nt.me\ntelegram.me\ntelegram.dog\ntelesco.pe' },
+  google: { name: 'GOOGLE', domains: 'google.com\ngstatic.com\ngoogleapis.com\ngoogleusercontent.com' },
+  direct: { name: 'DIRECT-LIST', domains: '# домены, которые пойдут мимо прокси (DIRECT)\nexample.com' }
+};
+
+function policyCardDom(card, index) {
+  const wrap = document.createElement('div');
+  wrap.className = 'policy-card';
+  wrap.style.cssText = 'border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:10px';
+  const title = document.createElement('div');
+  title.style.cssText = 'display:flex;gap:8px;align-items:center';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'policy-name';
+  nameInput.placeholder = 'Имя политики (например: AI)';
+  nameInput.value = card.name || '';
+  nameInput.style.cssText = 'flex:1;padding:8px;box-sizing:border-box';
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'btn btn-gray policy-del';
+  del.textContent = '✕ Удалить';
+  del.addEventListener('click', () => wrap.remove());
+  title.append(nameInput, del);
+  const domainsLabel = document.createElement('label');
+  domainsLabel.className = 'label';
+  domainsLabel.style.cssText = 'display:block;margin-top:8px';
+  domainsLabel.textContent = 'Домены / правила (по одному в строке):';
+  const domains = document.createElement('textarea');
+  domains.className = 'policy-domains';
+  domains.rows = 4;
+  domains.style.cssText = 'width:100%;padding:8px;box-sizing:border-box;font-family:monospace';
+  domains.value = card.domains || '';
+  domains.placeholder = 'example.com\nDOMAIN-SUFFIX,example.com\nDOMAIN,exact.example.com\n192.0.2.0/24';
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = 'Голый домен = DOMAIN-SUFFIX (с поддоменами). Поддерживаются: DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, DOMAIN-REGEX, GEOSITE, CIDR (→ IP-CIDR,no-resolve). Нераспознанные строки пропускаются с предупреждением.';
+  wrap.append(title, domainsLabel, domains, hint);
+  return wrap;
+}
+
+function addPolicyCard(card) {
+  document.getElementById('policyCards').appendChild(policyCardDom(card || {}));
+}
+
+function collectPolicyRouting() {
+  const cards = Array.from(document.querySelectorAll('#policyCards .policy-card'));
+  const policies = [];
+  const seen = new Set();
+  for (let i = 0; i < cards.length; i++) {
+    const name = cards[i].querySelector('.policy-name').value.trim();
+    const domains = cards[i].querySelector('.policy-domains').value;
+    if (!name && !domains.trim()) continue; // пустая карточка — не политика
+    if (!name) throw new Error('Политика #' + (i + 1) + ': укажите имя политики');
+    if (seen.has(name)) throw new Error('Дублирующееся имя политики: «' + name + '»');
+    seen.add(name);
+    policies.push({ name, domains });
+  }
+  return policies;
+}
+
+function updatePolicyRoutingVisibility() {
+  const on = document.getElementById('cfgPolicyRouting').checked;
+  const bsOn = document.getElementById('cfgAutoWhitelist').checked;
+  const master = document.getElementById('cfgPerProxyMaster') && document.getElementById('cfgPerProxyMaster').checked;
+  const subMode = document.getElementById('cfgSubMode').checked;
+  document.getElementById('policyRoutingPanel').style.display = on ? 'block' : 'none';
+  const hints = [];
+  if (bsOn) hints.push('Режим белых списков: категории указывают на GLOBAL (плоский fallback PRIMARY→FALLBACK) или DIRECT; AUTO-группы категорий не создаются.');
+  else if (subMode) hints.push('URL-подписки: каждая категория получает AUTO url-test-группу над общим provider (use:) и select [AUTO, ⚡ Fastest, GLOBAL, DIRECT].');
+  else hints.push('Без URL-подписок: категории — select [⚡ Fastest, GLOBAL, DIRECT]; AUTO-группы возможны только над подписками.');
+  if (master) hints.push('⚠ Режим «на каждый прокси» несовместим с политиками — при сборке политики будут проигнорированы.');
+  document.getElementById('policyRoutingHint').textContent = hints.join(' ');
 }
 
 // === MIHOMO BUILDER (via web4core) ===
@@ -1299,9 +1748,22 @@ function buildMihomo() {
   if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
 
   const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
-  const addTun = document.getElementById('cfgTun').checked;
-  const addSocks = document.getElementById('cfgSocks').checked;
+  let addTun = document.getElementById('cfgTun').checked;
+  let addSocks = document.getElementById('cfgSocks').checked;
   const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
+  // Deployment profile: router | vps-local | vps-gateway.
+  // БС-режим живёт на router-контракте (см. onWhitelistChange).
+  const deploymentProfile = autoWhitelist ? 'router' : document.getElementById('cfgProfile').value;
+  // Fail-safe клампы профиля: не доверяем checked/disabled в DOM (могут быть
+  // подменены расширением/консолью) — контракт профиля применяется здесь,
+  // до передачи опций в runtime и до пост-патчей YAML.
+  if (deploymentProfile === 'vps-local') {
+    addTun = false;
+    addSocks = true;
+  } else if (deploymentProfile === 'vps-gateway') {
+    addTun = true; // gateway без TUN невозможен; auto-route: false остаётся в пост-патче
+  }
+  const lanChecked = document.getElementById('cfgLan').checked && deploymentProfile !== 'vps-local';
   // Fail-safe: не доверяем прямой подмене DOM — повторно проверяем зависимости
   // (MIPS и Per-Proxy TUN требуют TUN, Per-Proxy SOCKS требует Mixed Port);
   // БС-режим принудительно исключает Per-Proxy и VPS.
@@ -1313,11 +1775,33 @@ function buildMihomo() {
   const tunStack = advancedStack ? advancedStack : ((addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor');
   const perProxySocks = (master && !autoWhitelist && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
 
+  // Domain Policy Routing: карточки политик. Кламп: per-proxy активен —
+  // политики игнорируются (движок отклонил бы сборку; UI не доводит до ошибки).
+  let domainPolicy;
+  try {
+    if (document.getElementById('cfgPolicyRouting').checked && !perProxyTun && !perProxySocks) {
+      domainPolicy = collectPolicyRouting();
+    }
+  } catch (e) {
+    return showToast('❌ ' + (e && e.message ? e.message : e), true);
+  }
+
   const webUiEnabled = document.getElementById('cfgWebUI').checked;
   const webUiChoice = document.getElementById('webUiSelect').value;
   const webUiCustomUrl = document.getElementById('webUiCustomUrl').value.trim();
   if (webUiEnabled && webUiChoice === 'custom' && !/^https?:\/\//i.test(webUiCustomUrl)) {
     return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
+  }
+
+  // dialer-proxy (туннель в туннеле): имя таргета + необязательные транзитные узлы
+  // и/или URL-провайдеры авторской dialer-группы. Пустые поля — byte-parity прежнего output.
+  const wgDialer = document.getElementById('wgDialerInput').value.trim();
+  const wgDialerMembers = document.getElementById('wgDialerMembers').value.split('\n')
+    .map(s => s.trim()).filter(Boolean);
+  const wgDialerProviders = document.getElementById('wgDialerProviders').value.split('\n')
+    .map(s => s.trim()).filter(Boolean);
+  if ((wgDialerMembers.length || wgDialerProviders.length) && (wgDialer === 'GLOBAL' || wgDialer === '⚡ Fastest')) {
+    return showToast('❌ dialer-группа не может называться GLOBAL или ⚡ Fastest: они содержат сам WARP (цикл)', true);
   }
 
   try {
@@ -1341,7 +1825,11 @@ function buildMihomo() {
         mihomoPerProxyTun: perProxyTun,
         mihomoTunStack: tunStack,
         perProxyPort: perProxySocks,
-        mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined
+        mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined,
+        mihomoDomainPolicy: domainPolicy && domainPolicy.length ? domainPolicy : undefined,
+        wgDialerProxy: wgDialer || undefined,
+        wgDialerGroupMembers: wgDialerMembers.length ? wgDialerMembers : undefined,
+        wgDialerProviders: wgDialerProviders.length ? wgDialerProviders : undefined
       }
     });
 
@@ -1351,13 +1839,13 @@ function buildMihomo() {
 
     // PATCH: Deployment profile — только при opt-in профиле VPS Gateway.
     // При 'generic' пост-патч не выполняется вовсе (инвариант byte-for-byte).
-    const deploymentProfile = autoWhitelist ? 'generic' : document.getElementById('cfgProfile').value;
-    if (deploymentProfile === 'vps') {
-      yaml = applyDeploymentProfile(yaml, deploymentProfile, tunStack);
+
+    if (deploymentProfile === 'vps-gateway') {
+      yaml = applyDeploymentProfile(yaml, 'vps', tunStack);
     }
 
     // PATCH: Allow LAN
-    if (document.getElementById('cfgLan').checked) {
+    if (lanChecked) {
       yaml = yaml.replace(/^allow-lan:\s*false\s*$/m, 'allow-lan: true');
       if (!yaml.includes('bind-address')) {
         yaml = yaml.replace(/^(allow-lan:\s*true\s*)$/m, '$1\nbind-address: "*"');
@@ -1369,6 +1857,11 @@ function buildMihomo() {
     showToast('✅ Mihomo config built!');
     if (realityModern.invalid > 0) {
       showToast('⚠ Modern REALITY: пропущено некорректных строк: ' + realityModern.invalid);
+    }
+    if (Array.isArray(result.warnings) && result.warnings.length) {
+      const head = result.warnings.slice(0, 2).join(' | ');
+      const tail = result.warnings.length > 2 ? ' …и ещё ' + (result.warnings.length - 2) : '';
+      showToast('⚠ Политики: ' + head + tail);
     }
     // Автоматическая проверка итогового YAML (после всех патчей), до Copy
     runMihomoValidation(yaml);
@@ -1404,6 +1897,19 @@ initPingSelector();
 initWgUpload();
 document.getElementById('cfgAutoWhitelist').addEventListener('change', onWhitelistChange);
 document.getElementById('cfgProfile').addEventListener('change', onProfileChange);
+
+// ADVANCED-спойлер: маркер раскрытия. Раскрытие не включает master,
+// закрытие не сбрасывает настройки — состояние master/children отдельно.
+(function () {
+  const d = document.getElementById('perProxyAdvancedDetails');
+  const marker = document.getElementById('perProxyDisclosureMarker');
+  if (!d || !marker) return;
+  // маркер — отдельный span: badge-разметка summary не разрушается,
+  // повторные open/close не накапливают пробелы
+  const sync = () => { marker.textContent = d.open ? '▼' : '▶'; };
+  d.addEventListener('toggle', sync);
+  sync();
+})();
 document.getElementById('vpsDnsEnabled').addEventListener('change', updateVpsDnsFields);
 document.getElementById('cfgTun').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgSocks').addEventListener('change', updateMihomoOptionStates);
@@ -1416,10 +1922,18 @@ document.getElementById('cfgSubMode').addEventListener('change', () => {
 });
 document.getElementById('cfgWebUI').addEventListener('change', updateWebUiVisibility);
 document.getElementById('webUiSelect').addEventListener('change', updateWebUiVisibility);
+document.getElementById('cfgPolicyRouting').addEventListener('change', updatePolicyRoutingVisibility);
+document.getElementById('cfgAutoWhitelist').addEventListener('change', updatePolicyRoutingVisibility);
+document.getElementById('cfgSubMode').addEventListener('change', updatePolicyRoutingVisibility);
+document.getElementById('btnPolicyAdd').addEventListener('click', () => {
+  const preset = POLICY_PRESETS[document.getElementById('policyPresetSelect').value] || {};
+  addPolicyCard(preset);
+});
 updateExcludeFilterVisibility();
 updateSubModeHint();
 updateWebUiVisibility();
 updateMihomoOptionStates();
+applyDeploymentProfileUi(); // заполнить hint и применить состояние профиля при загрузке
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
 // результат проверки недействительным — старый VALID не сохраняется
 ['input', 'change'].forEach(ev => document.addEventListener(ev, () => {
