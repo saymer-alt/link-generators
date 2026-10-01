@@ -52,6 +52,10 @@
   .advanced-stack-control label{display:flex;align-items:center;gap:8px;margin:0;cursor:pointer;color:var(--text)}
   .advanced-stack-control select{margin-top:8px}
   .advanced-panel{margin-top:12px;padding:12px 14px;border:1px solid rgba(210,153,34,.55);border-radius:10px;background:rgba(210,153,34,.06)}
+  details.advanced-panel>summary{cursor:pointer;list-style:none}
+  details.advanced-panel>summary::-webkit-details-marker{display:none}
+  details.advanced-panel>summary::after{content:'▶';margin-left:auto;color:#e3b341;font-size:.72rem}
+  details.advanced-panel[open]>summary::after{content:'▼'}
   .advanced-panel-title{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;color:var(--text)}
   .advanced-badge{display:inline-block;padding:2px 7px;border:1px solid rgba(210,153,34,.7);border-radius:999px;color:#e3b341;background:rgba(210,153,34,.10);font-size:.68rem;letter-spacing:.05em}
   .advanced-master{margin-top:10px;padding:10px 12px;border:1px solid rgba(210,153,34,.45);border-radius:8px;background:rgba(210,153,34,.08)}
@@ -59,6 +63,10 @@
   .advanced-master input[type="checkbox"]{width:18px;height:18px;accent-color:var(--warn)}
   .advanced-panel .checkbox-grid{margin-top:10px;padding-top:10px;border-top:1px solid rgba(210,153,34,.22)}
   .advanced-panel .hint{color:var(--muted)}
+  .guide-link{display:block;margin:-4px 0 16px;text-align:right;font-size:.82rem;color:var(--accent);text-decoration:none}
+  .guide-link:hover{text-decoration:underline}
+  .profile-hint{margin-top:8px;padding:10px 12px;border-left:3px solid var(--accent);background:rgba(88,166,255,.06);color:var(--muted);font-size:.8rem}
+  .warning-hint{margin-top:8px;padding:10px 12px;border:1px solid rgba(210,153,34,.45);border-radius:8px;background:rgba(210,153,34,.07);color:#e3b341;font-size:.78rem}
   button:disabled{opacity:.45;cursor:not-allowed}
   .validation-box{margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;font-size:.85rem;color:var(--muted)}
   .validation-box.state-validating{color:var(--accent)}
@@ -147,6 +155,7 @@
 
   <!-- TAB 2: MIHOMO BUILDER -->
   <div id="tab-mihomo" class="tab-content active">
+    <a class="guide-link" href="https://github.com/saymer-alt/link-generators/blob/main/docs/GENERATOR-GUIDE.md" target="_blank" rel="noopener">📖 Короткая инструкция по генератору ↗</a>
     <div class="card">
       <div class="card-title">📋 Входные данные</div>
       <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
@@ -178,13 +187,47 @@
       <div style="margin-top: 15px;">
         <label class="label" for="wgDialerInput" style="display: block; margin-bottom: 5px;">Промежуточный proxy / dialer-proxy:</label>
         <input type="text" id="wgDialerInput" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Имя proxy или группы (пусто = выключено)">
-        <div class="hint" style="margin-top: 5px;">Туннель в туннеле: WireGuard/WARP подключается к своему серверу через указанный proxy или группу. Таргет обязан поддерживать UDP (подходит VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет). Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408).</div>
+        <div class="hint" style="margin-top: 5px;">Туннель в туннеле: WireGuard/WARP подключается к своему серверу через указанный proxy или группу. Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408).</div>
+        <div class="warning-hint"><b>⚠ Важно для dialer-proxy.</b> Транспорт должен реально поддерживать UDP relay: рабочий TCP сам по себе этого не доказывает. И смена узла в WARP-DIALER не разрывает уже поднятый WireGuard-сеанс: в полевых тестах старый путь сохранялся более 150 секунд. Для гарантированной немедленной смены транспорта нужен reload/пересоздание WireGuard outbound.</div>
         <label class="label" for="wgDialerMembers" style="display: block; margin-bottom: 5px; margin-top: 10px;">Транзитные узлы dialer-группы (по одному в строке, необязательно):</label>
         <textarea id="wgDialerMembers" rows="3" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="VPS-DK&#10;VPS-EE&#10;VPS-SE"></textarea>
         <div class="hint" style="margin-top: 5px;">Если заполнено — создается select-группа (имя из поля выше или WARP-DIALER), и нижний транспорт WARP можно менять без пересборки. Эти узлы сами не получают dialer-proxy (иначе цикл). Избегайте GLOBAL/⚡ Fastest как таргета — они содержат сам WARP.</div>
         <label class="label" for="wgDialerProviders" style="display: block; margin-bottom: 5px; margin-top: 10px;">URL-подписки для dialer-группы (по одному в строке, необязательно):</label>
         <textarea id="wgDialerProviders" rows="2" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="https://account.geodema.org/..."></textarea>
-        <div class="hint" style="margin-top: 5px;">URL должен совпадать с одной из включённых URL-подписок — группа получает <code>use:</code> на этот provider (узлы не разворачиваются). Для WireGuard dialer вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения — состав подписки заранее неизвестен, поэтому проверяется только выбором.</div>
+        <div class="hint" style="margin-top: 5px;">URL должен совпадать с одной из включённых URL-подписок — группа получает <code>use:</code> на этот provider (узлы не разворачиваются). Для WireGuard dialer вручную выбирайте в группе узел с поддержкой UDP relay; состав подписки заранее неизвестен, поэтому генератор не может доказать UDP-совместимость удалённого узла.</div>
+      </div>
+    </div>
+
+    <div class="card" id="deploymentProfileCard">
+      <div class="card-title">🎯 Где будет работать Mihomo?</div>
+      <select id="cfgProfile">
+        <option value="router" selected>Роутер / обычный TUN (Keenetic)</option>
+        <option value="vps-local">VPS — локальный Mihomo / SOCKS для Xray / 3X-UI</option>
+        <option value="vps-gateway">VPS Transparent Gateway (amnezia-mihomo-gateway)</option>
+      </select>
+      <div id="profileHint" class="profile-hint"></div>
+      <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <div class="row">
+          <div><label>TUN device</label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div><label>MTU</label><input type="text" id="vpsMtu" value="1420"></div>
+          <div><label>fake-ip-range</label><input type="text" id="vpsFakeIp" value="198.18.0.0/16"></div>
+        </div>
+        <div class="toggle-row">
+          <label><input type="checkbox" id="vpsDnsEnabled" checked> 🌐 DNS-перехват (fake-ip) — часть VPS-профиля</label>
+        </div>
+        <div id="vpsDnsFields">
+          <div class="row">
+            <div><label>DNS listen</label><input type="text" id="vpsDnsListen" value="0.0.0.0:53"></div>
+            <div><label>Nameservers (через запятую)</label><input type="text" id="vpsDnsNs" value="1.1.1.1, 8.8.8.8"></div>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <div><label>proxy-server-nameserver</label><input type="text" id="vpsProxyNs" value="1.1.1.1"></div>
+          </div>
+          <div id="vpsDnsWarn" class="hint" style="color:#d9534f;margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
+        </div>
+        <div class="hint" style="margin-top:8px">⚠️ Для Mihomo 1.19.31 top-level tun.inet4-address не управляет адресом TUN: IPv4-префикс вычисляется из dns.fake-ip-range и приводится к /30. Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. <b>auto-route всегда false</b>, поэтому профиль не должен автоматически перехватывать SSH-маршрут VPS.</div>
       </div>
     </div>
 
@@ -206,7 +249,7 @@
           <option value="custom">Custom URL…</option>
         </select>
         <input type="text" id="webUiCustomUrl" placeholder="https://example.com/dashboard.zip" style="display:none;margin-left:8px">
-        <div class="hint">Архив дашборда, который Mihomo скачает в каталог external-ui. MetaCubeXD — по умолчанию. Custom: абсолютный http/https URL архива (.zip/.tgz); URL только генерируется в конфиг, не проверяется из браузера.</div>
+        <div class="hint">Архив дашборда, который Mihomo скачает в каталог external-ui. MetaCubeXD — по умолчанию. Custom: абсолютный http/https URL архива (.zip/.tgz); URL только генерируется, не проверяется браузером.</div>
       </div>
       <div id="excludeFilterRow" style="margin-top:10px">
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
@@ -235,10 +278,10 @@
           <option value="mixed">mixed</option>
         </select>
         <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
-        <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
+        <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS. system/mixed оставлены для экспериментов и не рекомендуются как дефолт.</div>
       </div>
-      <div id="perProxyAdvancedPanel" class="advanced-panel">
-        <div class="advanced-panel-title"><span class="advanced-badge">ADVANCED</span><span>Отдельный вход на каждый прокси</span></div>
+      <details id="perProxyAdvancedPanel" class="advanced-panel">
+        <summary class="advanced-panel-title"><span class="advanced-badge">ADVANCED</span><span>Отдельный вход на каждый прокси</span></summary>
         <div class="advanced-master">
           <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
         </div>
@@ -247,10 +290,10 @@
           <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
           <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
         </div>
-      </div>
-      <div class="hint">Обычный TUN и MIPS включены по умолчанию. Режимы отдельного входа на каждый прокси — за крышкой расширенного режима; system/mixed — за крышкой расширенного TUN stack.</div>
-      <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
-      <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
+      </details>
+      <div class="hint">Обычный TUN и MIPS включены по умолчанию в профиле «Роутер / обычный TUN». system/mixed и Per-Proxy спрятаны как расширенные функции.</div>
+      <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. MIPS влияет только на TUN-трафик; при выключенном TUN выбор stack не влияет на YAML.</div>
+      <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Профиль VPS local блокирует Per-Proxy, чтобы сохранить один локальный Mixed Port 7890.</div>
 
       <label style="margin-top:16px">🏓 Ping server (health-check)</label>
       <select id="pingSelect"></select>
@@ -259,38 +302,6 @@
         <button class="btn" onclick="buildMihomo()">⚡ Build Config</button>
         <button class="btn btn-gray" id="copyYamlBtn" onclick="copyMihomo()">📋 Copy YAML</button>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">🎯 Профиль развёртывания</div>
-      <select id="cfgProfile">
-        <option value="generic" selected>Универсальный (по умолчанию — обычная генерация)</option>
-        <option value="vps">VPS Gateway — Mihomo-конфиг для amnezia-mihomo-gateway</option>
-      </select>
-      <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
-        <div class="row">
-          <div><label>TUN device</label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
-        </div>
-        <div class="row" style="margin-top:12px">
-          <div><label>MTU</label><input type="text" id="vpsMtu" value="1420"></div>
-          <div><label>fake-ip-range</label><input type="text" id="vpsFakeIp" value="198.18.0.0/16"></div>
-        </div>
-        <div class="toggle-row">
-          <label><input type="checkbox" id="vpsDnsEnabled" checked> 🌐 DNS-перехват (fake-ip) — часть VPS-профиля</label>
-        </div>
-        <div id="vpsDnsFields">
-          <div class="row">
-            <div><label>DNS listen</label><input type="text" id="vpsDnsListen" value="0.0.0.0:53"></div>
-            <div><label>Nameservers (через запятую)</label><input type="text" id="vpsDnsNs" value="1.1.1.1, 8.8.8.8"></div>
-          </div>
-          <div class="row" style="margin-top:12px">
-            <div><label>proxy-server-nameserver</label><input type="text" id="vpsProxyNs" value="1.1.1.1"></div>
-          </div>
-          <div id="vpsDnsWarn" class="hint" style="color:#d9534f;margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
-        </div>
-        <div class="hint" style="margin-top:8px">⚠️ Для Mihomo 1.19.31 top-level tun.inet4-address не управляет адресом TUN: IPv4-префикс вычисляется из dns.fake-ip-range и приводится к /30. Поэтому VPS-профиль задаёт device + fake-ip-range, но не обещает отдельный inet4-address. Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
-      </div>
-      <div class="hint">VPS Gateway выключен по умолчанию и не влияет на обычную генерацию. Подробно — docs/VPS-GATEWAY.md.</div>
     </div>
 
     <div class="card">
@@ -332,1236 +343,238 @@ function showToast(msg, err) {
 function parseYaml() {
   const raw = document.getElementById('yamlInput').value.trim();
   if (!raw) return showToast('Вставь YAML', true);
-  
   try {
     const docs = jsyaml.loadAll(raw);
     let proxyData = null;
-    
     for (const doc of docs) {
       if (!doc) continue;
-      if (doc.proxies && Array.isArray(doc.proxies) && doc.proxies.length > 0) {
-        proxyData = doc.proxies[0];
-        break;
-      }
-      if (doc['private-key'] || doc.privateKey) {
-        proxyData = doc;
-        break;
-      }
+      if (doc.proxies && Array.isArray(doc.proxies) && doc.proxies.length > 0) { proxyData = doc.proxies[0]; break; }
+      if (doc['private-key'] || doc.privateKey) { proxyData = doc; break; }
       for (const key of Object.keys(doc)) {
         const val = doc[key];
-        if (val && typeof val === 'object' && (val['private-key'] || val.privateKey)) {
-          proxyData = val;
-          break;
-        }
+        if (val && typeof val === 'object' && (val['private-key'] || val.privateKey)) { proxyData = val; break; }
       }
       if (proxyData) break;
     }
-    
     if (!proxyData) return showToast('Не найдены данные прокси в YAML', true);
-    
     const r = {
       privateKey: proxyData['private-key'] || proxyData.privateKey || '',
       publicKey: proxyData['public-key'] || proxyData.publicKey || '',
-      ip: proxyData.ip || '',
-      ipv6: proxyData.ipv6 || '',
-      sni: proxyData.sni || '',
-      port: proxyData.port || ''
+      ip: proxyData.ip || '', ipv6: proxyData.ipv6 || '', sni: proxyData.sni || '', port: proxyData.port || ''
     };
-    
-    if (Array.isArray(proxyData.dns)) {
-      r.dns = proxyData.dns.join(',');
-    } else {
-      r.dns = proxyData.dns || '';
-    }
-    
+    r.dns = Array.isArray(proxyData.dns) ? proxyData.dns.join(',') : (proxyData.dns || '');
     if (!r.privateKey) return showToast('Не найден private-key в YAML', true);
-    
     ['privateKey','publicKey','ip','ipv6','sni','dns'].forEach(k => {
-      const el = document.getElementById(k);
-      if (!el) return;
-      el.value = r[k] || '';
-      if (r[k]) {
-        el.classList.add('field-filled');
-        setTimeout(() => el.classList.remove('field-filled'), 2000);
-      }
+      const el = document.getElementById(k); if (!el) return; el.value = r[k] || '';
+      if (r[k]) { el.classList.add('field-filled'); setTimeout(() => el.classList.remove('field-filled'), 2000); }
     });
-    
     document.getElementById('parsedBadge').style.display = 'inline-block';
     showToast('✅ YAML распарсен');
-  } catch (e) {
-    showToast('❌ Ошибка парсинга YAML: ' + e.message, true);
-  }
+  } catch (e) { showToast('❌ Ошибка парсинга YAML: ' + e.message, true); }
 }
 
 // === WARP LINK GENERATOR (ENGINEERED STRATEGY) ===
-function urlEncodeKey(key) {
-  return key.replace(/\+/g, '%2B').replace(/\//g, '%2F').replace(/=/g, '%3D');
-}
-
-// П.2: Фиксированный пул стабильных QUIC endpoint'ов
-const QUIC_ENDPOINTS = [
-  { ip: '162.159.198.2', port: 443 },
-  { ip: '162.159.198.1', port: 443 },
-  { ip: '162.159.199.2', port: 443 }
-];
-
-// П.2: H2 IP — только подсети 198 и 199
+function urlEncodeKey(key) { return key.replace(/\+/g, '%2B').replace(/\//g, '%2F').replace(/=/g, '%3D'); }
+const QUIC_ENDPOINTS = [ { ip: '162.159.198.2', port: 443 }, { ip: '162.159.198.1', port: 443 }, { ip: '162.159.199.2', port: 443 } ];
 const H2_SUBNETS = [198, 199];
-
-// П.1: Взвешенные порты для H2
-const SAFE_PORTS_WEIGHTED = [
-  { port: 443, weight: 70 },
-  { port: 8443, weight: 20 },
-  { port: 4443, weight: 5 },
-  { port: 8095, weight: 5 }
-];
-
-const ALL_PORTS_WEIGHTED = [
-  { port: 443, weight: 50 },
-  { port: 8443, weight: 15 },
-  { port: 4443, weight: 7 },
-  { port: 8095, weight: 5 },
-  { port: 500, weight: 5 },
-  { port: 1701, weight: 5 },
-  { port: 4500, weight: 5 },
-  { port: 8443, weight: 8 }  // доп. вес для 8443 в полном режиме
-];
-
-function weightedRandom(items) {
-  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
-  let random = Math.random() * totalWeight;
-  for (const item of items) {
-    random -= item.weight;
-    if (random <= 0) return item.port;
-  }
-  return items[0].port;
-}
-
-function getRandomH2Ip(excludeIp) {
-  // Генерируем IP из 198/199, избегая совпадения с excludeIp
-  let attempts = 0;
-  while (attempts < 20) {
-    const subnet = H2_SUBNETS[Math.floor(Math.random() * H2_SUBNETS.length)];
-    const octet = Math.floor(Math.random() * 254) + 1; // 1-254, избегаем .0 и .255
-    const ip = `162.159.${subnet}.${octet}`;
-    if (ip !== excludeIp || attempts > 18) return ip;
-    attempts++;
-  }
-  return `162.159.198.${Math.floor(Math.random() * 254) + 1}`;
-}
-
+const SAFE_PORTS_WEIGHTED = [ { port: 443, weight: 70 }, { port: 8443, weight: 20 }, { port: 4443, weight: 5 }, { port: 8095, weight: 5 } ];
+const ALL_PORTS_WEIGHTED = [ { port: 443, weight: 50 }, { port: 8443, weight: 15 }, { port: 4443, weight: 7 }, { port: 8095, weight: 5 }, { port: 500, weight: 5 }, { port: 1701, weight: 5 }, { port: 4500, weight: 5 }, { port: 8443, weight: 8 } ];
+function weightedRandom(items) { const totalWeight = items.reduce((sum, item) => sum + item.weight, 0); let random = Math.random() * totalWeight; for (const item of items) { random -= item.weight; if (random <= 0) return item.port; } return items[0].port; }
+function getRandomH2Ip(excludeIp) { let attempts = 0; while (attempts < 20) { const subnet = H2_SUBNETS[Math.floor(Math.random() * H2_SUBNETS.length)]; const octet = Math.floor(Math.random() * 254) + 1; const ip = `162.159.${subnet}.${octet}`; if (ip !== excludeIp || attempts > 18) return ip; attempts++; } return `162.159.198.${Math.floor(Math.random() * 254) + 1}`; }
 let lastGeneratedLinks = [];
-
 function generateWarp() {
   const baseProfile = document.getElementById('profileName').value.trim() || 'WARP-MASQUE';
   const safePortsOnly = document.getElementById('safePortsOnly').checked;
-  
-  const pk = document.getElementById('privateKey').value.trim();
-  const pub = document.getElementById('publicKey').value.trim();
-  const ip = document.getElementById('ip').value.trim();
-  const ipv6 = document.getElementById('ipv6').value.trim();
-  const sni = document.getElementById('sni').value.trim();
-  const dns = document.getElementById('dns').value.trim();
+  const pk = document.getElementById('privateKey').value.trim(); const pub = document.getElementById('publicKey').value.trim();
+  const ip = document.getElementById('ip').value.trim(); const ipv6 = document.getElementById('ipv6').value.trim();
+  const sni = document.getElementById('sni').value.trim(); const dns = document.getElementById('dns').value.trim();
   const count = parseInt(document.getElementById('pairCount').value) || 1;
-
   if (!pk || !pub) return showToast('Нужны ключи!', true);
-
-  const out = document.getElementById('warpOutput');
-  out.innerHTML = '';
-  lastGeneratedLinks = [];
-
+  const out = document.getElementById('warpOutput'); out.innerHTML = ''; lastGeneratedLinks = [];
   const portWeights = safePortsOnly ? SAFE_PORTS_WEIGHTED : ALL_PORTS_WEIGHTED;
-
   for (let i = 0; i < count; i++) {
-    // П.2: QUIC — случайный из фиксированного пула, всегда порт 443
-    const quicEndpoint = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
-    
-    // П.1: H2 порт — взвешенный рандом
-    const h2Port = weightedRandom(portWeights);
-    
-    // П.3: Анти-корреляция — если порты совпали, H2 IP ОБЯЗАТЕЛЬНО отличается
-    let h2Ip;
-    if (h2Port === quicEndpoint.port) {
-      h2Ip = getRandomH2Ip(quicEndpoint.ip);
-    } else {
-      h2Ip = getRandomH2Ip(null);
-    }
-    
-    const suffix = count > 1 ? `-${i + 1}` : '';
-    
+    const quicEndpoint = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length]; const h2Port = weightedRandom(portWeights);
+    const h2Ip = getRandomH2Ip(h2Port === quicEndpoint.port ? quicEndpoint.ip : null); const suffix = count > 1 ? `-${i + 1}` : '';
     const buildLink = (serverAddr, port, isH2) => {
-      const pkEnc = urlEncodeKey(pk);
-      const pubEnc = urlEncodeKey(pub);
-      // Имя профиля: QUIC без порта, H2 с портом
-      const name = isH2 
-        ? `${baseProfile}-H2-${port}${suffix}` 
-        : `${baseProfile}-QUIC${suffix}`;
-      
-      let url = `masque://${serverAddr}:${port}?sni=${sni}&private-key=${pkEnc}&public-key=${pubEnc}&ip=${ip}&udp=true&remote-dns-resolve=true`;
-      if (ipv6 && ipv6.trim()) url += `&ipv6=${ipv6}`;
-      if (dns && dns.trim()) url += `&dns=${dns}`;
-      if (isH2) url += '&network=h2';
-      url += `#${name}`;
-      return url;
+      const name = isH2 ? `${baseProfile}-H2-${port}${suffix}` : `${baseProfile}-QUIC${suffix}`;
+      let url = `masque://${serverAddr}:${port}?sni=${sni}&private-key=${urlEncodeKey(pk)}&public-key=${urlEncodeKey(pub)}&ip=${ip}&udp=true&remote-dns-resolve=true`;
+      if (ipv6 && ipv6.trim()) url += `&ipv6=${ipv6}`; if (dns && dns.trim()) url += `&dns=${dns}`; if (isH2) url += '&network=h2'; return url + `#${name}`;
     };
-    
-    const quic = buildLink(quicEndpoint.ip, quicEndpoint.port, false);
-    const h2 = buildLink(h2Ip, h2Port, true);
-    
-    lastGeneratedLinks.push(quic, h2);
-
-    // Недоверенные значения WARP (включая импортированный YAML) должны оставаться
-    // текстом. Не собираем результат через innerHTML/inline onclick.
-    const appendLinkBlock = (link, endpointIp, icon) => {
-      const block = document.createElement('div');
-      block.className = 'link-block';
-
-      const label = document.createElement('div');
-      label.className = 'link-label';
-      label.textContent = `${icon} ${link.split('#')[1] || ''} (${endpointIp})`;
-
-      const text = document.createElement('div');
-      text.className = 'link-text';
-      text.textContent = link;
-
-      const button = document.createElement('button');
-      button.className = 'copy-btn';
-      button.type = 'button';
-      button.textContent = 'Copy';
-      button.addEventListener('click', () => copyText(link));
-
-      block.append(label, text, button);
-      out.appendChild(block);
-    };
-
-    appendLinkBlock(quic, quicEndpoint.ip, '🔷');
-    appendLinkBlock(h2, h2Ip, '🟢');
+    const quic = buildLink(quicEndpoint.ip, quicEndpoint.port, false); const h2 = buildLink(h2Ip, h2Port, true); lastGeneratedLinks.push(quic, h2);
+    const appendLinkBlock = (link, endpointIp, icon) => { const block = document.createElement('div'); block.className = 'link-block'; const label = document.createElement('div'); label.className = 'link-label'; label.textContent = `${icon} ${link.split('#')[1] || ''} (${endpointIp})`; const text = document.createElement('div'); text.className = 'link-text'; text.textContent = link; const button = document.createElement('button'); button.className = 'copy-btn'; button.type = 'button'; button.textContent = 'Copy'; button.addEventListener('click', () => copyText(link)); block.append(label, text, button); out.appendChild(block); };
+    appendLinkBlock(quic, quicEndpoint.ip, '🔷'); appendLinkBlock(h2, h2Ip, '🟢');
   }
-  
-  const modeStr = safePortsOnly ? 'Safe Ports' : 'All Ports';
-  showToast(`✅ ${count * 2} ссылок (${modeStr})`);
+  showToast(`✅ ${count * 2} ссылок (${safePortsOnly ? 'Safe Ports' : 'All Ports'})`);
 }
-
-function sendToMihomo() {
-  if (!lastGeneratedLinks.length) return showToast('Сначала сгенерируй ссылки', true);
-  const subMode = document.getElementById('cfgSubMode');
-  if (subMode && subMode.checked) {
-    subMode.checked = false;
-    subMode.dispatchEvent(new Event('change'));
-  }
-  document.getElementById('mihomoInput').value = lastGeneratedLinks.join('\n');
-  switchTab(null, 'mihomo');
-  setTimeout(buildMihomo, 100);
-}
+function sendToMihomo() { if (!lastGeneratedLinks.length) return showToast('Сначала сгенерируй ссылки', true); const subMode = document.getElementById('cfgSubMode'); if (subMode && subMode.checked) { subMode.checked = false; subMode.dispatchEvent(new Event('change')); } document.getElementById('mihomoInput').value = lastGeneratedLinks.join('\n'); switchTab(null, 'mihomo'); setTimeout(buildMihomo, 100); }
 
 // === PING SELECTOR ===
-function initPingSelector() {
-  const choices = (globalThis.web4core?.URLTEST_CHOICES || []);
-  const sel = document.getElementById('pingSelect');
-  if (!choices.length) {
-    sel.innerHTML = '<option value="https://google.com/generate_204">Google (default)</option>';
-    return;
-  }
-  choices.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.url;
-    opt.textContent = c.label || c.url;
-    sel.appendChild(opt);
-  });
-}
+function initPingSelector() { const choices = (globalThis.web4core?.URLTEST_CHOICES || []); const sel = document.getElementById('pingSelect'); if (!choices.length) { sel.innerHTML = '<option value="https://google.com/generate_204">Google (default)</option>'; return; } choices.forEach(c => { const opt = document.createElement('option'); opt.value = c.url; opt.textContent = c.label || c.url; sel.appendChild(opt); }); }
 
 // === WIREGUARD UPLOAD ===
-let wgBeans = [];
-let wgUploadSeq = 0;
-let wgUploadPending = false;
-
-// AWG-патч 1/3: рантайм-парсер понимает только скаляры, а реальные AWG-конфиги
-// пишут диапазоны и словесные булевы: PersistentKeepalive = 25-35 (Premium и
-// self-hosted 3.1), RandomTrailers/DisableCookies = on/off (официальный формат
-// литералов AWG 3.1; потеря RandomTrailers критична — флаг двусторонний).
-// Сводим к скаляру/0-1 ДО парсинга, иначе парсер молча выбрасывает поле
-// (on/off не входит в его 1/true/yes-набор). Заодно снимаем UTF-8 BOM —
-// он ломает разбор первой секции [Interface].
-function normalizeWgText(text) {
-  return String(text)
-    .replace(/^\uFEFF/, '')
-    .replace(/^(\s*PersistentKeepalive\s*=\s*)(\d+)\s*-\s*\d+(\s*(?:[#;].*)?)$/gim,
-      '$1$2$3')
-    .replace(/^(\s*(?:RandomTrailers|DisableCookies)\s*=\s*)(on|off)(\s*(?:[#;].*)?)$/gim,
-      (m, p1, p2, p3) => p1 + (p2.toLowerCase() === 'on' ? '1' : '0') + p3);
-}
-
-// AWG-патч 2/3: в .conf нет поля Version, а mihomo активирует движок AWG 3.x
-// только при version: 3. Если видим 3.x-поля — проставляем версию принудительно.
-const AWG_V3_KEYS = [
-  'header-protection-key', 'content-padding-addition', 'rekey-after-time',
-  'rekey-timeout', 'reject-after-time', 'keepalive-timeout',
-  'max-handshake-attempts', 'random-trailers', 'disable-cookies'
-];
-
-// int-поля amnezia-wg-option в mihomo (jc/jmin/jmax/s1-s4/itime): range-строка
-// вида "10-20" уронила бы декодирование ВСЕГО конфига (weakly-typed int-парсер
-// её не читает), поэтому сводим к нижней границе. Поля, которые mihomo держит
-// строками (h1-h4, content-padding-addition, rekey-*/keepalive/max-handshake
-// таймеры), не трогаем: их v3-движок парсит как UintRange ("lo-hi" легален).
-const AWG_INT_KEYS = ['jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'itime'];
-
-function normalizeWgBeans(beans) {
-  for (const bean of (Array.isArray(beans) ? beans : [])) {
-    if (bean?.proto !== 'wireguard') continue;
-    const awg = bean.wireguard?.['amnezia-wg-option'];
-    if (!awg) continue;
-    for (const k of AWG_INT_KEYS) {
-      if (typeof awg[k] !== 'string') continue;
-      const m = /^(\d+)\s*-\s*\d+$/.exec(awg[k].trim());
-      if (m) awg[k] = parseInt(m[1], 10);
-    }
-    if (awg.version !== undefined) continue;
-    if (AWG_V3_KEYS.some(k => awg[k] !== undefined && awg[k] !== null && awg[k] !== '')) {
-      awg.version = 3;
-    }
-  }
-  return beans;
-}
-
-// AWG-патч 3/3: web4core не эмитит dns/remote-dns-resolve для wireguard-outbound.
-// После buildFromRequest возвращаем YAML в объект и инжектируем DNS из поля
-// wgCustomDns (UI); пустое поле — dns удаляется. lineWidth:-1 обязателен — иначе
-// jsyaml переносит длинные I1-I5/H-строки и портит их содержимое.
-function injectWgDns(result, beans) {
-  if (!result || result.kind !== 'yaml' || !Array.isArray(beans)) return result;
-  const customDnsInput = document.getElementById('wgCustomDns');
-  const customDnsStr = customDnsInput ? customDnsInput.value : '';
-  const customDns = customDnsStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
-
-  const withDns = beans.filter(b => b?.proto === 'wireguard');
-  if (!withDns.length || typeof result.data !== 'string') return result;
-
-  const doc = jsyaml.load(result.data);
-  const proxies = Array.isArray(doc?.proxies) ? doc.proxies : [];
-  const wgProxies = proxies.filter(p => p?.type === 'wireguard');
-  const used = new Set();
-
-  for (const bean of withDns) {
-    let proxy = wgProxies.find(p => p.name === bean.name && !used.has(p));
-    if (!proxy) proxy = wgProxies.find(p => !used.has(p));
-    if (!proxy) continue;
-    used.add(proxy);
-
-    if (customDns.length > 0) {
-      proxy.dns = customDns;
-      if (bean.wireguard && bean.wireguard.remoteDnsResolve) proxy['remote-dns-resolve'] = true;
-    } else {
-      delete proxy.dns;
-    }
-  }
-  result.data = jsyaml.dump(doc, { lineWidth: -1 });
-  return result;
-}
-
+let wgBeans = []; let wgUploadSeq = 0; let wgUploadPending = false;
+function normalizeWgText(text) { return String(text).replace(/^\uFEFF/, '').replace(/^(\s*PersistentKeepalive\s*=\s*)(\d+)\s*-\s*\d+(\s*(?:[#;].*)?)$/gim, '$1$2$3').replace(/^(\s*(?:RandomTrailers|DisableCookies)\s*=\s*)(on|off)(\s*(?:[#;].*)?)$/gim, (m, p1, p2, p3) => p1 + (p2.toLowerCase() === 'on' ? '1' : '0') + p3); }
+const AWG_V3_KEYS = ['header-protection-key','content-padding-addition','rekey-after-time','rekey-timeout','reject-after-time','keepalive-timeout','max-handshake-attempts','random-trailers','disable-cookies'];
+const AWG_INT_KEYS = ['jc','jmin','jmax','s1','s2','s3','s4','itime'];
+function normalizeWgBeans(beans) { for (const bean of (Array.isArray(beans) ? beans : [])) { if (bean?.proto !== 'wireguard') continue; const awg = bean.wireguard?.['amnezia-wg-option']; if (!awg) continue; for (const k of AWG_INT_KEYS) { if (typeof awg[k] !== 'string') continue; const m = /^(\d+)\s*-\s*\d+$/.exec(awg[k].trim()); if (m) awg[k] = parseInt(m[1], 10); } if (awg.version !== undefined) continue; if (AWG_V3_KEYS.some(k => awg[k] !== undefined && awg[k] !== null && awg[k] !== '')) awg.version = 3; } return beans; }
+function injectWgDns(result, beans) { if (!result || result.kind !== 'yaml' || !Array.isArray(beans)) return result; const customDnsInput = document.getElementById('wgCustomDns'); const customDns = (customDnsInput ? customDnsInput.value : '').split(',').map(s => s.trim()).filter(Boolean); const withDns = beans.filter(b => b?.proto === 'wireguard'); if (!withDns.length || typeof result.data !== 'string') return result; const doc = jsyaml.load(result.data); const wgProxies = (Array.isArray(doc?.proxies) ? doc.proxies : []).filter(p => p?.type === 'wireguard'); const used = new Set(); for (const bean of withDns) { let proxy = wgProxies.find(p => p.name === bean.name && !used.has(p)); if (!proxy) proxy = wgProxies.find(p => !used.has(p)); if (!proxy) continue; used.add(proxy); if (customDns.length > 0) { proxy.dns = customDns; if (bean.wireguard && bean.wireguard.remoteDnsResolve) proxy['remote-dns-resolve'] = true; } else delete proxy.dns; } result.data = jsyaml.dump(doc, { lineWidth: -1 }); return result; }
 function initWgUpload() {
-  const fileInput = document.getElementById('wgFile');
-  const statusEl = document.getElementById('wgStatus');
-  const btnEl = document.getElementById('btnWg');
-
+  const fileInput = document.getElementById('wgFile'); const statusEl = document.getElementById('wgStatus'); const btnEl = document.getElementById('btnWg');
   fileInput.addEventListener('change', async () => {
-    const requestId = ++wgUploadSeq;
-    const files = Array.from(fileInput.files || []);
-    if (!files.length) {
-      wgUploadPending = false;
-      wgBeans = [];
-      const dnsInput = document.getElementById('wgCustomDns');
-      const dnsWarn = document.getElementById('wgDnsWarning');
-      if (dnsInput) dnsInput.value = '';
-      if (dnsWarn) dnsWarn.style.display = 'none';
-      updateWgStatus();
-      return;
-    }
-
-    const api = globalThis.web4core;
-    if (!api?.parseWireGuardConf) {
-      wgUploadPending = false;
-      showToast('web4core.runtime не загружен!', true);
-      return;
-    }
-
-    // Не публикуем частично прочитанный набор файлов: пока чтение идёт,
-    // предыдущий wgBeans остаётся неизменным, а Build блокируется.
-    wgUploadPending = true;
-    statusEl.textContent = '⏳ Чтение WG/AWG...';
-    statusEl.classList.remove('loaded');
-    btnEl.textContent = '📂 WG/AWG (чтение...)';
-
-    const nextBeans = [];
-    for (const file of files) {
-      try {
-        const raw = await file.text();
-        if (requestId !== wgUploadSeq) return;
-        const text = normalizeWgText(raw);
-        const bean = api.parseWireGuardConf(text, file.name);
-        if (bean) nextBeans.push(bean);
-      } catch (e) {
-        if (requestId !== wgUploadSeq) return;
-        showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true);
-      }
-    }
-
-    // Более новый selection уже стартовал: старый async result не имеет права
-    // менять wgBeans/status/validation state.
-    if (requestId !== wgUploadSeq) return;
-
-    wgBeans = nextBeans;
-    wgUploadPending = false;
-
-    // Перехват нестабильного DNS
-    const customDnsInput = document.getElementById('wgCustomDns');
-    const dnsWarning = document.getElementById('wgDnsWarning');
-    if (wgBeans && wgBeans.length > 0 && customDnsInput) {
-      const bean = wgBeans[0];
-      if (bean.wireguard && Array.isArray(bean.wireguard.dns)) {
-        if (bean.wireguard.dns.includes('100.64.0.1')) {
-          customDnsInput.value = '1.1.1.1, 8.8.8.8';
-          if (dnsWarning) dnsWarning.style.display = 'block';
-        } else {
-          customDnsInput.value = bean.wireguard.dns.join(', ');
-          if (dnsWarning) dnsWarning.style.display = 'none';
-        }
-      } else {
-        customDnsInput.value = '';
-        if (dnsWarning) dnsWarning.style.display = 'none';
-      }
-    }
-    updateWgStatus();
-
-    // File input change invalidated state when selection started. This second
-    // invalidation is required because a build may have completed while an old
-    // browser/runtime still allowed async reading to finish later.
-    mihomoValidationSeq++;
-    resetCompatSummary();
-    setMihomoValidationState('NOT_BUILT');
+    const requestId = ++wgUploadSeq; const files = Array.from(fileInput.files || []);
+    if (!files.length) { wgUploadPending = false; wgBeans = []; const dnsInput = document.getElementById('wgCustomDns'); const dnsWarn = document.getElementById('wgDnsWarning'); if (dnsInput) dnsInput.value = ''; if (dnsWarn) dnsWarn.style.display = 'none'; updateWgStatus(); return; }
+    const api = globalThis.web4core; if (!api?.parseWireGuardConf) { wgUploadPending = false; showToast('web4core.runtime не загружен!', true); return; }
+    wgUploadPending = true; statusEl.textContent = '⏳ Чтение WG/AWG...'; statusEl.classList.remove('loaded'); btnEl.textContent = '📂 WG/AWG (чтение...)'; const nextBeans = [];
+    for (const file of files) { try { const raw = await file.text(); if (requestId !== wgUploadSeq) return; const bean = api.parseWireGuardConf(normalizeWgText(raw), file.name); if (bean) nextBeans.push(bean); } catch (e) { if (requestId !== wgUploadSeq) return; showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true); } }
+    if (requestId !== wgUploadSeq) return; wgBeans = nextBeans; wgUploadPending = false;
+    const customDnsInput = document.getElementById('wgCustomDns'); const dnsWarning = document.getElementById('wgDnsWarning');
+    if (wgBeans && wgBeans.length > 0 && customDnsInput) { const bean = wgBeans[0]; if (bean.wireguard && Array.isArray(bean.wireguard.dns)) { if (bean.wireguard.dns.includes('100.64.0.1')) { customDnsInput.value = '1.1.1.1, 8.8.8.8'; if (dnsWarning) dnsWarning.style.display = 'block'; } else { customDnsInput.value = bean.wireguard.dns.join(', '); if (dnsWarning) dnsWarning.style.display = 'none'; } } else { customDnsInput.value = ''; if (dnsWarning) dnsWarning.style.display = 'none'; } }
+    updateWgStatus(); mihomoValidationSeq++; resetCompatSummary(); setMihomoValidationState('NOT_BUILT');
   });
-
-  function updateWgStatus() {
-    if (wgBeans.length > 0) {
-      statusEl.textContent = `✅ Загружено: ${wgBeans.length} конфиг(ов)`;
-      statusEl.classList.add('loaded');
-      btnEl.textContent = `📂 WG/AWG (${wgBeans.length})`;
-    } else {
-      statusEl.textContent = '';
-      statusEl.classList.remove('loaded');
-      btnEl.textContent = '📂 Загрузить .conf / .awg';
-    }
-  }
+  function updateWgStatus() { if (wgBeans.length > 0) { statusEl.textContent = `✅ Загружено: ${wgBeans.length} конфиг(ов)`; statusEl.classList.add('loaded'); btnEl.textContent = `📂 WG/AWG (${wgBeans.length})`; } else { statusEl.textContent = ''; statusEl.classList.remove('loaded'); btnEl.textContent = '📂 Загрузить .conf / .awg'; } }
 }
 
 // === MIHOMO BASIC VALIDATION ===
-// Структурная проверка ГОТОВОГО YAML на клиенте. Это НЕ эквивалент `mihomo -t`:
-// настоящий запуск Mihomo в браузере невозможен (см. README). Проверяем только то,
-// что Mihomo гарантированно отвергнет (сверено с исходниками v1.19.x), и сознательно
-// НЕ проверяем неизвестные поля — Mihomo их игнорирует, а мы не должны блокировать
-// валидные конфиги. Уверенные ошибки (ERROR) блокируют Copy, предупреждения (WARNING) — нет.
-const MIHOMO_VALIDATION_STATE = { state: 'NOT_BUILT', result: null }; // NOT_BUILT | VALIDATING | VALID | INVALID
-
-// Типы исходящих: точный список case'ов из adapter/parser.go (MetaCubeX/mihomo,
-// линия v1.19.x). Неизвестный тип = уверенная ошибка ("unsupport proxy type").
-const MIHOMO_PROXY_TYPES = new Set([
-  'ss', 'ssr', 'socks5', 'http', 'vmess', 'vless', 'snell', 'trojan', 'hysteria',
-  'hysteria2', 'tuic', 'ssh', 'mieru', 'anytls', 'masque', 'trusttunnel',
-  'shadowquic', 'gost-relay', 'sudoku', 'wireguard',
-  'direct', 'reject', 'dns', 'rematch', 'openvpn', 'tailscale', 'zerotier'
-]);
-// Подмножество, для которого server+port обязательны (у остальных иная адресация —
-// direct/reject/dns не имеют сервера, wireguard/openvpn/tailscale/zerotier адресуются иначе).
-const MIHOMO_SERVER_TYPES = new Set([
-  'ss', 'ssr', 'socks5', 'http', 'vmess', 'vless', 'snell', 'trojan', 'hysteria',
-  'hysteria2', 'tuic', 'ssh', 'mieru', 'anytls', 'masque', 'trusttunnel',
-  'shadowquic', 'gost-relay', 'sudoku'
-]);
-// Типы групп: точный список case'ов из adapter/outboundgroup/parser.go
-const MIHOMO_GROUP_TYPES = new Set(['select', 'url-test', 'fallback', 'load-balance', 'relay']);
-// Встроенные цели, допустимые в ссылках групп (разрешаем с запасом — лишнее не блокируем)
-const MIHOMO_BUILTIN_TARGETS = new Set(['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL']);
-
-function fmtVal(v) {
-  if (v === undefined) return '(отсутствует)';
-  if (v === null) return 'null';
-  if (typeof v === 'string') return v === '' ? '(пустая строка)' : '"' + v + '"';
-  if (Array.isArray(v)) return '[список]';
-  if (typeof v === 'object') return '{словарь}';
-  return String(v);
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
+const MIHOMO_VALIDATION_STATE = { state: 'NOT_BUILT', result: null };
+const MIHOMO_PROXY_TYPES = new Set(['ss','ssr','socks5','http','vmess','vless','snell','trojan','hysteria','hysteria2','tuic','ssh','mieru','anytls','masque','trusttunnel','shadowquic','gost-relay','sudoku','wireguard','direct','reject','dns','rematch','openvpn','tailscale','zerotier']);
+const MIHOMO_SERVER_TYPES = new Set(['ss','ssr','socks5','http','vmess','vless','snell','trojan','hysteria','hysteria2','tuic','ssh','mieru','anytls','masque','trusttunnel','shadowquic','gost-relay','sudoku']);
+const MIHOMO_GROUP_TYPES = new Set(['select','url-test','fallback','load-balance','relay']);
+const MIHOMO_BUILTIN_TARGETS = new Set(['DIRECT','REJECT','REJECT-DROP','PASS','COMPATIBLE','GLOBAL']);
+function fmtVal(v) { if (v === undefined) return '(отсутствует)'; if (v === null) return 'null'; if (typeof v === 'string') return v === '' ? '(пустая строка)' : '"' + v + '"'; if (Array.isArray(v)) return '[список]'; if (typeof v === 'object') return '{словарь}'; return String(v); }
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function validateMihomoYaml(yaml) {
-  const errors = [];
-  const warnings = [];
-  const err = (where, field, value, message) => errors.push({ where, field, value, message });
-  const warn = (where, field, value, message) => warnings.push({ where, field, value, message });
-
-  let doc;
-  try {
-    doc = jsyaml.load(String(yaml));
-  } catch (e) {
-    err('', '', '', 'YAML не парсится: ' + (e.message || e));
-    return { status: 'INVALID', errors, warnings };
-  }
-  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
-    err('', '', '', 'Корень YAML должен быть словарём, а не ' + (Array.isArray(doc) ? 'списком' : typeof doc));
-    return { status: 'INVALID', errors, warnings };
-  }
-
-  const checkPort = (where, field, v) => {
-    if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 65535) {
-      err(where, field, fmtVal(v), 'порт должен быть целым числом 1–65535');
-    }
-  };
-
-  // --- верхнеуровневые скалярные порты и структура секций ---
-  ['port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port'].forEach(key => {
-    if (doc[key] !== undefined) checkPort('', key, doc[key]);
-  });
-  ['dns', 'tun', 'proxy-providers', 'rule-providers'].forEach(key => {
-    const v = doc[key];
-    if (v !== undefined && (typeof v !== 'object' || v === null || Array.isArray(v))) {
-      err('', key, fmtVal(v), 'поле должно быть словарём');
-    }
-  });
-  ['rules', 'listeners', 'inbounds'].forEach(key => {
-    const v = doc[key];
-    if (v !== undefined && !Array.isArray(v)) err('', key, fmtVal(v), 'поле должно быть списком');
-  });
-  if (Array.isArray(doc.rules)) {
-    doc.rules.forEach((r, i) => {
-      if (typeof r !== 'string' || !r.trim()) err('rules[' + i + ']', '', fmtVal(r), 'правило должно быть непустой строкой');
-    });
-  }
-  // --- listeners / inbounds: только структурные проверки ---
-  const listenerNames = new Set();
-  ['listeners', 'inbounds'].forEach(listName => {
-    if (!Array.isArray(doc[listName])) return;
-    doc[listName].forEach((l, i) => {
-      const at = listName + '[' + i + ']';
-      if (!l || typeof l !== 'object' || Array.isArray(l)) { err(at, '', '', 'должен быть словарём'); return; }
-      if (typeof l.name === 'string' && l.name) {
-        if (listenerNames.has(l.name)) err(at, 'name', l.name, 'дублирующееся имя listener (mihomo отвергает дубликаты)');
-        else listenerNames.add(l.name);
-      }
-      if (l.port !== undefined) checkPort(at, 'port', l.port);
-    });
-  });
-
-  // --- proxies ---
+  const errors = [], warnings = []; const err = (where, field, value, message) => errors.push({ where, field, value, message }); const warn = (where, field, value, message) => warnings.push({ where, field, value, message });
+  let doc; try { doc = jsyaml.load(String(yaml)); } catch (e) { err('', '', '', 'YAML не парсится: ' + (e.message || e)); return { status: 'INVALID', errors, warnings }; }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) { err('', '', '', 'Корень YAML должен быть словарём, а не ' + (Array.isArray(doc) ? 'списком' : typeof doc)); return { status: 'INVALID', errors, warnings }; }
+  const checkPort = (where, field, v) => { if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 65535) err(where, field, fmtVal(v), 'порт должен быть целым числом 1–65535'); };
+  ['port','socks-port','mixed-port','redir-port','tproxy-port'].forEach(key => { if (doc[key] !== undefined) checkPort('', key, doc[key]); });
+  ['dns','tun','proxy-providers','rule-providers'].forEach(key => { const v = doc[key]; if (v !== undefined && (typeof v !== 'object' || v === null || Array.isArray(v))) err('', key, fmtVal(v), 'поле должно быть словарём'); });
+  ['rules','listeners','inbounds'].forEach(key => { const v = doc[key]; if (v !== undefined && !Array.isArray(v)) err('', key, fmtVal(v), 'поле должно быть списком'); });
+  if (Array.isArray(doc.rules)) doc.rules.forEach((r, i) => { if (typeof r !== 'string' || !r.trim()) err('rules[' + i + ']', '', fmtVal(r), 'правило должно быть непустой строкой'); });
+  const listenerNames = new Set(); ['listeners','inbounds'].forEach(listName => { if (!Array.isArray(doc[listName])) return; doc[listName].forEach((l, i) => { const at = listName + '[' + i + ']'; if (!l || typeof l !== 'object' || Array.isArray(l)) { err(at, '', '', 'должен быть словарём'); return; } if (typeof l.name === 'string' && l.name) { if (listenerNames.has(l.name)) err(at, 'name', l.name, 'дублирующееся имя listener (mihomo отвергает дубликаты)'); else listenerNames.add(l.name); } if (l.port !== undefined) checkPort(at, 'port', l.port); }); });
   const proxyNames = new Set();
-  if (doc.proxies !== undefined && !Array.isArray(doc.proxies)) {
-    err('', 'proxies', '', 'поле proxies должно быть списком');
-  } else if (Array.isArray(doc.proxies)) {
-    doc.proxies.forEach((p, i) => {
-      const at = 'proxies[' + i + ']';
-      if (!p || typeof p !== 'object' || Array.isArray(p)) { err(at, '', '', 'прокси должен быть словарём'); return; }
-      const name = p.name, type = p.type;
-      if (typeof name !== 'string' || !name.trim()) {
-        err(at, 'name', fmtVal(name), 'обязательное поле отсутствует или пустое');
-      } else if (proxyNames.has(name)) {
-        err(name, 'name', name, 'дублирующееся имя прокси (mihomo: "proxy ... is the duplicate name")');
-      } else {
-        proxyNames.add(name);
-      }
-      const where = (typeof name === 'string' && name) ? name : at;
-      if (typeof type !== 'string' || !type.trim()) {
-        err(where, 'type', fmtVal(type), 'обязательное поле отсутствует или пустое');
-      } else if (!MIHOMO_PROXY_TYPES.has(type)) {
-        err(where, 'type', type, 'неизвестный тип — mihomo отвечает "unsupport proxy type"');
-      } else if (MIHOMO_SERVER_TYPES.has(type)) {
-        if (typeof p.server !== 'string' || !p.server.trim()) {
-          err(where, 'server', fmtVal(p.server), 'обязательное поле отсутствует или пустое');
-        }
-        if (type === 'mieru' && p['port-range'] !== undefined && p['port-range'] !== '') {
-          // mihomo adapter/outbound/mieru.go: port и port-range взаимоисключающие;
-          // port-range — строка строго "%d-%d", границы 1–65535, begin <= end.
-          const pr = p['port-range'];
-          if (p.port !== undefined && p.port !== 0) {
-            err(where, 'port', fmtVal(p.port), 'mihomo: port и port-range нельзя задавать одновременно ("port and port-range cannot be set at the same time")');
-          }
-          const m = typeof pr === 'string' && pr.match(/^(\d+)-(\d+)$/);
-          if (!m) {
-            err(where, 'port-range', fmtVal(pr), 'должен быть строкой вида "начало-конец", например "20000-22000"');
-          } else {
-            const a = Number(m[1]), b = Number(m[2]);
-            if (a < 1 || a > 65535 || b < 1 || b > 65535 || a > b) {
-              err(where, 'port-range', fmtVal(pr), 'границы диапазона должны быть в 1–65535 и начало <= конец');
-            }
-          }
-        } else {
-          checkPort(where, 'port', p.port);
-        }
-      }
-      if (type === 'mieru') {
-        const tr = p.transport;
-        if (tr !== 'TCP' && tr !== 'UDP') {
-          err(where, 'transport', fmtVal(tr), 'mihomo принимает только TCP или UDP ("transport must be TCP or UDP")');
-        }
-      }
-    });
-  }
-
-  // --- proxy-groups ---
+  if (doc.proxies !== undefined && !Array.isArray(doc.proxies)) err('', 'proxies', '', 'поле proxies должно быть списком');
+  else if (Array.isArray(doc.proxies)) doc.proxies.forEach((p, i) => { const at = 'proxies[' + i + ']'; if (!p || typeof p !== 'object' || Array.isArray(p)) { err(at, '', '', 'прокси должен быть словарём'); return; } const name = p.name, type = p.type; if (typeof name !== 'string' || !name.trim()) err(at, 'name', fmtVal(name), 'обязательное поле отсутствует или пустое'); else if (proxyNames.has(name)) err(name, 'name', name, 'дублирующееся имя прокси (mihomo: "proxy ... is the duplicate name")'); else proxyNames.add(name); const where = (typeof name === 'string' && name) ? name : at; if (typeof type !== 'string' || !type.trim()) err(where, 'type', fmtVal(type), 'обязательное поле отсутствует или пустое'); else if (!MIHOMO_PROXY_TYPES.has(type)) err(where, 'type', type, 'неизвестный тип — mihomo отвечает "unsupport proxy type"'); else if (MIHOMO_SERVER_TYPES.has(type)) { if (typeof p.server !== 'string' || !p.server.trim()) err(where, 'server', fmtVal(p.server), 'обязательное поле отсутствует или пустое'); if (type === 'mieru' && p['port-range'] !== undefined && p['port-range'] !== '') { const pr = p['port-range']; if (p.port !== undefined && p.port !== 0) err(where, 'port', fmtVal(p.port), 'mihomo: port и port-range нельзя задавать одновременно'); const m = typeof pr === 'string' && pr.match(/^(\d+)-(\d+)$/); if (!m) err(where, 'port-range', fmtVal(pr), 'должен быть строкой вида "начало-конец"'); else { const a = Number(m[1]), b = Number(m[2]); if (a < 1 || a > 65535 || b < 1 || b > 65535 || a > b) err(where, 'port-range', fmtVal(pr), 'границы диапазона должны быть в 1–65535 и начало <= конец'); } } else checkPort(where, 'port', p.port); } if (type === 'mieru' && p.transport !== 'TCP' && p.transport !== 'UDP') err(where, 'transport', fmtVal(p.transport), 'mihomo принимает только TCP или UDP'); });
   const groupNames = new Set();
-  if (doc['proxy-groups'] !== undefined && !Array.isArray(doc['proxy-groups'])) {
-    err('', 'proxy-groups', '', 'поле proxy-groups должно быть списком');
-  } else if (Array.isArray(doc['proxy-groups'])) {
-    const groups = doc['proxy-groups'];
-    // проход 1: собираем имена всех групп (ссылки могут быть вперёд)
-    groups.forEach((g) => {
-      if (g && typeof g === 'object' && !Array.isArray(g) && typeof g.name === 'string' && g.name.trim()) {
-        if (groupNames.has(g.name)) err(g.name, 'name', g.name, 'дублирующееся имя группы (mihomo: "the duplicate name")');
-        else groupNames.add(g.name);
-      }
-    });
-    // проход 2: содержимое
-    groups.forEach((g, i) => {
-      const at = 'proxy-groups[' + i + ']';
-      if (!g || typeof g !== 'object' || Array.isArray(g)) { err(at, '', '', 'группа должна быть словарём'); return; }
-      const where = (typeof g.name === 'string' && g.name) ? g.name : at;
-      if (typeof g.name !== 'string' || !g.name.trim()) {
-        err(where, 'name', fmtVal(g.name), 'обязательное поле отсутствует или пустое');
-      }
-      if (typeof g.type !== 'string' || !g.type.trim()) {
-        err(where, 'type', fmtVal(g.type), 'обязательное поле отсутствует или пустое');
-      } else if (!MIHOMO_GROUP_TYPES.has(g.type)) {
-        err(where, 'type', g.type, 'неизвестный тип группы (mihomo: select, url-test, fallback, load-balance, relay)');
-      }
-      if (g.proxies !== undefined && !Array.isArray(g.proxies)) {
-        err(where, 'proxies', fmtVal(g.proxies), 'должно быть списком');
-      } else if (Array.isArray(g.proxies)) {
-        if (!g.proxies.length) warn(where, 'proxies', '', 'список ссылок пуст');
-        g.proxies.forEach((ref, j) => {
-          if (typeof ref !== 'string' || !ref) { err(where, 'proxies[' + j + ']', fmtVal(ref), 'ссылка должна быть непустой строкой'); return; }
-          if (!proxyNames.has(ref) && !groupNames.has(ref) && !MIHOMO_BUILTIN_TARGETS.has(ref)) {
-            err(where, 'proxies[' + j + ']', ref, 'ссылается на несуществующий прокси или группу');
-          }
-        });
-      }
-    });
-    for (const n of groupNames) {
-      if (proxyNames.has(n)) warn(n, 'name', n, 'имя группы совпадает с именем прокси');
-    }
-  }
-
-  // --- dialer-proxy (туннель в туннеле) ---
-  // Mihomo v1.19.31 сам валидирует существование таргета и прямые циклы при
-  // загрузке конфига ("dialer-proxy [Y] not found" / "circular dialer-proxy
-  // dependency"), но НЕ ловит цикл через членство в группе (WARP -> группа,
-  // выбирающая WARP, рекурсирует на dial). Здесь дублируем статические проверки
-  // и добавляем предупреждения о членах группы и UDP/MTU.
+  if (doc['proxy-groups'] !== undefined && !Array.isArray(doc['proxy-groups'])) err('', 'proxy-groups', '', 'поле proxy-groups должно быть списком');
+  else if (Array.isArray(doc['proxy-groups'])) { const groups = doc['proxy-groups']; groups.forEach(g => { if (g && typeof g === 'object' && !Array.isArray(g) && typeof g.name === 'string' && g.name.trim()) { if (groupNames.has(g.name)) err(g.name, 'name', g.name, 'дублирующееся имя группы'); else groupNames.add(g.name); } }); groups.forEach((g, i) => { const at = 'proxy-groups[' + i + ']'; if (!g || typeof g !== 'object' || Array.isArray(g)) { err(at, '', '', 'группа должна быть словарём'); return; } const where = (typeof g.name === 'string' && g.name) ? g.name : at; if (typeof g.name !== 'string' || !g.name.trim()) err(where, 'name', fmtVal(g.name), 'обязательное поле отсутствует или пустое'); if (typeof g.type !== 'string' || !g.type.trim()) err(where, 'type', fmtVal(g.type), 'обязательное поле отсутствует или пустое'); else if (!MIHOMO_GROUP_TYPES.has(g.type)) err(where, 'type', g.type, 'неизвестный тип группы'); if (g.proxies !== undefined && !Array.isArray(g.proxies)) err(where, 'proxies', fmtVal(g.proxies), 'должно быть списком'); else if (Array.isArray(g.proxies)) { if (!g.proxies.length) warn(where, 'proxies', '', 'список ссылок пуст'); g.proxies.forEach((ref, j) => { if (typeof ref !== 'string' || !ref) { err(where, 'proxies[' + j + ']', fmtVal(ref), 'ссылка должна быть непустой строкой'); return; } if (!proxyNames.has(ref) && !groupNames.has(ref) && !MIHOMO_BUILTIN_TARGETS.has(ref)) err(where, 'proxies[' + j + ']', ref, 'ссылается на несуществующий прокси или группу'); }); } }); for (const n of groupNames) if (proxyNames.has(n)) warn(n, 'name', n, 'имя группы совпадает с именем прокси'); }
   if (Array.isArray(doc.proxies)) {
-    const groupByName = new Map();
-    if (Array.isArray(doc['proxy-groups'])) {
-      for (const g of doc['proxy-groups']) {
-        if (g && typeof g === 'object' && !Array.isArray(g) && typeof g.name === 'string') {
-          groupByName.set(g.name, g);
-        }
-      }
-    }
-    const dialerTargets = new Map(); // target -> [user proxy names], для прямых циклов
-    for (const p of doc.proxies) {
-      if (!p || typeof p !== 'object' || Array.isArray(p) || typeof p.name !== 'string') continue;
-      const dp = p['dialer-proxy'];
-      if (dp === undefined || dp === '') continue;
-      if (typeof dp !== 'string' || !dp.trim()) {
-        err(p.name, 'dialer-proxy', fmtVal(dp), 'должен быть непустой строкой — именем proxy или группы');
-        continue;
-      }
-      if (dp === p.name) {
-        err(p.name, 'dialer-proxy', dp, 'прокси не может вести сам через себя (self-reference)');
-        continue;
-      }
-      if (dp !== 'DIRECT' && !proxyNames.has(dp) && !groupNames.has(dp)) {
-        err(p.name, 'dialer-proxy', dp, 'таргет не найден среди proxies/proxy-groups (mihomo: "dialer-proxy [...] not found")');
-        continue;
-      }
-      const tg = dialerTargets.get(dp) || [];
-      tg.push(p.name);
-      dialerTargets.set(dp, tg);
-      const targetGroup = groupByName.get(dp);
-      if (targetGroup && Array.isArray(targetGroup.use) && targetGroup.use.length) {
-        warn(p.name, 'dialer-proxy', dp, 'dialer-группа построена на proxy-provider: состав подписки заранее неизвестен и не проверяется на UDP. Для WireGuard вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения.');
-      }
-      if (p.type === 'wireguard') {
-        if (typeof p.mtu !== 'number' || p.mtu > 1300) {
-          warn(p.name, 'dialer-proxy', dp, 'для WireGuard через dialer-proxy рекомендуется явный MTU 1200–1280 (без mtu Mihomo использует 1408 — возможна фрагментация во вложенном туннеле)');
-        }
-      }
-      const targetProxy = (doc.proxies || []).find(x => x && typeof x === 'object' && x.name === dp);
-      if (targetProxy && targetProxy.type === 'http') {
-        warn(p.name, 'dialer-proxy', dp, 'таргет типа http не передаёт UDP — WireGuard/hy2/tuic через него работать не будут');
-      }
-    }
-    // Полный dependency-graph детектор циклов — централизован в рантайме
-    // (web4core.analyzeDialerGraph): граф строится из итогового YAML единым кодом
-    // для движка и валидатора (dialer-рёбра, proxies:, use:, provider
-    // override.dialer-proxy; смешанные группы дают обе категории рёбер).
-    // Разрешены все ациклические цепочки (WG-over-WG, группы, провайдеры);
-    // INVALID — только маршрут, возвращающийся к исходному outbound, с полным
-    // путём в сообщении. Ветви provider-групп без override — dynamic/unknown:
-    // предупреждение, а не ложное «цикл невозможен» и не ложная ошибка.
-    // Fallback на локальную копию — только пока не доставлен новый рантайм.
-    if (Array.isArray(doc.proxies) && dialerTargets.size > 0 && typeof web4core.analyzeDialerGraph === 'function') {
-      const dialerOfValue = (name) => {
-        const p = (doc.proxies || []).find(x => x && typeof x === 'object' && x.name === name);
-        return p && typeof p['dialer-proxy'] === 'string' ? p['dialer-proxy'] : '';
-      };
-      const analysis = web4core.analyzeDialerGraph(doc);
-      for (const c of analysis.cycles) {
-        err(c.start, 'dialer-proxy', dialerOfValue(doc, c.start),
-          'циклическая зависимость dialer-proxy: маршрут ' + c.route.join(' → ') + ' возвращается к исходному outbound — хендшейк невозможен. Разрешены только цепочки без возврата (WG-over-WG и группы допустимы, если путь не замыкается).');
-      }
-      if (analysis.dynamicGroups.length && analysis.dynamicProviders.length) {
-        warn(analysis.dynamicGroups[0], 'dialer-proxy', analysis.dynamicProviders.join(', '),
-          'dialer-маршрут опирается на proxy-provider без статического override: содержимое подписки на этапе генерации неизвестно, поэтому ветвь помечена как dynamic/unknown — статически цикл не доказан и не исключён, а UDP-совместимость узлов не проверяется. Выбирайте узел с UDP relay вручную; runtime-совместимость — полевой тест.');
-      } else if (analysis.dynamicGroups.length) {
-        // provider-группы с только статическими членами не дают unknown-ветвей,
-        // но UDP-предупреждение для use-групп сохраняем
-        const useGroup = (doc['proxy-groups'] || []).find(g => g && Array.isArray(g.use) && g.use.length && analysis.dynamicGroups.includes(g.name));
-        if (useGroup) {
-          warn(useGroup.name, 'dialer-proxy', (useGroup.use || []).join(', '),
-            'dialer-группа построена на proxy-provider: состав подписки заранее неизвестен и не проверяется на UDP. Для WireGuard вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения.');
-        }
-      }
-    } else if (Array.isArray(doc.proxies) && dialerTargets.size > 0) {
-      // Fallback (старый рантайм): локальная копия детектора. Удаляется, когда
-      // web4core.runtime.js с analyzeDialerGraph доставлен всем.
-      const dialerOf = new Map();
-      for (const p of doc.proxies) {
-        if (p && typeof p === 'object' && typeof p.name === 'string' && typeof p['dialer-proxy'] === 'string' && p['dialer-proxy'].trim()) {
-          dialerOf.set(p.name, p['dialer-proxy'].trim());
-        }
-      }
-      const groupStatic = new Map(), groupUse = new Map();
-      for (const g of groupByName.values()) {
-        if (Array.isArray(g.proxies)) groupStatic.set(g.name, g.proxies.filter(m => typeof m === 'string'));
-        if (Array.isArray(g.use)) groupUse.set(g.name, g.use.filter(m => typeof m === 'string'));
-      }
-      const providerDialer = new Map();
-      if (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object' && !Array.isArray(doc['proxy-providers'])) {
-        for (const [name, provider] of Object.entries(doc['proxy-providers'])) {
-          const ov = provider && typeof provider === 'object' ? provider.override : undefined;
-          const odp = ov && typeof ov === 'object' ? ov['dialer-proxy'] : undefined;
-          if (typeof odp === 'string' && odp.trim()) providerDialer.set(name, odp.trim());
-        }
-      }
-      const deadEnds = new Set(['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE']);
-      const nextNodes = (node) => {
-        const out = [];
-        if (dialerOf.has(node)) out.push(dialerOf.get(node));
-        if (groupStatic.has(node)) out.push(...groupStatic.get(node).filter(m => !deadEnds.has(m)));
-        if (groupUse.has(node)) {
-          for (const u of groupUse.get(node)) if (providerDialer.has(u)) out.push(providerDialer.get(u));
-        }
-        return out;
-      };
-      const reportCycle = (start, route) => {
-        err(start, 'dialer-proxy', dialerOf.get(start),
-          'циклическая зависимость dialer-proxy: маршрут ' + route.join(' → ') + ' возвращается к исходному outbound — хендшейк невозможен. Разрешены только цепочки без возврата (WG-over-WG и группы допустимы, если путь не замыкается).');
-      };
-      for (const start of dialerOf.keys()) {
-        const path = [start];
-        const visit = (node) => {
-          if (node === start) return true;
-          if (path.includes(node) || deadEnds.has(node)) return false;
-          path.push(node);
-          for (const n of nextNodes(node)) {
-            if (visit(n)) return true;
-          }
-          path.pop();
-          return false;
-        };
-        for (const n of nextNodes(start)) {
-          if (visit(n)) { reportCycle(start, path); break; }
-        }
-      }
-    }
+    const groupByName = new Map(); if (Array.isArray(doc['proxy-groups'])) for (const g of doc['proxy-groups']) if (g && typeof g === 'object' && !Array.isArray(g) && typeof g.name === 'string') groupByName.set(g.name, g);
+    const dialerTargets = new Map();
+    for (const p of doc.proxies) { if (!p || typeof p !== 'object' || Array.isArray(p) || typeof p.name !== 'string') continue; const dp = p['dialer-proxy']; if (dp === undefined || dp === '') continue; if (typeof dp !== 'string' || !dp.trim()) { err(p.name, 'dialer-proxy', fmtVal(dp), 'должен быть непустой строкой — именем proxy или группы'); continue; } if (dp === p.name) { err(p.name, 'dialer-proxy', dp, 'прокси не может вести сам через себя'); continue; } if (dp !== 'DIRECT' && !proxyNames.has(dp) && !groupNames.has(dp)) { err(p.name, 'dialer-proxy', dp, 'таргет не найден среди proxies/proxy-groups'); continue; } const tg = dialerTargets.get(dp) || []; tg.push(p.name); dialerTargets.set(dp, tg); const targetGroup = groupByName.get(dp); if (targetGroup && Array.isArray(targetGroup.use) && targetGroup.use.length) warn(p.name, 'dialer-proxy', dp, 'dialer-группа построена на proxy-provider: состав подписки заранее неизвестен и не проверяется на UDP. Выбирайте узел с поддержкой UDP relay вручную.'); if (p.type === 'wireguard' && (typeof p.mtu !== 'number' || p.mtu > 1300)) warn(p.name, 'dialer-proxy', dp, 'для WireGuard через dialer-proxy рекомендуется явный MTU 1200–1280'); const targetProxy = (doc.proxies || []).find(x => x && typeof x === 'object' && x.name === dp); if (targetProxy && targetProxy.type === 'http') warn(p.name, 'dialer-proxy', dp, 'таргет типа http не передаёт UDP'); }
+    if (dialerTargets.size > 0 && typeof web4core.analyzeDialerGraph === 'function') { const analysis = web4core.analyzeDialerGraph(doc); const dialerOfValue = name => { const p = (doc.proxies || []).find(x => x && typeof x === 'object' && x.name === name); return p && typeof p['dialer-proxy'] === 'string' ? p['dialer-proxy'] : ''; }; for (const c of analysis.cycles) err(c.start, 'dialer-proxy', dialerOfValue(c.start), 'циклическая зависимость dialer-proxy: маршрут ' + c.route.join(' → ') + ' возвращается к исходному outbound'); if (analysis.dynamicGroups.length && analysis.dynamicProviders.length) warn(analysis.dynamicGroups[0], 'dialer-proxy', analysis.dynamicProviders.join(', '), 'ветвь proxy-provider dynamic/unknown: статически цикл и UDP-совместимость не доказаны'); }
   }
-
-
   return { status: errors.length ? 'INVALID' : 'VALID', errors, warnings };
 }
-
-function renderMihomoValidation() {
-  const box = document.getElementById('mihomoValidationBox');
-  const st = MIHOMO_VALIDATION_STATE;
-  box.className = 'validation-box state-' + st.state.toLowerCase();
-  let html = '';
-  if (st.state === 'NOT_BUILT') {
-    html = '— Базовая проверка ещё не выполнялась. Нажмите ⚡ Build Config — проверка запустится автоматически.';
-  } else if (st.state === 'VALIDATING') {
-    html = '⏳ Базовая проверка конфигурации...';
-  } else if (st.state === 'VALID') {
-    html = '<b>⚠️ Базовая проверка пройдена. Это не эквивалент проверки mihomo -t.</b>' +
-      '<div style="margin-top:8px">Финальная проверка выполняется настоящим Mihomo: <code>mihomo -t -f /path/to/config.yaml</code>. Если Mihomo отвергнет YAML, для разбора сохраните полный YAML и полный вывод этой команды.</div>';
-  } else if (st.state === 'INVALID') {
-    html = '<b>❌ Ошибка базовой проверки</b>';
-  }
-  const res = st.result;
-  if (res) {
-    for (const e of res.errors) html += validationIssueHtml(e, true);
-    if (res.warnings.length) {
-      html += '<div style="margin-top:8px">' + (res.status === 'VALID' ? 'Предупреждения (Copy доступен):' : 'Предупреждения:') + '</div>';
-      for (const w of res.warnings) html += validationIssueHtml(w, false);
-    }
-  }
-  if (st.state === 'INVALID') html += '<div style="margin-top:8px">Исправьте конфигурацию и выполните ⚡ Build Config снова.</div>';
-  box.innerHTML = html;
-  const btn = document.getElementById('copyYamlBtn');
-  if (btn) btn.disabled = st.state !== 'VALID';
-}
-
-function validationIssueHtml(issue, isError) {
-  const lines = [];
-  if (issue.where) lines.push('Proxy: ' + issue.where);
-  if (issue.field) lines.push('Field: ' + issue.field);
-  if (issue.value !== undefined && issue.value !== '') lines.push('Value: ' + issue.value);
-  lines.push((isError ? 'Ошибка: ' : 'Внимание: ') + issue.message);
-  return '<div class="validation-issue' + (isError ? ' validation-issue-error' : '') + '">' + lines.map(escapeHtml).join('\n') + '</div>';
-}
-
-function setMihomoValidationState(state, result) {
-  MIHOMO_VALIDATION_STATE.state = state;
-  MIHOMO_VALIDATION_STATE.result = result || null;
-  renderMihomoValidation();
-}
-
-// Счётчик поколений: любой сброс статуса инвалидирует незавершённую проверку,
-// чтобы асинхронный VALID не перезаписал сброс, случившийся во время проверки
+function validationIssueHtml(issue, isError) { const lines = []; if (issue.where) lines.push('Proxy: ' + issue.where); if (issue.field) lines.push('Field: ' + issue.field); if (issue.value !== undefined && issue.value !== '') lines.push('Value: ' + issue.value); lines.push((isError ? 'Ошибка: ' : 'Внимание: ') + issue.message); return '<div class="validation-issue' + (isError ? ' validation-issue-error' : '') + '">' + lines.map(escapeHtml).join('\n') + '</div>'; }
+function renderMihomoValidation() { const box = document.getElementById('mihomoValidationBox'); const st = MIHOMO_VALIDATION_STATE; box.className = 'validation-box state-' + st.state.toLowerCase(); let html = ''; if (st.state === 'NOT_BUILT') html = '— Базовая проверка ещё не выполнялась. Нажмите ⚡ Build Config — проверка запустится автоматически.'; else if (st.state === 'VALIDATING') html = '⏳ Базовая проверка конфигурации...'; else if (st.state === 'VALID') html = '<b>⚠️ Базовая проверка пройдена. Это не эквивалент проверки mihomo -t.</b><div style="margin-top:8px">Финальная проверка: <code>mihomo -t -f /path/to/config.yaml</code>. Если Mihomo отвергнет YAML, сохраните полный YAML и полный вывод команды.</div>'; else if (st.state === 'INVALID') html = '<b>❌ Ошибка базовой проверки</b>'; const res = st.result; if (res) { for (const e of res.errors) html += validationIssueHtml(e, true); if (res.warnings.length) { html += '<div style="margin-top:8px">' + (res.status === 'VALID' ? 'Предупреждения (Copy доступен):' : 'Предупреждения:') + '</div>'; for (const w of res.warnings) html += validationIssueHtml(w, false); } } if (st.state === 'INVALID') html += '<div style="margin-top:8px">Исправьте конфигурацию и выполните ⚡ Build Config снова.</div>'; box.innerHTML = html; const btn = document.getElementById('copyYamlBtn'); if (btn) btn.disabled = st.state !== 'VALID'; }
+function setMihomoValidationState(state, result) { MIHOMO_VALIDATION_STATE.state = state; MIHOMO_VALIDATION_STATE.result = result || null; renderMihomoValidation(); }
 let mihomoValidationSeq = 0;
+async function runMihomoValidation(yaml) { const seq = ++mihomoValidationSeq; setMihomoValidationState('VALIDATING'); await new Promise(r => setTimeout(r, 30)); if (seq !== mihomoValidationSeq) return; const res = validateMihomoYaml(yaml); if (seq !== mihomoValidationSeq) return; setMihomoValidationState(res.status, res); }
 
-async function runMihomoValidation(yaml) {
-  const seq = ++mihomoValidationSeq;
-  setMihomoValidationState('VALIDATING');
-  await new Promise(r => setTimeout(r, 30)); // даём браузеру отрисовать статус
-  if (seq !== mihomoValidationSeq) return; // входные данные изменились — статус уже NOT_BUILT
-  const res = validateMihomoYaml(yaml);
-  if (seq !== mihomoValidationSeq) return;
-  setMihomoValidationState(res.status, res); // 'VALID' | 'INVALID'
-}
+// === COMPATIBILITY SUMMARY ===
+function deriveCompatSummary(doc) { if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return []; const items = []; const add = (key, text) => { if (!items.some(x => x.key === key)) items.push({ key, text }); }; const proxies = Array.isArray(doc.proxies) ? doc.proxies : []; const listeners = [...(Array.isArray(doc.listeners) ? doc.listeners : []), ...(Array.isArray(doc.inbounds) ? doc.inbounds : [])]; const providers = doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object' ? Object.values(doc['proxy-providers']) : []; if (doc.tun?.stack === 'mips' || listeners.some(l => l && l.stack === 'mips')) add('mips', 'MIPS TUN stack — требуется Mihomo >= 1.19.31.'); if (proxies.some(p => p?.type === 'wireguard' && p['amnezia-wg-option'] && Number(p['amnezia-wg-option'].version) === 3)) add('awg31', 'AmneziaWG 3.1 — требуется Mihomo >= 1.19.30.'); const overrideExprs = providers.flatMap(p => { const expr = p && p.override && p.override['override-expr']; return Array.isArray(expr) ? expr : []; }); if (overrideExprs.length) add('override-expr', 'proxy-provider override-expr — требуется Mihomo >= 1.19.29.'); if (proxies.some(p => p && p['reality-opts'] && p['reality-opts']['support-x25519mlkem768'] === true) || overrideExprs.some(x => JSON.stringify(x).includes('support-x25519mlkem768'))) add('modern-reality', 'Modern REALITY (X25519+ML-KEM) — используйте только с серверами подтверждённой совместимости; Xray v25.5.16 — проверенная рабочая точка лаборатории, но версия сама по себе не является гарантией.'); if (proxies.some(p => p?.type === 'mieru')) add('mieru', 'Mieru / mierus — экспериментальный путь генератора; перед эксплуатацией рекомендуется проверка на вашей версии Mihomo.'); if (proxies.some(p => p?.type === 'trusttunnel')) add('trusttunnel', 'TrustTunnel (tt) — экспериментальный путь генератора; перед эксплуатацией рекомендуется проверка на вашей версии Mihomo.'); return items; }
+function resetCompatSummary() { const box = document.getElementById('mihomoCompatBox'); if (!box) return; box.style.display = 'none'; box.innerHTML = ''; }
+function renderCompatSummary(yaml) { const box = document.getElementById('mihomoCompatBox'); if (!box) return; let doc; try { doc = jsyaml.load(String(yaml)); } catch (_) { resetCompatSummary(); return; } const items = deriveCompatSummary(doc); if (!items.length) { resetCompatSummary(); return; } box.innerHTML = '<b>🧩 Требования используемых функций</b><ul>' + items.map(x => '<li>' + escapeHtml(x.text) + '</li>').join('') + '</ul>'; box.style.display = 'block'; }
 
-// === COMPATIBILITY SUMMARY (non-blocking, final YAML only) ===
-// Сводка строится из уже готового YAML после всех пост-патчей. Она не меняет
-// конфигурацию, не влияет на validator state и никогда не блокирует Copy.
-function deriveCompatSummary(doc) {
-  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return [];
-
-  const items = [];
-  const add = (key, text) => {
-    if (!items.some(x => x.key === key)) items.push({ key, text });
-  };
-  const proxies = Array.isArray(doc.proxies) ? doc.proxies : [];
-  const listeners = [
-    ...(Array.isArray(doc.listeners) ? doc.listeners : []),
-    ...(Array.isArray(doc.inbounds) ? doc.inbounds : [])
-  ];
-  const providers = doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object'
-    ? Object.values(doc['proxy-providers']) : [];
-
-  const usesMips = doc.tun?.stack === 'mips' || listeners.some(l => l && l.stack === 'mips');
-  if (usesMips) add('mips', 'MIPS TUN stack — требуется Mihomo >= 1.19.31.');
-
-  const usesAwg31 = proxies.some(p => {
-    const awg = p && p['amnezia-wg-option'];
-    return p?.type === 'wireguard' && awg && Number(awg.version) === 3;
-  });
-  if (usesAwg31) add('awg31', 'AmneziaWG 3.1 — требуется Mihomo >= 1.19.30.');
-
-  const overrideExprs = providers.flatMap(p => {
-    const expr = p && p.override && p.override['override-expr'];
-    return Array.isArray(expr) ? expr : [];
-  });
-  if (overrideExprs.length) add('override-expr', 'proxy-provider override-expr — требуется Mihomo >= 1.19.29.');
-
-  const modernStatic = proxies.some(p => p && p['reality-opts'] && p['reality-opts']['support-x25519mlkem768'] === true);
-  const modernProvider = overrideExprs.some(x => JSON.stringify(x).includes('support-x25519mlkem768'));
-  if (modernStatic || modernProvider) {
-    add('modern-reality', 'Modern REALITY (X25519+ML-KEM) — используйте только с серверами подтверждённой совместимости; Xray v25.5.16 — проверенная рабочая точка лаборатории, но версия сама по себе не является гарантией.');
-  }
-
-  if (proxies.some(p => p?.type === 'mieru')) {
-    add('mieru', 'Mieru / mierus — экспериментальный путь генератора; перед эксплуатацией рекомендуется проверка на вашей версии Mihomo.');
-  }
-  if (proxies.some(p => p?.type === 'trusttunnel')) {
-    add('trusttunnel', 'TrustTunnel (tt) — экспериментальный путь генератора; перед эксплуатацией рекомендуется проверка на вашей версии Mihomo.');
-  }
-
-  return items;
-}
-
-function resetCompatSummary() {
-  const box = document.getElementById('mihomoCompatBox');
-  if (!box) return;
-  box.style.display = 'none';
-  box.innerHTML = '';
-}
-
-function renderCompatSummary(yaml) {
-  const box = document.getElementById('mihomoCompatBox');
-  if (!box) return;
-  let doc;
-  try {
-    doc = jsyaml.load(String(yaml));
-  } catch (_) {
-    resetCompatSummary();
-    return;
-  }
-  const items = deriveCompatSummary(doc);
-  if (!items.length) {
-    resetCompatSummary();
-    return;
-  }
-  box.innerHTML = '<b>🧩 Требования используемых функций</b>' +
-    '<ul>' + items.map(x => '<li>' + escapeHtml(x.text) + '</li>').join('') + '</ul>';
-  box.style.display = 'block';
-}
-// === DEPLOYMENT PROFILE (VPS GATEWAY, opt-in) ===
-// Дефолты — зеркало текущего amnezia-mihomo-gateway/install.sh (источник истины для значений):
-// PROXY_IF (tun-mihomo), FAKE_IP_RANGE (198.18.0.0/16),
-// пакет v2.0 (mtu 1420, gso, find-process-mode: off, store-*: false).
-// При изменении install.sh — синхронизировать эту константу и value= в полях
-// #vpsDevice/#vpsMtu/#vpsFakeIp/#vpsDnsListen/#vpsDnsNs/#vpsProxyNs.
-// Generic-профиль: applyDeploymentProfile() НЕ вызывается (guard в buildMihomo) —
-// вывод байт-в-байт прежний. Подробно — docs/VPS-GATEWAY.md.
-const VPS_GATEWAY_DEFAULTS = {
-  device: 'tun-mihomo',
-  mtu: 1420,
-  fakeIpRange: '198.18.0.0/16',
-  dnsListen: '0.0.0.0:53',
-  dnsNameservers: ['1.1.1.1', '8.8.8.8'],
-  dnsProxyServerNameserver: ['1.1.1.1']
+// === DEPLOYMENT PROFILES ===
+const VPS_GATEWAY_DEFAULTS = { device: 'tun-mihomo', mtu: 1420, fakeIpRange: '198.18.0.0/16', dnsListen: '0.0.0.0:53', dnsNameservers: ['1.1.1.1','8.8.8.8'], dnsProxyServerNameserver: ['1.1.1.1'] };
+const DEPLOYMENT_PROFILE_DEFAULTS = {
+  router: { tun: true, socks: true, lan: true, mips: true, stackAdvanced: false, stackEx: '', perProxyMaster: false, perProxyTun: false, perProxySocks: false },
+  'vps-local': { tun: false, socks: true, lan: false, mips: false, stackAdvanced: false, stackEx: '', perProxyMaster: false, perProxyTun: false, perProxySocks: false },
+  'vps-gateway': { tun: true, socks: true, lan: true, mips: true, stackAdvanced: false, stackEx: '', perProxyMaster: false, perProxyTun: false, perProxySocks: false }
 };
-
-function vpsField(id, fallback) {
-  const v = (document.getElementById(id).value || '').trim();
-  return v ? v : fallback;
-}
-
-function vpsCsv(id, fallback) {
-  const arr = (document.getElementById(id).value || '').split(',').map(s => s.trim()).filter(Boolean);
-  return arr.length ? arr : fallback;
-}
-
-// Чистый пост-патч финального YAML. Вызывается ТОЛЬКО при профиле 'vps'
-// (после injectWgDns, до allow-lan патча). lineWidth:-1 обязателен —
-// иначе jsyaml переносит длинные AWG base64-строки и портит их.
-function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') {
-  if (profile !== 'vps') return yaml;
-  let doc;
-  try {
-    doc = jsyaml.load(String(yaml));
-  } catch (e) {
-    return yaml; // не наш YAML — пусть валидатор покажет ошибку
-  }
-  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return yaml;
-
-  const mtu = parseInt(vpsField('vpsMtu', String(VPS_GATEWAY_DEFAULTS.mtu)), 10) || VPS_GATEWAY_DEFAULTS.mtu;
-
-  doc.tun = Object.assign({}, doc.tun, {
-    'enable': true,
-    'device': vpsField('vpsDevice', VPS_GATEWAY_DEFAULTS.device),
-    'stack': ['gvisor', 'mips', 'system', 'mixed'].includes(tunStack) ? tunStack : 'gvisor',
-    'auto-route': false, // инвариант: иначе Mihomo перехватит весь трафик VPS (потеря SSH)
-    'auto-detect-interface': true,
-    'mtu': mtu,
-    'gso': true
-  });
-  delete doc.tun['endpoint-independent-nat']; // ломает gvisor (см. install.sh §2.7)
-
-  doc['find-process-mode'] = 'off';
-
-  // merge: прочие ключи profile (если появятся) не затирать
-  doc.profile = Object.assign({}, doc.profile, {
-    'store-selected': false,
-    'store-fake-ip': false
-  });
-
-  if (document.getElementById('vpsDnsEnabled').checked) {
-    doc.dns = {
-      'enable': true,
-      'ipv6': false,
-      'enhanced-mode': 'fake-ip',
-      'fake-ip-range': vpsField('vpsFakeIp', VPS_GATEWAY_DEFAULTS.fakeIpRange),
-      'listen': vpsField('vpsDnsListen', VPS_GATEWAY_DEFAULTS.dnsListen),
-      'nameserver': vpsCsv('vpsDnsNs', VPS_GATEWAY_DEFAULTS.dnsNameservers),
-      'proxy-server-nameserver': vpsCsv('vpsProxyNs', VPS_GATEWAY_DEFAULTS.dnsProxyServerNameserver)
-    };
-  } else {
-    delete doc.dns; // выключен целиком, без частичных остатков
-  }
-
-  return jsyaml.dump(doc, { lineWidth: -1 });
-}
-
-function updateVpsDnsFields() {
-  const on = document.getElementById('vpsDnsEnabled').checked;
-  document.getElementById('vpsDnsFields').style.display = on ? 'block' : 'none';
-}
-
+const deploymentProfileSnapshots = {};
+let activeDeploymentProfile = null;
+function vpsField(id, fallback) { const v = (document.getElementById(id).value || '').trim(); return v ? v : fallback; }
+function vpsCsv(id, fallback) { const arr = (document.getElementById(id).value || '').split(',').map(s => s.trim()).filter(Boolean); return arr.length ? arr : fallback; }
+function readProfileOwnedState() { return { tun: document.getElementById('cfgTun').checked, socks: document.getElementById('cfgSocks').checked, lan: document.getElementById('cfgLan').checked, mips: document.getElementById('cfgTunMips').checked, stackAdvanced: document.getElementById('cfgTunStackAdvanced').checked, stackEx: document.getElementById('cfgTunStackEx').value, perProxyMaster: document.getElementById('cfgPerProxyMaster').checked, perProxyTun: document.getElementById('cfgPerProxyTun').checked, perProxySocks: document.getElementById('cfgPerProxySocks').checked }; }
+function writeProfileOwnedState(state) { document.getElementById('cfgTun').checked = !!state.tun; document.getElementById('cfgSocks').checked = !!state.socks; document.getElementById('cfgLan').checked = !!state.lan; document.getElementById('cfgTunMips').checked = !!state.mips; document.getElementById('cfgTunStackAdvanced').checked = !!state.stackAdvanced; document.getElementById('cfgTunStackEx').value = state.stackEx || ''; document.getElementById('cfgPerProxyMaster').checked = !!state.perProxyMaster; document.getElementById('cfgPerProxyTun').checked = !!state.perProxyTun; document.getElementById('cfgPerProxySocks').checked = !!state.perProxySocks; }
+function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') { if (profile !== 'vps-gateway') return yaml; let doc; try { doc = jsyaml.load(String(yaml)); } catch (e) { return yaml; } if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return yaml; const mtu = parseInt(vpsField('vpsMtu', String(VPS_GATEWAY_DEFAULTS.mtu)), 10) || VPS_GATEWAY_DEFAULTS.mtu; doc.tun = Object.assign({}, doc.tun, { enable: true, device: vpsField('vpsDevice', VPS_GATEWAY_DEFAULTS.device), stack: ['gvisor','mips','system','mixed'].includes(tunStack) ? tunStack : 'gvisor', 'auto-route': false, 'auto-detect-interface': true, mtu, gso: true }); delete doc.tun['endpoint-independent-nat']; doc['find-process-mode'] = 'off'; doc.profile = Object.assign({}, doc.profile, { 'store-selected': false, 'store-fake-ip': false }); if (document.getElementById('vpsDnsEnabled').checked) doc.dns = { enable: true, ipv6: false, 'enhanced-mode': 'fake-ip', 'fake-ip-range': vpsField('vpsFakeIp', VPS_GATEWAY_DEFAULTS.fakeIpRange), listen: vpsField('vpsDnsListen', VPS_GATEWAY_DEFAULTS.dnsListen), nameserver: vpsCsv('vpsDnsNs', VPS_GATEWAY_DEFAULTS.dnsNameservers), 'proxy-server-nameserver': vpsCsv('vpsProxyNs', VPS_GATEWAY_DEFAULTS.dnsProxyServerNameserver) }; else delete doc.dns; return jsyaml.dump(doc, { lineWidth: -1 }); }
+function updateVpsDnsFields() { const on = document.getElementById('vpsDnsEnabled').checked; document.getElementById('vpsDnsFields').style.display = on ? 'block' : 'none'; }
+function updateProfileHint(profile) { const hints = { router: 'Для Keenetic и обычного TUN-сценария. По умолчанию: TUN + MIPS + Mixed Port 7890 + Allow LAN. Эти настройки остаются доступными вручную.', 'vps-local': 'Для Xray/3X-UI или другого приложения на том же VPS, которое отправляет трафик в 127.0.0.1:7890. TUN принудительно OFF, Mixed Port 7890 ON, Allow LAN OFF. Подписки, WARP, фильтры и dialer-настройки не сбрасываются.', 'vps-gateway': 'Только для amnezia-mihomo-gateway / transparent routing. TUN принудительно ON, auto-route всегда false. Linux policy routing, iptables, Docker/AWG этот генератор не создаёт.' }; document.getElementById('profileHint').textContent = hints[profile] || hints.router; }
 function onProfileChange() {
-  const isVps = !document.getElementById('cfgAutoWhitelist').checked && document.getElementById('cfgProfile').value === 'vps';
-  const panel = document.getElementById('vpsPanel');
-  const tun = document.getElementById('cfgTun');
-  panel.style.display = isVps ? 'block' : 'none';
-  if (isVps) {
-    panel.dataset.prevTun = tun.checked ? '1' : '0';
-    tun.checked = true; // TUN обязателен для gateway-сценария
-    tun.disabled = true;
-    updateVpsDnsFields();
-  } else {
-    tun.disabled = false;
-    tun.checked = panel.dataset.prevTun !== '0'; // восстановить прежнее состояние
-  }
+  const profile = document.getElementById('cfgProfile').value;
+  if (activeDeploymentProfile && activeDeploymentProfile !== profile) deploymentProfileSnapshots[activeDeploymentProfile] = readProfileOwnedState();
+  if (activeDeploymentProfile !== profile) writeProfileOwnedState(deploymentProfileSnapshots[profile] || DEPLOYMENT_PROFILE_DEFAULTS[profile] || DEPLOYMENT_PROFILE_DEFAULTS.router);
+  activeDeploymentProfile = profile;
+  const isGateway = profile === 'vps-gateway'; const isLocal = profile === 'vps-local'; const tun = document.getElementById('cfgTun'); const socks = document.getElementById('cfgSocks'); const lan = document.getElementById('cfgLan'); const perPanel = document.getElementById('perProxyAdvancedPanel');
+  if (isGateway) { tun.checked = true; tun.disabled = true; document.getElementById('vpsPanel').style.display = 'block'; updateVpsDnsFields(); }
+  else { tun.disabled = isLocal; if (isLocal) tun.checked = false; document.getElementById('vpsPanel').style.display = 'none'; }
+  socks.disabled = isLocal; lan.disabled = isLocal; if (isLocal) { socks.checked = true; lan.checked = false; document.getElementById('cfgPerProxyMaster').checked = false; document.getElementById('cfgPerProxyTun').checked = false; document.getElementById('cfgPerProxySocks').checked = false; if (perPanel) perPanel.open = false; }
+  updateProfileHint(profile); updateMihomoOptionStates();
 }
 
-// Зависимости inbound-опций: дочерние чекбоксы включаемы только при активном
-// родителе (MIPS и «TUN на каждый прокси» — при TUN; «SOCKS-порт на каждый
-// прокси» — при Mixed Port); выключение родителя сбрасывает зависимую опцию.
-// В БС-режиме Per-Proxy принудительно недоступны (плюс кламп в buildMihomo).
-function updateExcludeFilterVisibility() {
-  // Эти параметры имеют смысл только для proxy-providers (Mihomo + Sub Mode).
-  const visible = document.getElementById('cfgSubMode').checked ? '' : 'none';
-  document.getElementById('excludeFilterRow').style.display = visible;
-  document.getElementById('deviceModelRow').style.display = visible;
-}
-
-function updateSubModeHint() {
-  const on = document.getElementById('cfgSubMode').checked;
-  document.getElementById('subModeHint').textContent = on
-    ? 'URL-подписки включены: HTTP(S) URL будут добавлены как proxy-providers. Обычные proxy-ссылки можно смешивать с ними. Если в поле только обычные ссылки, выключите этот режим.'
-    : 'URL-подписки выключены: обычные proxy-ссылки разбираются напрямую. Чтобы использовать HTTP(S) URL подписки, включите этот режим.';
-}
-
-function updateWebUiVisibility() {
-  const webUi = document.getElementById('cfgWebUI').checked;
-  const select = document.getElementById('webUiSelect');
-  const custom = document.getElementById('webUiCustomUrl');
-  document.getElementById('webUiRow').style.display = webUi ? '' : 'none';
-  custom.style.display = select.value === 'custom' ? '' : 'none';
-}
-
-// Selective modern REALITY: разбор строк «host» / «host:port» / «[ipv6]:port».
-// Голый IPv6 без скобок неоднозначен и считается некорректной строкой.
-function parseRealityModernLines() {
-  const hosts = [];
-  let invalid = 0;
-  for (const raw of document.getElementById('realityModernInput').value.split('\n')) {
-    const s = raw.trim();
-    if (!s) continue;
-    const bracket = s.match(/^\[([^\]]+)\](?::(\d{1,5}))?$/);
-    const hp = bracket ? null : s.match(/^([^:]+):(\d{1,5})$/);
-    let host, port;
-    if (bracket) {
-      host = bracket[1];
-      port = bracket[2] !== undefined ? Number(bracket[2]) : undefined;
-    } else if (hp) {
-      host = hp[1];
-      port = Number(hp[2]);
-    } else if (!s.includes(':')) {
-      host = s;
-    } else {
-      invalid++;
-      continue;
-    }
-    if (port !== undefined && (port < 1 || port > 65535)) { invalid++; continue; }
-    hosts.push(port === undefined ? { host: host.toLowerCase() } : { host: host.toLowerCase(), port });
-  }
-  return { hosts, invalid };
-}
-
+function updateExcludeFilterVisibility() { const visible = document.getElementById('cfgSubMode').checked ? '' : 'none'; document.getElementById('excludeFilterRow').style.display = visible; document.getElementById('deviceModelRow').style.display = visible; }
+function updateSubModeHint() { const on = document.getElementById('cfgSubMode').checked; document.getElementById('subModeHint').textContent = on ? 'URL-подписки включены: HTTP(S) URL будут добавлены как proxy-providers. Обычные proxy-ссылки можно смешивать с ними. Если в поле только обычные ссылки, выключите этот режим.' : 'URL-подписки выключены: обычные proxy-ссылки разбираются напрямую. Чтобы использовать HTTP(S) URL подписки, включите этот режим.'; }
+function updateWebUiVisibility() { const webUi = document.getElementById('cfgWebUI').checked; const select = document.getElementById('webUiSelect'); const custom = document.getElementById('webUiCustomUrl'); document.getElementById('webUiRow').style.display = webUi ? '' : 'none'; custom.style.display = select.value === 'custom' ? '' : 'none'; }
+function parseRealityModernLines() { const hosts = []; let invalid = 0; for (const raw of document.getElementById('realityModernInput').value.split('\n')) { const s = raw.trim(); if (!s) continue; const bracket = s.match(/^\[([^\]]+)\](?::(\d{1,5}))?$/); const hp = bracket ? null : s.match(/^([^:]+):(\d{1,5})$/); let host, port; if (bracket) { host = bracket[1]; port = bracket[2] !== undefined ? Number(bracket[2]) : undefined; } else if (hp) { host = hp[1]; port = Number(hp[2]); } else if (!s.includes(':')) host = s; else { invalid++; continue; } if (port !== undefined && (port < 1 || port > 65535)) { invalid++; continue; } hosts.push(port === undefined ? { host: host.toLowerCase() } : { host: host.toLowerCase(), port }); } return { hosts, invalid }; }
 function updateMihomoOptionStates() {
-  const bsOn = document.getElementById('cfgAutoWhitelist').checked;
-  const tun = document.getElementById('cfgTun').checked;
-  const socks = document.getElementById('cfgSocks').checked;
-  const mips = document.getElementById('cfgTunMips');
-  const masterEl = document.getElementById('cfgPerProxyMaster');
-  const master = !!(masterEl && masterEl.checked);
-  const perTun = document.getElementById('cfgPerProxyTun');
-  const perSocks = document.getElementById('cfgPerProxySocks');
-  const stackAdv = document.getElementById('cfgTunStackAdvanced');
-  const stackEx = document.getElementById('cfgTunStackEx');
-  if (!tun) { mips.checked = false; stackAdv.checked = false; }
-  if (!master) { perTun.checked = false; perSocks.checked = false; }
-  if (!tun) { perTun.checked = false; }
-  if (!socks) perSocks.checked = false;
-  stackAdv.disabled = !tun;
-  if (!stackAdv.checked) stackEx.value = '';
-  stackEx.style.display = stackAdv.checked ? '' : 'none';
-  const advancedStackActive = stackAdv.checked && (stackEx.value === 'system' || stackEx.value === 'mixed');
-  mips.disabled = !tun || advancedStackActive;
-  if (advancedStackActive) mips.checked = false; // единое состояние: нет «MIPS checked» при system/mixed в YAML
-  masterEl.disabled = bsOn;
-  perTun.disabled = !master || !tun || bsOn;
-  perSocks.disabled = !master || !socks || bsOn;
+  const bsOn = document.getElementById('cfgAutoWhitelist').checked; const profile = document.getElementById('cfgProfile').value; const local = profile === 'vps-local'; const tun = document.getElementById('cfgTun').checked; const socks = document.getElementById('cfgSocks').checked; const mips = document.getElementById('cfgTunMips'); const masterEl = document.getElementById('cfgPerProxyMaster'); const master = !!(masterEl && masterEl.checked); const perTun = document.getElementById('cfgPerProxyTun'); const perSocks = document.getElementById('cfgPerProxySocks'); const stackAdv = document.getElementById('cfgTunStackAdvanced'); const stackEx = document.getElementById('cfgTunStackEx');
+  if (!tun) { mips.checked = false; stackAdv.checked = false; } if (!master || local) { perTun.checked = false; perSocks.checked = false; } if (!tun) perTun.checked = false; if (!socks) perSocks.checked = false; stackAdv.disabled = !tun || local; if (!stackAdv.checked) stackEx.value = ''; stackEx.style.display = stackAdv.checked ? '' : 'none'; const advancedStackActive = stackAdv.checked && (stackEx.value === 'system' || stackEx.value === 'mixed'); mips.disabled = !tun || advancedStackActive || local; if (advancedStackActive) mips.checked = false; masterEl.disabled = bsOn || local; perTun.disabled = !master || !tun || bsOn || local; perSocks.disabled = !master || !socks || bsOn || local;
 }
-
-// UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
 let whitelistUiState = null;
 function onWhitelistChange() {
-  const on = document.getElementById('cfgAutoWhitelist').checked;
-  const perTun = document.getElementById('cfgPerProxyTun');
-  const perSocks = document.getElementById('cfgPerProxySocks');
-  const profile = document.getElementById('cfgProfile');
-  if (on && !whitelistUiState) {
-    whitelistUiState = { perTun: perTun.checked, perSocks: perSocks.checked, profile: profile.value };
-    perTun.checked = perSocks.checked = false;
-    const wasVps = profile.value === 'vps';
-    profile.value = 'generic';
-    if (wasVps) onProfileChange();
-  } else if (!on && whitelistUiState) {
-    perTun.checked = whitelistUiState.perTun;
-    perSocks.checked = whitelistUiState.perSocks;
-    profile.value = whitelistUiState.profile;
-    if (profile.value === 'vps') onProfileChange();
-    whitelistUiState = null;
-  }
-  profile.disabled = on;
-  updateMihomoOptionStates();
-  const perProxyPanel = document.getElementById('perProxyAdvancedPanel');
-  if (perProxyPanel) perProxyPanel.style.display = on ? 'none' : '';
-  profile.closest('.card').style.display = on ? 'none' : '';
-  document.getElementById('whitelistPanel').style.display = on ? 'block' : 'none';
+  const on = document.getElementById('cfgAutoWhitelist').checked; const profile = document.getElementById('cfgProfile'); const gatewayOption = profile.querySelector('option[value="vps-gateway"]');
+  if (on && profile.value === 'vps-gateway') { whitelistUiState = { profile: 'vps-gateway' }; profile.value = 'router'; onProfileChange(); }
+  else if (!on && whitelistUiState?.profile === 'vps-gateway') { profile.value = 'vps-gateway'; whitelistUiState = null; onProfileChange(); }
+  if (gatewayOption) gatewayOption.disabled = on;
+  updateMihomoOptionStates(); const perProxyPanel = document.getElementById('perProxyAdvancedPanel'); if (perProxyPanel) perProxyPanel.style.display = on ? 'none' : ''; document.getElementById('whitelistPanel').style.display = on ? 'block' : 'none';
 }
 
-// === MIHOMO BUILDER (via web4core) ===
+// === MIHOMO BUILDER ===
 function buildMihomo() {
-  if (wgUploadPending) {
-    mihomoValidationSeq++;
-    resetCompatSummary();
-    setMihomoValidationState('NOT_BUILT');
-    return showToast('WG/AWG файл ещё читается. Дождитесь завершения загрузки.', true);
-  }
-  const raw = document.getElementById('mihomoInput').value.trim();
-  if (!raw && wgBeans.length === 0) return showToast('Вставь ссылки или загрузи WG конфиг', true);
-  
-  const api = globalThis.web4core;
-  if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
-
+  if (wgUploadPending) { mihomoValidationSeq++; resetCompatSummary(); setMihomoValidationState('NOT_BUILT'); return showToast('WG/AWG файл ещё читается. Дождитесь завершения загрузки.', true); }
+  const raw = document.getElementById('mihomoInput').value.trim(); if (!raw && wgBeans.length === 0) return showToast('Вставь ссылки или загрузи WG конфиг', true);
+  const api = globalThis.web4core; if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
+  const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked; const requestedProfile = document.getElementById('cfgProfile').value; const deploymentProfile = (autoWhitelist && requestedProfile === 'vps-gateway') ? 'router' : requestedProfile;
+  const addTun = deploymentProfile === 'vps-local' ? false : (deploymentProfile === 'vps-gateway' ? true : document.getElementById('cfgTun').checked);
+  const addSocks = deploymentProfile === 'vps-local' ? true : document.getElementById('cfgSocks').checked;
+  const allowLan = deploymentProfile === 'vps-local' ? false : document.getElementById('cfgLan').checked;
   const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
-  const addTun = document.getElementById('cfgTun').checked;
-  const addSocks = document.getElementById('cfgSocks').checked;
-  const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
-  // Fail-safe: не доверяем прямой подмене DOM — повторно проверяем зависимости
-  // (MIPS и Per-Proxy TUN требуют TUN, Per-Proxy SOCKS требует Mixed Port);
-  // БС-режим принудительно исключает Per-Proxy и VPS.
-  const master = document.getElementById('cfgPerProxyMaster') && document.getElementById('cfgPerProxyMaster').checked === true;
+  const master = deploymentProfile !== 'vps-local' && document.getElementById('cfgPerProxyMaster')?.checked === true;
   const perProxyTun = (master && !autoWhitelist && addTun) ? document.getElementById('cfgPerProxyTun').checked : false;
-  const stackAdvEl = document.getElementById('cfgTunStackAdvanced');
-  const stackExEl = document.getElementById('cfgTunStackEx');
-  const advancedStack = (addTun && stackAdvEl && stackAdvEl.checked === true && stackExEl && (stackExEl.value === 'system' || stackExEl.value === 'mixed')) ? stackExEl.value : null;
-  const tunStack = advancedStack ? advancedStack : ((addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor');
-  const perProxySocks = (master && !autoWhitelist && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
-
-  const webUiEnabled = document.getElementById('cfgWebUI').checked;
-  const webUiChoice = document.getElementById('webUiSelect').value;
-  const webUiCustomUrl = document.getElementById('webUiCustomUrl').value.trim();
-  if (webUiEnabled && webUiChoice === 'custom' && !/^https?:\/\//i.test(webUiCustomUrl)) {
-    return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
-  }
-
-  // dialer-proxy (туннель в туннеле): имя таргета + необязательные транзитные узлы
-  // и/или URL-провайдеры авторской dialer-группы. Пустые поля — byte-parity прежнего output.
-  const wgDialer = document.getElementById('wgDialerInput').value.trim();
-  const wgDialerMembers = document.getElementById('wgDialerMembers').value.split('\n')
-    .map(s => s.trim()).filter(Boolean);
-  const wgDialerProviders = document.getElementById('wgDialerProviders').value.split('\n')
-    .map(s => s.trim()).filter(Boolean);
-  if ((wgDialerMembers.length || wgDialerProviders.length) && (wgDialer === 'GLOBAL' || wgDialer === '⚡ Fastest')) {
-    return showToast('❌ dialer-группа не может называться GLOBAL или ⚡ Fastest: они содержат сам WARP (цикл)', true);
-  }
-
+  const stackAdvEl = document.getElementById('cfgTunStackAdvanced'); const stackExEl = document.getElementById('cfgTunStackEx'); const advancedStack = (addTun && stackAdvEl?.checked === true && stackExEl && (stackExEl.value === 'system' || stackExEl.value === 'mixed')) ? stackExEl.value : null; const tunStack = advancedStack ? advancedStack : ((addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor'); const perProxySocks = (master && !autoWhitelist && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
+  const webUiEnabled = document.getElementById('cfgWebUI').checked; const webUiChoice = document.getElementById('webUiSelect').value; const webUiCustomUrl = document.getElementById('webUiCustomUrl').value.trim(); if (webUiEnabled && webUiChoice === 'custom' && !/^https?:\/\//i.test(webUiCustomUrl)) return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
+  const wgDialer = document.getElementById('wgDialerInput').value.trim(); const wgDialerMembers = document.getElementById('wgDialerMembers').value.split('\n').map(s => s.trim()).filter(Boolean); const wgDialerProviders = document.getElementById('wgDialerProviders').value.split('\n').map(s => s.trim()).filter(Boolean); if ((wgDialerMembers.length || wgDialerProviders.length) && (wgDialer === 'GLOBAL' || wgDialer === '⚡ Fastest')) return showToast('❌ dialer-группа не может называться GLOBAL или ⚡ Fastest: они содержат сам WARP (цикл)', true);
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
     const realityModern = parseRealityModernLines();
-    const result = api.buildFromRequest({
-      core: 'mihomo',
-      input: raw,
-      ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}),
-      wgBeans: normalizeWgBeans(wgBeans),
-      options: {
-        addSocks: addSocks,
-        addTun: addTun,
-        webUI: webUiEnabled,
-        urlTest: urlTest,
-        mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
-        excludeFilter: document.getElementById('excludeFilterInput').value,
-        deviceModel: document.getElementById('deviceModelInput').value,
-        webUiDashboard: webUiEnabled ? webUiChoice : undefined,
-        webUiCustomUrl: webUiEnabled && webUiChoice === 'custom' ? webUiCustomUrl : undefined,
-        mihomoPerProxyTun: perProxyTun,
-        mihomoTunStack: tunStack,
-        perProxyPort: perProxySocks,
-        mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined,
-        wgDialerProxy: wgDialer || undefined,
-        wgDialerGroupMembers: wgDialerMembers.length ? wgDialerMembers : undefined,
-        wgDialerProviders: wgDialerProviders.length ? wgDialerProviders : undefined
-      }
-    });
-
-    injectWgDns(result, wgBeans);
-
-    let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
-
-    // PATCH: Deployment profile — только при opt-in профиле VPS Gateway.
-    // При 'generic' пост-патч не выполняется вовсе (инвариант byte-for-byte).
-    const deploymentProfile = autoWhitelist ? 'generic' : document.getElementById('cfgProfile').value;
-    if (deploymentProfile === 'vps') {
-      yaml = applyDeploymentProfile(yaml, deploymentProfile, tunStack);
-    }
-
-    // PATCH: Allow LAN
-    if (document.getElementById('cfgLan').checked) {
-      yaml = yaml.replace(/^allow-lan:\s*false\s*$/m, 'allow-lan: true');
-      if (!yaml.includes('bind-address')) {
-        yaml = yaml.replace(/^(allow-lan:\s*true\s*)$/m, '$1\nbind-address: "*"');
-      }
-    }
-
-    document.getElementById('mihomoOutput').value = yaml;
-    renderCompatSummary(yaml);
-    showToast('✅ Mihomo config built!');
-    if (realityModern.invalid > 0) {
-      showToast('⚠ Modern REALITY: пропущено некорректных строк: ' + realityModern.invalid);
-    }
-    // Автоматическая проверка итогового YAML (после всех патчей), до Copy
-    runMihomoValidation(yaml);
-  } catch (e) {
-    resetCompatSummary();
-    setMihomoValidationState('NOT_BUILT');
-    let message = String(e && e.message ? e.message : e);
-    if (document.getElementById('cfgSubMode').checked &&
-        /Provide one or more HTTP\(S\) URLs/i.test(message)) {
-      message = 'Режим «URL-подписки» включён, но URL подписки не найден. Если вы вставили обычные proxy-ссылки — выключите «Использовать URL-подписки».';
-    }
-    showToast('❌ ' + message, true);
-  }
+    const result = api.buildFromRequest({ core: 'mihomo', input: raw, ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}), wgBeans: normalizeWgBeans(wgBeans), options: { addSocks, addTun, webUI: webUiEnabled, urlTest, mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked, excludeFilter: document.getElementById('excludeFilterInput').value, deviceModel: document.getElementById('deviceModelInput').value, webUiDashboard: webUiEnabled ? webUiChoice : undefined, webUiCustomUrl: webUiEnabled && webUiChoice === 'custom' ? webUiCustomUrl : undefined, mihomoPerProxyTun: perProxyTun, mihomoTunStack: tunStack, perProxyPort: perProxySocks, mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined, wgDialerProxy: wgDialer || undefined, wgDialerGroupMembers: wgDialerMembers.length ? wgDialerMembers : undefined, wgDialerProviders: wgDialerProviders.length ? wgDialerProviders : undefined } });
+    injectWgDns(result, wgBeans); let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
+    if (deploymentProfile === 'vps-gateway') yaml = applyDeploymentProfile(yaml, deploymentProfile, tunStack);
+    if (allowLan) { yaml = yaml.replace(/^allow-lan:\s*false\s*$/m, 'allow-lan: true'); if (!yaml.includes('bind-address')) yaml = yaml.replace(/^(allow-lan:\s*true\s*)$/m, '$1\nbind-address: "*"'); }
+    document.getElementById('mihomoOutput').value = yaml; renderCompatSummary(yaml); showToast('✅ Mihomo config built!'); if (realityModern.invalid > 0) showToast('⚠ Modern REALITY: пропущено некорректных строк: ' + realityModern.invalid); runMihomoValidation(yaml);
+  } catch (e) { resetCompatSummary(); setMihomoValidationState('NOT_BUILT'); let message = String(e && e.message ? e.message : e); if (document.getElementById('cfgSubMode').checked && /Provide one or more HTTP\(S\) URLs/i.test(message)) message = 'Режим «URL-подписки» включён, но URL подписки не найден. Если вы вставили обычные proxy-ссылки — выключите «Использовать URL-подписки».'; showToast('❌ ' + message, true); }
 }
+function copyMihomo() { if (MIHOMO_VALIDATION_STATE.state !== 'VALID') { showToast('Копирование заблокировано: конфигурация не прошла базовую проверку', true); return; } const text = document.getElementById('mihomoOutput').value; if (!text) return showToast('Нет конфига', true); navigator.clipboard.writeText(text).then(() => showToast('YAML скопирован!')); }
+function copyText(text) { navigator.clipboard.writeText(text).then(() => showToast('Скопировано!')); }
 
-function copyMihomo() {
-  // Без silently-success: копирование разрешено только после пройденной проверки
-  if (MIHOMO_VALIDATION_STATE.state !== 'VALID') {
-    showToast('Копирование заблокировано: конфигурация не прошла базовую проверку', true);
-    return;
-  }
-  const text = document.getElementById('mihomoOutput').value;
-  if (!text) return showToast('Нет конфига', true);
-  navigator.clipboard.writeText(text).then(() => showToast('YAML скопирован!'));
-}
-
-function copyText(text) {
-  navigator.clipboard.writeText(text).then(() => showToast('Скопировано!'));
+function initControlHints() {
+  const hints = {
+    safePortsOnly: 'Оставляет только порты, которые меньше конфликтуют с DPI-сигнатурами VPN.',
+    cfgAutoWhitelist: 'Создаёт primary/fallback схему с автоматическим переходом на резерв.',
+    cfgLan: 'Разрешает подключения к inbound Mihomo с других устройств. В VPS local принудительно выключено.',
+    cfgSocks: 'Mixed HTTP/SOCKS inbound на порту 7890. В VPS local принудительно включён.',
+    cfgWebUI: 'Добавляет external-controller и dashboard Mihomo. На VPS ограничьте доступ firewall/SSH-туннелем.',
+    cfgSubMode: 'HTTP(S) URL будут подключены как proxy-providers. Для обычных proxy-ссылок можно выключить.',
+    cfgTun: 'Создаёт TUN inbound. Профиль сам блокирует неправильное состояние для VPS local/gateway.',
+    cfgTunMips: 'TUN/IP stack MIPS, не архитектура CPU. Требуется Mihomo >= 1.19.31.',
+    cfgTunStackAdvanced: 'Открывает экспериментальный выбор system/mixed.',
+    cfgPerProxyMaster: 'Редкий режим отдельных inbound для каждого proxy/provider.',
+    cfgPerProxyTun: 'Создаёт отдельный TUN для каждого proxy/provider.',
+    cfgPerProxySocks: 'Создаёт отдельный SOCKS-порт для каждого proxy/provider.',
+    vpsDnsEnabled: 'Добавляет fake-ip DNS секцию для Transparent Gateway.'
+  };
+  for (const [id, text] of Object.entries(hints)) { const el = document.getElementById(id); if (el) el.title = text; }
+  const buttonHints = new Map([
+    ['🔍 Распарсить','Разобрать YAML и заполнить WARP identity-поля.'], ['Очистить','Очистить поле импорта.'], ['⚡ Сгенерировать ссылки','Создать пары MASQUE QUIC/H2.'], ['🚀 В Mihomo Builder','Перенести сгенерированные MASQUE-ссылки в Mihomo Builder.'], ['📂 Загрузить .conf / .awg','Загрузить WireGuard/AmneziaWG конфигурацию.'], ['⚡ Build Config','Собрать YAML и запустить базовую проверку.'], ['📋 Copy YAML','Скопировать YAML; доступно только после успешной базовой проверки.']
+  ]);
+  for (const btn of document.querySelectorAll('button')) { const key = btn.textContent.trim(); if (buttonHints.has(key)) btn.title = buttonHints.get(key); else if (btn.classList.contains('tab')) btn.title = 'Переключить вкладку генератора'; }
 }
 
 // === INIT ===
-initPingSelector();
-initWgUpload();
+initPingSelector(); initWgUpload(); initControlHints();
 document.getElementById('cfgAutoWhitelist').addEventListener('change', onWhitelistChange);
 document.getElementById('cfgProfile').addEventListener('change', onProfileChange);
 document.getElementById('vpsDnsEnabled').addEventListener('change', updateVpsDnsFields);
@@ -1570,25 +583,12 @@ document.getElementById('cfgSocks').addEventListener('change', updateMihomoOptio
 document.getElementById('cfgPerProxyMaster').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgTunStackAdvanced').addEventListener('change', updateMihomoOptionStates);
 document.getElementById('cfgTunStackEx').addEventListener('change', updateMihomoOptionStates);
-document.getElementById('cfgSubMode').addEventListener('change', () => {
-  updateExcludeFilterVisibility();
-  updateSubModeHint();
-});
+document.getElementById('cfgSubMode').addEventListener('change', () => { updateExcludeFilterVisibility(); updateSubModeHint(); });
 document.getElementById('cfgWebUI').addEventListener('change', updateWebUiVisibility);
 document.getElementById('webUiSelect').addEventListener('change', updateWebUiVisibility);
-updateExcludeFilterVisibility();
-updateSubModeHint();
-updateWebUiVisibility();
-updateMihomoOptionStates();
-// Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
-// результат проверки недействительным — старый VALID не сохраняется
-['input', 'change'].forEach(ev => document.addEventListener(ev, () => {
-  mihomoValidationSeq++; // инвалидируем незавершённую проверку, если была
-  resetCompatSummary();
-  setMihomoValidationState('NOT_BUILT');
-}, true));
-resetCompatSummary();
-setMihomoValidationState('NOT_BUILT');
+onProfileChange(); updateExcludeFilterVisibility(); updateSubModeHint(); updateWebUiVisibility(); updateMihomoOptionStates();
+['input','change'].forEach(ev => document.addEventListener(ev, () => { mihomoValidationSeq++; resetCompatSummary(); setMihomoValidationState('NOT_BUILT'); }, true));
+resetCompatSummary(); setMihomoValidationState('NOT_BUILT');
 </script>
 </body>
 </html>
