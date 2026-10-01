@@ -460,3 +460,24 @@ Workflow автоматически запускает source Mihomo tests, сб
 self-hosted 3.1 сервера и поведение конкретной сборки ядра (требование mihomo ≥ 1.19.30
 для 3.1-ключей — см. [PROTOCOLS.md](PROTOCOLS.md)). Успешная структурная валидация ≠
 работающий туннель.
+
+## Domain Policy Routing (Variant B) — 2026-10-01
+
+Коммиты: web4core `2daf383` (эмиссия: `src/core/mihomo.js`, `src/build.js`,
+`src/core/yaml.js`, `tools/tests/mihomo-policy-routing.test.mjs`), consumer —
+runtime `dcc16b68…` (Source: `saymer-alt/web4core@2daf383bde5257c1d8bd15a0f4c719c6b3f8e5d8`).
+
+- Source-тесты форка: `node --test tools/tests/mihomo-policy-routing.test.mjs` — 12/12;
+  полный набор форка 158/158; `test:amnezia` 12/12.
+- Consumer node-регресс: `JS_YAML_PATH=… node tests/policy-routing.cjs` — 33 кейса
+  (parity off, basic, shared provider, `proxy: DIRECT`, AW-совместимость, static,
+  предупреждения, структурные ошибки).
+- Браузерный UI: `node tests/policy-routing-browser.cjs` — 14 кейсов (панель,
+  карточки add/remove, пресеты, сборка, дубликат имён, кламп per-proxy, VALID).
+- Полный потребительский набор после изменений: `runtime.cjs` 63/63,
+  `whitelist.cjs` 10 кейсов, `browser.cjs` 47 валидатор + pipeline — PASS.
+- Реальный `mihomo -t` v1.19.31 (Windows-бинар) на 5 пробах из поставляемого
+  runtime: dpr-subscription (GEOSITE/KEYWORD/CIDR), dpr-static, dpr-aw,
+  dpr-off-parity, dpr-cyrillic — все successful; per-proxy+DPR отклонён
+  движком как задумано. Живой PoC маршрутизации — тестовый VPS, 2026-10-01
+  (журнал владельца): DOMAIN→POLICY→PROVIDER→NODE доказан на обеих версиях.

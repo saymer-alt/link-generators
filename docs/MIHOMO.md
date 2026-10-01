@@ -12,6 +12,19 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 Факты по коду, включая MIPS TUN (2026-09-15): настройки UI → опции → секции YAML; в конце — краткое
 описание pre-copy валидатора (полностью — [VALIDATION.md](VALIDATION.md)).
 
+## Политики по доменам (Domain Policy Routing, Variant B)
+
+Опциональный чекбокс «🚦 Политики по доменам»: карточки «имя + домены» превращаются
+в inline `rule-providers` (`policy-<slug>`), категории-группы и `RULE-SET`-правила
+перед неизменным `MATCH,GLOBAL`. В режиме URL-подписок категория получает
+`NAME-AUTO` (url-test, `use:` на общий provider — несколько групп на один
+провайдер) и select `[NAME-AUTO, ⚡ Fastest, GLOBAL, DIRECT]`; без подписок —
+select `[⚡ Fastest, GLOBAL, DIRECT]`; в БС-режиме — select `[GLOBAL, DIRECT]`
+(плоский fallback не вкладывается, #2588). `proxy: DIRECT` у провайдеров —
+обязательный контракт (без него холодный старт дедлочит фетч подписки).
+Выключенный режим — byte-parity. Полное описание, ограничения (ECH/DoH/hardcoded IP,
+домен-детект для TUN) и PoC-доказательства — [POLICY-ROUTING.md](POLICY-ROUTING.md).
+
 ## Настройки вкладки «⚙️ Mihomo Config Builder»
 
 | Элемент UI | id | Опция `buildFromRequest` | Дефолт | Эффект в YAML |
