@@ -70,6 +70,14 @@
   .validation-issue-error{border-color:var(--red)}
   .compat-box{display:none;margin-top:12px;padding:12px 14px;border:1px solid rgba(88,166,255,.45);border-radius:8px;background:rgba(88,166,255,.06);font-size:.85rem;color:var(--text)}
   .compat-box ul{margin:8px 0 0 18px;padding:0}.compat-box li{margin:4px 0}
+  /* === CONTEXT HELP (? markers): единая подсказка «что это / когда включать / что изменится».
+     Не меняет значения контролов, не запускает Build, ничего не сохраняет. === */
+  .ctx-help-wrap{position:relative;display:inline-block;margin-left:6px}
+  .ctx-help{width:17px;height:17px;line-height:15px;padding:0;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:.72rem;cursor:help;vertical-align:middle}
+  .ctx-help:hover,.ctx-help:focus-visible{color:var(--accent);border-color:var(--accent);outline:none}
+  .ctx-help-pop{display:none;position:absolute;bottom:calc(100% + 8px);right:-8px;z-index:60;width:min(300px,78vw);padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:.8rem;font-weight:400;line-height:1.45;box-shadow:0 6px 18px rgba(0,0,0,.45);text-align:left}
+  .ctx-help-wrap.open .ctx-help-pop{display:block}
+  @media (max-width:640px){.ctx-help-pop{right:auto;left:50%;transform:translateX(-50%)}}
 </style>
 </head>
 <body>
@@ -109,6 +117,7 @@
         <div><label>SNI</label><input type="text" id="sni" value="4pda.to"></div>
         <div><label>DNS</label><input type="text" id="dns" value="1.1.1.1,1.0.0.1"></div>
       </div>
+      <div class="hint">Поля заполняются кнопкой «🔍 Распарсить» из YAML WARP-бота. Меняйте вручную только осознанно: ключи, IP, SNI и DNS входят в генерируемые ссылки <code>masque://</code>.</div>
     </div>
 
     <div class="card">
@@ -149,7 +158,7 @@
 
   <!-- TAB 2: MIHOMO BUILDER -->
   <div id="tab-mihomo" class="tab-content active">
-    <div class="hint" style="margin-bottom:10px"><a href="docs/GENERATOR-GUIDE.md">📖 Короткая инструкция по генератору</a></div>
+    <div class="hint" style="margin-bottom:10px"><a href="quick-start.html">❓ Помощь / Быстрый старт</a> · <a href="docs/GENERATOR-GUIDE.md">📖 Короткая инструкция (MD)</a></div>
     <div class="card" id="profileRow">
       <div class="card-title">🎯 Где будет работать Mihomo?</div>
       <select id="cfgProfile">
@@ -160,18 +169,18 @@
       <div id="profileHint" class="hint"></div>
       <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
         <div class="row">
-          <div><label>TUN device</label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
+          <div><label>TUN device <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN device">?</button><span class="ctx-help-pop" role="note">Имя TUN-интерфейса Mihomo. Должно совпадать с PROXY_IF в amnezia-mihomo-gateway — иначе routing-скрипт и watchdog не найдут интерфейс. Обычно менять не нужно.</span></span></label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
         </div>
         <div class="row" style="margin-top:12px">
-          <div><label>MTU</label><input type="text" id="vpsMtu" value="1420"></div>
-          <div><label>fake-ip-range</label><input type="text" id="vpsFakeIp" value="198.18.0.0/16"></div>
+          <div><label>MTU <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: MTU">?</button><span class="ctx-help-pop" role="note">MTU туннеля. 1420 — проверенное значение для двойной инкапсуляции (AmneziaWG + WARP) вместе с TCPMSS clamp на Linux-стороне; давало ~2x скорость.</span></span></label><input type="text" id="vpsMtu" value="1420"></div>
+          <div><label>fake-ip-range <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: fake-ip-range">?</button><span class="ctx-help-pop" role="note">Диапазон виртуальных DNS-адресов. Должен совпадать с FAKE_IP_RANGE маршрутизации gateway — иначе пакеты на fake-ip не попадут в TUN. Из IPv4 TUN выводится с маской /30.</span></span></label><input type="text" id="vpsFakeIp" value="198.18.0.0/16"></div>
         </div>
         <div class="toggle-row">
-          <label><input type="checkbox" id="vpsDnsEnabled" checked> 🌐 DNS-перехват (fake-ip) — часть VPS-профиля</label>
+          <label><input type="checkbox" id="vpsDnsEnabled" checked> 🌐 DNS-перехват (fake-ip) — часть VPS-профиля <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: DNS-перехват">?</button><span class="ctx-help-pop" role="note">Выключение удаляет секцию dns: целиком (fake-ip, dns-hijack, persistence). Пассивный сниффер остаётся. Для gateway-сценария обычно держать включённым: без fake-ip домены pure-IP клиентов не классифицируются.</span></span></label>
         </div>
         <div id="vpsDnsFields">
           <div class="row">
-            <div><label>DNS listen</label><input type="text" id="vpsDnsListen" value="0.0.0.0:53"></div>
+            <div><label>DNS listen <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: DNS listen">?</button><span class="ctx-help-pop" role="note">Адрес DNS-слушателя Mihomo. 0.0.0.0:53 — боевой дефолт схемы: резолвер для клиентов/контейнеров VPS. Доступ из интернета ограничивается firewall самого VPS (см. предупреждение ниже) — вне scope генератора.</span></span></label><input type="text" id="vpsDnsListen" value="0.0.0.0:53"></div>
             <div><label>Nameservers (через запятую)</label><input type="text" id="vpsDnsNs" value="1.1.1.1, 8.8.8.8"></div>
           </div>
           <div class="row" style="margin-top:12px">
@@ -228,9 +237,9 @@
     <div class="card">
       <div class="card-title">⚙️ Настройки Mihomo</div>
       <div class="checkbox-grid">
-        <label title="Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Для домашнего роутера обычно включено; для VPS с локальным Xray/3X-UI выключите."><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
-        <label title="Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo."><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
-        <label title="Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090."><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
+        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Для домашнего роутера обычно включено; для VPS с локальным Xray/3X-UI выключите.</span></span></label>
+        <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
+        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090.</span></span></label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки</label>
       </div>
       <div id="subModeHint" class="hint"></div>
@@ -263,6 +272,7 @@
       <div class="toggle-row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgPolicyRouting"> 🚦 Политики по доменам (Domain Policy Routing)</label>
       </div>
+      <div class="hint" id="policyRoutingOffHint">Доменные категории («AI», «YouTube»…) направляются в отдельные группы выхода через <code>RULE-SET</code>; состав подписки меняется — правила не пересобираются. Подробно — <a href="quick-start.html">❓ Быстрый старт</a>.</div>
       <div id="policyRoutingPanel" style="display:none">
         <div class="hint">Доменное правило → стабильная логическая группа → <code>proxy-provider</code> подписки → текущий живой узел. Правила ссылаются на группы, а не на серверы: состав подписки может меняться — правила не требуют пересборки. Порядок политик = порядок правил; завершающее <code>MATCH,GLOBAL</code> остаётся правилом по умолчанию. Требуется Mihomo ≥ 1.19.27 (empty-fallback), инлайн rule-провайдеры ≥ 1.19.1.</div>
         <div id="policyCards"></div>
@@ -282,8 +292,8 @@
         <div class="hint" id="policyRoutingHint"></div>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label title="Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo»."><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
-        <label title="TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor."><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
+        <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN Interface">?</button><span class="ctx-help-pop" role="note">Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo».</span></span></label>
+        <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: MIPS stack">?</button><span class="ctx-help-pop" role="note">TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor.</span></span></label>
       </div>
       <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
       <div class="advanced-stack-control">
@@ -312,7 +322,7 @@
       <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
       <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
 
-      <label style="margin-top:16px" title="URL, по которому Mihomo проверяет доступность узлов (url-test и health-check провайдеров). Обычно достаточно Google generate_204.">🏓 Ping server (health-check)</label>
+      <label style="margin-top:16px">🏓 Ping server (health-check) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Ping server">?</button><span class="ctx-help-pop" role="note">URL, по которому Mihomo проверяет доступность узлов (url-test и health-check провайдеров). Обычно достаточно Google generate_204.</span></span></label>
       <select id="pingSelect"></select>
 
       <div class="btn-group">
@@ -1330,7 +1340,7 @@ function renderCompatSummary(yaml) {
 // пакет v2.0 (mtu 1420, gso, find-process-mode: off, store-*: false).
 // При изменении install.sh — синхронизировать эту константу и value= в полях
 // #vpsDevice/#vpsMtu/#vpsFakeIp/#vpsDnsListen/#vpsDnsNs/#vpsProxyNs.
-// Generic-профиль: applyDeploymentProfile() НЕ вызывается (guard в buildMihomo) —
+// Профили router/vps-local: applyDeploymentProfile() НЕ вызывается (guard в buildMihomo) —
 // вывод байт-в-байт прежний. Подробно — docs/VPS-GATEWAY.md.
 const VPS_GATEWAY_DEFAULTS = {
   device: 'tun-mihomo',
@@ -1351,8 +1361,9 @@ function vpsCsv(id, fallback) {
   return arr.length ? arr : fallback;
 }
 
-// Чистый пост-патч финального YAML. Вызывается ТОЛЬКО при профиле 'vps'
-// (после injectWgDns, до allow-lan патча). lineWidth:-1 обязателен —
+// Чистый пост-патч финального YAML. Вызывается ТОЛЬКО для профиля vps-gateway
+// (второй аргумент — внутреннее имя 'vps' gateway-семейства, не id профиля;
+// после injectWgDns, до allow-lan патча). lineWidth:-1 обязателен —
 // иначе jsyaml переносит длинные AWG base64-строки и портит их.
 function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') {
   if (profile !== 'vps') return yaml;
@@ -1725,6 +1736,7 @@ function updatePolicyRoutingVisibility() {
   const master = document.getElementById('cfgPerProxyMaster') && document.getElementById('cfgPerProxyMaster').checked;
   const subMode = document.getElementById('cfgSubMode').checked;
   document.getElementById('policyRoutingPanel').style.display = on ? 'block' : 'none';
+  document.getElementById('policyRoutingOffHint').style.display = on ? 'none' : '';
   const hints = [];
   if (bsOn) hints.push('Режим белых списков: категории указывают на GLOBAL (плоский fallback PRIMARY→FALLBACK) или DIRECT; AUTO-группы категорий не создаются.');
   else if (subMode) hints.push('URL-подписки: каждая категория получает AUTO url-test-группу над общим provider (use:) и select [AUTO, ⚡ Fastest, GLOBAL, DIRECT].');
@@ -1837,8 +1849,8 @@ function buildMihomo() {
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
 
-    // PATCH: Deployment profile — только при opt-in профиле VPS Gateway.
-    // При 'generic' пост-патч не выполняется вовсе (инвариант byte-for-byte).
+    // PATCH: Deployment profile — только при профиле vps-gateway.
+    // При router/vps-local пост-патч не выполняется вовсе (инвариант byte-for-byte).
 
     if (deploymentProfile === 'vps-gateway') {
       yaml = applyDeploymentProfile(yaml, 'vps', tunStack);
@@ -1943,6 +1955,30 @@ applyDeploymentProfileUi(); // заполнить hint и применить с�
 }, true));
 resetCompatSummary();
 setMihomoValidationState('NOT_BUILT');
+
+// === CONTEXT HELP: один делегированный обработчик на все ?-маркеры.
+// Клик — открыть/закрыть; снаружи/Escape — закрыть; состояние чекбоксов и Build не затрагивается.
+(function () {
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest ? e.target.closest('.ctx-help') : null;
+    document.querySelectorAll('.ctx-help-wrap.open').forEach(function (w) {
+      if (!btn || w !== btn.parentElement) { w.classList.remove('open'); const b = w.querySelector('.ctx-help'); if (b) b.setAttribute('aria-expanded', 'false'); }
+    });
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const wrap = btn.parentElement;
+    const open = wrap.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }, false);
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('.ctx-help-wrap.open').forEach(function (w) {
+      w.classList.remove('open');
+      const b = w.querySelector('.ctx-help'); if (b) b.setAttribute('aria-expanded', 'false');
+    });
+  });
+})();
 </script>
 </body>
 </html>

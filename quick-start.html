@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Помощь / Быстрый старт — WARP &amp; Mihomo Unified Generator</title>
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#238636; --warn:#d29922; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;padding:20px}
+  .wrap{max-width:860px;margin:0 auto}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  h1{font-size:1.5rem;margin-bottom:6px}
+  h2{font-size:1.15rem;margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+  h3{font-size:1rem;margin:16px 0 6px;color:var(--accent)}
+  p,li{font-size:.95rem;color:var(--text)}
+  ul,ol{margin:6px 0 6px 22px}
+  li{margin:4px 0}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .back{display:inline-block;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.9rem}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin:12px 0}
+  .muted{color:var(--muted);font-size:.85rem}
+  .warn{color:var(--warn)}
+  code{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:.85em;word-break:break-all}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:.88rem}
+  th,td{border:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  .steps li{margin:8px 0}
+  @media (max-width:640px){body{padding:12px}.card{padding:12px}table{font-size:.8rem;display:block;overflow-x:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a class="back" href="index.html">← Вернуться в генератор</a>
+    <span class="muted">версия документации: октябрь 2026</span>
+  </div>
+
+  <h1>❓ Помощь / Быстрый старт</h1>
+  <p class="muted">Простыми словами: что нажимать, чтобы получить рабочий конфиг Mihomo. Всё считается в вашем браузере — ключи и ссылки никуда не отправляются.</p>
+
+  <h2>Шаг 1. Где будет работать Mihomo?</h2>
+  <p>Наверху вкладки Builder есть вопрос <b>«🎯 Где будет работать Mihomo?»</b> — это профиль развёртывания. Он задаёт «сценарий»: что включить и что выключить. Прокси, подписки и файлы он не трогает.</p>
+  <div class="card">
+    <h3>🏠 Роутер / обычный TUN (Keenetic) — по умолчанию</h3>
+    <ul>
+      <li><b>Когда:</b> Mihomo стоит на домашнем роутере (Keenetic с Entware) или на компьютере, и нужно «завернуть» весь трафик устройства.</li>
+      <li><b>Включает:</b> TUN-интерфейс (весь трафик через Mihomo), MIPS-стек, порт 7890, доступ из локальной сети.</li>
+      <li><b>Чего не делает:</b> не настраивает сам роутер — установка Mihomo на Keenetic описана в проекте <a href="https://github.com/saymer-alt/keenetic-auto-setup">keenetic-auto-setup</a>.</li>
+    </ul>
+    <h3>🖥️ VPS — локальный Mihomo / SOCKS для Xray / 3X-UI</h3>
+    <ul>
+      <li><b>Когда:</b> на сервере уже работает Xray/3X-UI (или другое приложение), и оно отправляет трафик в Mihomo через <code>127.0.0.1:7890</code>.</li>
+      <li><b>Включает:</b> только локальный вход 7890; TUN и «доступ из сети» выключены — они серверу не нужны.</li>
+      <li><b>Чего не делает:</b> не настраивает Xray/3X-UI — в панели укажите исходящим сервером <code>socks5://127.0.0.1:7890</code>.</li>
+    </ul>
+    <h3>🌐 VPS Transparent Gateway (amnezia-mihomo-gateway)</h3>
+    <ul>
+      <li><b>Когда:</b> специальный сценарий «прозрачного шлюза» с Linux-маршрутизацией, Docker и AmneziaWG — всё под управлением <a href="https://github.com/saymer-alt/amnezia-mihomo-gateway">amnezia-mihomo-gateway</a>.</li>
+      <li><b>Включает:</b> TUN с фиксированными настройками безопасности, DNS-перехват (fake-ip) с полями ниже, автоматический пакет домен-детекта.</li>
+      <li><b>Чего не делает:</b> <b>никогда</b> не настраивает Linux-часть (маршруты, firewall, Docker) — это делает установщик gateway. Для обычного VPS с Xray выбирайте предыдущий профиль.</li>
+    </ul>
+  </div>
+
+  <h2>Шаг 2. Что вставить</h2>
+  <table>
+    <tr><th>Что у вас есть</th><th>Что делать</th></tr>
+    <tr><td>Обычные ссылки <code>vless://</code>, <code>trojan://</code>, <code>ss://</code>, <code>masque://</code>…</td><td>Вставьте в большое поле; режим «📡 Использовать URL-подписки» выключите.</td></tr>
+    <tr><td>Ссылка-подписка <code>https://…</code></td><td>Вставьте в то же поле; режим «📡 Использовать URL-подписки» оставьте включённым (он включён по умолчанию).</td></tr>
+    <tr><td>Файлы WireGuard / AmneziaWG <code>.conf/.wg/.awg</code></td><td>Кнопка «📂 Загрузить .conf / .awg» — каждый файл станет отдельным прокси.</td></tr>
+    <tr><td>Свои WARP-ссылки</td><td>Вкладка «⚡ WARP MASQUE Links»: вставьте YAML от WARP-бота → «Сгенерировать» → «🚀 В Mihomo Builder».</td></tr>
+    <tr><td>Смесь (подписка + ссылки)</td><td>Можно вместе; режим подписок включён, если есть хотя бы один URL.</td></tr>
+  </table>
+
+  <h2>Шаг 3. Типовые сценарии</h2>
+  <p class="muted">Каждый сценарий: что включить → что вставить → что нажать → что получится.</p>
+  <div class="card">
+    <h3>1. Обычные ссылки на Keenetic</h3>
+    <ol class="steps">
+      <li>Профиль «🏠 Роутер» (уже выбран).</li>
+      <li>Вставьте ссылки, выключите «📡 URL-подписки».</li>
+      <li>«⚡ Build Config» → «📋 Copy YAML».</li>
+      <li>Готовый <code>config.yaml</code> с TUN-режимом — на роутер.</li>
+    </ol>
+    <h3>2. URL-подписка</h3>
+    <ol class="steps">
+      <li>Профиль «🏠 Роутер»; режим «📡 URL-подписки» включён.</li>
+      <li>Вставьте URL подписки. Узлы фильтруются опциональным «🚫 Exclude Filter» (для кириллических имён пишите фильтр кириллицей: <code>Россия|Москва</code>).</li>
+      <li>«⚡ Build Config» → Copy. Mihomo сам скачает и будет обновлять узлы (раз в 12 часов + проверка доступности).</li>
+    </ol>
+    <h3>3. WARP / AmneziaWG</h3>
+    <ol class="steps">
+      <li>WARP: вкладка «⚡ WARP MASQUE Links» → YAML от бота → «Сгенерировать» → «🚀 В Mihomo Builder».</li>
+      <li>AWG: «📂 Загрузить .conf / .awg». Если в файле DNS <code>100.64.0.1</code> — подставятся публичные (с предупреждением).</li>
+      <li>«⚡ Build Config» → Copy.</li>
+    </ol>
+    <h3>4. Xray → локальный Mihomo на VPS</h3>
+    <ol class="steps">
+      <li>Профиль «🖥️ VPS — локальный Mihomo / SOCKS».</li>
+      <li>Вставьте ссылки/подписку как в сценарии 1–2.</li>
+      <li>«⚡ Build Config» → Copy. В Xray/3X-UI укажите исходящим <code>socks5://127.0.0.1:7890</code>.</li>
+    </ol>
+    <h3>5. Transparent VPS Gateway</h3>
+    <ol class="steps">
+      <li>Профиль «🌐 VPS Transparent Gateway». Проверьте поля (TUN device, MTU, fake-ip-range) — они должны совпадать с установщиком gateway (обычно менять не нужно).</li>
+      <li>Вставьте прокси/подписки; при желании включите «🚦 Политики по доменам».</li>
+      <li>«⚡ Build Config» → Copy → установите через amnezia-mihomo-gateway (он сам настроит Linux-часть).</li>
+    </ol>
+    <h3>6. Политики по доменам (DPR)</h3>
+    <ol class="steps">
+      <li>Включите «🚦 Политики по доменам», нажмите «➕ Добавить политику», выберите шаблон (AI/YouTube/Telegram/Google/Direct) или впишите свои домены (по одному в строке).</li>
+      <li>«⚡ Build Config» → Copy. Домены из категории пойдут через отдельную группу выхода; остальной трафик — как раньше (<code>MATCH,GLOBAL</code>).</li>
+      <li>Состав подписки меняется — правила пересобирать не нужно: правила указывают на группы, группы — на подписку.</li>
+    </ol>
+    <h3>7. Автоматический режим белых списков (БС)</h3>
+    <ol class="steps">
+      <li>Включите «Автоматический режим белых списков».</li>
+      <li>В верхнем поле — обычные серверы (основные), в появившемся втором — резерв (то, что работает при блокировках).</li>
+      <li>«⚡ Build Config» → Copy. При недоступности основных выходов Mihomo сам перейдёт на резерв и вернётся обратно по проверке доступности.</li>
+    </ol>
+    <h3>8. WARP через промежуточный VPS (dialer-proxy)</h3>
+    <ol class="steps">
+      <li>Загрузите WARP как в сценарии 3.</li>
+      <li>В поле «Промежуточный proxy / dialer-proxy» укажите имя прокси/группы, ИЛИ заполните «Транзитные узлы» (список имён), ИЛИ «URL-подписки для dialer-группы» (URL одной из ваших подписок).</li>
+      <li>«⚡ Build Config» → Copy. WARP будет подключаться к Cloudflare через выбранный транзит (другая страна/сеть).</li>
+      <li><span class="warn">Важно:</span> транзитный узел обязан поддерживать UDP; смена узла в группе меняет путь не мгновенно (до ~150 секунд) — для мгновенной смены нужен reload конфига.</li>
+    </ol>
+  </div>
+
+  <h2>Частые вопросы</h2>
+  <div class="card">
+    <h3>Проверка прошла, а Mihomo не запускается с конфигом</h3>
+    <p>Базовая проверка в браузере ловит только очевидные структурные ошибки. Авторитетная проверка — на машине с Mihomo: <code>mihomo -t -f config.yaml</code>. Если реальный Mihomo отверг YAML — сохраните полный YAML и полный вывод команды.</p>
+    <h3>Подписка отдаёт «App not supported» / пустой список</h3>
+    <p>Некоторые панели требуют заголовок <code>x-hwid</code> — генератор добавляет его автоматически. Если панель всё равно отказывает, проверьте, что подписка активна и ссылка полная.</p>
+    <h3>Exclude Filter не исключает «Россия»</h3>
+    <p>Фильтр сравнивается с фактическим именем узла: латинский <code>ru|russia</code> не совпадёт с кириллическим «Россия». Пишите оба варианта.</p>
+    <h3>Что делает «?» рядом с настройками</h3>
+    <p>Короткая подсказка «что это и когда включать». Наведите мышью, коснитесь пальцем или выберите с клавиатуры (Enter — открыть, Escape — закрыть). Значения настроек она не меняет.</p>
+    <h3>Нужна ли кнопка «🖥️ Web UI»?</h3>
+    <p>Она скачивает веб-панель управления Mihomo (MetaCubeXD по умолчанию). Для «поставил и работает» — не обязательна, но удобна для смены узлов и просмотра логов.</p>
+    <h3>Какая версия Mihomo нужна</h3>
+    <p>Минимум — 1.19.31 (для MIPS-стека TUN и домен-детекта gateway), рекомендуемая — 1.19.32. Отдельные функции имеют собственные минимумы (AWG 3.1 — от 1.19.30, политики по доменам — от 1.19.27); подсказка у переключателя предупредит, если функция требует новее.</p>
+  </div>
+
+  <h2>Подробная документация</h2>
+  <ul>
+    <li><a href="docs/GENERATOR-GUIDE.md">Короткая инструкция по всем режимам (Markdown)</a></li>
+    <li><a href="docs/POLICY-ROUTING.md">Политики по доменам и домен-детект — подробно</a></li>
+    <li><a href="docs/AUTO-WHITELIST.md">Автоматический режим белых списков — подробно</a></li>
+    <li><a href="docs/VPS-GATEWAY.md">VPS Transparent Gateway — подробно</a></li>
+    <li><a href="https://github.com/saymer-alt/link-generators">Репозиторий проекта</a></li>
+  </ul>
+  <p class="muted" style="margin-top:18px">Страница статическая: без JavaScript, без счётчиков, без отправки данных. Приватность — как в самом генераторе.</p>
+</div>
+</body>
+</html>
