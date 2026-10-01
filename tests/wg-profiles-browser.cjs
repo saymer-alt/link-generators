@@ -32,6 +32,15 @@ const fx = n => path.join(__dirname, 'fixtures', n);
       return page.evaluate(() => ({ state: MIHOMO_VALIDATION_STATE.state, yaml: document.getElementById('mihomoOutput').value }));
     };
     const wgNames = y => (y.match(/^  - name: (.+)$/gm) || []).map(l => l.replace('  - name: ', '').trim()).filter(n => !['⚡ Fastest', 'GLOBAL', 'WARP-DIALER'].includes(n));
+    const proxyBlockOf = (y, name) => {
+      const lines = y.split('\n');
+      const start = lines.findIndex(l => { const t = l.trim().replace(/^- /, ''); return t === `name: ${name}` || t === `name: "${name}"` || t === `name: '${name}'`; });
+      assert.ok(start !== -1, `proxy ${name} найден в yaml`);
+      let end = lines.length;
+      for (let i = start + 1; i < lines.length; i++) if (/^\s{2}- name:/.test(lines[i])) { end = i; break; }
+      return lines.slice(start, end).join('\n');
+    };
+    const proxyHasDialer = (y, name) => /dialer-proxy:/.test(proxyBlockOf(y, name));
 
     // single WG
     await page.locator('#wgFile').setInputFiles(fx('wg-simple-a.conf'));
@@ -101,24 +110,97 @@ const fx = n => path.join(__dirname, 'fixtures', n);
 
     // коллизия имён с разным контентом — рантайм переименовывает (fail-safe)
     await page.evaluate(() => {
-      const p = (name, addr, ep) => web4core.parseWireGuardConf(
-        `[Interface]\nName = collide\nPrivateKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAddress = ${addr}/32\n[Peer]\nPublicKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAllowedIPs = 0.0.0.0/0\nEndpoint = ${ep}\n`, name);
-      wgBeans = [p('a.conf', '10.9.0.1', '198.51.100.71:51820'), p('b.conf', '10.9.0.2', '198.51.100.72:51820')];
-      wgFiles = ['a.conf', 'b.conf'];
+      const p = (filename, addr, ep) => ({
+        id: ++wgProfileSeq, filename, mode: 'direct', target: '',
+        bean: web4core.parseWireGuardConf(
+          `[Interface]\nName = collide\nPrivateKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAddress = ${addr}/32\n[Peer]\nPublicKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAllowedIPs = 0.0.0.0/0\nEndpoint = ${ep}\n`, filename),
+      });
+      wgProfiles = [p('a.conf', '10.9.0.1', '198.51.100.71:51820'), p('b.conf', '10.9.0.2', '198.51.100.72:51820')];
+      syncWgCollections();
     });
     r = await build();
     assert.equal(r.state, 'VALID');
     assert.deepEqual(wgNames(r.yaml).sort(), ['collide', 'collide-2']);
     ok('коллизия имён с разным контентом — авто-переименование, VALID');
 
-    // dialer scope: глобальный на все WG (зафиксирован как current behavior)
-    await page.evaluate(() => { wgBeans = [web4core.parseWireGuardConf(normalizeWgText(`[Interface]\nPrivateKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAddress = 10.7.0.2/32\n[Peer]\nPublicKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAllowedIPs = 0.0.0.0/0\nEndpoint = 198.51.100.10:51820\n`), 'wg-home.conf')]; wgFiles = ['wg-home.conf']; });
+    // per-profile dialer: таргет = существующий link-proxy (Variant A)
+    await page.evaluate(() => {
+      wgProfiles = [{
+        id: ++wgProfileSeq, filename: 'wg-home.conf', mode: 'proxy', target: 'VPS-SE',
+        bean: web4core.parseWireGuardConf(normalizeWgText(`[Interface]\nPrivateKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAddress = 10.7.0.2/32\n[Peer]\nPublicKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAllowedIPs = 0.0.0.0/0\nEndpoint = 198.51.100.10:51820\n`), 'wg-home.conf'),
+      }];
+      syncWgCollections();
+    });
     await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#VPS-SE');
-    await page.locator('#wgDialerInput').fill('VPS-SE');
     r = await build();
-    const dialers = (r.yaml.match(/dialer-proxy: VPS-SE/g) || []).length;
-    assert.equal(dialers, 1, 'единственный WG-профиль получил dialer-proxy (global scope)');
-    ok('dialer-proxy: применён ко всем WG-профилям (current global contract)');
+    assert.equal((r.yaml.match(/dialer-proxy: VPS-SE/g) || []).length, 1, 'единственный WG получил dialer-proxy от своей карточки');
+    ok('per-profile dialer (таргет = существующий proxy) работает');
+
+    // смешанный сценарий §16: 2 direct + 2 разных dialer-таргета (+ группа WARP-DIALER)
+    await page.evaluate(() => {
+      const mk = (filename, name, addr) => ({
+        id: ++wgProfileSeq, filename, mode: 'direct', target: '',
+        bean: web4core.parseWireGuardConf(
+          `[Interface]\nPrivateKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAddress = ${addr}/32\n[Peer]\nPublicKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAllowedIPs = 0.0.0.0/0\nEndpoint = 198.51.100.55:51820\n`, name),
+      });
+      wgProfiles = [mk('home.conf', 'wg-home', '10.7.1.2'), mk('office.conf', 'wg-office', '10.7.2.2')];
+      wgProfiles[1].mode = 'proxy'; wgProfiles[1].target = 'WARP-DIALER';
+      wgProfiles.push(mk('warp-ee.conf', 'wg-warp-ee', '10.7.3.2'));
+      wgProfiles[2].mode = 'proxy'; wgProfiles[2].target = 'VPS-EE';
+      syncWgCollections();
+      document.getElementById('wgDialerMembers').value = 'wg-home';
+      renderWgList();
+    });
+    await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#VPS-SE\nvless://00000000-0000-4000-8000-000000000002@192.0.2.2:443#VPS-EE');
+    r = await build();
+    assert.equal(r.state, 'VALID');
+    assert.ok(!proxyHasDialer(r.yaml, 'wg-home'), 'home.conf — напрямую');
+    assert.match(proxyBlockOf(r.yaml, 'wg-office'), /dialer-proxy: WARP-DIALER/, 'office.conf — через WARP-DIALER');
+    assert.match(proxyBlockOf(r.yaml, 'wg-warp-ee'), /dialer-proxy: VPS-EE/, 'warp-ee.conf — через VPS-EE');
+    assert.ok(/name: WARP-DIALER/.test(r.yaml), 'dialer-группа WARP-DIALER построена');
+    assert.match(r.yaml.match(/  - name: WARP-DIALER[\s\S]*?(?=  - name: |rules:)/)[0], /wg-home/, 'группа содержит транзитный узел');
+    ok('смешанный direct+dialer: таргеты независимы, группа построена');
+
+    // пустой таргет при режиме «Через proxy» — честная ошибка, не тихий direct
+    // (таргет очищается через карточку: change инвалидирует результат, guard ловит пустоту)
+    await page.locator('.wg-target').nth(2).fill('');
+    assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT', 'очистка таргета инвалидирует сборку');
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT');
+    assert.match(await page.evaluate(() => window.__lastToast || ''), /Укажите proxy\/группу/);
+    await page.locator('.wg-target').nth(2).fill('VPS-EE');
+    r = await build();
+    assert.equal(r.state, 'VALID');
+    ok('пустой таргет при «Через proxy» — fail-closed с понятной ошибкой');
+
+    // пер-профильный режим через UI-карточку: select меняет состояние и инвалидирует сборку
+    await page.evaluate(() => {
+      document.getElementById('wgDialerInput').value = '';
+      document.getElementById('wgDialerMembers').value = '';
+      document.getElementById('wgDialerProviders').value = '';
+      wgProfiles = []; syncWgCollections(); renderWgList();
+    });
+    await page.locator('#wgFile').setInputFiles(fx('wg-simple-a.conf'));
+    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 1);
+    await page.locator('#mihomoInput').fill('');
+    r = await build();
+    assert.equal(r.state, 'VALID');
+    assert.ok(!r.yaml.includes('dialer-proxy'), 'режим по умолчанию — Напрямую');
+    await page.locator('.wg-mode').first().selectOption('proxy');
+    assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT', 'смена режима инвалидирует результат');
+    const targetVal = await page.locator('.wg-target').first().inputValue();
+    assert.equal(targetVal, '', 'таргет не выдумывается без группы');
+    await page.locator('.wg-target').first().fill('VPS-SE');
+    r = await build();
+    assert.match(proxyBlockOf(r.yaml, 'wg-simple-a'), /dialer-proxy: VPS-SE/, 'карточка управляет dialer-proxy');
+    ok('UI-карточка: Напрямую → Через proxy + таргет управляют сборкой');
+
+    // повторное добавление после удаления разрешено
+    await page.locator('.wg-list-del').first().click();
+    await page.waitForFunction(() => wgBeans.length === 0);
+    await page.locator('#wgFile').setInputFiles(fx('wg-simple-a.conf'));
+    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 1);
+    ok('после удаления тот же файл можно добавить снова');
 
     // race: медленный A, быстрый B — старый async не затирает новое состояние
     await page.evaluate(() => {

@@ -43,8 +43,18 @@
   .file-upload input[type=file]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
   .wg-status{font-size:.8rem;color:var(--muted)}
   .wg-status.loaded{color:var(--green)}
-  .wg-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+  .wg-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
   .wg-list li{display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;word-break:break-all}
+  li.wg-card{display:block;padding:8px 10px}
+  .wg-card-head{display:flex;align-items:center;gap:6px}
+  .wg-card-head .wg-list-name{flex:1;font-weight:600}
+  .wg-card-info{margin:3px 0 6px;color:var(--muted);font-size:.78rem;word-break:break-all}
+  .wg-card-mode{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .wg-card-mode label{margin:0;color:var(--muted);font-size:.8rem}
+  .wg-mode{padding:4px 6px;font-size:.85rem}
+  .wg-target-row{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+  .wg-target-row label{margin:0;color:var(--muted);font-size:.8rem}
+  .wg-target{flex:1;min-width:160px;padding:5px 8px;font-size:.85rem}
   .wg-list-ok{color:var(--green)}
   .wg-list-name{flex:1}
   .wg-list-tag{color:var(--muted);font-size:.75rem}
@@ -216,15 +226,15 @@
       <ul class="wg-list" id="wgList" role="list" hidden></ul>
       <button class="btn btn-gray" id="wgClear" type="button" style="display:none;margin-top:6px" onclick="clearWgProfiles()">🧹 Очистить все WG/AWG</button>
       <div style="margin-top: 15px;">
-        <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">WireGuard DNS:</label>
+        <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">Общий DNS override для всех WG/AWG профилей:</label>
         <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
         <div class="hint" style="margin-top: 5px;">Общий DNS для ВСЕХ загруженных WG/AWG-профилей (добавляет <code>dns</code>/<code>remote-dns-resolve</code> в каждый wireguard-outbound). Пусто — DNS удаляется из профилей.</div>
         <div id="wgDnsWarning" class="hint" style="color: #d9534f; display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
       </div>
       <div style="margin-top: 15px;">
-        <label class="label" for="wgDialerInput" style="display: block; margin-bottom: 5px;">Промежуточный proxy / dialer-proxy:</label>
+        <label class="label" for="wgDialerInput" style="display: block; margin-bottom: 5px;">Имя dialer-группы (определение группы):</label>
         <input type="text" id="wgDialerInput" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Имя proxy или группы (пусто = выключено)">
-        <div class="hint" style="margin-top: 5px;">Туннель в туннеле: WireGuard/WARP подключается к своему серверу через указанный proxy или группу. Таргет обязан поддерживать UDP (подходит VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет). Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408). <b>Действует на ВСЕ загруженные WG/AWG-профили</b>, кроме профиля с именем таргета и узлов dialer-группы; исключить отдельный профиль сейчас нельзя.</div>
+        <div class="hint" style="margin-top: 5px;">Определяет dialer-группу: имя + транзитные узлы/подписки ниже. КТО её использует — выбирается в карточке каждого WG/AWG-профиля («Через промежуточный proxy»). Новые профили наследуют это поле как таргет по умолчанию; таргет обязан поддерживать UDP (подходит VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет). Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408). Избегайте GLOBAL/⚡ Fastest — они содержат сам WARP.</div>
         <label class="label" for="wgDialerMembers" style="display: block; margin-bottom: 5px; margin-top: 10px;">Транзитные узлы dialer-группы (по одному в строке, необязательно):</label>
         <textarea id="wgDialerMembers" rows="3" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="VPS-DK&#10;VPS-EE&#10;VPS-SE"></textarea>
         <div class="hint" style="margin-top: 5px;">Если заполнено — создается select-группа (имя из поля выше или WARP-DIALER), и нижний транспорт WARP можно менять без пересборки. Эти узлы сами не получают dialer-proxy (иначе цикл). Избегайте GLOBAL/⚡ Fastest как таргета — они содержат сам WARP.</div>
@@ -609,10 +619,33 @@ function initPingSelector() {
 }
 
 // === WIREGUARD UPLOAD ===
+// Источник истины WG/AWG-профилей: wgProfiles = [{id, filename, bean, mode, target}].
+// mode: 'direct' | 'proxy'; target — имя proxy/группы для dialer-proxy (mode=proxy).
+// wgBeans/wgFiles — производные коллекции (совместимость с существующим кодом/тестами),
+// пересобираются при каждом изменении; сами bean никогда не мутируются — на Build
+// создаётся клон с подставленным wireguard.dialerProxy (runtime-контракт per-profile).
+let wgProfiles = [];
 let wgBeans = [];
 let wgFiles = [];   // исходные имена файлов, параллельно wgBeans (для списка загрузки)
+let wgProfileSeq = 0;
 let wgUploadSeq = 0;
 let wgUploadPending = false;
+
+function syncWgCollections() {
+  wgBeans = wgProfiles.map(p => p.bean);
+  wgFiles = wgProfiles.map(p => p.filename);
+}
+
+// Клон профиля для Build: dialer-proxy подставляется только в клон
+// (per-profile контракт web4core: bean.wireguard.dialerProxy).
+function wgProfileBuildBean(p) {
+  const bean = JSON.parse(JSON.stringify(p.bean));
+  if (p.mode === 'proxy' && p.target.trim()) {
+    bean.wireguard = bean.wireguard || {};
+    bean.wireguard.dialerProxy = p.target.trim();
+  }
+  return bean;
+}
 
 // AWG-патч 1/3: рантайм-парсер понимает только скаляры, а реальные AWG-конфиги
 // пишут диапазоны и словесные булевы: PersistentKeepalive = 25-35 (Premium и
@@ -715,6 +748,15 @@ function wgBeanKey(bean) {
   return seen(copy);
 }
 
+// Текущее определение dialer-группы из глобальных полей (имя/узлы/подписки).
+// Используется при добавлении профилей: новый профиль наследует режим «Через
+// промежуточный proxy», если определение группы уже заполнено.
+function wgGlobalGroupFields() {
+  const members = document.getElementById('wgDialerMembers').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const providers = document.getElementById('wgDialerProviders').value.split('\n').map(s => s.trim()).filter(Boolean);
+  return { members, providers };
+}
+
 function initWgUpload() {
   const fileInput = document.getElementById('wgFile');
   const statusEl = document.getElementById('wgStatus');
@@ -723,6 +765,9 @@ function initWgUpload() {
   fileInput.addEventListener('change', async () => {
     const requestId = ++wgUploadSeq;
     const files = Array.from(fileInput.files || []);
+    // Сброс поля сразу после захвата списка: иначе повторный выбор ТОГО ЖЕ файла
+    // не генерирует change (value не изменился) и re-add после удаления не работает.
+    fileInput.value = '';
     // Отмена picker'а (0 файлов) — осознанный no-op: ранее это молча стирало
     // все загруженные профили. Очистка — только явная кнопка «🧹 Очистить все».
     if (!files.length) return;
@@ -769,8 +814,20 @@ function initWgUpload() {
 
     // APPEND-модель: повторное открытие picker'а добавляет профили к существующим,
     // а не молча заменяет их (прежнее поведение теряло ранее загруженные файлы).
-    wgBeans = wgBeans.concat(fresh);
-    wgFiles = wgFiles.concat(freshNames);
+    // Миграция старого сценария: если dialer-таргет уже задан глобально, новый
+    // профиль по умолчанию наследует «Через промежуточный proxy» с этим таргетом.
+    const globalTarget = document.getElementById('wgDialerInput').value.trim();
+    const hasGroupSrc = globalTarget || wgGlobalGroupFields().members.length > 0 || wgGlobalGroupFields().providers.length > 0;
+    fresh.forEach((bean, i) => {
+      wgProfiles.push({
+        id: ++wgProfileSeq,
+        filename: freshNames[i],
+        bean,
+        mode: hasGroupSrc ? 'proxy' : 'direct',
+        target: globalTarget || (hasGroupSrc ? 'WARP-DIALER' : ''),
+      });
+    });
+    syncWgCollections();
     wgUploadPending = false;
 
     // Перехват нестабильного DNS: поле общее для всех WG-профилей; при добавлении
@@ -814,20 +871,33 @@ function initWgUpload() {
   }
 }
 
-// Список загруженных профилей: filename + тип + имя proxy. Только публичные
+// Карточки загруженных профилей: filename + тип + имя proxy + endpoint + режим
+// подключения (Напрямую / Через промежуточный proxy + таргет). Только публичные
 // атрибуты — ни ключей, ни PSK (DOM собирается через createElement/textContent).
+function wgProfileEndpoint(bean) {
+  const peers = bean?.wireguard?.peers;
+  if (Array.isArray(peers) && peers[0] && peers[0].server) return peers[0].server + ':' + (peers[0].port || '');
+  if (bean?.host) return bean.host + (bean.port ? ':' + bean.port : '');
+  return '';
+}
+
 function renderWgList() {
   const list = document.getElementById('wgList');
   const clearBtn = document.getElementById('wgClear');
   if (!list) return;
   list.textContent = '';
-  wgBeans.forEach((bean, i) => {
+  wgProfiles.forEach((p, i) => {
+    const bean = p.bean;
     const li = document.createElement('li');
+    li.className = 'wg-card';
+
+    const head = document.createElement('div');
+    head.className = 'wg-card-head';
     const mark = document.createElement('span');
     mark.textContent = '✓ ';
     mark.className = 'wg-list-ok';
     const name = document.createElement('span');
-    name.textContent = (wgFiles[i] || bean.name || 'profile') + ' — ' + (bean.name || '?');
+    name.textContent = p.filename || bean.name || 'profile';
     name.className = 'wg-list-name';
     const tag = document.createElement('span');
     const isAwg = !!(bean.wireguard && bean.wireguard['amnezia-wg-option']);
@@ -837,19 +907,91 @@ function renderWgList() {
     del.type = 'button';
     del.className = 'wg-list-del';
     del.textContent = '✕';
-    del.setAttribute('aria-label', 'Удалить ' + (wgFiles[i] || bean.name || 'профиль'));
+    del.setAttribute('aria-label', 'Удалить ' + (p.filename || bean.name || 'профиль'));
     del.addEventListener('click', () => removeWgProfile(i));
-    li.append(mark, name, tag, del);
+    head.append(mark, name, tag, del);
+
+    const info = document.createElement('div');
+    info.className = 'wg-card-info';
+    const ep = wgProfileEndpoint(bean);
+    const bits = [];
+    if (bean.name) bits.push('proxy: ' + bean.name);
+    if (ep) bits.push('endpoint: ' + ep);
+    if (bean.wireguard && bean.wireguard.ip) bits.push('address: ' + bean.wireguard.ip);
+    info.textContent = bits.join(' · ');
+
+    const modeRow = document.createElement('div');
+    modeRow.className = 'wg-card-mode';
+    const modeLabel = document.createElement('label');
+    modeLabel.textContent = 'Подключение:';
+    modeLabel.htmlFor = 'wgMode' + p.id;
+    const modeSel = document.createElement('select');
+    modeSel.id = 'wgMode' + p.id;
+    modeSel.className = 'wg-mode';
+    modeSel.dataset.idx = i;
+    const o1 = document.createElement('option');
+    o1.value = 'direct';
+    o1.textContent = 'Напрямую';
+    const o2 = document.createElement('option');
+    o2.value = 'proxy';
+    o2.textContent = 'Через промежуточный proxy';
+    modeSel.append(o1, o2);
+    modeSel.value = p.mode;
+    modeRow.append(modeLabel, modeSel);
+
+    const targetRow = document.createElement('div');
+    targetRow.className = 'wg-target-row';
+    if (p.mode !== 'proxy') targetRow.style.display = 'none';
+    const targetLabel = document.createElement('label');
+    targetLabel.textContent = 'Proxy / группа:';
+    targetLabel.htmlFor = 'wgTarget' + p.id;
+    const targetInput = document.createElement('input');
+    targetInput.type = 'text';
+    targetInput.id = 'wgTarget' + p.id;
+    targetInput.className = 'wg-target';
+    targetInput.dataset.idx = i;
+    targetInput.value = p.target;
+    targetInput.placeholder = 'например: WARP-DIALER';
+    targetRow.append(targetLabel, targetInput);
+
+    li.append(head, info, modeRow, targetRow);
     list.appendChild(li);
   });
-  list.hidden = wgBeans.length === 0;
-  clearBtn.style.display = wgBeans.length > 0 ? '' : 'none';
+  list.hidden = wgProfiles.length === 0;
+  clearBtn.style.display = wgProfiles.length > 0 ? '' : 'none';
 }
 
+// Делегированный обработчик изменений per-profile режима (select/input карточек):
+// меняет только UI-state профиля и инвалидирует результат сборки.
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (!t.classList) return;
+  const idx = Number(t.dataset && t.dataset.idx);
+  if (!Number.isInteger(idx) || !(idx >= 0 && idx < wgProfiles.length)) return;
+  if (t.classList.contains('wg-mode')) {
+    wgProfiles[idx].mode = t.value === 'proxy' ? 'proxy' : 'direct';
+    if (wgProfiles[idx].mode === 'proxy' && !wgProfiles[idx].target.trim()) {
+      const g = document.getElementById('wgDialerInput');
+      wgProfiles[idx].target = (g && g.value.trim()) || 'WARP-DIALER';
+    }
+    const row = t.closest('.wg-card');
+    const targetRow = row && row.querySelector('.wg-target-row');
+    if (targetRow) targetRow.style.display = wgProfiles[idx].mode === 'proxy' ? '' : 'none';
+    mihomoValidationSeq++;
+    resetCompatSummary();
+    setMihomoValidationState('NOT_BUILT');
+  } else if (t.classList.contains('wg-target')) {
+    wgProfiles[idx].target = t.value;
+    mihomoValidationSeq++;
+    resetCompatSummary();
+    setMihomoValidationState('NOT_BUILT');
+  }
+});
+
 function removeWgProfile(index) {
-  if (!(index >= 0 && index < wgBeans.length)) return;
-  wgBeans = wgBeans.filter((_, i) => i !== index);
-  wgFiles = wgFiles.filter((_, i) => i !== index);
+  if (!(index >= 0 && index < wgProfiles.length)) return;
+  wgProfiles = wgProfiles.filter((_, i) => i !== index);
+  syncWgCollections();
   mihomoValidationSeq++;
   resetCompatSummary();
   setMihomoValidationState('NOT_BUILT');
@@ -857,8 +999,8 @@ function removeWgProfile(index) {
 }
 
 function clearWgProfiles() {
-  wgBeans = [];
-  wgFiles = [];
+  wgProfiles = [];
+  syncWgCollections();
   const dnsInput = document.getElementById('wgCustomDns');
   const dnsWarn = document.getElementById('wgDnsWarning');
   if (dnsInput) dnsInput.value = '';
@@ -1895,8 +2037,10 @@ function buildMihomo() {
     return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
   }
 
-  // dialer-proxy (туннель в туннеле): имя таргета + необязательные транзитные узлы
-  // и/или URL-провайдеры авторской dialer-группы. Пустые поля — byte-parity прежнего output.
+  // dialer-proxy (туннель в туннеле): per-profile модель. Назначение — в карточке
+  // каждого WG/AWG-профиля (mode 'direct'|'proxy' + таргет); глобальные поля ниже
+  // описывают только dialer-ГРУППУ (имя + транзитные узлы + URL-подписки).
+  // GROUP DEFINITION ≠ PROFILE ASSIGNMENT.
   const wgDialer = document.getElementById('wgDialerInput').value.trim();
   const wgDialerMembers = document.getElementById('wgDialerMembers').value.split('\n')
     .map(s => s.trim()).filter(Boolean);
@@ -1905,15 +2049,26 @@ function buildMihomo() {
   if ((wgDialerMembers.length || wgDialerProviders.length) && (wgDialer === 'GLOBAL' || wgDialer === '⚡ Fastest')) {
     return showToast('❌ dialer-группа не может называться GLOBAL или ⚡ Fastest: они содержат сам WARP (цикл)', true);
   }
+  const dialedProfiles = wgProfiles.filter(p => p.mode === 'proxy');
+  const emptyTargets = dialedProfiles.filter(p => !p.target.trim());
+  if (emptyTargets.length) {
+    return showToast('❌ Укажите proxy/группу в карточке профиля: ' + emptyTargets.map(p => p.filename).join(', ') + ' (или переключите «Напрямую»)', true);
+  }
+  const badTargets = dialedProfiles.filter(p => p.target.trim() === 'GLOBAL' || p.target.trim() === '⚡ Fastest');
+  if (badTargets.length) {
+    return showToast('❌ Таргет не может быть GLOBAL или ⚡ Fastest (они содержат сам WARP): ' + badTargets.map(p => p.filename).join(', '), true);
+  }
+  const useDialerGroup = dialedProfiles.length > 0 && (wgDialerMembers.length > 0 || wgDialerProviders.length > 0);
 
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
     const realityModern = parseRealityModernLines();
+    const buildBeans = wgProfiles.map(wgProfileBuildBean);
     const result = api.buildFromRequest({
       core: 'mihomo',
       input: raw,
       ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}),
-      wgBeans: normalizeWgBeans(wgBeans),
+      wgBeans: normalizeWgBeans(buildBeans),
       options: {
         addSocks: addSocks,
         addTun: addTun,
@@ -1929,13 +2084,14 @@ function buildMihomo() {
         perProxyPort: perProxySocks,
         mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined,
         mihomoDomainPolicy: domainPolicy && domainPolicy.length ? domainPolicy : undefined,
-        wgDialerProxy: wgDialer || undefined,
-        wgDialerGroupMembers: wgDialerMembers.length ? wgDialerMembers : undefined,
-        wgDialerProviders: wgDialerProviders.length ? wgDialerProviders : undefined
+        wgDialerProxy: useDialerGroup ? (wgDialer || undefined) : undefined,
+        wgDialerGroupMembers: useDialerGroup ? wgDialerMembers : undefined,
+        wgDialerProviders: useDialerGroup ? wgDialerProviders : undefined,
+        wgDialerGroupOnly: useDialerGroup ? true : undefined
       }
     });
 
-    injectWgDns(result, wgBeans);
+    injectWgDns(result, buildBeans);
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
 
