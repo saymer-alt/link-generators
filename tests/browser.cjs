@@ -491,6 +491,38 @@ const expectedAwg = {
       assert.equal(await page.evaluate(() => document.getElementById('perProxyDisclosureMarker').textContent), '▶', 'marker ▶ cycle ' + cycle);
     }
 
+    // ADVANCED — Расширенные настройки: обе подсекции внутри контейнера;
+    // TUN stack скрыт в закрытом спойлере, значения переживают open/close,
+    // закрытие/раскрытие не меняет результат сборки.
+    await page.evaluate(() => { document.getElementById('perProxyAdvancedDetails').open = false; });
+    assert.equal(await page.locator('#cfgTunStackAdvanced').isVisible(), false, 'закрытый ADVANCED прячет TUN stack');
+    assert.equal(await page.locator('#perProxyAdvancedSummary').innerText().then(s => s.includes('Расширенные настройки')), true, 'заголовок контейнера переименован');
+    assert.equal(await page.evaluate(() => document.querySelector('#perProxyAdvancedDetails .advanced-subsection-title') && document.querySelector('#perProxyAdvancedDetails .advanced-subsection-title').textContent.includes('Расширенный TUN stack')), true, 'подсекция TUN stack внутри details');
+    assert.equal(await page.evaluate(() => Array.from(document.querySelectorAll('#perProxyAdvancedDetails .advanced-subsection-title')).some(el => el.textContent.includes('Отдельный вход на каждый прокси'))), true, 'подсекция Per-Proxy внутри details');
+    await page.locator('#perProxyAdvancedSummary').click();
+    assert.equal(await page.locator('#cfgTunStackAdvanced').isVisible(), true, 'открытый ADVANCED показывает TUN stack');
+    await page.locator('#cfgSubMode').uncheck(); // в CYCLE обычная ссылка — режим подписок не нужен
+    await page.locator('#cfgTunStackAdvanced').check();
+    await page.locator('#cfgTunStackEx').selectOption('system');
+    await page.locator('#cfgPerProxyMaster').check();
+    await page.locator('#cfgPerProxyTun').check();
+    await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#CYCLE');
+    const cycleBefore = await build('adv-cycle-before');
+    await page.locator('#perProxyAdvancedSummary').click(); // закрыть
+    assert.equal(await page.evaluate(() => document.getElementById('perProxyAdvancedDetails').open), false);
+    assert.equal(await checked2('#cfgPerProxyMaster'), true, 'закрытие НЕ сбрасывает master');
+    assert.equal(await checked2('#cfgTunStackAdvanced'), true, 'закрытие НЕ сбрасывает advanced stack');
+    assert.equal(await page.evaluate(() => document.getElementById('cfgTunStackEx').value), 'system', 'закрытие НЕ сбрасывает stack value');
+    await page.locator('#perProxyAdvancedSummary').click(); // открыть снова
+    const cycleAfter = await build('adv-cycle-after');
+    assert.equal(cycleAfter.yaml, cycleBefore.yaml, 'YAML не меняется от цикла open/close при тех же состояниях');
+    // восстановить состояния для последующих фаз (Sub Mode и input этой фазы)
+    await page.locator('#cfgPerProxyTun').uncheck();
+    await page.locator('#cfgPerProxyMaster').uncheck();
+    await page.locator('#cfgTunStackAdvanced').uncheck();
+    await page.locator('#cfgSubMode').check();
+    await page.locator('#mihomoInput').fill(INDEP.input);
+
     // router: ручное изменение router-owned параметра перед уходом
     await page.locator('#cfgTunMips').uncheck();
 

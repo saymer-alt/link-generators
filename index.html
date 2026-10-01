@@ -61,6 +61,10 @@
   .advanced-master input[type="checkbox"]{width:18px;height:18px;accent-color:var(--warn)}
   .advanced-panel .checkbox-grid{margin-top:10px;padding-top:10px;border-top:1px solid rgba(210,153,34,.22)}
   .advanced-panel .hint{color:var(--muted)}
+  .advanced-subsection{margin-top:10px}
+  .advanced-subsection-second{margin-top:14px;padding-top:12px;border-top:1px solid rgba(210,153,34,.22)}
+  .advanced-subsection-title{color:#e3b341;font-weight:600;font-size:.85rem;margin-bottom:4px}
+  .advanced-subsection .hint{margin-top:6px}
   button:disabled{opacity:.45;cursor:not-allowed}
   .validation-box{margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;font-size:.85rem;color:var(--muted)}
   .validation-box.state-validating{color:var(--accent)}
@@ -286,31 +290,37 @@
         <label title="TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor."><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
       </div>
       <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
-      <div class="advanced-stack-control">
-        <label><input type="checkbox" id="cfgTunStackAdvanced"> ⚙ Расширенный TUN stack (system / mixed)</label>
-        <select id="cfgTunStackEx" style="display:none">
-          <option value="system">system</option>
-          <option value="mixed">mixed</option>
-        </select>
-        <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
-        <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
-      </div>
       <div id="perProxyAdvancedPanel" class="advanced-panel">
         <details id="perProxyAdvancedDetails">
-          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Отдельный вход на каждый прокси</span></summary>
-          <div class="advanced-master">
-            <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
+          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Расширенные настройки</span></summary>
+          <div class="advanced-subsection">
+            <div class="advanced-subsection-title">⚙ Расширенный TUN stack</div>
+            <div class="advanced-stack-control">
+              <label><input type="checkbox" id="cfgTunStackAdvanced"> Включить расширенный TUN stack (system / mixed)</label>
+              <select id="cfgTunStackEx" style="display:none">
+                <option value="system">system</option>
+                <option value="mixed">mixed</option>
+              </select>
+              <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
+              <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
+            </div>
+            <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
           </div>
-          <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен. Раскрытие секции само по себе ничего не включает и не сбрасывает.</div>
-          <div class="checkbox-grid">
-            <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
-            <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
+          <div class="advanced-subsection advanced-subsection-second">
+            <div class="advanced-subsection-title">🔀 Отдельный вход на каждый прокси</div>
+            <div class="advanced-master">
+              <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
+            </div>
+            <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен. Раскрытие секции само по себе ничего не включает и не сбрасывает.</div>
+            <div class="checkbox-grid">
+              <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
+              <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
+            </div>
+            <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
           </div>
         </details>
       </div>
-      <div class="hint">Обычный TUN и MIPS включены по умолчанию. Режимы отдельного входа на каждый прокси — за крышкой расширенного режима; system/mixed — за крышкой расширенного TUN stack.</div>
-      <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
-      <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
+      <div class="hint">Обычный TUN и MIPS включены по умолчанию и настроены выше. Экспериментальный TUN stack (system / mixed) и режимы отдельного входа на каждый прокси собраны внутри ADVANCED-секции.</div>
 
       <label style="margin-top:16px" title="URL, по которому Mihomo проверяет доступность узлов (url-test и health-check провайдеров). Обычно достаточно Google generate_204.">🏓 Ping server (health-check)</label>
       <select id="pingSelect"></select>
