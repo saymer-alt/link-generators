@@ -131,6 +131,8 @@ const expectedAwg = {
     for (const perTun of [true, false]) {
       await page.locator('#cfgPerProxyTun').setChecked(perTun);
       await page.locator('#cfgProfile').selectOption('vps-gateway');
+      // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+      await page.locator('#cfgSubMode').setChecked(false);
       const vps = await build(perTun ? 'vps-per-proxy-mips' : 'vps-mips');
       assert.equal(vps.doc.tun.stack, 'mips');
       assert.equal(vps.doc.tun['auto-route'], false);
@@ -138,11 +140,23 @@ const expectedAwg = {
       assert.equal(vps.doc.tun['inet4-address'], undefined);
       assert.equal(vps.doc['find-process-mode'], 'off');
       assert.equal(vps.doc.profile['store-selected'], false);
-      if (perTun) assert.ok(vps.doc.listeners.every(l => l.stack === 'mips'));
+      // v1.6.2 контракт: Per-Proxy — router-only. В VPS-профиле Per-Proxy
+      // конфигурация не генерируется, даже если master был включён в router.
+      assert.equal(vps.doc.listeners, undefined, 'vps-gateway без per-proxy listeners');
       await page.locator('#vpsDnsEnabled').uncheck();
       assert.equal((await build()).doc.dns, undefined);
       await page.locator('#vpsDnsEnabled').check();
       await page.locator('#cfgProfile').selectOption('router');
+      // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+      await page.locator('#cfgSubMode').setChecked(false);
+      // router-возврат: ручной Per-Proxy восстановлен, listeners на месте
+      const routerPer = await build(perTun ? 'router-per-proxy-mips' : 'router-mips');
+      if (perTun) {
+        assert.ok(Array.isArray(routerPer.doc.listeners) && routerPer.doc.listeners.length === 2, 'router: per-proxy listeners восстановлены после VPS');
+        assert.ok(routerPer.doc.listeners.every(l => l.type === 'tun' && l.stack === 'mips'));
+      } else {
+        assert.equal(routerPer.doc.listeners, undefined, 'router: perTun off — listeners нет');
+      }
     }
     await page.locator('#cfgTunMips').uncheck();
     assert.equal((await build()).yaml, gvisor.yaml); // uncheck -> тот же gvisor-вывод
@@ -155,11 +169,15 @@ const expectedAwg = {
     for (const stack of ['system', 'mixed']) {
       await page.locator('#cfgTunStackEx').selectOption(stack);
       await page.locator('#cfgProfile').selectOption('vps-gateway');
+      // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+      await page.locator('#cfgSubMode').setChecked(false);
       const vpsExperimental = await build('vps-' + stack);
       assert.equal(vpsExperimental.doc.tun.stack, stack);
       assert.equal(vpsExperimental.doc.tun['inet4-address'], undefined);
       assert.equal(vpsExperimental.doc.tun['auto-route'], false);
       await page.locator('#cfgProfile').selectOption('router');
+      // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+      await page.locator('#cfgSubMode').setChecked(false);
     }
     await page.locator('#cfgTunStackAdvanced').uncheck();
     await page.locator('#cfgTunMips').uncheck();
@@ -262,6 +280,8 @@ const expectedAwg = {
     assert.match(inlineComments.text, /PersistentKeepalive = 25 # use lower bound/);
     await page.locator('#cfgTunMips').check();
     await page.locator('#cfgProfile').selectOption('vps-gateway');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     const awgVps = await build('awg31-vps-mips');
     assert.deepEqual(awgVps.doc.proxies[0]['amnezia-wg-option'], proxy['amnezia-wg-option']);
     assert.equal(awgVps.doc.tun.stack, 'mips');
@@ -295,6 +315,8 @@ const expectedAwg = {
     }
     await page.locator('#wgClear').click(); // явная очистка профилей (отмена picker'а теперь no-op)
     await page.locator('#cfgProfile').selectOption('router');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     await page.locator('#mihomoInput').fill('mieru://test:test@192.0.2.4:20000?transport=TPC#TEST');
     await page.locator('button[onclick="buildMihomo()"]').click();
     await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'INVALID');
@@ -528,6 +550,8 @@ const expectedAwg = {
 
     // vps-local: контракт + DOM tamper
     await page.locator('#cfgProfile').selectOption('vps-local');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     assert.equal(await checked2('#cfgTun'), false, 'vps-local: TUN off');
     assert.equal(await disabled2('#cfgTun'), true, 'vps-local: TUN disabled');
     assert.equal(await checked2('#cfgTunMips'), false);
@@ -552,6 +576,8 @@ const expectedAwg = {
 
     // vps-gateway: TUN ON locked, panel, auto-route false
     await page.locator('#cfgProfile').selectOption('vps-gateway');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     assert.equal(await checked2('#cfgTun'), true, 'gateway: TUN on');
     assert.equal(await disabled2('#cfgTun'), true, 'gateway: TUN locked');
     assert.equal(await vis2('#vpsPanel'), true, 'gateway panel виден');
@@ -563,6 +589,8 @@ const expectedAwg = {
 
     // Round trip в router: независимые данные живы
     await page.locator('#cfgProfile').selectOption('router');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     for (const [id, want] of [
       ['#mihomoInput', INDEP.input], ['#excludeFilterInput', INDEP.exclude],
       ['#deviceModelInput', INDEP.device], ['#realityModernInput', INDEP.reality],
@@ -575,52 +603,75 @@ const expectedAwg = {
     await page.locator('#wgDialerMembers').fill(INDEP.members);
     await page.locator('#wgDialerProviders').fill(INDEP.providers);
     await page.locator('#cfgProfile').selectOption('vps-local');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     await page.locator('#cfgProfile').selectOption('router');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     for (const [id, want] of [['#wgDialerInput', INDEP.dialer], ['#wgDialerMembers', INDEP.members], ['#wgDialerProviders', INDEP.providers]])
       assert.equal(await page.locator(id).inputValue(), want, 'dialer поле пережило переключение: ' + id);
 
-    // БС × профили: ON/OFF без залипания
+    // БС × профили (v1.6.2 contract): БС — router-only; профиль НИКОГДА не
+    // подменяется; в VPS чекбокс БС и Per-Proxy disabled+unchecked.
     for (const profileValue of ['router', 'vps-local', 'vps-gateway']) {
       await page.locator('#cfgProfile').selectOption(profileValue);
+      // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+      await page.locator('#cfgSubMode').setChecked(false);
       const bs = page.locator('#cfgAutoWhitelist');
-      await bs.check();
-      assert.equal(await page.locator('#cfgProfile').inputValue(), profileValue, 'БС: выбранный профиль сохранён (temporary router)');
-      assert.equal(await disabled2('#cfgProfile'), true, 'БС: выбор заблокирован');
-      assert.equal(await vis2('#vpsPanel'), false, 'БС: gateway panel скрыт');
-      assert.equal(await checked2('#cfgPerProxyTun'), false, 'БС: Per-Proxy TUN off');
-      await bs.uncheck();
-      assert.equal(await page.locator('#cfgProfile').inputValue(), profileValue, 'БС off: профиль восстановлен');
-      assert.equal(await disabled2('#cfgProfile'), false, 'БС off: разблокирован');
+      if (profileValue === 'router') {
+        assert.equal(await disabled2('#cfgAutoWhitelist'), false, 'router: БС доступен');
+        await bs.check();
+        assert.equal(await page.locator('#cfgProfile').inputValue(), 'router', 'БС: профиль не подменяется (temporary router удалён)');
+        assert.equal(await disabled2('#cfgProfile'), false, 'БС: выбор профиля остаётся доступным');
+        assert.equal(await vis2('#vpsPanel'), false, 'БС: gateway panel скрыт в router');
+        assert.equal(await disabled2('#cfgPerProxyMaster'), true, 'БС: Per-Proxy master недоступен');
+        await bs.uncheck();
+        assert.equal(await disabled2('#cfgAutoWhitelist'), false, 'БС off: снова доступен');
+      } else {
+        assert.equal(await disabled2('#cfgAutoWhitelist'), true, profileValue + ': БС недоступен');
+        assert.equal(await checked2('#cfgAutoWhitelist'), false, profileValue + ': БС выключен');
+        assert.equal(await disabled2('#cfgPerProxyMaster'), true, profileValue + ': Per-Proxy master недоступен');
+        assert.equal(await checked2('#cfgPerProxyMaster'), false, profileValue + ': Per-Proxy выключен');
+      }
+      assert.equal(await page.locator('#cfgProfile').inputValue(), profileValue, 'выбранный профиль сохранён: ' + profileValue);
     }
+    await page.locator('#cfgProfile').selectOption('router');
+    await page.locator('#cfgSubMode').setChecked(false);
     console.log('Profiles: router/vps-local/vps-gateway contract, round trip, spoiler, БС — passed');
 
-    // === Router snapshot через БС (vps-local) ===
+    // === Router snapshot через vps-local (v1.6.2: без БС — он router-only) ===
     await page.locator('#cfgProfile').selectOption('router');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     await page.locator('#cfgTun').check();
     await page.locator('#cfgTunMips').uncheck();
     await page.locator('#cfgLan').uncheck();
     await page.locator('#cfgProfile').selectOption('vps-local');
-    await page.locator('#cfgAutoWhitelist').check();
-    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-local', 'БС: выбранное сохранено (vps-local)');
-    await page.locator('#cfgAutoWhitelist').uncheck();
-    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-local', 'БС off: профиль восстановлен');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
+    assert.equal(await disabled2('#cfgAutoWhitelist'), true, 'vps-local: БС недоступен (router-only)');
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-local', 'выбранный профиль сохранён');
     await page.locator('#cfgProfile').selectOption('router');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     assert.equal(await checked2('#cfgTun'), true, 'snapshot: TUN=ON восстановлен');
     assert.equal(await checked2('#cfgTunMips'), false, 'snapshot: MIPS=OFF восстановлен');
     assert.equal(await checked2('#cfgLan'), false, 'snapshot: LAN=OFF восстановлен');
-    console.log('Router snapshot через vps-local + БС — passed');
+    console.log('Router snapshot через vps-local — passed');
 
-    // === Router snapshot через БС (vps-gateway) ===
+    // === Router snapshot через vps-gateway (v1.6.2: без БС — он router-only) ===
     await page.locator('#cfgProfile').selectOption('vps-gateway');
-    await page.locator('#cfgAutoWhitelist').check();
-    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway', 'БС: выбранное сохранено (vps-gateway)');
-    await page.locator('#cfgAutoWhitelist').uncheck();
-    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway', 'БС off: профиль восстановлен');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
+    assert.equal(await disabled2('#cfgAutoWhitelist'), true, 'vps-gateway: БС недоступен (router-only)');
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway', 'выбранный профиль сохранён');
     await page.locator('#cfgProfile').selectOption('router');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     assert.equal(await checked2('#cfgTun'), true, 'snapshot через gateway: TUN=ON восстановлен');
     assert.equal(await checked2('#cfgTunMips'), false, 'snapshot через gateway: MIPS=OFF');
     assert.equal(await checked2('#cfgLan'), false, 'snapshot через gateway: LAN=OFF');
-    console.log('Router snapshot через vps-gateway + БС — passed');
+    console.log('Router snapshot через vps-gateway — passed');
 
     // === 6 прямых profile transitions (path-independent UI-state) ===
     const PROFILE_STATE = {
@@ -640,7 +691,11 @@ const expectedAwg = {
     ];
     for (const [from, to] of transitions) {
       await page.locator('#cfgProfile').selectOption(from);
+      // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+      await page.locator('#cfgSubMode').setChecked(false);
       await page.locator('#cfgProfile').selectOption(to);
+      // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+      await page.locator('#cfgSubMode').setChecked(false);
       const st = PROFILE_STATE[to];
       if (st.tun !== null) assert.equal(await checked2('#cfgTun'), st.tun, `${from}→${to}: TUN checked`);
       assert.equal(await disabled2('#cfgTun'), st.tunDisabled, `${from}→${to}: TUN disabled`);
@@ -654,6 +709,8 @@ const expectedAwg = {
 
     // === vps-gateway DOM tamper ===
     await page.locator('#cfgProfile').selectOption('vps-gateway');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     await page.evaluate(() => {
       const tun = document.getElementById('cfgTun');
       tun.checked = false; tun.disabled = false;
@@ -672,7 +729,11 @@ const expectedAwg = {
     await page.locator('.policy-card .policy-domains').first().fill('keep.example\nDOMAIN-SUFFIX,keep2.example');
     await page.locator('#cfgPolicyRouting').uncheck();
     await page.locator('#cfgProfile').selectOption('vps-local');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     await page.locator('#cfgProfile').selectOption('router');
+    // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно
+    await page.locator('#cfgSubMode').setChecked(false);
     await page.locator('#cfgPolicyRouting').check();
     assert.equal(await page.locator('.policy-card .policy-name').first().inputValue(), 'KEEP-DPR', 'DPR: имя политики пережило переключение');
     assert.match(await page.locator('.policy-card .policy-domains').first().inputValue(), /keep\.example/, 'DPR: домены пережили переключение');

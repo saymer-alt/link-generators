@@ -1,0 +1,263 @@
+name: Generator CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, stable]
+  push:
+    branches: [main, stable]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: generator-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-and-node:
+    name: deterministic / static + node
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install transient node test dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          deps="$RUNNER_TEMP/generator-ci-deps"
+          mkdir -p "$deps"
+          npm install --prefix "$deps" --no-save --no-package-lock js-yaml@4.1.0
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+          echo "JS_YAML_PATH=$deps/node_modules/js-yaml/dist/js-yaml.min.js" >> "$GITHUB_ENV"
+
+      - name: Repository invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .nojekyll
+          test ! -e package.json
+          test ! -e package-lock.json
+          if grep -RInE '^(<<<<<<<|=======|>>>>>>>)( |$)' index.html quick-start.html web4core.runtime.js tests docs tools; then
+            echo 'merge-conflict marker found'
+            exit 1
+          fi
+
+      - name: JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web4core.runtime.js
+          for f in tests/*.cjs; do node --check "$f"; done
+          node --check tools/warp-dialer-fieldtest/fieldtest.mjs
+          node --check tools/warp-dialer-fieldtest/lib.mjs
+          node --check tools/warp-dialer-fieldtest/check-secrets.mjs
+
+      - name: Every deterministic test is wired into CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for f in tests/*.cjs; do
+            case "$f" in
+              *.manual.cjs) continue ;;
+            esac
+            if ! grep -Fq "$f" .github/workflows/generator-ci.yml; then
+              echo "deterministic test is not wired into Generator CI: $f"
+              missing=1
+            fi
+          done
+          test "$missing" -eq 0
+
+      - name: HTML and public-link contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          class Audit(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.ids = []
+                  self.hrefs = []
+              def handle_starttag(self, tag, attrs):
+                  d = dict(attrs)
+                  if 'id' in d:
+                      self.ids.append(d['id'])
+                  if tag == 'a' and d.get('href'):
+                      self.hrefs.append(d['href'])
+
+          for name in ('index.html', 'quick-start.html'):
+              p = Path(name)
+              assert p.is_file(), f'missing {name}'
+              a = Audit()
+              a.feed(p.read_text(encoding='utf-8'))
+              dup = sorted({x for x in a.ids if a.ids.count(x) > 1})
+              assert not dup, f'{name}: duplicate ids: {dup}'
+              bad = []
+              for href in a.hrefs:
+                  parsed = urlparse(href)
+                  if parsed.scheme in ('http', 'https'):
+                      continue
+                  path = parsed.path.lower()
+                  if path.endswith('.md'):
+                      bad.append(href)
+              assert not bad, f'{name}: user-facing relative raw .md links: {bad}'
+          print('HTML/public-link contract: PASS')
+          PY
+
+      - name: Consumer runtime regression
+        run: node tests/runtime.cjs web4core.runtime.js
+
+      - name: Domain Policy Routing regression
+        run: node tests/policy-routing.cjs
+
+      - name: Fieldtest harness offline unit tests
+        run: node --test tools/warp-dialer-fieldtest/fieldtest.test.mjs
+
+      - name: Fieldtest harness secret scan
+        run: node tools/warp-dialer-fieldtest/check-secrets.mjs
+
+      - name: CI must never invoke live field-test modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -rnE 'fieldtest\.mjs (sweep|switchtest|mtusweep)' .github/workflows/; then
+            echo 'workflow invokes a live/mutating field-test mode'
+            exit 1
+          fi
+
+  browser:
+    name: deterministic / browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install transient browser test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          deps="$RUNNER_TEMP/generator-ci-deps"
+          mkdir -p "$deps"
+          npm install --prefix "$deps" --no-save --no-package-lock playwright@1.55.0 js-yaml@4.1.0
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+          echo "JS_YAML_PATH=$deps/node_modules/js-yaml/dist/js-yaml.min.js" >> "$GITHUB_ENV"
+          echo "BROWSER_CHANNEL=chromium" >> "$GITHUB_ENV"
+          "$deps/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Main browser regression
+        run: node tests/browser.cjs
+
+      - name: Help UX regression
+        run: node tests/help-ux-browser.cjs
+
+      - name: MASQUE/DPI deterministic regression
+        run: node tests/masque-dpi-regression.cjs
+
+      - name: Domain Policy Routing browser regression
+        run: node tests/policy-routing-browser.cjs
+
+      - name: VPS domain-detection browser regression
+        run: node tests/vps-detection-browser.cjs
+
+      - name: WG/AWG profile manager browser regression
+        run: node tests/wg-profiles-browser.cjs
+
+      - name: MagiTrickle import regression
+        run: node tests/magitrickle-import.cjs
+
+      - name: Deployment profile matrix regression
+        run: node tests/profile-matrix.cjs
+
+      - name: WG dialer selector regression
+        run: node tests/wg-dialer-selector.cjs
+
+      - name: Auto-Whitelist browser regression
+        run: node tests/whitelist.cjs
+
+  mihomo-compat:
+    name: mihomo compat / ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: 1.19.31
+            sha256: 04cf9f09671704f839ddbee2e93069dc831a4123a75281e725d1d96ab9ac1afc
+          - version: 1.19.32
+            sha256: ba3ce607747a07f948fc35780e108a4a7c7f552a38b9bd4d115f313ebcb89c20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install transient test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          deps="$RUNNER_TEMP/generator-ci-deps"
+          mkdir -p "$deps"
+          npm install --prefix "$deps" --no-save --no-package-lock playwright@1.55.0 js-yaml@4.1.0
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+          echo "JS_YAML_PATH=$deps/node_modules/js-yaml/dist/js-yaml.min.js" >> "$GITHUB_ENV"
+          echo "BROWSER_CHANNEL=chromium" >> "$GITHUB_ENV"
+          "$deps/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Download pinned Mihomo
+        shell: bash
+        env:
+          MIHOMO_VERSION: ${{ matrix.version }}
+          MIHOMO_SHA256: ${{ matrix.sha256 }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/mihomo.gz"
+          binary="$RUNNER_TEMP/mihomo"
+          url="https://github.com/MetaCubeX/mihomo/releases/download/v${MIHOMO_VERSION}/mihomo-linux-amd64-compatible-v${MIHOMO_VERSION}.gz"
+          curl -fL --retry 3 --retry-delay 2 "$url" -o "$archive"
+          echo "$MIHOMO_SHA256  $archive" | sha256sum -c -
+          gzip -dc "$archive" > "$binary"
+          chmod +x "$binary"
+          "$binary" -v
+          echo "MIHOMO_BIN=$binary" >> "$GITHUB_ENV"
+          echo "TEST_OUTPUT_DIR=$RUNNER_TEMP/mihomo-output-${MIHOMO_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Auto-Whitelist against real Mihomo core
+        run: node tests/whitelist.cjs
+
+      - name: Deterministic failover integration
+        run: node tests/mihomo-failover.cjs
+
+      - name: Deterministic AWL priority integration
+        run: node tests/mihomo-awl-priority.cjs
+
+      - name: Explicit manual/live exclusion guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f tests/mihomo-awl-soak.manual.cjs
+          test -f tests/mihomo-reality-handshake.manual.cjs
+          if grep -nE 'mihomo-(awl-soak|reality-handshake)\.manual\.cjs' .github/workflows/generator-ci.yml | grep -v 'test -f'; then
+            echo 'manual/live test was wired into CI'
+            exit 1
+          fi
