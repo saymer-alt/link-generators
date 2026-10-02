@@ -588,3 +588,19 @@ consumer runtime пересобран из форка (provenance в комми�
 hover 11.25:1. Семантические green/yellow/red не менялись; разрозненные hex
 (#e3b341/#b8860b/#d9534f/#a5d6ff) переведены на переменные. Сгенерированный YAML
 не затронут (CSS-only). Полная батарея зелёная; browser.cjs 9/9 прогонов подряд.
+
+
+## Integration + XP Professional redesign — 2026-10-02
+
+Интеграция ночной цепочки (#82 docs/help → #84 WG manager/per-profile dialer/DPR+AWL fix → #86 contrast, #83 superseded #84, #85 внутри #86) в `integration/v1.6-xp-ui`; pre-theme baseline `1fe6c5d`.
+
+- Интеграционная батарея (11 suites) — зелёная до редизайна.
+- **Theme-only parity gate: 13/13 сценариев byte-identical** между 1fe6c5d и XP-деревом
+  (router, router+DPR, router+AWL, vps-local, vps-gateway ± DNS, WG single/multi direct,
+  WG per-profile dialer, WG/AWG mixed, Per-Proxy, advanced system, advanced mixed).
+- Батарея на XP-дереве: runtime 63/63, whitelist 10, masque 7, policy-routing 33+14,
+  browser 47+, policy-routing-browser 14, vps-detection 54/54, help-ux 10, wg-profiles 15,
+  failover 3/3, AWL priority PASS.
+- `mihomo -t`: 6/6 (2 direct / dialer-группа / 3 mixed) на **1.19.31** и **1.19.32-compatible**.
+- Owner acceptance bundle: 12 скриншотов (builder/warp/profiles/WG manager/ADVANCED ±/DPR/
+  validation ±/quick-start/mobile 390 main + WG cards).
