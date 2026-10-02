@@ -195,7 +195,8 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   ok('subscription target: main input → dropdown → generated use: group без повторного URL');
 
   // 9b. Legacy/ADVANCED provider-backed group остаётся совместимым.
-  await page.locator('.wg-mode').first().selectOption('direct');
+  // Группа существует только когда хотя бы один WG реально использует dialer.
+  await page.locator('.wg-mode').first().selectOption('proxy');
   await page.evaluate(() => {
     document.getElementById('wgDialerProviders').value = 'https://subs.example.invalid/token';
     document.getElementById('wgDialerProviders').dispatchEvent(new Event('change', { bubbles: true }));
