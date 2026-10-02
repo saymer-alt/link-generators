@@ -1,0 +1,39 @@
+name: Fix v1.6.2 help assertion
+
+on:
+  push:
+    branches: [fix/v162-production-ux]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v162-production-ux
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Update Help UX assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tests/help-ux-browser.cjs')
+          s = p.read_text(encoding='utf-8')
+          old = "    assert.match(targetPop, /существуют в текущей конфигурации/, 'подсказка таргета: только существующие цели');"
+          new = "    assert.match(targetPop, /Доступны существующие proxy, другие WG\\/AWG и включённые URL-подписки/, 'подсказка таргета перечисляет реальные цели и URL-подписки');\n    assert.match(targetPop, /браузер не скачивает/, 'подсказка таргета объясняет локальный provider-backed путь без fetch подписки');"
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one old assertion, got {s.count(old)}')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+          rm .github/workflows/fix-help-assert.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/help-ux-browser.cjs .github/workflows/fix-help-assert.yml
+          git commit -m 'test: align WG target help assertion with subscription UX'
+          git push origin HEAD:fix/v162-production-ux
