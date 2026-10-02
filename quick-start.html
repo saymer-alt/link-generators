@@ -13,8 +13,8 @@
     --green:#0a7a0a; --red:#a40000; --warn:#8a6d00; --info:#003399; --tooltip:#ffffe1; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:linear-gradient(165deg,var(--desktop1) 0%,#4a72c4 45%,var(--desktop2) 100%) fixed;color:var(--text);font-family:Tahoma,Verdana,Arial,sans-serif;font-size:13px;line-height:1.55;padding:18px}
-  .wrap{max-width:1160px;margin:0 auto;background:var(--face);border:1px solid #0831d9;border-top:none;border-radius:0 0 4px 4px;box-shadow:3px 4px 14px rgba(0,0,30,.45);padding:0 24px 24px}
-  a{color:var(--link);text-decoration:none}
+  .wrap{width:min(1520px,calc(100vw - 36px));margin-inline:auto;background:var(--face);border:1px solid #0831d9;border-top:none;border-radius:0 0 4px 4px;box-shadow:3px 4px 14px rgba(0,0,30,.45);padding:0 24px 24px}
+  a{color:var(--link);text-decoration:none;overflow-wrap:anywhere}
   a:hover{color:var(--link-hover);text-decoration:underline}
   a:visited{color:var(--link)}
   .titlebar{margin:0 -24px;padding:9px 14px;font-size:1.05rem;color:#fff;font-weight:bold;border-bottom:2px solid var(--luna-deep);
@@ -31,23 +31,23 @@
   h3{font-size:.95rem;margin:0 0 8px;color:var(--info)}
   p,li{font-size:.9rem;color:var(--text)}
   p{margin:6px 0}
-  .lead{margin:8px 0 4px}
-  .section-intro{margin:0 0 12px}
+  .lead{margin:8px 0 4px;max-width:105ch}
+  .section-intro{margin:0 0 12px;max-width:105ch}
   ul,ol{margin:6px 0 4px 20px}
   li{margin:5px 0;padding-left:2px}
-  .muted{color:var(--muted);font-size:.85rem}
+  .muted{color:var(--muted);font-size:.85rem;max-width:105ch}
   .warn{color:var(--warn);font-weight:bold}
-  code{background:var(--field);border:1px solid var(--field-border);border-radius:0;padding:1px 5px;font-size:.85em;word-break:break-all;overflow-wrap:anywhere}
+  code{background:var(--field);border:1px solid var(--field-border);border-radius:0;padding:1px 5px;font-size:.85em;word-break:normal;overflow-wrap:anywhere;white-space:normal}
   table{border-collapse:collapse;width:100%;margin:12px 0 4px;font-size:.88rem;background:var(--field)}
   th,td{border:1px solid var(--field-border);padding:7px 10px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
   th{background:var(--face-dark);color:var(--text);font-weight:bold}
   .what-col{width:34%}
   .action-col{width:66%}
   /* Лёгкие карточки: тонкая XP-рамка, без оконных titlebar */
-  .profile-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:14px 0 4px}
-  .scenario-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0 4px}
+  .profile-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:14px 0 4px}
+  .scenario-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:14px 0 4px}
   .profile-card,.scenario-card{background:rgba(255,255,255,.55);border:1px solid var(--border);border-radius:0;padding:12px 14px;box-shadow:inset 1px 1px 0 #fff;min-width:0}
-  .profile-card h3,.scenario-card h3{margin:0 0 8px}
+  .profile-card h3,.scenario-card h3{margin:0 0 8px;text-wrap:balance;overflow-wrap:break-word}
   .profile-card ul,.scenario-card ol{margin:4px 0 2px 18px}
   .scenario-card .warn{display:inline-block;margin-top:6px}
   .steps li{margin:7px 0}
@@ -55,14 +55,17 @@
   .faq-list{margin:12px 0 4px}
   .faq-item{padding:12px 2px;border-bottom:1px solid var(--border)}
   .faq-item:last-child{border-bottom:none}
-  .faq-item h3{margin:0 0 6px}
+  .faq-item h3{margin:0 0 6px;text-wrap:balance}
   .faq-item p{margin:0}
   /* Навигационный блок подробной документации */
   .docs-nav{background:rgba(255,255,255,.55);border:1px solid var(--border);border-radius:0;padding:12px 16px;box-shadow:inset 1px 1px 0 #fff}
   .docs-nav ul{margin:6px 0 0 20px}
-  .footer-note{margin:20px 0 4px}
-  @media (max-width:1023px){
-    .profile-grid,.scenario-grid{grid-template-columns:minmax(0,1fr)}
+  .footer-note{margin:20px 0 4px;max-width:105ch}
+  @media (max-width:1199px){
+    .profile-grid{grid-template-columns:minmax(0,1fr)}
+  }
+  @media (max-width:899px){
+    .scenario-grid{grid-template-columns:minmax(0,1fr)}
   }
   @media (max-width:640px){
     body{padding:6px}
