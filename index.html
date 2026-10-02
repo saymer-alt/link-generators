@@ -2903,7 +2903,7 @@ function updatePolicyRoutingVisibility() {
 }
 
 // === MIHOMO BUILDER (via web4core) ===
-async function buildMihomo() {
+async async function buildMihomo() {
   if (wgUploadPending) {
     mihomoValidationSeq++;
     resetCompatSummary();
@@ -2915,6 +2915,12 @@ async function buildMihomo() {
   
   const api = globalThis.web4core;
   if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
+  const subMode = document.getElementById('cfgSubMode').checked;
+  const excludeFilterRaw = document.getElementById('excludeFilterInput').value.trim();
+  const filterCompiled = compileSubscriptionExcludeFilter(excludeFilterRaw);
+  if (!subMode && filterCompiled.error) {
+    return showToast('❌ Exclude Filter: некорректное регулярное выражение для статического разворачивания: ' + filterCompiled.error, true);
+  }
   const subMode = document.getElementById('cfgSubMode').checked;
   const excludeFilterRaw = document.getElementById('excludeFilterInput').value.trim();
   const filterCompiled = compileSubscriptionExcludeFilter(excludeFilterRaw);
@@ -3040,9 +3046,9 @@ async function buildMihomo() {
         addTun: addTun,
         webUI: webUiEnabled,
         urlTest: urlTest,
-        mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
-        excludeFilter: document.getElementById('excludeFilterInput').value,
-        deviceModel: document.getElementById('deviceModelInput').value,
+        mihomoSubscriptionMode: subMode,
+        excludeFilter: subMode ? excludeFilterRaw : undefined,
+        deviceModel: subMode ? document.getElementById('deviceModelInput').value : undefined,
         webUiDashboard: webUiEnabled ? webUiChoice : undefined,
         webUiCustomUrl: webUiEnabled && webUiChoice === 'custom' ? webUiCustomUrl : undefined,
         mihomoPerProxyTun: perProxyTun,
