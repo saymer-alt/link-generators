@@ -247,13 +247,22 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
       buildMihomo();
       while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
       const doc = jsyaml.load(document.getElementById('mihomoOutput').value);
-      return Object.values(doc['proxy-providers'] || {}).some(p => 'exclude-filter' in p);
+      return { state: MIHOMO_VALIDATION_STATE.state, toast: window.__lastToast,
+        vals: Object.values(doc['proxy-providers'] || {}).map(p => p['exclude-filter']),
+        providers: Object.keys(doc['proxy-providers'] || {}),
+        input: document.getElementById('mihomoInput').value,
+        exRaw: document.getElementById('excludeFilterInput').value };
     });
-    assert.equal(exEmpty, false);
+    assert.equal(exEmpty.state, 'VALID', 'exEmpty build: ' + exEmpty.toast);
+    assert.deepEqual(exEmpty.vals, [undefined, undefined], 'exEmpty: без exclude-filter ' + JSON.stringify(exEmpty));
     await page.locator('#cfgSubMode').uncheck();
-    assert.equal(await page.locator('#excludeFilterRow').isVisible(), false);
+    // v1.6.2+subscription: Exclude Filter виден всегда (OFF-режим применяет его
+    // браузером до сборки); Device Model — только в режиме подписок.
+    assert.equal(await page.locator('#excludeFilterRow').isVisible(), true, 'exclude filter виден и в OFF-режиме');
+    assert.equal(await page.locator('#deviceModelRow').isVisible(), false, 'device model скрыт в OFF-режиме');
     await page.locator('#cfgSubMode').check();
     assert.equal(await page.locator('#excludeFilterRow').isVisible(), true);
+    assert.equal(await page.locator('#deviceModelRow').isVisible(), true, 'device model виден в ON-режиме');
     // Selective modern REALITY: host/host:port/IPv6, invalid пропускается,
     // дубликаты схлопываются, legacy-узлы не тронуты, providers получают
     // override-expr. Пустое поле — legacy (byte-parity через 266 baseline).
@@ -380,10 +389,11 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.equal(tunClamp.mixed, 7890);
     assert.doesNotMatch(tunClamp.yaml, /stack:/); // MIPS клампнут вместе с TUN
     // Полное отсутствие inbound (TUN off + Mixed off) — fail-closed ошибкой рантайма.
-    const noInbound = await page.evaluate(() => {
+    const noInbound = await page.evaluate(async () => {
       document.getElementById('cfgSocks').checked = false;
       document.getElementById('mihomoOutput').value = '';
       buildMihomo();
+      while (MIHOMO_VALIDATION_STATE.state === 'VALIDATING') await new Promise(r => setTimeout(r, 10));
       return { state: MIHOMO_VALIDATION_STATE.state, out: document.getElementById('mihomoOutput').value };
     });
     assert.equal(noInbound.state, 'NOT_BUILT');

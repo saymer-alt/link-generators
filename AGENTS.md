@@ -283,10 +283,27 @@ The Mihomo core accepts (CORE_PROTOCOL_SUPPORT): `vmess, vless, trojan, anytls, 
 http, hy2, tuic, wireguard, masque, mieru, trusttunnel`.
 
 Subscriptions: an `http(s)://…` line without username/password in the URL is considered a
-subscription (in Sub Mode — proxy-providers with 43200 s refresh and fallback retries);
-a URL with credentials is treated as a normal link. `fetchSubscription` in the browser is
-subject to CORS — only sources returning CORS headers work; this is a platform limitation,
-not a bug.
+subscription. In Sub Mode it becomes a proxy-provider (43200 s refresh, fallback retries);
+with Sub Mode OFF the page fetches it once at Build (subscription inspection, issue #100,
+owner-approved 2026-10-02) and inlines the current nodes as static `proxies:` — the old
+behaviour (parsing the URL as a bogus http-proxy) is gone. Fetch failure in OFF mode fails
+the build with a clear error; in ON mode the preview is non-fatal.
+
+Subscription inspection privacy/identity contract (binding):
+
+- Preview identity: `x-hwid` = random 32-hex from
+  `localStorage['link-generators.subscription-preview-hwid.v1']` (memory-only fallback),
+  stable across builds; `x-device-model` = `Saymer Link Generators Preview` (a constant,
+  NOT the user's `📱 Device Model` field, which stays on the Mihomo provider).
+- Header allowlist is exactly `x-hwid` + `x-device-model`, enforced in the runtime and
+  again in the worker; arbitrary headers never leave the caller.
+- CORS fallback `sub.web2core.workers.dev`: POST JSON `{url, headers}` contract with its
+  own allowlist, redirect/timeout/size caps and `Cache-Control: no-store`; legacy
+  `GET ?url=` preserved; the runtime degrades POST → GET on legacy deployments.
+- Network only on explicit user action (Build); no background polling, no telemetry;
+  subscription URLs, bodies and proxy credentials are never stored or logged.
+- `buildMihomo()` is async since inspection: it sets `VALIDATING` before the first await;
+  tests must wait for VALID/INVALID, not for state ≠ VALIDATING right after the click.
 
 ### WireGuard / AmneziaWG
 

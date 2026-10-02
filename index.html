@@ -819,6 +819,20 @@ function dialerKindLabel(entry) {
   return (entry.type || 'proxy').toUpperCase();
 }
 
+// Ввод для префлайт-реестра целей: после успешной Build — точный inspected
+// ввод (подписки уже развёрнуты в ссылки), до неё — сырой ввод без
+// subscription-URL строк (в не-подписочном режиме https://-строка парсится
+// как http-прокси — мусорные имена в списке; в подписочном режиме строки
+// обрабатывает сам префлайт, срезать их не нужно).
+let lastInspectedBuildInput = null;
+let lastInspectedFallbackInput = null;
+
+function preflightInputForRegistry(raw) {
+  if (lastInspectedBuildInput !== null) return lastInspectedBuildInput;
+  if (document.getElementById('cfgSubMode').checked) return raw;
+  return splitSubscriptionInputForPreview(raw).filter(e => !e.subscription).map(e => e.line).join('\n');
+}
+
 function computeDialerTargetsSync() {
   const api = globalThis.web4core;
   if (!api || !wgProfilesEnabled()) return [];
@@ -836,8 +850,8 @@ function computeDialerTargetsSync() {
     const realityModern = parseRealityModernLines();
     const result = api.buildFromRequest({
       core: 'mihomo',
-      input: document.getElementById('mihomoInput').value,
-      ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}),
+      input: preflightInputForRegistry(document.getElementById('mihomoInput').value),
+      ...(autoWhitelist ? { fallbackInput: lastInspectedFallbackInput !== null ? lastInspectedFallbackInput : document.getElementById('whitelistInput').value.trim() } : {}),
       wgBeans: normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, { noDialer: true }))),
       options: {
         addSocks: addSocks,
@@ -2296,10 +2310,12 @@ function getSubscriptionPreviewHwid() {
 }
 
 function subscriptionPreviewHeaders() {
+  // Allowlist контракта fetchSubscription: ровно два заголовка с доказанной
+  // необходимостью (x-hwid — HWID-gate Geodema/Remnawave, x-device-model —
+  // подпись identity самого preview-генератора). Больше ничего не отправляем.
   return {
     'x-hwid': getSubscriptionPreviewHwid(),
-    'x-device-model': SUBSCRIPTION_PREVIEW_DEVICE_MODEL,
-    'x-device-os': 'Browser'
+    'x-device-model': SUBSCRIPTION_PREVIEW_DEVICE_MODEL
   };
 }
 
@@ -3009,6 +3025,10 @@ async function buildMihomo() {
   }
   const useDialerGroup = dialedProfiles.length > 0 && (wgDialerMembers.length > 0 || wgDialerProviders.length > 0);
 
+  // Сборка теперь асинхронная (inspection подписок): честно выставляем
+  // состояние «идёт сборка/проверка» до первого await — тесты и Copy-гейт
+  // видят промежуточное состояние, а не устаревший прошлый результат.
+  setMihomoValidationState('VALIDATING');
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
     if (!api.fetchSubscription || !api.buildBeansFromInput) throw new Error('Обновите web4core.runtime: требуется subscription inspection API');
@@ -3027,6 +3047,10 @@ async function buildMihomo() {
       fallbackPrepared = fallbackInspected.input;
       mergeSubscriptionPreviewSummary(previewSummary, fallbackInspected.summary);
     }
+    // Реестр dialer-целей от этого момента строится из inspected-ввода —
+    // имена развёрнутых узлов совпадают с итоговым YAML (до инвалидиции).
+    lastInspectedBuildInput = mainInspected.input;
+    lastInspectedFallbackInput = autoWhitelist ? fallbackPrepared : null;
     renderSubscriptionPreview(previewSummary);
     const realityModern = parseRealityModernLines();
     const buildBeans = wgProfiles.map(wgProfileBuildBean);
@@ -3148,7 +3172,13 @@ document.getElementById('cfgSubMode').addEventListener('change', () => {
 });
 for (const id of ['mihomoInput', 'whitelistInput', 'excludeFilterInput']) {
   const el = document.getElementById(id);
-  if (el) el.addEventListener('input', clearSubscriptionPreview);
+  if (el) el.addEventListener('input', () => {
+    // inspected-ввод устарел вместе с preview: реестр целей возвращается
+    // к префлайту сырого состояния
+    lastInspectedBuildInput = null;
+    lastInspectedFallbackInput = null;
+    clearSubscriptionPreview();
+  });
 }
 document.getElementById('cfgWebUI').addEventListener('change', updateWebUiVisibility);
 document.getElementById('webUiSelect').addEventListener('change', updateWebUiVisibility);
@@ -3178,6 +3208,16 @@ document.addEventListener('input', (e) => {
   if (t.id === 'mihomoInput' || t.id === 'wgDialerInput' || t.id === 'wgDialerMembers' || t.id === 'wgDialerProviders' ||
       (t.classList && t.classList.contains('wg-target-manual'))) {
     scheduleDialerRefresh();
+  }
+}, true);
+// Любое изменение состояния (включая чекбоксы) обесценивает inspected-ввод:
+// реестр целей и итоговая сборка должны соответствовать текущему UI.
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (!t || !t.id) return;
+  if (t.id === 'mihomoInput' || t.id === 'whitelistInput' || t.id === 'excludeFilterInput' || t.id === 'cfgSubMode') {
+    lastInspectedBuildInput = null;
+    lastInspectedFallbackInput = null;
   }
 }, true);
 document.addEventListener('change', (e) => {

@@ -133,6 +133,12 @@ const expectedAwg = {
       'https://sub-two.example.test/token'
     ].join('\n');
     await page.locator('#cfgSubMode').setChecked(false);
+    // Invalid regexp in static-expansion mode: explicit error, no build.
+    await page.locator('#excludeFilterInput').fill('(?i)ru|moscow(');
+    await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#A');
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT', 'invalid regexp: сборка не выполняется');
+    assert.match(await page.evaluate(() => window.__lastToast || ''), /Exclude Filter: некорректное регулярное выражение/);
     await page.locator('#excludeFilterInput').fill('(?i)ru|moscow');
     await page.locator('#mihomoInput').fill(syntheticMixed);
     const expanded = await build('subscription-inline-static');
@@ -141,6 +147,7 @@ const expectedAwg = {
     assert.ok(expanded.doc.proxies.some(p => p.name === 'STATIC'));
     assert.ok(!expanded.doc.proxies.some(p => /RU Moscow|Moscow Backup/i.test(p.name)));
     assert.match(await page.locator('#subscriptionPreviewStats').innerText(), /Подписок: 2.*найдено узлов: 3.*после фильтра: 1.*исключено: 2/s);
+    await page.locator('#subscriptionPreviewDetails').evaluate(d => { d.open = true; }); // закрытый details не рендерится
     assert.match(await page.locator('#subscriptionPreviewNames').innerText(), /Sweden Stockholm/);
     assert.match(await page.locator('#subscriptionPreviewNames').innerText(), /RU Moscow/);
     let subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
@@ -148,7 +155,8 @@ const expectedAwg = {
     assert.match(subCalls[0].headers['x-hwid'], /^[0-9a-f]{32}$/);
     assert.equal(subCalls[0].headers['x-hwid'], subCalls[1].headers['x-hwid']);
     assert.equal(subCalls[0].headers['x-device-model'], 'Saymer Link Generators Preview');
-    assert.equal(subCalls[0].headers['x-device-os'], 'Browser');
+    assert.equal(subCalls[0].headers['x-device-os'], undefined, 'allowlist: только x-hwid + x-device-model');
+    assert.equal(subCalls[0].headers['authorization'], undefined);
 
     // A second Build in the same page keeps the same preview identity.
     const firstHwid = subCalls[0].headers['x-hwid'];
@@ -165,10 +173,100 @@ const expectedAwg = {
     assert.ok(Object.values(providerMode.doc['proxy-providers']).every(p => p['exclude-filter'] === '(?i)ru|moscow'));
     assert.match(await page.locator('#subscriptionPreviewStats').innerText(), /найдено узлов: 3.*исключено: 2/s);
 
+    // Preview failure in ON mode is non-fatal: provider YAML still builds,
+    // the warning names no URL and no HWID.
+    await page.evaluate(() => {
+      web4core.fetchSubscription = async (url, options) => {
+        globalThis.__subscriptionFetchCalls.push({ url, headers: Object.assign({}, options && options.headers) });
+        throw new Error('preview fetch failed for ' + url);
+      };
+    });
+    const degraded = await build('subscription-provider-preview-degraded');
+    assert.equal(Object.keys(degraded.doc['proxy-providers'] || {}).length, 2, 'provider YAML собран без preview');
+    const previewText = await page.locator('#subscriptionPreviewBox').innerText();
+    assert.match(previewText, /Не удалось получить preview/);
+    assert.ok(!previewText.includes('sub-one.example.test'), 'URL не раскрыт в предупреждении');
+    assert.ok(!previewText.includes(firstHwid), 'HWID не раскрыт в предупреждении');
+
+    // HWID persistence: same browser storage across reload -> same identity;
+    // cleared storage -> new identity. Reload resets page state, so the
+    // pre-reload UI state is captured and restored for the sections below.
+    const snapshotUiState = () => page.evaluate(() => {
+      const ids = ['cfgTun', 'cfgTunMips', 'cfgTunStackAdvanced', 'cfgSocks', 'cfgLan', 'cfgWebUI', 'cfgSubMode', 'cfgProfile', 'cfgAutoWhitelist', 'cfgPerProxyMaster', 'cfgPerProxyTun', 'cfgPerProxySocks', 'cfgPolicyRouting'];
+      const st = {};
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        st[id] = el.type === 'checkbox' ? el.checked : el.value;
+      }
+      st.__mihomoInput = document.getElementById('mihomoInput').value;
+      st.__exclude = document.getElementById('excludeFilterInput').value;
+      return st;
+    });
+    const restoreUiState = st => page.evaluate(s => {
+      for (const [id, v] of Object.entries(s)) {
+        if (!id.startsWith('__')) {
+          const el = document.getElementById(id);
+          if (el) if (el.type === 'checkbox') el.checked = v; else el.value = v;
+        }
+      }
+      document.getElementById('mihomoInput').value = s.__mihomoInput;
+      document.getElementById('excludeFilterInput').value = s.__exclude;
+      // повторно применить disabled-состояния профиля
+      document.getElementById('cfgProfile').dispatchEvent(new Event('change', { bubbles: true }));
+    }, st);
+    const storedHwid = await page.evaluate(() => localStorage.getItem('link-generators.subscription-preview-hwid.v1'));
+    assert.equal(storedHwid, firstHwid, 'HWID сохранён в localStorage');
+    const stateBeforeReload = await snapshotUiState();
+    await page.reload();
+    await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+    await restoreUiState(stateBeforeReload);
+    await page.evaluate(() => {
+      globalThis.__subscriptionFetchOriginal = web4core.fetchSubscription;
+      globalThis.__subscriptionFetchCalls = [];
+      web4core.fetchSubscription = async (url, options) => {
+        globalThis.__subscriptionFetchCalls.push({ url, headers: Object.assign({}, options && options.headers) });
+        return 'vless://00000000-0000-4000-8000-000000000011@192.0.2.11:443?encryption=none&type=tcp#Reloaded';
+      };
+    });
+    await page.locator('#cfgSubMode').setChecked(false);
+    await page.locator('#mihomoInput').fill('https://sub-one.example.test/token');
+    await build('subscription-reload');
+    const reloadCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    assert.equal(reloadCalls.length, 1);
+    assert.equal(reloadCalls[0].headers['x-hwid'], firstHwid, 'после reload HWID тот же');
+    await page.evaluate(() => localStorage.clear());
+    const stateBeforeClear = await snapshotUiState();
+    await page.reload();
+    await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+    await restoreUiState(stateBeforeClear);
+    await page.evaluate(() => {
+      globalThis.__subscriptionFetchOriginal = web4core.fetchSubscription;
+      globalThis.__subscriptionFetchCalls = [];
+      web4core.fetchSubscription = async (url, options) => {
+        globalThis.__subscriptionFetchCalls.push({ url, headers: Object.assign({}, options && options.headers) });
+        return 'vless://00000000-0000-4000-8000-000000000011@192.0.2.11:443?encryption=none&type=tcp#Fresh';
+      };
+    });
+    await page.locator('#cfgSubMode').setChecked(false);
+    await page.locator('#mihomoInput').fill('https://sub-one.example.test/token');
+    await build('subscription-fresh-hwid');
+    const freshCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    assert.equal(freshCalls.length, 1);
+    assert.match(freshCalls[0].headers['x-hwid'], /^[0-9a-f]{32}$/);
+    assert.notEqual(freshCalls[0].headers['x-hwid'], firstHwid, 'очищенный storage -> новый HWID');
     await page.evaluate(() => {
       web4core.fetchSubscription = globalThis.__subscriptionFetchOriginal;
       delete globalThis.__subscriptionFetchOriginal;
       delete globalThis.__subscriptionFetchCalls;
+      localStorage.removeItem('link-generators.subscription-preview-hwid.v1');
+      // далее по сюите — автономная заглушка вместо сетевого fetch (см. INDEP)
+      web4core.fetchSubscription = async (url) => {
+        if (String(url).includes('keep.example.example')) {
+          return 'trojan://independent-pass@203.0.113.90:443#KEEP-SUB-NODE';
+        }
+        throw new Error('offline test stub: subscription fetch unavailable');
+      };
     });
     await page.locator('#excludeFilterInput').fill('');
     await page.locator('#cfgSubMode').setChecked(false);
@@ -552,6 +650,18 @@ const expectedAwg = {
     await page.locator('#deviceModelInput').fill(INDEP.device);
     await page.locator('#realityModernInput').fill(INDEP.reality);
     await page.locator('#wgCustomDns').fill(INDEP.dns);
+    // v1.6.2: Sub OFF + subscription URL в вводе => Build читает подписку.
+    // Сетевой fetch в тестах недоступен — ставим автономную заглушку для
+    // keep.example.example (остальные URL пусть падают быстро и локально).
+    await page.evaluate(() => {
+      globalThis.__subscriptionFetchOriginal = web4core.fetchSubscription;
+      web4core.fetchSubscription = async (url) => {
+        if (String(url).includes('keep.example.example')) {
+          return 'trojan://independent-pass@203.0.113.90:443#KEEP-SUB-NODE';
+        }
+        throw new Error('offline test stub: subscription fetch unavailable');
+      };
+    });
 
     // Спойлер ADVANCED: закрыт по умолчанию; раскрытие не включает master;
     // закрытие не сбрасывает.

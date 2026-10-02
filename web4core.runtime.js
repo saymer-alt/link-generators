@@ -4387,7 +4387,7 @@
     const splitLines2 = (text) => (text || "").split(/\n/).map((s) => s.trim()).filter(Boolean);
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
-    const allowedRequestHeaders = /* @__PURE__ */ new Set(["x-hwid", "x-device-model", "x-device-os", "x-ver-os"]);
+    const allowedRequestHeaders = /* @__PURE__ */ new Set(["x-hwid", "x-device-model"]);
     const requestHeaders = {};
     if (options && options.headers && typeof options.headers === "object") {
       for (const [rawName, rawValue] of Object.entries(options.headers)) {
@@ -4405,7 +4405,7 @@
         return allowedSchemes.has(scheme);
       });
     }
-    async function tryFetch(u) {
+    async function tryFetch(u, initOverride) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
       try {
@@ -4417,7 +4417,9 @@
             headers.set("Referer", "https://github.com/");
           }
         }
-        const resp = await fetch(u, Object.assign({}, FETCH_INIT, { headers, signal: controller.signal }));
+        const init = Object.assign({}, FETCH_INIT, { headers, signal: controller.signal });
+        if (initOverride) Object.assign(init, initOverride);
+        const resp = await fetch(u, init);
         if (!resp.ok) {
           const reason = resp.statusText || httpReason(resp.status) || "";
           const label = "HTTP " + resp.status + (reason ? " " + reason : "");
@@ -4502,12 +4504,27 @@
         }
         for (const makeUrl of PUBLIC_CORS_FALLBACKS) {
           const maxRetries = Math.max(0, Number(SUB_FALLBACK_RETRIES || 0));
-          for (let retry = 0; retry <= maxRetries; retry++) {
-            const result = await tryFetch(makeUrl(u));
-            const resolved = await consumeFetchResult(result);
-            if (resolved) return resolved;
-            if (result.error && retry < maxRetries) {
-              await sleep(500);
+          const fallbackAttempts = [];
+          if (Object.keys(requestHeaders).length) {
+            fallbackAttempts.push({
+              kind: "post",
+              init: (target) => ({
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: target, headers: requestHeaders })
+              })
+            });
+          }
+          fallbackAttempts.push({ kind: "get", init: (target) => ({}) });
+          for (const attempt of fallbackAttempts) {
+            for (let retry = 0; retry <= maxRetries; retry++) {
+              const result = await tryFetch(makeUrl(u), attempt.init(u));
+              const resolved = await consumeFetchResult(result);
+              if (resolved) return resolved;
+              if (attempt.kind === "post" && result.error && /^HTTP\s+4(0[05])\b/.test(String(result.error.message || ""))) break;
+              if (result.error && retry < maxRetries) {
+                await sleep(500);
+              }
             }
           }
         }
