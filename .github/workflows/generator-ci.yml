@@ -123,7 +123,7 @@ jobs:
   browser:
     name: deterministic / browser
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -170,6 +170,24 @@ jobs:
             node tests/magitrickle-import.cjs
           else
             echo 'MagiTrickle regression not present on this revision; skipping.'
+          fi
+
+      - name: Deployment profile matrix regression when present
+        shell: bash
+        run: |
+          if [ -f tests/profile-matrix.cjs ]; then
+            node tests/profile-matrix.cjs
+          else
+            echo 'Profile matrix regression not present on this revision; skipping.'
+          fi
+
+      - name: WG dialer selector regression when present
+        shell: bash
+        run: |
+          if [ -f tests/wg-dialer-selector.cjs ]; then
+            node tests/wg-dialer-selector.cjs
+          else
+            echo 'WG dialer selector regression not present on this revision; skipping.'
           fi
 
       - name: Auto-Whitelist browser regression
