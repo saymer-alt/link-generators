@@ -180,7 +180,8 @@ const root = path.resolve(__dirname, '..');
       return pop ? pop.textContent : '';
     });
     assert.match(targetPop, /Endpoint/, 'подсказка таргета объясняет Endpoint-соединение');
-    assert.match(targetPop, /существуют в текущей конфигурации/, 'подсказка таргета: только существующие цели');
+    assert.match(targetPop, /Доступны существующие proxy, другие WG\/AWG и включённые URL-подписки/, 'подсказка таргета перечисляет реальные цели и URL-подписки');
+    assert.match(targetPop, /браузер не скачивает/, 'подсказка таргета объясняет локальный provider-backed путь без fetch подписки');
     // MT mapping-подсказка появляется в preview
     await page.locator('#cfgPolicyRouting').check();
     await page.locator('#mtImportBtn').click();
