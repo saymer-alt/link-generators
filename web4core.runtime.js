@@ -2864,14 +2864,18 @@
         groups.push({
           name,
           type: "select",
-          proxies: [`${name}-AUTO`, FASTEST_GROUP_NAME, GLOBAL_GROUP_NAME, "DIRECT"]
+          // ⚡ Fastest is referenced only when it is actually emitted
+          // (a single-static config emits no Fastest group; referencing
+          // it would produce a dangling group target).
+          proxies: [`${name}-AUTO`, ...existingGroups.has(FASTEST_GROUP_NAME) ? [FASTEST_GROUP_NAME] : [], GLOBAL_GROUP_NAME, "DIRECT"]
         });
         existingGroups.add(`${name}-AUTO`);
       } else if (ctx.mode === "static") {
         groups.push({
           name,
           type: "select",
-          proxies: [FASTEST_GROUP_NAME, GLOBAL_GROUP_NAME, "DIRECT"]
+          // ⚡ Fastest is referenced only when it is actually emitted (see above).
+          proxies: [...existingGroups.has(FASTEST_GROUP_NAME) ? [FASTEST_GROUP_NAME] : [], GLOBAL_GROUP_NAME, "DIRECT"]
         });
       } else {
         groups.push({
@@ -3281,6 +3285,7 @@
       if (Number.isFinite(wg.mtu)) p.mtu = wg.mtu;
       if (Number.isFinite(wg.persistentKeepalive) && wg.persistentKeepalive > 0) p["persistent-keepalive"] = wg.persistentKeepalive;
       if (wg.reserved !== void 0) p.reserved = wg.reserved;
+      if (typeof wg.dialerProxy === "string" && wg.dialerProxy.trim()) p["dialer-proxy"] = wg.dialerProxy.trim();
       if (hasPeers) p.peers = peers.map(mapPeer).filter(Boolean);
       if (wg.ipStack && typeof wg.ipStack === "object" && Object.keys(wg.ipStack).length) p["ip-stack"] = wg.ipStack;
       if (wg["amnezia-wg-option"] && typeof wg["amnezia-wg-option"] === "object") {
@@ -3714,10 +3719,21 @@
     for (const [name, side] of [["PRIMARY", primary], ["FALLBACK", fallback]]) {
       const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter, modernHosts: opts?.modernHosts, deviceModel: opts?.deviceModel }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
       const names = [];
+      const renameMap = /* @__PURE__ */ new Map();
+      const sideProxies = [];
       built.proxies.forEach((proxy, index) => {
+        const oldName = proxy.name;
         proxy.name = name + "-" + (index + 1) + ": " + proxy.name;
+        renameMap.set(oldName, proxy.name);
         names.push(proxy.name);
+        sideProxies.push(proxy);
         proxies.push(proxy);
+      });
+      sideProxies.forEach((proxy) => {
+        if (typeof proxy["dialer-proxy"] === "string") {
+          const mapped = renameMap.get(proxy["dialer-proxy"]);
+          if (mapped) proxy["dialer-proxy"] = mapped;
+        }
       });
       const use = [];
       Object.entries(built.providers || {}).forEach(([key, provider]) => {
@@ -3902,12 +3918,16 @@
   }
   var MIHOMO_WG_DIALER_DEFAULT_GROUP = "WARP-DIALER";
   function resolveMihomoWgDialer(proxies, groups, providers, opts) {
+    const groupOnly = !!(opts && opts.wgDialerGroupOnly);
     const target = String(opts && opts.wgDialerProxy || "").trim();
     const membersRaw = opts && Array.isArray(opts.wgDialerGroupMembers) ? opts.wgDialerGroupMembers : [];
     const members = membersRaw.map((s) => String(s).trim()).filter(Boolean);
     const providersRaw = opts && Array.isArray(opts.wgDialerProviders) ? opts.wgDialerProviders : [];
     const providerUrls = providersRaw.map((s) => String(s).trim()).filter(Boolean);
     if (!target && members.length === 0 && providerUrls.length === 0) return null;
+    if (groupOnly && members.length === 0 && providerUrls.length === 0) {
+      return null;
+    }
     const proxyList = Array.isArray(proxies) ? proxies : [];
     const groupList = Array.isArray(groups) ? groups : [];
     const proxyNames = new Set(proxyList.map((p) => String(p && p.name || "")));
@@ -3941,24 +3961,31 @@
       const group = { name: groupName, type: "select" };
       if (members.length) group.proxies = members.slice();
       if (providerNames.length) group.use = providerNames;
-      return { target: groupName, members: new Set(members), group };
+      return { target: groupName, members: new Set(members), group, stampAll: !groupOnly };
     }
     if (target !== "DIRECT" && !proxyNames.has(target) && !groupNames.has(target)) {
       throw new Error(`Mihomo: dialer-proxy target "${target}" not found among proxies or groups`);
     }
-    return { target, members: /* @__PURE__ */ new Set(), group: null };
+    return { target, members: /* @__PURE__ */ new Set(), group: null, stampAll: !groupOnly };
   }
   function applyMihomoWgDialer(proxies, dialer) {
-    if (!dialer) return proxies;
+    if (!dialer || dialer.stampAll === false) return proxies;
     let applied = 0;
+    let explicit = 0;
     const out = (Array.isArray(proxies) ? proxies : []).map((p) => {
-      if (p && p.type === "wireguard" && p.name !== dialer.target && !dialer.members.has(String(p.name || ""))) {
-        applied++;
-        return Object.assign({}, p, { "dialer-proxy": dialer.target });
+      if (p && p.type === "wireguard") {
+        if (p["dialer-proxy"]) {
+          explicit++;
+          return p;
+        }
+        if (p.name !== dialer.target && !dialer.members.has(String(p.name || ""))) {
+          applied++;
+          return Object.assign({}, p, { "dialer-proxy": dialer.target });
+        }
       }
       return p;
     });
-    if (applied === 0) {
+    if (applied === 0 && explicit === 0) {
       throw new Error(`Mihomo: dialer-proxy "${dialer.target}" applies to no wireguard proxy (self-named and member profiles are excluded)`);
     }
     return out;

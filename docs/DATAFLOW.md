@@ -153,7 +153,7 @@ DNS Amnezia Premium), поле подставляет `1.1.1.1, 8.8.8.8` и по
 ```text
 cfgTunMips → tunStack → options.mihomoTunStack → buildFromRequest
 policyCards → collectPolicyRouting() → options.mihomoDomainPolicy → buildFromRequest (inline rule-providers + policy groups + RULE-SET rules; выключено → byte-parity)
-#cfgProfile=vps + #vpsDnsEnabled → applyDeploymentProfile() → tun.dns-hijack + profile.store-fake-ip + sniffer (VPS Domain Detection Package; generic не затрагивается)
+#cfgProfile=vps-gateway + #vpsDnsEnabled → applyDeploymentProfile() → tun.dns-hijack + profile.store-fake-ip + sniffer (VPS Domain Detection Package; router/vps-local не затрагиваются)
           → mihomoTunOpts.stack → opts.tun.stack в buildMihomoYaml
           → normal TUN / Per-Proxy listeners
 ```
@@ -175,9 +175,9 @@ VPS получает тот же `tunStack` третьим аргументом 
 ```text
 1. result = web4core.buildFromRequest({ core:'mihomo', input, wgBeans: normalizeWgBeans(wgBeans), options })
 2. injectWgDns(result, wgBeans)                       # правка YAML (wireguard dns)
-3. applyDeploymentProfile(yaml, profile, tunStack)    # ТОЛЬКО при профиле «VPS Gateway» (opt-in):
+3. applyDeploymentProfile(yaml, profile, tunStack)    # ТОЛЬКО при профиле «VPS Gateway» (vps-gateway):
                                                       #   gateway-постпатч tun/dns/find-process-mode/
-                                                      #   profile; при generic НЕ вызывается —
+                                                      #   profile; при router/vps-local НЕ вызывается —
                                                       #   см. VPS-GATEWAY.md
 4. allow-lan патч: регэксп allow-lan: false → true
    + вставка bind-address: "*" сразу после            # привязан к текстовому формату рантайма:

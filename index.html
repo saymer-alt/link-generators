@@ -6,70 +6,144 @@
 <title>WARP & Mihomo Unified Generator</title>
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 <style>
-  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#238636; --red:#da3633; --warn:#d29922; }
+  /* === Windows XP Professional / Luna Blue theme ===
+     Цветовая модель централизована: --face (control face), --field (белые поля),
+     --link/--link-hover (классические ссылки), --luna (Luna Blue accent).
+     Semantic: green=success, amber=warning, red=error, blue=info/focus/link. */
+  :root { --desktop1:#7ba2e7; --desktop2:#2f5ab3; --face:#ece9d8; --face-dark:#dcd8c8; --field:#fff;
+    --border:#919b9c; --field-border:#7f9db9; --text:#1a1a1a; --muted:#4a4a44;
+    --luna-hi:#3f8cf3; --luna:#0054e3; --luna-deep:#003bbd; --accent:#0054e3;
+    --link:#0000cc; --link-hover:#0033dd;
+    --green:#0a7a0a; --green-bg:#eef7ee; --red:#a40000; --red-bg:#fbeeee;
+    --warn:#8a6d00; --warn-bg:#fdf6dd; --info:#003399; --tooltip:#ffffe1; }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.5;padding:20px}
-  .container{max-width:850px;margin:0 auto}
-  h1{text-align:center;color:var(--accent);font-size:1.6rem;margin-bottom:20px}
-  .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px}
-  .tab{flex:1;padding:12px;text-align:center;cursor:pointer;background:transparent;border:none;color:var(--muted);font-size:0.95rem;font-weight:600;transition:all .2s}
-  .tab.active{color:var(--accent);border-bottom:2px solid var(--accent);background:rgba(88,166,255,0.05)}
-  .tab:hover:not(.active){color:var(--text)}
-  .tab-content{display:none}.tab-content.active{display:block}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
-  .card-title{font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:12px;font-weight:600;display:flex;align-items:center;gap:8px}
-  label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 4px}
-  input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:.9rem;font-family:monospace;transition:border-color .2s}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
-  textarea{resize:vertical;min-height:120px}
-  .row{display:flex;gap:12px;flex-wrap:wrap}.row>*{flex:1;min-width:140px}
-  .btn-group{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
-  .btn{padding:10px 18px;border:none;border-radius:8px;font-size:.9rem;font-weight:500;cursor:pointer;color:#fff;background:var(--green);transition:opacity .2s}
-  .btn:hover{opacity:.85}
-  .btn-blue{background:#1f6feb}.btn-gray{background:var(--border)}.btn-red{background:var(--red)}.btn-purple{background:#8957e5}
-  .link-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;position:relative}
-  .link-label{font-size:.8rem;color:var(--accent);font-weight:600;margin-bottom:6px}
-  .link-text{font-family:monospace;font-size:.8rem;color:#a5d6ff;word-break:break-all;line-height:1.6}
-  .copy-btn{position:absolute;top:10px;right:10px;padding:4px 10px;font-size:.75rem;background:var(--border);border:none;border-radius:6px;color:var(--text);cursor:pointer}
-  .copy-btn:hover{background:#484f58}
-  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--green);color:#fff;padding:10px 20px;border-radius:8px;opacity:0;transition:all .3s;z-index:1000;pointer-events:none}
+  body{background:linear-gradient(165deg,var(--desktop1) 0%,#4a72c4 45%,var(--desktop2) 100%) fixed;color:var(--text);font-family:Tahoma,Verdana,Arial,sans-serif;font-size:13px;line-height:1.5;padding:18px}
+  a{color:var(--link);text-decoration:none}
+  a:hover{color:var(--link-hover);text-decoration:underline}
+  a:visited{color:var(--link)}
+  .container{width:min(1520px,100%);margin:0 auto;background:var(--face);border:1px solid #0831d9;border-top:none;border-radius:0 0 4px 4px;box-shadow:3px 4px 14px rgba(0,0,30,.45)}
+  @media (min-width:2100px){.container{width:min(1600px,100%)}}
+  h1{margin:0;padding:9px 14px;font-size:1.05rem;color:#fff;font-weight:bold;text-align:left;border-bottom:2px solid var(--luna-deep);
+     background:linear-gradient(180deg,#0a6cf1 0%,var(--luna-hi) 9%,var(--luna) 22%,var(--luna) 70%,var(--luna-deep) 96%);
+     text-shadow:1px 1px 1px rgba(0,0,60,.7)}
+  h1::before{content:"\2699 ";opacity:.9}
+  .tabs{display:flex;gap:3px;padding:6px 10px 0;border-bottom:1px solid var(--border);background:var(--face)}
+  .tab{flex:0 0 auto;padding:7px 16px 6px;cursor:pointer;border:1px solid var(--border);border-bottom:none;border-radius:4px 4px 0 0;
+       background:linear-gradient(180deg,#f6f4ea,var(--face-dark));color:#333;font-size:.92rem;font-weight:bold;font-family:inherit}
+  .tab:hover:not(.active){background:linear-gradient(180deg,#fbfaf4,#e6e2d2)}
+  .tab.active{background:var(--face);color:#000;border-color:var(--border);padding-bottom:7px;margin-bottom:-1px;position:relative;top:1px}
+  .tab:focus-visible{outline:2px dotted var(--accent);outline-offset:-4px}
+  .tab-content{display:none;padding:14px}
+  .tab-content.active{display:block}
+  .card{background:var(--face);border:1px solid var(--border);border-radius:0;padding:18px 14px 12px;margin:16px 0 14px;position:relative;box-shadow:inset 1px 1px 0 #fff}
+  .card-title{position:absolute;top:-9px;left:10px;max-width:calc(100% - 24px);margin:0;padding:0 6px;background:var(--face);color:var(--info);font-size:.8rem;font-weight:bold;text-transform:none;letter-spacing:0;display:flex;align-items:center;gap:6px;line-height:1.3;overflow-wrap:anywhere}
+  label{display:block;font-size:.85rem;color:var(--text);margin:12px 0 4px}
+  input,select,textarea{width:100%;max-width:100%;background:var(--field);border:1px solid var(--field-border);border-radius:0;padding:6px 8px;color:var(--text);font-size:.9rem;font-family:monospace;transition:border-color .15s}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--luna);box-shadow:0 0 0 1px var(--luna)}
+  textarea{resize:vertical;min-height:120px;width:100%;max-width:100%;min-width:280px}
+  @media (min-width:1024px){textarea{resize:both}}
+  @media (max-width:767px){textarea{min-width:0}}
+  input:disabled,select:disabled,textarea:disabled{background:#f0efe6;color:#8a8a80;border-color:#b8b4a4}
+  .row{display:flex;gap:12px;flex-wrap:wrap}.row>*{flex:1 1 140px;min-width:0;max-width:100%}
+  .btn-group{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .btn{padding:6px 16px;border:1px solid #7a7a6e;border-radius:3px;font-size:.9rem;line-height:1.2;font-family:inherit;cursor:pointer;color:var(--text);vertical-align:middle;
+       background:linear-gradient(180deg,#fdfdfa,#f4f2e8 48%,#e8e5d6 92%,#ddd9c8);
+       box-shadow:inset 1px 1px 0 #fff,inset -1px -1px 0 #d5d1c0;transition:box-shadow .1s}
+  .btn:hover{box-shadow:inset 0 0 0 2px #ffd9a0,inset 1px 1px 0 #fff}
+  .btn:active{background:linear-gradient(180deg,#ddd9c8,#e8e5d6);box-shadow:inset 1px 1px 3px rgba(0,0,0,.25)}
+  .btn:focus-visible{outline:2px dotted var(--accent);outline-offset:1px}
+  .btn-blue{box-shadow:inset 0 0 0 1px #fff,inset 0 0 0 3px var(--luna);font-weight:bold}
+  .btn-blue:hover{box-shadow:inset 0 0 0 1px #fff,inset 0 0 0 3px var(--luna),inset 0 0 0 5px #ffd9a0}
+  .btn-blue:active{box-shadow:inset 1px 1px 3px rgba(0,0,0,.25),inset 0 0 0 3px var(--luna)}
+  .btn-gray{background:linear-gradient(180deg,#f2f0e6,#e4e1d2)}
+  .btn-purple{border-color:#6a4a9a}
+  .btn-red{color:var(--red);border-color:#a07070}
+  .link-block{background:var(--field);border:1px solid var(--field-border);border-radius:0;padding:12px;margin-bottom:12px;position:relative}
+  .link-label{font-size:.8rem;color:var(--info);font-weight:bold;margin-bottom:6px}
+  .link-text{font-family:monospace;font-size:.8rem;color:#003399;word-break:break-all;line-height:1.6}
+  .copy-btn{position:absolute;top:8px;right:8px;padding:3px 10px;font-size:.75rem;font-family:inherit;background:linear-gradient(180deg,#fdfdfa,#e8e5d6);border:1px solid #7a7a6e;border-radius:3px;color:var(--text);cursor:pointer}
+  .copy-btn:hover{box-shadow:inset 0 0 0 2px #ffd9a0}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--tooltip);color:var(--text);border:1px solid #000;padding:10px 18px;border-radius:0;box-shadow:3px 3px 6px rgba(0,0,0,.35);opacity:0;transition:all .3s;z-index:1000;pointer-events:none;max-width:80vw}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
-  .hint{font-size:.75rem;color:#484f58;margin-top:4px}
+  .hint{font-size:.75rem;color:var(--muted);margin-top:4px}
   .field-filled{border-color:var(--green)!important}
-  .parsed-badge{background:var(--green);color:#fff;font-size:.7rem;padding:2px 8px;border-radius:4px}
+  .parsed-badge{background:var(--green);color:#fff;font-size:.7rem;padding:2px 8px;border-radius:3px}
   #mihomoOutput{min-height:300px;font-size:.8rem}
+  @media (min-width:1024px){
+    #mihomoOutput{min-height:440px;font-size:.82rem}
+    textarea{min-height:170px}
+    .wg-card-mode{display:grid;grid-template-columns:auto 1fr;align-items:center}
+    .wg-target-row{display:grid;grid-template-columns:auto 1fr;align-items:center}
+    .wg-mode,.wg-target{width:100%}
+    .wg-list-del{justify-self:end}
+    .btn-group{max-width:560px}
+  }
+  /* semantic narrow fields: широкое поле бессмысленно */
+  #pairCount{max-width:200px}
+  #vpsMtu{max-width:220px}
+  #vpsDevice{max-width:320px}
+  #vpsDnsListen{max-width:320px}
+  #vpsFakeIp{max-width:320px}
   .file-upload-wrapper{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .file-upload{position:relative;overflow:hidden;display:inline-block}
   .file-upload input[type=file]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
   .wg-status{font-size:.8rem;color:var(--muted)}
-  .wg-status.loaded{color:var(--green)}
-  .checkbox-grid{display:flex;flex-wrap:wrap;gap:12px 20px;margin-top:8px}
+  .wg-status.loaded{color:var(--green);font-weight:bold}
+  .checkbox-grid{display:flex;flex-wrap:wrap;gap:10px 20px;margin-top:8px}
   .checkbox-grid label{display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;font-size:.85rem;color:var(--text)}
-  label > input[type="checkbox"]{width:16px;height:16px;padding:0;flex:0 0 auto;accent-color:var(--accent)}
+  label > input[type="checkbox"]{width:14px;height:14px;padding:0;flex:0 0 auto;accent-color:var(--luna)}
   .toggle-row{display:flex;align-items:center;gap:10px;margin-top:12px}
   .toggle-row label{margin:0;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text)}
-  .advanced-stack-control{margin-top:10px;padding:10px 12px;border:1px dashed var(--border);border-radius:8px;background:rgba(139,148,158,.04)}
+  .advanced-stack-control{margin-top:6px;padding:2px 2px 0;background:transparent}
   .advanced-stack-control label{display:flex;align-items:center;gap:8px;margin:0;cursor:pointer;color:var(--text)}
   .advanced-stack-control select{margin-top:8px}
-  .advanced-panel{margin-top:12px;padding:12px 14px;border:1px solid rgba(210,153,34,.55);border-radius:10px;background:rgba(210,153,34,.06)}
-  .advanced-panel summary{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;color:var(--text);cursor:pointer;list-style:none;padding:2px 0}
+  .advanced-panel{margin-top:14px;padding:10px 12px;border:1px solid var(--border);border-radius:0;background:rgba(255,255,255,.35)}
+  .advanced-panel summary{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:bold;color:var(--info);cursor:pointer;list-style:none;padding:2px 0}
   .advanced-panel summary::-webkit-details-marker{display:none}
   .advanced-panel summary .advanced-badge{flex:none}
-  .advanced-badge{display:inline-block;padding:2px 7px;border:1px solid rgba(210,153,34,.7);border-radius:999px;color:#e3b341;background:rgba(210,153,34,.10);font-size:.68rem;letter-spacing:.05em}
-  .advanced-master{margin-top:10px;padding:10px 12px;border:1px solid rgba(210,153,34,.45);border-radius:8px;background:rgba(210,153,34,.08)}
-  .advanced-master label{display:flex;align-items:center;gap:10px;margin:0;cursor:pointer;color:var(--text);font-weight:600}
-  .advanced-master input[type="checkbox"]{width:18px;height:18px;accent-color:var(--warn)}
-  .advanced-panel .checkbox-grid{margin-top:10px;padding-top:10px;border-top:1px solid rgba(210,153,34,.22)}
-  .advanced-panel .hint{color:var(--muted)}
-  button:disabled{opacity:.45;cursor:not-allowed}
-  .validation-box{margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;font-size:.85rem;color:var(--muted)}
-  .validation-box.state-validating{color:var(--accent)}
-  .validation-box.state-valid{border-color:var(--green);background:rgba(35,134,54,.08);color:var(--text)}
-  .validation-box.state-invalid{border-color:var(--red);background:rgba(218,54,51,.08);color:var(--text)}
-  .validation-issue{margin-top:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:monospace;font-size:.75rem;white-space:pre-wrap;word-break:break-word}
+  .advanced-badge{display:inline-block;padding:1px 7px;border:1px solid #b09a4a;border-radius:3px;color:#5a4a00;background:var(--warn-bg);font-size:.68rem;letter-spacing:.05em}
+  .advanced-master{margin-top:8px;padding:0;background:transparent}
+  .advanced-master label{display:flex;align-items:center;gap:10px;margin:0;cursor:pointer;color:var(--text);font-weight:bold}
+  .advanced-master input[type="checkbox"]{width:15px;height:15px;accent-color:var(--luna)}
+  .advanced-panel .checkbox-grid{margin-top:10px;padding-top:10px;border-top:1px dotted var(--border)}
+  .advanced-subsection{margin-top:12px}
+  .advanced-subsection-second{margin-top:14px;padding-top:12px;border-top:1px dotted var(--border)}
+  .advanced-subsection-title{color:var(--info);font-weight:bold;font-size:.85rem;margin-bottom:4px}
+  .advanced-subsection .hint{margin-top:6px}
+  .wg-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .wg-list li{background:var(--field);border:1px solid var(--field-border);border-radius:0;padding:8px 10px;font-size:.85rem;color:var(--text);word-break:break-all}
+  li.wg-card{padding:8px 10px}
+  .wg-card-head{display:flex;align-items:center;gap:6px}
+  .wg-card-head .wg-list-name{flex:1;font-weight:bold}
+  .wg-card-info{margin:3px 0 6px;color:var(--muted);font-size:.78rem;word-break:break-all}
+  .wg-card-mode{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .wg-card-mode label{margin:0;color:var(--text);font-size:.8rem}
+  .wg-mode{padding:4px 6px;font-size:.85rem;width:auto}
+  .wg-target-row{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+  .wg-target-row label{margin:0;color:var(--text);font-size:.8rem}
+  .wg-target{flex:1;min-width:160px;padding:4px 8px;font-size:.85rem}
+  .wg-list-del{padding:5px 14px;font-size:.85rem;line-height:1.2;font-family:inherit;background:linear-gradient(180deg,#fdfdfa,#e8e5d6);border:1px solid #a07070;border-radius:3px;color:var(--red);cursor:pointer;flex:none;align-self:flex-start}
+  .wg-list-del:hover{box-shadow:inset 0 0 0 2px #ffc0c0}
+  button:disabled{opacity:.55;cursor:not-allowed}
+  input:disabled,select:disabled{background:#f0efe6;color:#8a8a80;border-color:#b8b4a4}
+  .validation-box{margin-top:12px;padding:10px 12px;border:1px solid var(--field-border);border-radius:0;font-size:.85rem;color:var(--text);background:var(--field)}
+  .validation-box.state-validating{color:var(--info)}
+  .validation-box.state-valid{border-color:var(--green);background:var(--green-bg);color:var(--text)}
+  .validation-box.state-invalid{border-color:var(--red);background:var(--red-bg);color:var(--text)}
+  .validation-issue{margin-top:8px;padding:8px 10px;background:var(--face);border:1px solid var(--red);border-radius:0;font-family:monospace;font-size:.75rem;white-space:pre-wrap;word-break:break-word;color:#6a0000}
   .validation-issue-error{border-color:var(--red)}
-  .compat-box{display:none;margin-top:12px;padding:12px 14px;border:1px solid rgba(88,166,255,.45);border-radius:8px;background:rgba(88,166,255,.06);font-size:.85rem;color:var(--text)}
+  .compat-box{display:none;margin-top:12px;padding:10px 12px;border:1px solid var(--field-border);border-radius:0;background:var(--warn-bg);font-size:.85rem;color:var(--text)}
   .compat-box ul{margin:8px 0 0 18px;padding:0}.compat-box li{margin:4px 0}
+  /* Контекстная помощь #82: классический XP tooltip */
+  .ctx-help-wrap{position:relative;display:inline-block;margin-left:6px}
+  .ctx-help{width:16px;height:16px;line-height:14px;padding:0;border-radius:3px;border:1px solid var(--luna);background:linear-gradient(180deg,#7ab3f7,var(--luna));color:#fff;font-size:.72rem;font-weight:bold;cursor:help;vertical-align:middle;font-family:Tahoma,Verdana,Arial,sans-serif}
+  .ctx-help:hover,.ctx-help:focus-visible{box-shadow:0 0 0 2px #ffd9a0;outline:none}
+  .ctx-help-pop{display:none;position:absolute;bottom:calc(100% + 8px);right:-8px;z-index:60;width:min(300px,78vw);padding:8px 10px;border:1px solid #000;background:var(--tooltip);color:var(--text);font-size:.8rem;font-weight:normal;line-height:1.45;box-shadow:3px 3px 6px rgba(0,0,0,.35);text-align:left}
+  .ctx-help-wrap.open .ctx-help-pop{display:block}
+  @media (max-width:640px){.ctx-help-pop{right:auto;left:50%;transform:translateX(-50%)}}
+  /* Responsive */
+  @media (max-width:768px){body{padding:8px}.container{border-radius:0}.tab{padding:7px 10px 6px}.card{padding:14px 10px 10px}}
+  @media (max-width:390px){body{padding:4px}.tabs{flex-wrap:wrap}.tab{flex:1 1 100%;border-radius:0;border-bottom:none}.tab.active{top:0;margin-bottom:0}.row{flex-direction:column}.row>*{min-width:0}.btn{flex:1 1 auto}.wg-target-row,.wg-card-mode{flex-direction:column;align-items:stretch}}
 </style>
 </head>
 <body>
@@ -109,6 +183,7 @@
         <div><label>SNI</label><input type="text" id="sni" value="4pda.to"></div>
         <div><label>DNS</label><input type="text" id="dns" value="1.1.1.1,1.0.0.1"></div>
       </div>
+      <div class="hint">Поля заполняются кнопкой «🔍 Распарсить» из YAML WARP-бота. Меняйте вручную только осознанно: ключи, IP, SNI и DNS входят в генерируемые ссылки <code>masque://</code>.</div>
     </div>
 
     <div class="card">
@@ -149,7 +224,7 @@
 
   <!-- TAB 2: MIHOMO BUILDER -->
   <div id="tab-mihomo" class="tab-content active">
-    <div class="hint" style="margin-bottom:10px"><a href="docs/GENERATOR-GUIDE.md">📖 Короткая инструкция по генератору</a></div>
+    <div class="hint" style="margin-bottom:10px"><a href="quick-start.html">📖 Короткая инструкция по генератору</a> · <a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/GENERATOR-GUIDE.md">📖 Подробная инструкция</a></div>
     <div class="card" id="profileRow">
       <div class="card-title">🎯 Где будет работать Mihomo?</div>
       <select id="cfgProfile">
@@ -160,28 +235,28 @@
       <div id="profileHint" class="hint"></div>
       <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
         <div class="row">
-          <div><label>TUN device</label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
+          <div><label>TUN device <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN device">?</button><span class="ctx-help-pop" role="note">Имя TUN-интерфейса Mihomo. Должно совпадать с PROXY_IF в amnezia-mihomo-gateway — иначе routing-скрипт и watchdog не найдут интерфейс. Обычно менять не нужно.</span></span></label><input type="text" id="vpsDevice" value="tun-mihomo"></div>
         </div>
         <div class="row" style="margin-top:12px">
-          <div><label>MTU</label><input type="text" id="vpsMtu" value="1420"></div>
-          <div><label>fake-ip-range</label><input type="text" id="vpsFakeIp" value="198.18.0.0/16"></div>
+          <div><label>MTU <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: MTU">?</button><span class="ctx-help-pop" role="note">MTU туннеля. 1420 — проверенное значение для двойной инкапсуляции (AmneziaWG + WARP) вместе с TCPMSS clamp на Linux-стороне; давало ~2x скорость.</span></span></label><input type="text" id="vpsMtu" value="1420"></div>
+          <div><label>fake-ip-range <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: fake-ip-range">?</button><span class="ctx-help-pop" role="note">Диапазон виртуальных DNS-адресов. Должен совпадать с FAKE_IP_RANGE маршрутизации gateway — иначе пакеты на fake-ip не попадут в TUN. Из IPv4 TUN выводится с маской /30.</span></span></label><input type="text" id="vpsFakeIp" value="198.18.0.0/16"></div>
         </div>
         <div class="toggle-row">
-          <label><input type="checkbox" id="vpsDnsEnabled" checked> 🌐 DNS-перехват (fake-ip) — часть VPS-профиля</label>
+          <label><input type="checkbox" id="vpsDnsEnabled" checked> 🌐 DNS-перехват (fake-ip) — часть VPS-профиля <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: DNS-перехват">?</button><span class="ctx-help-pop" role="note">Выключение удаляет секцию dns: целиком (fake-ip, dns-hijack, persistence). Пассивный сниффер остаётся. Для gateway-сценария обычно держать включённым: без fake-ip домены pure-IP клиентов не классифицируются.</span></span></label>
         </div>
         <div id="vpsDnsFields">
           <div class="row">
-            <div><label>DNS listen</label><input type="text" id="vpsDnsListen" value="0.0.0.0:53"></div>
+            <div><label>DNS listen <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: DNS listen">?</button><span class="ctx-help-pop" role="note">Адрес DNS-слушателя Mihomo. 0.0.0.0:53 — боевой дефолт схемы: резолвер для клиентов/контейнеров VPS. Доступ из интернета ограничивается firewall самого VPS (см. предупреждение ниже) — вне scope генератора.</span></span></label><input type="text" id="vpsDnsListen" value="0.0.0.0:53"></div>
             <div><label>Nameservers (через запятую)</label><input type="text" id="vpsDnsNs" value="1.1.1.1, 8.8.8.8"></div>
           </div>
           <div class="row" style="margin-top:12px">
             <div><label>proxy-server-nameserver</label><input type="text" id="vpsProxyNs" value="1.1.1.1"></div>
           </div>
-          <div id="vpsDnsWarn" class="hint" style="color:#d9534f;margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
+          <div id="vpsDnsWarn" class="hint" style="color:var(--red);margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
         </div>
         <div class="hint" style="margin-top:8px">⚠️ Для Mihomo 1.19.31 top-level tun.inet4-address не управляет адресом TUN: IPv4-префикс вычисляется из dns.fake-ip-range и приводится к /30. Поэтому VPS-профиль задаёт device + fake-ip-range, но не обещает отдельный inet4-address. Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
       </div>
-      <div class="hint">Профиль задаёт только сценарий развёртывания: вход (TUN/SOCKS), базовые переключатели и gateway-настройки. Прокси, подписки, WireGuard, фильтры и остальные данные не затрагиваются. Подробно: <a href="docs/GENERATOR-GUIDE.md">GENERATOR-GUIDE.md</a>, <a href="docs/VPS-GATEWAY.md">VPS-GATEWAY.md</a>.</div>
+      <div class="hint">Профиль задаёт только сценарий развёртывания: вход (TUN/SOCKS), базовые переключатели и gateway-настройки. Прокси, подписки, WireGuard, фильтры и остальные данные не затрагиваются. Подробно: <a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/GENERATOR-GUIDE.md">подробная инструкция</a>, <a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/VPS-GATEWAY.md">VPS Gateway</a>.</div>
     </div>
     <div class="card">
       <div class="card-title">📋 Входные данные</div>
@@ -201,36 +276,39 @@
       <div class="card-title">📂 WireGuard / AmneziaWG</div>
       <div class="file-upload-wrapper">
         <div class="file-upload">
-          <button class="btn btn-gray" id="btnWg" title="Загрузить WireGuard/AmneziaWG конфиг — каждый файл станет отдельным proxy в YAML">📂 Загрузить .conf / .awg</button>
-          <input type="file" id="wgFile" accept=".conf,.wg,.awg,text/plain" multiple>
+          <button class="btn btn-gray" id="btnWg" title="Добавляет WireGuard/AmneziaWG конфиги к уже загруженным (каждый файл — отдельный proxy в YAML). Список и удаление — ниже.">📂 Загрузить .conf / .wg / .awg</button>
+          <input type="file" id="wgFile" accept=".conf,.wg,.awg" multiple>
         </div>
         <span class="wg-status" id="wgStatus"></span>
       </div>
+      <ul class="wg-list" id="wgList" role="list" hidden></ul>
+      <button class="btn btn-gray" id="wgClear" type="button" style="display:none;margin-top:6px" onclick="clearWgProfiles()">🧹 Очистить все WG/AWG</button>
       <div style="margin-top: 15px;">
-        <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">WireGuard DNS:</label>
+        <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">Общий DNS override для всех WG/AWG профилей:</label>
         <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
-        <div id="wgDnsWarning" class="hint" style="color: #d9534f; display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
+        <div class="hint" style="margin-top: 5px;">Общий DNS для ВСЕХ загруженных WG/AWG-профилей (добавляет <code>dns</code>/<code>remote-dns-resolve</code> в каждый wireguard-outbound). Пусто — DNS удаляется из профилей.</div>
+        <div id="wgDnsWarning" class="hint" style="color:var(--red); display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
       </div>
       <div style="margin-top: 15px;">
-        <label class="label" for="wgDialerInput" style="display: block; margin-bottom: 5px;">Промежуточный proxy / dialer-proxy:</label>
+        <label class="label" for="wgDialerInput" style="display: block; margin-bottom: 5px;">Имя dialer-группы (определение группы):</label>
         <input type="text" id="wgDialerInput" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Имя proxy или группы (пусто = выключено)">
-        <div class="hint" style="margin-top: 5px;">Туннель в туннеле: WireGuard/WARP подключается к своему серверу через указанный proxy или группу. Таргет обязан поддерживать UDP (подходит VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет). Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408).</div>
+        <div class="hint" style="margin-top: 5px;">Определяет dialer-группу: имя + транзитные узлы/подписки ниже. КТО её использует — выбирается в карточке каждого WG/AWG-профиля («Через промежуточный proxy»). Новые профили наследуют это поле как таргет по умолчанию; таргет обязан поддерживать UDP (подходит VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет). Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408). Избегайте GLOBAL/⚡ Fastest — они содержат сам WARP.</div>
         <label class="label" for="wgDialerMembers" style="display: block; margin-bottom: 5px; margin-top: 10px;">Транзитные узлы dialer-группы (по одному в строке, необязательно):</label>
         <textarea id="wgDialerMembers" rows="3" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="VPS-DK&#10;VPS-EE&#10;VPS-SE"></textarea>
         <div class="hint" style="margin-top: 5px;">Если заполнено — создается select-группа (имя из поля выше или WARP-DIALER), и нижний транспорт WARP можно менять без пересборки. Эти узлы сами не получают dialer-proxy (иначе цикл). Избегайте GLOBAL/⚡ Fastest как таргета — они содержат сам WARP.</div>
         <label class="label" for="wgDialerProviders" style="display: block; margin-bottom: 5px; margin-top: 10px;">URL-подписки для dialer-группы (по одному в строке, необязательно):</label>
         <textarea id="wgDialerProviders" rows="2" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="https://account.geodema.org/..."></textarea>
         <div class="hint" style="margin-top: 5px;">URL должен совпадать с одной из включённых URL-подписок — группа получает <code>use:</code> на этот provider (узлы не разворачиваются). Для WireGuard dialer вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения — состав подписки заранее неизвестен, поэтому проверяется только выбором.</div>
-        <div class="hint" style="color:#b8860b;margin-top:5px">⚠️ Переключение узла в dialer-группе не означает мгновенную смену уже установленного WireGuard-пути: в полевых тестах старый transport сохранялся более 150 секунд. Для гарантированной немедленной смены пути требуется пересоздание WireGuard outbound (reload/restart Mihomo). Смена colo (FRA/AMS) — наблюдение, не гарантия: Cloudflare выбирает ingress сам.</div>
+        <div class="hint" style="color:var(--warn);margin-top:5px">⚠️ Переключение узла в dialer-группе не означает мгновенную смену уже установленного WireGuard-пути: в полевых тестах старый transport сохранялся более 150 секунд. Для гарантированной немедленной смены пути требуется пересоздание WireGuard outbound (reload/restart Mihomo). Смена colo (FRA/AMS) — наблюдение, не гарантия: Cloudflare выбирает ingress сам.</div>
       </div>
     </div>
 
     <div class="card">
       <div class="card-title">⚙️ Настройки Mihomo</div>
       <div class="checkbox-grid">
-        <label title="Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Для домашнего роутера обычно включено; для VPS с локальным Xray/3X-UI выключите."><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0)</label>
-        <label title="Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo."><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890</label>
-        <label title="Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090."><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI</label>
+        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Для домашнего роутера обычно включено; для VPS с локальным Xray/3X-UI выключите.</span></span></label>
+        <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
+        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090.</span></span></label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки</label>
       </div>
       <div id="subModeHint" class="hint"></div>
@@ -263,6 +341,7 @@
       <div class="toggle-row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgPolicyRouting"> 🚦 Политики по доменам (Domain Policy Routing)</label>
       </div>
+      <div class="hint" id="policyRoutingOffHint">Доменные категории («AI», «YouTube»…) направляются в отдельные группы выхода через <code>RULE-SET</code>; состав подписки меняется — правила не пересобираются. Подробно — <a href="quick-start.html">❓ Быстрый старт</a>.</div>
       <div id="policyRoutingPanel" style="display:none">
         <div class="hint">Доменное правило → стабильная логическая группа → <code>proxy-provider</code> подписки → текущий живой узел. Правила ссылаются на группы, а не на серверы: состав подписки может меняться — правила не требуют пересборки. Порядок политик = порядок правил; завершающее <code>MATCH,GLOBAL</code> остаётся правилом по умолчанию. Требуется Mihomo ≥ 1.19.27 (empty-fallback), инлайн rule-провайдеры ≥ 1.19.1.</div>
         <div id="policyCards"></div>
@@ -282,37 +361,43 @@
         <div class="hint" id="policyRoutingHint"></div>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label title="Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo»."><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface</label>
-        <label title="TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor."><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN</label>
+        <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN Interface">?</button><span class="ctx-help-pop" role="note">Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo».</span></span></label>
+        <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: MIPS stack">?</button><span class="ctx-help-pop" role="note">TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor.</span></span></label>
       </div>
       <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
-      <div class="advanced-stack-control">
-        <label><input type="checkbox" id="cfgTunStackAdvanced"> ⚙ Расширенный TUN stack (system / mixed)</label>
-        <select id="cfgTunStackEx" style="display:none">
-          <option value="system">system</option>
-          <option value="mixed">mixed</option>
-        </select>
-        <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
-        <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
-      </div>
       <div id="perProxyAdvancedPanel" class="advanced-panel">
         <details id="perProxyAdvancedDetails">
-          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Отдельный вход на каждый прокси</span></summary>
-          <div class="advanced-master">
-            <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
+          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Расширенные настройки</span></summary>
+          <div class="advanced-subsection">
+            <div class="advanced-subsection-title">⚙ Расширенный TUN stack</div>
+            <div class="advanced-stack-control">
+              <label><input type="checkbox" id="cfgTunStackAdvanced"> Включить расширенный TUN stack (system / mixed)</label>
+              <select id="cfgTunStackEx" style="display:none">
+                <option value="system">system</option>
+                <option value="mixed">mixed</option>
+              </select>
+              <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
+              <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
+            </div>
+            <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
           </div>
-          <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен. Раскрытие секции само по себе ничего не включает и не сбрасывает.</div>
-          <div class="checkbox-grid">
-            <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
-            <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
+          <div class="advanced-subsection advanced-subsection-second">
+            <div class="advanced-subsection-title">🔀 Отдельный вход на каждый прокси</div>
+            <div class="advanced-master">
+              <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
+            </div>
+            <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен. Раскрытие секции само по себе ничего не включает и не сбрасывает.</div>
+            <div class="checkbox-grid">
+              <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
+              <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
+            </div>
+            <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
           </div>
         </details>
       </div>
-      <div class="hint">Обычный TUN и MIPS включены по умолчанию. Режимы отдельного входа на каждый прокси — за крышкой расширенного режима; system/mixed — за крышкой расширенного TUN stack.</div>
-      <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
-      <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
+      <div class="hint">Обычный TUN и MIPS включены по умолчанию и настроены выше. Экспериментальный TUN stack (system / mixed) и режимы отдельного входа на каждый прокси собраны внутри ADVANCED-секции.</div>
 
-      <label style="margin-top:16px" title="URL, по которому Mihomo проверяет доступность узлов (url-test и health-check провайдеров). Обычно достаточно Google generate_204.">🏓 Ping server (health-check)</label>
+      <label style="margin-top:16px">🏓 Ping server (health-check) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Ping server">?</button><span class="ctx-help-pop" role="note">URL, по которому Mihomo проверяет доступность узлов (url-test и health-check провайдеров). Обычно достаточно Google generate_204.</span></span></label>
       <select id="pingSelect"></select>
 
       <div class="btn-group">
@@ -599,9 +684,33 @@ function initPingSelector() {
 }
 
 // === WIREGUARD UPLOAD ===
+// Источник истины WG/AWG-профилей: wgProfiles = [{id, filename, bean, mode, target}].
+// mode: 'direct' | 'proxy'; target — имя proxy/группы для dialer-proxy (mode=proxy).
+// wgBeans/wgFiles — производные коллекции (совместимость с существующим кодом/тестами),
+// пересобираются при каждом изменении; сами bean никогда не мутируются — на Build
+// создаётся клон с подставленным wireguard.dialerProxy (runtime-контракт per-profile).
+let wgProfiles = [];
 let wgBeans = [];
+let wgFiles = [];   // исходные имена файлов, параллельно wgBeans (для списка загрузки)
+let wgProfileSeq = 0;
 let wgUploadSeq = 0;
 let wgUploadPending = false;
+
+function syncWgCollections() {
+  wgBeans = wgProfiles.map(p => p.bean);
+  wgFiles = wgProfiles.map(p => p.filename);
+}
+
+// Клон профиля для Build: dialer-proxy подставляется только в клон
+// (per-profile контракт web4core: bean.wireguard.dialerProxy).
+function wgProfileBuildBean(p) {
+  const bean = JSON.parse(JSON.stringify(p.bean));
+  if (p.mode === 'proxy' && p.target.trim()) {
+    bean.wireguard = bean.wireguard || {};
+    bean.wireguard.dialerProxy = p.target.trim();
+  }
+  return bean;
+}
 
 // AWG-патч 1/3: рантайм-парсер понимает только скаляры, а реальные AWG-конфиги
 // пишут диапазоны и словесные булевы: PersistentKeepalive = 25-35 (Premium и
@@ -687,6 +796,32 @@ function injectWgDns(result, beans) {
   return result;
 }
 
+// Стабильный отпечаток содержимого WG-бина (без имени): для fail-safe дедупликации
+// при добавлении. Совпадает по смыслу с рантайм-дедупом buildFromRequest (транспорт
+// без имени), но срабатывает раньше — на этапе загрузки, с честным предупреждением.
+function wgBeanKey(bean) {
+  const seen = (value) => {
+    if (value === null) return 'null';
+    if (Array.isArray(value)) return '[' + value.map(seen).join(',') + ']';
+    if (typeof value === 'object') {
+      return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + seen(value[k])).join(',') + '}';
+    }
+    return JSON.stringify(value);
+  };
+  const copy = JSON.parse(JSON.stringify(bean || {}));
+  delete copy.name;
+  return seen(copy);
+}
+
+// Текущее определение dialer-группы из глобальных полей (имя/узлы/подписки).
+// Используется при добавлении профилей: новый профиль наследует режим «Через
+// промежуточный proxy», если определение группы уже заполнено.
+function wgGlobalGroupFields() {
+  const members = document.getElementById('wgDialerMembers').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const providers = document.getElementById('wgDialerProviders').value.split('\n').map(s => s.trim()).filter(Boolean);
+  return { members, providers };
+}
+
 function initWgUpload() {
   const fileInput = document.getElementById('wgFile');
   const statusEl = document.getElementById('wgStatus');
@@ -695,16 +830,12 @@ function initWgUpload() {
   fileInput.addEventListener('change', async () => {
     const requestId = ++wgUploadSeq;
     const files = Array.from(fileInput.files || []);
-    if (!files.length) {
-      wgUploadPending = false;
-      wgBeans = [];
-      const dnsInput = document.getElementById('wgCustomDns');
-      const dnsWarn = document.getElementById('wgDnsWarning');
-      if (dnsInput) dnsInput.value = '';
-      if (dnsWarn) dnsWarn.style.display = 'none';
-      updateWgStatus();
-      return;
-    }
+    // Сброс поля сразу после захвата списка: иначе повторный выбор ТОГО ЖЕ файла
+    // не генерирует change (value не изменился) и re-add после удаления не работает.
+    fileInput.value = '';
+    // Отмена picker'а (0 файлов) — осознанный no-op: ранее это молча стирало
+    // все загруженные профили. Очистка — только явная кнопка «🧹 Очистить все».
+    if (!files.length) return;
 
     const api = globalThis.web4core;
     if (!api?.parseWireGuardConf) {
@@ -720,14 +851,22 @@ function initWgUpload() {
     statusEl.classList.remove('loaded');
     btnEl.textContent = '📂 WG/AWG (чтение...)';
 
-    const nextBeans = [];
+    const fresh = [];
+    const freshNames = [];
+    const seen = new Set(wgBeans.map(wgBeanKey));
+    let skippedDup = 0;
     for (const file of files) {
       try {
         const raw = await file.text();
         if (requestId !== wgUploadSeq) return;
         const text = normalizeWgText(raw);
         const bean = api.parseWireGuardConf(text, file.name);
-        if (bean) nextBeans.push(bean);
+        if (!bean) continue;
+        const key = wgBeanKey(bean);
+        if (seen.has(key)) { skippedDup++; continue; }
+        seen.add(key);
+        fresh.push(bean);
+        freshNames.push(file.name);
       } catch (e) {
         if (requestId !== wgUploadSeq) return;
         showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true);
@@ -738,14 +877,30 @@ function initWgUpload() {
     // менять wgBeans/status/validation state.
     if (requestId !== wgUploadSeq) return;
 
-    wgBeans = nextBeans;
+    // APPEND-модель: повторное открытие picker'а добавляет профили к существующим,
+    // а не молча заменяет их (прежнее поведение теряло ранее загруженные файлы).
+    // Миграция старого сценария: если dialer-таргет уже задан глобально, новый
+    // профиль по умолчанию наследует «Через промежуточный proxy» с этим таргетом.
+    const globalTarget = document.getElementById('wgDialerInput').value.trim();
+    const hasGroupSrc = globalTarget || wgGlobalGroupFields().members.length > 0 || wgGlobalGroupFields().providers.length > 0;
+    fresh.forEach((bean, i) => {
+      wgProfiles.push({
+        id: ++wgProfileSeq,
+        filename: freshNames[i],
+        bean,
+        mode: hasGroupSrc ? 'proxy' : 'direct',
+        target: globalTarget || (hasGroupSrc ? 'WARP-DIALER' : ''),
+      });
+    });
+    syncWgCollections();
     wgUploadPending = false;
 
-    // Перехват нестабильного DNS
+    // Перехват нестабильного DNS: поле общее для всех WG-профилей; при добавлении
+    // заполняем ТОЛЬКО пустое поле (ручное значение пользователя не затираем).
     const customDnsInput = document.getElementById('wgCustomDns');
     const dnsWarning = document.getElementById('wgDnsWarning');
-    if (wgBeans && wgBeans.length > 0 && customDnsInput) {
-      const bean = wgBeans[0];
+    if (wgBeans && wgBeans.length > 0 && customDnsInput && !customDnsInput.value.trim() && fresh.length > 0) {
+      const bean = fresh.find(b => b.wireguard && Array.isArray(b.wireguard.dns)) || fresh[0];
       if (bean.wireguard && Array.isArray(bean.wireguard.dns)) {
         if (bean.wireguard.dns.includes('100.64.0.1')) {
           customDnsInput.value = '1.1.1.1, 8.8.8.8';
@@ -754,12 +909,10 @@ function initWgUpload() {
           customDnsInput.value = bean.wireguard.dns.join(', ');
           if (dnsWarning) dnsWarning.style.display = 'none';
         }
-      } else {
-        customDnsInput.value = '';
-        if (dnsWarning) dnsWarning.style.display = 'none';
       }
     }
     updateWgStatus();
+    if (skippedDup > 0) showToast(`Дубликат(ов) пропущено: ${skippedDup} — идентичный конфиг уже загружен`);
 
     // File input change invalidated state when selection started. This second
     // invalidation is required because a build may have completed while an old
@@ -777,9 +930,165 @@ function initWgUpload() {
     } else {
       statusEl.textContent = '';
       statusEl.classList.remove('loaded');
-      btnEl.textContent = '📂 Загрузить .conf / .awg';
+      btnEl.textContent = '📂 Загрузить .conf / .wg / .awg';
     }
+    renderWgList();
   }
+}
+
+// Карточки загруженных профилей: filename + тип + имя proxy + endpoint + режим
+// подключения (Напрямую / Через промежуточный proxy + таргет). Только публичные
+// атрибуты — ни ключей, ни PSK (DOM собирается через createElement/textContent).
+function wgProfileEndpoint(bean) {
+  const peers = bean?.wireguard?.peers;
+  if (Array.isArray(peers) && peers[0] && peers[0].server) return peers[0].server + ':' + (peers[0].port || '');
+  if (bean?.host) return bean.host + (bean.port ? ':' + bean.port : '');
+  return '';
+}
+
+function renderWgList() {
+  const list = document.getElementById('wgList');
+  const clearBtn = document.getElementById('wgClear');
+  if (!list) return;
+  list.textContent = '';
+  wgProfiles.forEach((p, i) => {
+    const bean = p.bean;
+    const li = document.createElement('li');
+    li.className = 'wg-card';
+
+    const head = document.createElement('div');
+    head.className = 'wg-card-head';
+    const mark = document.createElement('span');
+    mark.textContent = '✓ ';
+    mark.className = 'wg-list-ok';
+    const name = document.createElement('span');
+    name.textContent = p.filename || bean.name || 'profile';
+    name.className = 'wg-list-name';
+    const tag = document.createElement('span');
+    const isAwg = !!(bean.wireguard && bean.wireguard['amnezia-wg-option']);
+    tag.textContent = isAwg ? ' [AWG]' : ' [WG]';
+    tag.className = 'wg-list-tag';
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'wg-list-del';
+    del.textContent = '✕';
+    del.setAttribute('aria-label', 'Удалить ' + (p.filename || bean.name || 'профиль'));
+    del.addEventListener('click', () => removeWgProfile(i));
+    head.append(mark, name, tag, del);
+
+    const info = document.createElement('div');
+    info.className = 'wg-card-info';
+    const ep = wgProfileEndpoint(bean);
+    const bits = [];
+    if (bean.name) bits.push('proxy: ' + bean.name);
+    if (ep) bits.push('endpoint: ' + ep);
+    if (bean.wireguard && bean.wireguard.ip) bits.push('address: ' + bean.wireguard.ip);
+    info.textContent = bits.join(' · ');
+
+    const modeRow = document.createElement('div');
+    modeRow.className = 'wg-card-mode';
+    const modeLabel = document.createElement('label');
+    modeLabel.textContent = 'Подключение:';
+    modeLabel.htmlFor = 'wgMode' + p.id;
+    const modeSel = document.createElement('select');
+    modeSel.id = 'wgMode' + p.id;
+    modeSel.className = 'wg-mode';
+    modeSel.dataset.idx = i;
+    const o1 = document.createElement('option');
+    o1.value = 'direct';
+    o1.textContent = 'Напрямую';
+    const o2 = document.createElement('option');
+    o2.value = 'proxy';
+    o2.textContent = 'Через промежуточный proxy';
+    modeSel.append(o1, o2);
+    modeSel.value = p.mode;
+    modeRow.append(modeLabel, modeSel);
+
+    const targetRow = document.createElement('div');
+    targetRow.className = 'wg-target-row';
+    if (p.mode !== 'proxy') targetRow.style.display = 'none';
+    const targetLabel = document.createElement('label');
+    targetLabel.textContent = 'Proxy / группа:';
+    targetLabel.htmlFor = 'wgTarget' + p.id;
+    const targetInput = document.createElement('input');
+    targetInput.type = 'text';
+    targetInput.id = 'wgTarget' + p.id;
+    targetInput.className = 'wg-target';
+    targetInput.dataset.idx = i;
+    targetInput.value = p.target;
+    targetInput.placeholder = 'например: WARP-DIALER';
+    targetRow.append(targetLabel, targetInput);
+
+    li.append(head, info, modeRow, targetRow);
+    list.appendChild(li);
+  });
+  list.hidden = wgProfiles.length === 0;
+  clearBtn.style.display = wgProfiles.length > 0 ? '' : 'none';
+}
+
+// Делегированный обработчик изменений per-profile режима (select/input карточек):
+// меняет только UI-state профиля и инвалидирует результат сборки.
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (!t.classList) return;
+  const idx = Number(t.dataset && t.dataset.idx);
+  if (!Number.isInteger(idx) || !(idx >= 0 && idx < wgProfiles.length)) return;
+  if (t.classList.contains('wg-mode')) {
+    wgProfiles[idx].mode = t.value === 'proxy' ? 'proxy' : 'direct';
+    if (wgProfiles[idx].mode === 'proxy' && !wgProfiles[idx].target.trim()) {
+      const g = document.getElementById('wgDialerInput');
+      wgProfiles[idx].target = (g && g.value.trim()) || 'WARP-DIALER';
+    }
+    const row = t.closest('.wg-card');
+    const targetRow = row && row.querySelector('.wg-target-row');
+    if (targetRow) targetRow.style.display = wgProfiles[idx].mode === 'proxy' ? '' : 'none';
+    mihomoValidationSeq++;
+    resetCompatSummary();
+    setMihomoValidationState('NOT_BUILT');
+  } else if (t.classList.contains('wg-target')) {
+    wgProfiles[idx].target = t.value;
+    mihomoValidationSeq++;
+    resetCompatSummary();
+    setMihomoValidationState('NOT_BUILT');
+  }
+});
+
+function removeWgProfile(index) {
+  if (!(index >= 0 && index < wgProfiles.length)) return;
+  wgProfiles = wgProfiles.filter((_, i) => i !== index);
+  syncWgCollections();
+  mihomoValidationSeq++;
+  resetCompatSummary();
+  setMihomoValidationState('NOT_BUILT');
+  updateWgStatusTextOnly();
+}
+
+function clearWgProfiles() {
+  wgProfiles = [];
+  syncWgCollections();
+  const dnsInput = document.getElementById('wgCustomDns');
+  const dnsWarn = document.getElementById('wgDnsWarning');
+  if (dnsInput) dnsInput.value = '';
+  if (dnsWarn) dnsWarn.style.display = 'none';
+  mihomoValidationSeq++;
+  resetCompatSummary();
+  setMihomoValidationState('NOT_BUILT');
+  updateWgStatusTextOnly();
+}
+
+function updateWgStatusTextOnly() {
+  const btnEl = document.getElementById('btnWg');
+  const statusEl = document.querySelector('#wgStatus');
+  if (wgBeans.length > 0) {
+    statusEl.textContent = `✅ Загружено: ${wgBeans.length} конфиг(ов)`;
+    statusEl.classList.add('loaded');
+    btnEl.textContent = `📂 WG/AWG (${wgBeans.length})`;
+  } else {
+    statusEl.textContent = '';
+    statusEl.classList.remove('loaded');
+    btnEl.textContent = '📂 Загрузить .conf / .wg / .awg';
+  }
+  renderWgList();
 }
 
 // === MIHOMO BASIC VALIDATION ===
@@ -1330,7 +1639,7 @@ function renderCompatSummary(yaml) {
 // пакет v2.0 (mtu 1420, gso, find-process-mode: off, store-*: false).
 // При изменении install.sh — синхронизировать эту константу и value= в полях
 // #vpsDevice/#vpsMtu/#vpsFakeIp/#vpsDnsListen/#vpsDnsNs/#vpsProxyNs.
-// Generic-профиль: applyDeploymentProfile() НЕ вызывается (guard в buildMihomo) —
+// Профили router/vps-local: applyDeploymentProfile() НЕ вызывается (guard в buildMihomo) —
 // вывод байт-в-байт прежний. Подробно — docs/VPS-GATEWAY.md.
 const VPS_GATEWAY_DEFAULTS = {
   device: 'tun-mihomo',
@@ -1351,8 +1660,9 @@ function vpsCsv(id, fallback) {
   return arr.length ? arr : fallback;
 }
 
-// Чистый пост-патч финального YAML. Вызывается ТОЛЬКО при профиле 'vps'
-// (после injectWgDns, до allow-lan патча). lineWidth:-1 обязателен —
+// Чистый пост-патч финального YAML. Вызывается ТОЛЬКО для профиля vps-gateway
+// (второй аргумент — внутреннее имя 'vps' gateway-семейства, не id профиля;
+// после injectWgDns, до allow-lan патча). lineWidth:-1 обязателен —
 // иначе jsyaml переносит длинные AWG base64-строки и портит их.
 function applyDeploymentProfile(yaml, profile, tunStack = 'gvisor') {
   if (profile !== 'vps') return yaml;
@@ -1725,6 +2035,7 @@ function updatePolicyRoutingVisibility() {
   const master = document.getElementById('cfgPerProxyMaster') && document.getElementById('cfgPerProxyMaster').checked;
   const subMode = document.getElementById('cfgSubMode').checked;
   document.getElementById('policyRoutingPanel').style.display = on ? 'block' : 'none';
+  document.getElementById('policyRoutingOffHint').style.display = on ? 'none' : '';
   const hints = [];
   if (bsOn) hints.push('Режим белых списков: категории указывают на GLOBAL (плоский fallback PRIMARY→FALLBACK) или DIRECT; AUTO-группы категорий не создаются.');
   else if (subMode) hints.push('URL-подписки: каждая категория получает AUTO url-test-группу над общим provider (use:) и select [AUTO, ⚡ Fastest, GLOBAL, DIRECT].');
@@ -1793,8 +2104,10 @@ function buildMihomo() {
     return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
   }
 
-  // dialer-proxy (туннель в туннеле): имя таргета + необязательные транзитные узлы
-  // и/или URL-провайдеры авторской dialer-группы. Пустые поля — byte-parity прежнего output.
+  // dialer-proxy (туннель в туннеле): per-profile модель. Назначение — в карточке
+  // каждого WG/AWG-профиля (mode 'direct'|'proxy' + таргет); глобальные поля ниже
+  // описывают только dialer-ГРУППУ (имя + транзитные узлы + URL-подписки).
+  // GROUP DEFINITION ≠ PROFILE ASSIGNMENT.
   const wgDialer = document.getElementById('wgDialerInput').value.trim();
   const wgDialerMembers = document.getElementById('wgDialerMembers').value.split('\n')
     .map(s => s.trim()).filter(Boolean);
@@ -1803,15 +2116,26 @@ function buildMihomo() {
   if ((wgDialerMembers.length || wgDialerProviders.length) && (wgDialer === 'GLOBAL' || wgDialer === '⚡ Fastest')) {
     return showToast('❌ dialer-группа не может называться GLOBAL или ⚡ Fastest: они содержат сам WARP (цикл)', true);
   }
+  const dialedProfiles = wgProfiles.filter(p => p.mode === 'proxy');
+  const emptyTargets = dialedProfiles.filter(p => !p.target.trim());
+  if (emptyTargets.length) {
+    return showToast('❌ Укажите proxy/группу в карточке профиля: ' + emptyTargets.map(p => p.filename).join(', ') + ' (или переключите «Напрямую»)', true);
+  }
+  const badTargets = dialedProfiles.filter(p => p.target.trim() === 'GLOBAL' || p.target.trim() === '⚡ Fastest');
+  if (badTargets.length) {
+    return showToast('❌ Таргет не может быть GLOBAL или ⚡ Fastest (они содержат сам WARP): ' + badTargets.map(p => p.filename).join(', '), true);
+  }
+  const useDialerGroup = dialedProfiles.length > 0 && (wgDialerMembers.length > 0 || wgDialerProviders.length > 0);
 
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
     const realityModern = parseRealityModernLines();
+    const buildBeans = wgProfiles.map(wgProfileBuildBean);
     const result = api.buildFromRequest({
       core: 'mihomo',
       input: raw,
       ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}),
-      wgBeans: normalizeWgBeans(wgBeans),
+      wgBeans: normalizeWgBeans(buildBeans),
       options: {
         addSocks: addSocks,
         addTun: addTun,
@@ -1827,18 +2151,19 @@ function buildMihomo() {
         perProxyPort: perProxySocks,
         mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined,
         mihomoDomainPolicy: domainPolicy && domainPolicy.length ? domainPolicy : undefined,
-        wgDialerProxy: wgDialer || undefined,
-        wgDialerGroupMembers: wgDialerMembers.length ? wgDialerMembers : undefined,
-        wgDialerProviders: wgDialerProviders.length ? wgDialerProviders : undefined
+        wgDialerProxy: useDialerGroup ? (wgDialer || undefined) : undefined,
+        wgDialerGroupMembers: useDialerGroup ? wgDialerMembers : undefined,
+        wgDialerProviders: useDialerGroup ? wgDialerProviders : undefined,
+        wgDialerGroupOnly: useDialerGroup ? true : undefined
       }
     });
 
-    injectWgDns(result, wgBeans);
+    injectWgDns(result, buildBeans);
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
 
-    // PATCH: Deployment profile — только при opt-in профиле VPS Gateway.
-    // При 'generic' пост-патч не выполняется вовсе (инвариант byte-for-byte).
+    // PATCH: Deployment profile — только при профиле vps-gateway.
+    // При router/vps-local пост-патч не выполняется вовсе (инвариант byte-for-byte).
 
     if (deploymentProfile === 'vps-gateway') {
       yaml = applyDeploymentProfile(yaml, 'vps', tunStack);
@@ -1943,6 +2268,30 @@ applyDeploymentProfileUi(); // заполнить hint и применить с�
 }, true));
 resetCompatSummary();
 setMihomoValidationState('NOT_BUILT');
+
+// === CONTEXT HELP: один делегированный обработчик на все ?-маркеры.
+// Клик — открыть/закрыть; снаружи/Escape — закрыть; состояние чекбоксов и Build не затрагивается.
+(function () {
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest ? e.target.closest('.ctx-help') : null;
+    document.querySelectorAll('.ctx-help-wrap.open').forEach(function (w) {
+      if (!btn || w !== btn.parentElement) { w.classList.remove('open'); const b = w.querySelector('.ctx-help'); if (b) b.setAttribute('aria-expanded', 'false'); }
+    });
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const wrap = btn.parentElement;
+    const open = wrap.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }, false);
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('.ctx-help-wrap.open').forEach(function (w) {
+      w.classList.remove('open');
+      const b = w.querySelector('.ctx-help'); if (b) b.setAttribute('aria-expanded', 'false');
+    });
+  });
+})();
 </script>
 </body>
 </html>
