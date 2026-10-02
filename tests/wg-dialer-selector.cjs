@@ -164,20 +164,45 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   assert.ok(opts.some(o => o.value === 'WARP-DIALER'), 'provider/статик dialer-группа появилась в списке');
   ok('dynamic refresh: dialer-группа появляется в dropdown');
 
-  // 9. provider-backed dialer group (use:) — тоже цель (URL подписки обязан
-  // быть среди включённых URL-подписок — контракт совпадения URL)
+  // 9. URL-подписка из ОСНОВНОГО input автоматически становится target.
   await page.evaluate(() => {
     document.getElementById('wgDialerMembers').value = '';
+    document.getElementById('wgDialerProviders').value = '';
+    document.getElementById('wgDialerInput').value = '';
+  });
+  await page.locator('#mihomoInput').fill(LINKS + '\nhttps://subs.example.invalid/token');
+  await page.locator('#cfgSubMode').check();
+  await page.waitForFunction(() => dialerTargetsCache.some(t => t.kind === 'provider'), null, { timeout: 10000 });
+  const providerTarget = await page.evaluate(() => dialerTargetsCache.find(t => t.kind === 'provider'));
+  assert.ok(providerTarget && /ПОДПИСКА/.test(providerTarget.label), 'подписка видна как понятный target');
+  await page.locator('.wg-mode').first().selectOption('proxy');
+  await page.waitForTimeout(300);
+  const firstTarget = '#wgTarget' + (await page.evaluate(() => wgProfiles[0].id));
+  await page.locator(firstTarget).selectOption(providerTarget.value);
+  r = await build();
+  assert.equal(r.state, 'VALID', 'WG → subscription target: сборка VALID');
+  const providerCheck = await page.evaluate(y => {
+    const d = jsyaml.load(y);
+    const wg = (d.proxies || []).find(p => p && p.type === 'wireguard');
+    const g = (d['proxy-groups'] || []).find(x => x && x.name === (wg && wg['dialer-proxy']));
+    const providers = Object.keys(d['proxy-providers'] || {});
+    return { dialer: wg && wg['dialer-proxy'], group: g, providers };
+  }, r.yaml);
+  assert.ok(providerCheck.dialer && providerCheck.dialer.startsWith('DIALER-'), 'WG получил generated dialer group');
+  assert.ok(providerCheck.group && Array.isArray(providerCheck.group.use) && providerCheck.group.use.length === 1, 'generated group содержит use:[provider]');
+  assert.ok(providerCheck.providers.includes(providerCheck.group.use[0]), 'use ссылается на существующий proxy-provider');
+  assert.equal(await page.locator('#wgDialerProviders').inputValue(), '', 'URL не дублировался в advanced поле');
+  ok('subscription target: main input → dropdown → generated use: group без повторного URL');
+
+  // 9b. Legacy/ADVANCED provider-backed group остаётся совместимым.
+  // Группа существует только когда хотя бы один WG реально использует dialer.
+  await page.locator('.wg-mode').first().selectOption('proxy');
+  await page.evaluate(() => {
     document.getElementById('wgDialerProviders').value = 'https://subs.example.invalid/token';
     document.getElementById('wgDialerProviders').dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await page.locator('#mihomoInput').fill(LINKS + '\nhttps://subs.example.invalid/token');
-  await page.locator('#cfgSubMode').check(); // use:-группы требуют включённый Sub Mode
   await page.waitForFunction(() => dialerTargetsCache.some(t => t.value === 'WARP-DIALER'), null, { timeout: 10000 });
-  r = await build();
-  assert.equal(r.state, 'VALID', 'WG → provider-backed dialer-группа: сборка VALID');
-  assert.match(proxyBlockOf(r.yaml, 'wg-simple-a'), /dialer-proxy: WARP-DIALER/, 'WG идёт через provider-группу');
-  ok('WG → provider-backed dialer-группа (схема WG → DIALER GROUP → use: provider)');
+  ok('ADVANCED legacy provider-backed WARP-DIALER остаётся доступен');
 
   // 10. цикл A → B → A: централизованный детектор отклоняет сборку
   await page.evaluate(() => {

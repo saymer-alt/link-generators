@@ -154,12 +154,18 @@ const root = path.resolve(__dirname, '..');
       'Подсказка: Использовать URL-подписки',
       'Подсказка: Автоматический режим белых списков',
       'Подсказка: Отдельный вход на каждый прокси',
+      'Подсказка: Modern REALITY',
       'Подсказка: Импорт MagiTrickle',
     ];
     for (const label of expectedHelps) {
       assert.ok(await page.locator(`.ctx-help[aria-label="${label}"]`).count() === 1, 'подсказка присутствует: ' + label);
     }
-    ok('новые подсказки v1.6.2: Sub Mode, БС, Per-Proxy master, MagiTrickle import');
+    const realityHelp = await page.locator('.ctx-help[aria-label="Подсказка: Modern REALITY"] + .ctx-help-pop').textContent();
+    assert.match(realityHelp, /VLESS \+ REALITY/, 'Modern REALITY help объясняет scope');
+    assert.match(realityHelp, /25\.5\.16/, 'Modern REALITY help указывает появление поддержки');
+    assert.match(realityHelp, /не гарантирует совместимость/, 'Modern REALITY help содержит compatibility caveat');
+    assert.equal(await page.locator('#wgDialerAdvanced').getAttribute('open'), null, 'низкоуровневая dialer-группа скрыта в ADVANCED по умолчанию');
+    ok('новые подсказки v1.6.2: Sub Mode, БС, Per-Proxy, Modern REALITY, MagiTrickle + dialer ADVANCED');
     // WG-карточечные подсказки создаются динамически при загрузке профиля
     await page.locator('#wgFile').setInputFiles(path.join(root, 'tests', 'fixtures', 'wg-simple-a.conf'));
     await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 1);
@@ -174,7 +180,8 @@ const root = path.resolve(__dirname, '..');
       return pop ? pop.textContent : '';
     });
     assert.match(targetPop, /Endpoint/, 'подсказка таргета объясняет Endpoint-соединение');
-    assert.match(targetPop, /существуют в текущей конфигурации/, 'подсказка таргета: только существующие цели');
+    assert.match(targetPop, /Доступны существующие proxy, другие WG\/AWG и включённые URL-подписки/, 'подсказка таргета перечисляет реальные цели и URL-подписки');
+    assert.match(targetPop, /браузер не скачивает/, 'подсказка таргета объясняет локальный provider-backed путь без fetch подписки');
     // MT mapping-подсказка появляется в preview
     await page.locator('#cfgPolicyRouting').check();
     await page.locator('#mtImportBtn').click();
@@ -185,6 +192,10 @@ const root = path.resolve(__dirname, '..');
       return box ? box.querySelector('.ctx-help-pop') : null;
     });
     assert.ok(mapHelp, 'MagiTrickle: подсказка у маппинга интерфейсов');
+    const mtLayout = await page.locator('#mtImportPreview').evaluate(el => ({ paddingLeft: getComputedStyle(el).paddingLeft }));
+    assert.notEqual(mtLayout.paddingLeft, '0px', 'MagiTrickle preview имеет внутренний padding');
+    assert.ok(await page.locator('#mtImportGroups').evaluate(el => el.classList.contains('mt-import-groups')), 'MagiTrickle groups получает scroll-класс');
+    assert.equal(await page.locator('#mtImportGroups').evaluate(el => getComputedStyle(el).overflowY), 'auto', 'длинный список MagiTrickle прокручивается');
     await page.locator('#mtImportCancel').click();
     await page.locator('#cfgPolicyRouting').uncheck();
     ok('динамические подсказки: WG-карточки (Подключение/Промежуточный выход) + MT-маппинг');
