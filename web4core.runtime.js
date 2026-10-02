@@ -4381,12 +4381,22 @@
     };
     return map[status] || "";
   }
-  async function fetchSubscription(url) {
+  async function fetchSubscription(url, options = {}) {
     if (typeof fetch !== "function") throw new Error("Fetch API not available");
     const allowedSchemes = new Set(SUPPORTED_SCHEMES.filter((s) => s !== "http" && s !== "https"));
     const splitLines2 = (text) => (text || "").split(/\n/).map((s) => s.trim()).filter(Boolean);
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
+    const allowedRequestHeaders = /* @__PURE__ */ new Set(["x-hwid", "x-device-model", "x-device-os", "x-ver-os"]);
+    const requestHeaders = {};
+    if (options && options.headers && typeof options.headers === "object") {
+      for (const [rawName, rawValue] of Object.entries(options.headers)) {
+        const name = String(rawName || "").trim().toLowerCase();
+        if (!allowedRequestHeaders.has(name) || rawValue === void 0 || rawValue === null) continue;
+        const value = String(rawValue).trim();
+        if (value) requestHeaders[name] = value;
+      }
+    }
     function hasRealSubscriptionLinks(text) {
       const lines2 = splitLines2(text);
       if (!lines2.length) return false;
@@ -4401,6 +4411,7 @@
       try {
         const headers = new Headers(FETCH_INIT && FETCH_INIT.headers ? FETCH_INIT.headers : {});
         if (!headers.has("Accept")) headers.set("Accept", "text/plain, */*");
+        for (const [name, value] of Object.entries(requestHeaders)) headers.set(name, value);
         if (!isBrowser) {
           if (/github\.com|raw\.githubusercontent\.com/i.test(u)) {
             headers.set("Referer", "https://github.com/");
