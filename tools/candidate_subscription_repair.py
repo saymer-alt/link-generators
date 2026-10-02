@@ -3,6 +3,22 @@ from pathlib import Path
 path = Path('index.html')
 text = path.read_text()
 
+# One-shot patcher could be triggered again by its own push. Normalize the two
+# mechanical artifacts before any semantic repairs.
+while 'async async function buildMihomo()' in text:
+    text = text.replace('async async function buildMihomo()', 'async function buildMihomo()', 1)
+
+mode_block = '''  const subMode = document.getElementById('cfgSubMode').checked;
+  const excludeFilterRaw = document.getElementById('excludeFilterInput').value.trim();
+  const filterCompiled = compileSubscriptionExcludeFilter(excludeFilterRaw);
+  if (!subMode && filterCompiled.error) {
+    return showToast('❌ Exclude Filter: некорректное регулярное выражение для статического разворачивания: ' + filterCompiled.error, true);
+  }
+'''
+doubled = mode_block + mode_block
+while doubled in text:
+    text = text.replace(doubled, mode_block, 1)
+
 # Preflight dialer registry must keep using DOM state; build-local variables do not exist there.
 preflight_bad = '''        urlTest: document.getElementById('pingSelect').value || 'https://google.com/generate_204',
         mihomoSubscriptionMode: subMode,
