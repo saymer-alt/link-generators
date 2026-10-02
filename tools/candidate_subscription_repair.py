@@ -72,3 +72,15 @@ text = text.replace(
     1,
 )
 path.write_text(text)
+
+# Existing UI test intentionally asserted the old OFF-mode explanation. Update it
+# to the new contract while keeping the assertion user-facing rather than brittle.
+test_path = Path('tests/browser.cjs')
+test_text = test_path.read_text()
+old_assert = "    assert.match(await page.locator('#subModeHint').innerText(), /обычные proxy-ссылки.*напрямую/i);"
+new_assert = "    assert.match(await page.locator('#subModeHint').innerText(), /подписка читается один раз.*статические proxies/i);"
+if old_assert in test_text:
+    test_text = test_text.replace(old_assert, new_assert, 1)
+elif new_assert not in test_text:
+    raise SystemExit('legacy Sub Mode hint assertion not found')
+test_path.write_text(test_text)
