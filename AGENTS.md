@@ -394,17 +394,20 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
 
 ## Privacy and security
 
-- Users paste secrets here: WARP private/public keys, addresses, SNI. Currently
-  the page sends nothing and stores nothing: `index.html` contains no `fetch`,
-  `XMLHttpRequest`, `sendBeacon`, `localStorage`, or `sessionStorage` — only clipboard
-  writes. It must stay this way: DO NOT add telemetry, analytics, data transmission,
-  or persistence of keys.
-- Runtime nuance: `web4core.fetchSubscription()` can fetch subscription text from
-  the browser and, when direct fetch fails, falls back to the public CORS proxy
-  `sub.web2core.workers.dev` (upstream infrastructure). The current UI does NOT call it —
-  Mihomo itself fetches subscriptions through `proxy-providers`. Connecting fetchSubscription
-  is a decision to disclose the subscription URL to a third party — explicit owner approval
-  is required.
+- Users paste secrets here: WARP private/public keys, addresses, SNI and subscription URLs.
+  WARP/WG keys and configs stay local; DO NOT add telemetry or analytics and never persist keys,
+  subscription URLs, subscription bodies or proxy credentials.
+- Owner-approved subscription inspection (2026-10-02): when Build sees an HTTP(S) subscription,
+  the UI may call `web4core.fetchSubscription()` to preview actual node names and, with Sub Mode
+  OFF, expand the current subscription snapshot into static proxies. The request is user-triggered
+  by Build, never background polling. Direct browser fetch is preferred; when CORS/direct fetch
+  fails the runtime may fall back to the public proxy `sub.web2core.workers.dev`, which necessarily
+  discloses the subscription URL to that proxy.
+- The only persistent browser value introduced for inspection is a random preview identity HWID
+  (`link-generators.subscription-preview-hwid.v1`). It is not a key and is deliberately stable so
+  device-limited subscription panels do not register a new device on every Build. The preview uses
+  a recognizable generator `x-device-model`; it never reuses the generated Mihomo/Keenetic identity.
+  If storage is unavailable (including some `file://` contexts), keep the HWID in memory only.
 - User input is untrusted (bot YAML, links, files): parse inside try/catch and show
   a clear toast error, as currently implemented.
 - Treat user-derived WARP values as untrusted text. `generateWarp()` may clear its output

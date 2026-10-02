@@ -286,7 +286,7 @@
       <div class="card-title">📋 Входные данные</div>
       <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
       <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
-      <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Если используете HTTP(S) URL подписки, оставьте включённым режим «URL-подписки» ниже. Если в поле только обычные proxy-ссылки — режим URL-подписок лучше выключить.</div>
+      <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Для HTTP(S) подписки режим ниже определяет результат: включён — динамический <code>proxy-provider</code>; выключен — подписка один раз читается браузером и её текущие узлы встраиваются как обычные <code>proxies:</code>.</div>
       <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> Автоматический режим белых списков <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Автоматический режим белых списков">?</button><span class="ctx-help-pop" role="note">Плоский резервный набор (PRIMARY → FALLBACK): GLOBAL сначала использует основной набор выходов, при их недоступности переключается на резервный. Health-check каждые 300 секунд, ускоренный при неудачах. Доступен только в профиле «Роутер / обычный TUN»: на VPS не используется.</span></span></label></div>
       <div class="hint" id="awlRouterHint" style="display:none">Автоматический режим белых списков доступен только для профиля «Роутер / обычный TUN».</div>
       <div id="whitelistPanel" style="display:none">
@@ -337,7 +337,7 @@
         <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Для домашнего роутера обычно включено; для VPS с локальным Xray/3X-UI выключите.</span></span></label>
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090.</span></span></label>
-        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено по умолчанию во всех профилях: строки http(s):// из поля ввода добавляются как proxy-providers (узлы подтягиваются самим Mihomo по расписанию). Если в поле только обычные proxy-ссылки (vless://, trojan://…) — выключите этот режим, они разбираются напрямую.</span></span></label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется отдельный стабильный HWID генератора, а не HWID Mihomo/Keenetic.</span></span></label>
       </div>
       <div id="subModeHint" class="hint"></div>
       <div id="webUiRow" style="margin-top:10px">
@@ -354,7 +354,15 @@
       <div id="excludeFilterRow" style="margin-top:10px">
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
         <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
-        <div class="hint">Regexp/keyword-фильтр Mihomo <code>exclude-filter</code>: узлы provider, чьи фактические имена совпали, исключаются. Например, латинский <code>ru|russia</code> не совпадёт с кириллическим именем <code>Россия</code>, поэтому для таких подписок добавляйте кириллический вариант. Применяется ко всем подпискам. Пусто — поле не добавляется.</div>
+        <div class="hint">Фильтр по фактическим именам узлов. При включённых URL-подписках передаётся Mihomo как <code>exclude-filter</code>; при выключенных применяется браузером к развёрнутым узлам до сборки YAML. Например, <code>(?i)ru|russia|россия</code>. Применяется ко всем подпискам. Пусто — фильтрации нет.</div>
+        <div id="subscriptionPreviewBox" class="hint" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)" aria-live="polite">
+          <div id="subscriptionPreviewStats"></div>
+          <div id="subscriptionPreviewWarning" style="display:none;color:var(--warn);margin-top:4px"></div>
+          <details id="subscriptionPreviewDetails" style="margin-top:6px">
+            <summary>Найденные имена узлов</summary>
+            <div id="subscriptionPreviewNames" style="max-height:220px;overflow:auto;margin-top:5px;white-space:pre-wrap;font-family:monospace"></div>
+          </details>
+        </div>
       </div>
       <div id="deviceModelRow" style="margin-top:10px">
         <label for="deviceModelInput">📱 Device Model (необязательно)</label>
@@ -835,9 +843,9 @@ function computeDialerTargetsSync() {
         addSocks: addSocks,
         addTun: addTun,
         urlTest: document.getElementById('pingSelect').value || 'https://google.com/generate_204',
-        mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
-        excludeFilter: document.getElementById('excludeFilterInput').value,
-        deviceModel: document.getElementById('deviceModelInput').value,
+        mihomoSubscriptionMode: subMode,
+        excludeFilter: subMode ? excludeFilterRaw : undefined,
+        deviceModel: subMode ? document.getElementById('deviceModelInput').value : undefined,
         mihomoPerProxyTun: false,
         mihomoTunStack: tunStack,
         perProxyPort: false,
@@ -2260,18 +2268,170 @@ function onWhitelistChange() {
 // родителе (MIPS и «TUN на каждый прокси» — при TUN; «SOCKS-порт на каждый
 // прокси» — при Mixed Port); выключение родителя сбрасывает зависимую опцию.
 // В БС-режиме Per-Proxy принудительно недоступны (плюс кламп в buildMihomo).
+const SUBSCRIPTION_PREVIEW_STORAGE_KEY = 'link-generators.subscription-preview-hwid.v1';
+const SUBSCRIPTION_PREVIEW_DEVICE_MODEL = 'Saymer Link Generators Preview';
+let subscriptionPreviewMemoryHwid = '';
+
+function subscriptionPreviewRandomHwid() {
+  const bytes = new Uint8Array(16);
+  try {
+    (globalThis.crypto || window.crypto).getRandomValues(bytes);
+  } catch (_) {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function getSubscriptionPreviewHwid() {
+  if (/^[A-Za-z0-9=-]{10,64}$/.test(subscriptionPreviewMemoryHwid)) return subscriptionPreviewMemoryHwid;
+  let stored = '';
+  try { stored = localStorage.getItem(SUBSCRIPTION_PREVIEW_STORAGE_KEY) || ''; } catch (_) {}
+  if (/^[A-Za-z0-9=-]{10,64}$/.test(stored)) {
+    subscriptionPreviewMemoryHwid = stored;
+    return stored;
+  }
+  subscriptionPreviewMemoryHwid = subscriptionPreviewRandomHwid();
+  try { localStorage.setItem(SUBSCRIPTION_PREVIEW_STORAGE_KEY, subscriptionPreviewMemoryHwid); } catch (_) {}
+  return subscriptionPreviewMemoryHwid;
+}
+
+function subscriptionPreviewHeaders() {
+  return {
+    'x-hwid': getSubscriptionPreviewHwid(),
+    'x-device-model': SUBSCRIPTION_PREVIEW_DEVICE_MODEL,
+    'x-device-os': 'Browser'
+  };
+}
+
+function splitSubscriptionInputForPreview(raw) {
+  const lines = String(raw || '').split(/\r?\n/);
+  return lines.map(line => {
+    const trimmed = line.trim();
+    if (!/^https?:\/\//i.test(trimmed)) return { line, subscription: false };
+    try {
+      const u = new URL(trimmed);
+      if (u.username || u.password) return { line, subscription: false };
+      return { line, url: trimmed, subscription: true };
+    } catch (_) {
+      return { line, subscription: false };
+    }
+  });
+}
+
+function compileSubscriptionExcludeFilter(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return { regex: null, error: '' };
+  let source = value;
+  let flags = '';
+  const prefix = source.match(/^\(\?([ims]+)\)/i);
+  if (prefix) {
+    flags = Array.from(new Set(prefix[1].toLowerCase().split(''))).join('');
+    source = source.slice(prefix[0].length);
+  }
+  try { return { regex: new RegExp(source, flags), error: '' }; }
+  catch (e) { return { regex: null, error: e && e.message ? e.message : String(e) }; }
+}
+
+function subscriptionLinkName(api, link) {
+  try {
+    const beans = api.buildBeansFromInput(String(link || '').trim());
+    const bean = Array.isArray(beans) && beans.length ? beans[0] : null;
+    if (bean) {
+      if (typeof bean.name === 'string' && bean.name.trim()) return bean.name.trim();
+      if (typeof api.computeTag === 'function') {
+        const tag = api.computeTag(bean);
+        if (typeof tag === 'string' && tag.trim()) return tag.trim();
+      }
+    }
+  } catch (_) {}
+  const hash = String(link || '').split('#', 2)[1] || '';
+  if (hash) {
+    try { return decodeURIComponent(hash).trim() || 'proxy'; } catch (_) { return hash.trim() || 'proxy'; }
+  }
+  return 'proxy';
+}
+
+function emptySubscriptionPreviewSummary() {
+  return { subscriptions: 0, found: 0, excluded: 0, names: [], warnings: [] };
+}
+
+function mergeSubscriptionPreviewSummary(target, source) {
+  target.subscriptions += source.subscriptions;
+  target.found += source.found;
+  target.excluded += source.excluded;
+  target.names.push(...source.names);
+  target.warnings.push(...source.warnings);
+  return target;
+}
+
+async function inspectSubscriptionInput(api, raw, options) {
+  const expand = !!(options && options.expand);
+  const filterRegex = options && options.filterRegex ? options.filterRegex : null;
+  const entries = splitSubscriptionInputForPreview(raw);
+  const output = [];
+  const summary = emptySubscriptionPreviewSummary();
+  let ordinal = 0;
+  for (const entry of entries) {
+    if (!entry.subscription) {
+      output.push(entry.line);
+      continue;
+    }
+    ordinal++;
+    summary.subscriptions++;
+    try {
+      const body = await api.fetchSubscription(entry.url, { headers: subscriptionPreviewHeaders() });
+      const links = String(body || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (!links.length) throw new Error('подписка не вернула поддерживаемых proxy-ссылок');
+      for (const link of links) {
+        const name = subscriptionLinkName(api, link);
+        summary.found++;
+        summary.names.push(name);
+        const excluded = !!(filterRegex && filterRegex.test(name));
+        if (excluded) summary.excluded++;
+        if (expand && !excluded) output.push(link);
+      }
+      if (!expand) output.push(entry.line);
+    } catch (e) {
+      const reason = String(e && e.message ? e.message : e).replace(/https?:\/\/\S+/gi, '[URL hidden]');
+      if (expand) throw new Error('Не удалось прочитать подписку #' + ordinal + ': ' + reason);
+      summary.warnings.push('Не удалось получить preview подписки #' + ordinal + ': ' + reason + '. Provider YAML будет собран без preview.');
+      output.push(entry.line);
+    }
+  }
+  return { input: output.join('\n'), summary };
+}
+
+function clearSubscriptionPreview() {
+  const box = document.getElementById('subscriptionPreviewBox');
+  if (box) box.style.display = 'none';
+}
+
+function renderSubscriptionPreview(summary) {
+  const box = document.getElementById('subscriptionPreviewBox');
+  if (!box) return;
+  if (!summary || !summary.subscriptions) { clearSubscriptionPreview(); return; }
+  const remaining = Math.max(0, summary.found - summary.excluded);
+  document.getElementById('subscriptionPreviewStats').textContent =
+    'Подписок: ' + summary.subscriptions + ' · найдено узлов: ' + summary.found +
+    ' · после фильтра: ' + remaining + ' · исключено: ' + summary.excluded;
+  const warning = document.getElementById('subscriptionPreviewWarning');
+  warning.textContent = summary.warnings.join(' ');
+  warning.style.display = summary.warnings.length ? '' : 'none';
+  const names = document.getElementById('subscriptionPreviewNames');
+  names.textContent = summary.names.length ? Array.from(new Set(summary.names)).join('\n') : 'Имена узлов недоступны.';
+  box.style.display = '';
+}
+
 function updateExcludeFilterVisibility() {
-  // Эти параметры имеют смысл только для proxy-providers (Mihomo + Sub Mode).
-  const visible = document.getElementById('cfgSubMode').checked ? '' : 'none';
-  document.getElementById('excludeFilterRow').style.display = visible;
-  document.getElementById('deviceModelRow').style.display = visible;
+  document.getElementById('excludeFilterRow').style.display = '';
+  document.getElementById('deviceModelRow').style.display = document.getElementById('cfgSubMode').checked ? '' : 'none';
 }
 
 function updateSubModeHint() {
   const on = document.getElementById('cfgSubMode').checked;
   document.getElementById('subModeHint').textContent = on
-    ? 'URL-подписки включены: HTTP(S) URL будут добавлены как proxy-providers. Обычные proxy-ссылки можно смешивать с ними. Если в поле только обычные ссылки, выключите этот режим.'
-    : 'URL-подписки выключены: обычные proxy-ссылки разбираются напрямую. Чтобы использовать HTTP(S) URL подписки, включите этот режим.';
+    ? 'URL-подписки включены: HTTP(S) URL останутся proxy-providers. При Build браузер может один раз прочитать подписку для preview имён и Exclude Filter; финальный YAML остаётся динамическим.'
+    : 'URL-подписки выключены: при Build HTTP(S) подписка читается один раз, Exclude Filter применяется к фактическим именам узлов, а оставшиеся узлы встраиваются в YAML как статические proxies.';
 }
 
 function updateWebUiVisibility() {
@@ -2743,7 +2903,7 @@ function updatePolicyRoutingVisibility() {
 }
 
 // === MIHOMO BUILDER (via web4core) ===
-function buildMihomo() {
+async function buildMihomo() {
   if (wgUploadPending) {
     mihomoValidationSeq++;
     resetCompatSummary();
@@ -2755,6 +2915,12 @@ function buildMihomo() {
   
   const api = globalThis.web4core;
   if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
+  const subMode = document.getElementById('cfgSubMode').checked;
+  const excludeFilterRaw = document.getElementById('excludeFilterInput').value.trim();
+  const filterCompiled = compileSubscriptionExcludeFilter(excludeFilterRaw);
+  if (!subMode && filterCompiled.error) {
+    return showToast('❌ Exclude Filter: некорректное регулярное выражение для статического разворачивания: ' + filterCompiled.error, true);
+  }
 
   const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
   let addTun = document.getElementById('cfgTun').checked;
@@ -2833,7 +2999,7 @@ function buildMihomo() {
   // Ручные (и любые) таргеты проверяются против authoritative-реестра целей:
   // никаких dangling dialer-proxy — цель обязана существовать в конфиге,
   // который будет сгенерирован прямо сейчас.
-  const registryNow = computeDialerTargetsSync();
+  const registryNow = dialedProfiles.length ? computeDialerTargetsSync() : [];
   const knownTargets = new Set(registryNow.map(t => t.value));
   knownTargets.add('DIRECT'); // валидное значение dialer-proxy в mihomo
   const danglingTargets = dialedProfiles.filter(p => p.target.trim() && !knownTargets.has(p.target.trim()));
@@ -2845,12 +3011,29 @@ function buildMihomo() {
 
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
+    if (!api.fetchSubscription || !api.buildBeansFromInput) throw new Error('Обновите web4core.runtime: требуется subscription inspection API');
+    const previewSummary = emptySubscriptionPreviewSummary();
+    let filterRegex = filterCompiled.regex;
+    if (subMode && filterCompiled.error) {
+      filterRegex = null;
+      previewSummary.warnings.push('Preview не смог проверить Exclude Filter в браузере; Mihomo применит исходное выражение сам.');
+    }
+    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: !subMode, filterRegex });
+    mergeSubscriptionPreviewSummary(previewSummary, mainInspected.summary);
+    let fallbackPrepared;
+    if (autoWhitelist) {
+      const fallbackRaw = document.getElementById('whitelistInput').value.trim();
+      const fallbackInspected = await inspectSubscriptionInput(api, fallbackRaw, { expand: !subMode, filterRegex });
+      fallbackPrepared = fallbackInspected.input;
+      mergeSubscriptionPreviewSummary(previewSummary, fallbackInspected.summary);
+    }
+    renderSubscriptionPreview(previewSummary);
     const realityModern = parseRealityModernLines();
     const buildBeans = wgProfiles.map(wgProfileBuildBean);
     const result = api.buildFromRequest({
       core: 'mihomo',
-      input: raw,
-      ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}),
+      input: mainInspected.input,
+      ...(autoWhitelist ? { fallbackInput: fallbackPrepared } : {}),
       wgBeans: normalizeWgBeans(buildBeans),
       options: {
         addSocks: addSocks,
@@ -2961,7 +3144,12 @@ document.getElementById('cfgTunStackEx').addEventListener('change', updateMihomo
 document.getElementById('cfgSubMode').addEventListener('change', () => {
   updateExcludeFilterVisibility();
   updateSubModeHint();
+  clearSubscriptionPreview();
 });
+for (const id of ['mihomoInput', 'whitelistInput', 'excludeFilterInput']) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', clearSubscriptionPreview);
+}
 document.getElementById('cfgWebUI').addEventListener('change', updateWebUiVisibility);
 document.getElementById('webUiSelect').addEventListener('change', updateWebUiVisibility);
 document.getElementById('cfgPolicyRouting').addEventListener('change', updatePolicyRoutingVisibility);

@@ -105,6 +105,74 @@ const expectedAwg = {
     const openAdvancedDetails = async () => {
       await page.evaluate(() => { document.getElementById('perProxyAdvancedDetails').open = true; });
     };
+
+    // Subscription inspection: stable preview HWID, mixed/multi-URL input,
+    // static expansion when Sub Mode is OFF and provider preservation when ON.
+    await page.evaluate(() => {
+      globalThis.__subscriptionFetchOriginal = web4core.fetchSubscription;
+      globalThis.__subscriptionFetchCalls = [];
+      const subscriptions = {
+        'https://sub-one.example.test/token': [
+          'vless://00000000-0000-4000-8000-000000000011@192.0.2.11:443?encryption=none&type=tcp#Sweden%20Stockholm',
+          'vless://00000000-0000-4000-8000-000000000012@192.0.2.12:443?encryption=none&type=tcp#RU%20Moscow'
+        ],
+        'https://sub-two.example.test/token': [
+          'trojan://synthetic-only@192.0.2.13:443#Moscow%20Backup'
+        ]
+      };
+      web4core.fetchSubscription = async (url, options) => {
+        globalThis.__subscriptionFetchCalls.push({ url, headers: Object.assign({}, options && options.headers) });
+        const rows = subscriptions[url];
+        if (!rows) throw new Error('synthetic subscription missing');
+        return rows.join('\n');
+      };
+    });
+    const syntheticMixed = [
+      'https://sub-one.example.test/token',
+      'trojan://static-only@192.0.2.20:443#STATIC',
+      'https://sub-two.example.test/token'
+    ].join('\n');
+    await page.locator('#cfgSubMode').setChecked(false);
+    await page.locator('#excludeFilterInput').fill('(?i)ru|moscow');
+    await page.locator('#mihomoInput').fill(syntheticMixed);
+    const expanded = await build('subscription-inline-static');
+    assert.equal(expanded.doc['proxy-providers'], undefined);
+    assert.ok(expanded.doc.proxies.some(p => p.name === 'Sweden Stockholm'));
+    assert.ok(expanded.doc.proxies.some(p => p.name === 'STATIC'));
+    assert.ok(!expanded.doc.proxies.some(p => /RU Moscow|Moscow Backup/i.test(p.name)));
+    assert.match(await page.locator('#subscriptionPreviewStats').innerText(), /Подписок: 2.*найдено узлов: 3.*после фильтра: 1.*исключено: 2/s);
+    assert.match(await page.locator('#subscriptionPreviewNames').innerText(), /Sweden Stockholm/);
+    assert.match(await page.locator('#subscriptionPreviewNames').innerText(), /RU Moscow/);
+    let subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    assert.equal(subCalls.length, 2);
+    assert.match(subCalls[0].headers['x-hwid'], /^[0-9a-f]{32}$/);
+    assert.equal(subCalls[0].headers['x-hwid'], subCalls[1].headers['x-hwid']);
+    assert.equal(subCalls[0].headers['x-device-model'], 'Saymer Link Generators Preview');
+    assert.equal(subCalls[0].headers['x-device-os'], 'Browser');
+
+    // A second Build in the same page keeps the same preview identity.
+    const firstHwid = subCalls[0].headers['x-hwid'];
+    await build('subscription-inline-static-second-build');
+    subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    assert.equal(subCalls.length, 4);
+    assert.equal(subCalls[2].headers['x-hwid'], firstHwid);
+    assert.equal(subCalls[3].headers['x-hwid'], firstHwid);
+
+    await page.locator('#cfgSubMode').setChecked(true);
+    const providerMode = await build('subscription-provider-preview');
+    assert.equal(Object.keys(providerMode.doc['proxy-providers'] || {}).length, 2);
+    assert.ok(providerMode.doc.proxies.some(p => p.name === 'STATIC'));
+    assert.ok(Object.values(providerMode.doc['proxy-providers']).every(p => p['exclude-filter'] === '(?i)ru|moscow'));
+    assert.match(await page.locator('#subscriptionPreviewStats').innerText(), /найдено узлов: 3.*исключено: 2/s);
+
+    await page.evaluate(() => {
+      web4core.fetchSubscription = globalThis.__subscriptionFetchOriginal;
+      delete globalThis.__subscriptionFetchOriginal;
+      delete globalThis.__subscriptionFetchCalls;
+    });
+    await page.locator('#excludeFilterInput').fill('');
+    await page.locator('#cfgSubMode').setChecked(false);
+    await page.locator('#mihomoInput').fill(input);
     const defaultOutput = await build('default');
     assert.equal(defaultOutput.doc.tun.stack, 'mips'); // продуктовый дефолт (NIGHT-09)
     assert.equal(await page.locator('#mihomoCompatBox').isVisible(), true);
