@@ -15,19 +15,19 @@ jobs:
         with:
           ref: feat/subscription-inspection-hwid
       - run: python3 tools/candidate_subscription_repair.py
-      - name: Commit scope repair
+      - name: Commit scope/test repair
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
-          if git diff --quiet -- index.html; then
-            echo "Scope already correct"
+          if git diff --quiet -- index.html tests/browser.cjs; then
+            echo "Candidate repair already applied"
             exit 0
           fi
           git config user.name "candidate-repair"
           git config user.email "candidate-repair@users.noreply.github.com"
-          git add index.html
-          git commit -m "fix(subscription): keep preview options in correct build scope"
+          git add index.html tests/browser.cjs
+          git commit -m "fix(subscription): align preview UI and browser contract"
           git push origin HEAD:feat/subscription-inspection-hwid
 
   test:
