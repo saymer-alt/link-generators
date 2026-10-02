@@ -1,0 +1,62 @@
+{
+  "groups": [
+    {
+      "id": "a1000001",
+      "name": "Test Global Group",
+      "color": "#00ff00",
+      "interface": "mitun0",
+      "enable": true,
+      "rules": [
+        { "id": "r1000001", "name": "", "type": "namespace", "rule": "testglobal.example.com", "enable": "True" },
+        { "id": "r1000002", "name": "", "type": "domain", "rule": "exact.testglobal.example.com", "enable": "True" },
+        { "id": "r1000003", "name": "", "type": "wildcard", "rule": "*.wild.testglobal.example.com", "enable": "True" },
+        { "id": "r1000004", "name": "", "type": "regex", "rule": "^test[0-9]+\\.testglobal\\.example\\.com$", "enable": "True" },
+        { "id": "r1000005", "name": "", "type": "subnet", "rule": "192.0.2.0/24", "enable": "True" },
+        { "id": "r1000006", "name": "", "type": "subnet", "rule": "192.0.2.10", "enable": "True" },
+        { "id": "r1000007", "name": "", "type": "namespace", "rule": "testglobal.example.com", "enable": "True" },
+        { "id": "r1000008", "name": "", "type": "domain", "rule": "disabled.testglobal.example.com", "enable": "False" }
+      ]
+    },
+    {
+      "id": "a2000001",
+      "name": "Test Blackhole",
+      "color": "#ff0000",
+      "interface": "blackhole",
+      "enable": true,
+      "rules": [
+        { "id": "r2000001", "name": "", "type": "subnet", "rule": "2001:db8::/32", "enable": "True" },
+        { "id": "r2000002", "name": "", "type": "subnet", "rule": "2001:db8::1", "enable": "True" }
+      ]
+    },
+    {
+      "id": "a3000001",
+      "name": "Test Unknown Iface",
+      "color": "#0000ff",
+      "interface": "wg0",
+      "enable": true,
+      "rules": [
+        { "id": "r3000001", "name": "", "type": "domain", "rule": "unknown-iface.example.com", "enable": "True" }
+      ]
+    },
+    {
+      "id": "a4000001",
+      "name": "Test Unknown Type",
+      "color": "#ffff00",
+      "interface": "mitun0",
+      "enable": true,
+      "rules": [
+        { "id": "r4000001", "name": "", "type": "foobar", "rule": "unknown-type.example.com", "enable": "True" }
+      ]
+    },
+    {
+      "id": "a5000001",
+      "name": "Disabled Group",
+      "color": "#808080",
+      "interface": "mitun0",
+      "enable": false,
+      "rules": [
+        { "id": "r5000001", "name": "", "type": "domain", "rule": "disabled-group.example.com", "enable": "True" }
+      ]
+    }
+  ]
+}
