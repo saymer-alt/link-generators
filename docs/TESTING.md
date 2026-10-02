@@ -561,3 +561,30 @@ consumer runtime пересобран из форка (provenance в комми�
   **semantic** — wg-dialer (миграция глобального поля в per-profile наследование).
 - `mihomo -t`: 6/6 — 2 direct / 1 direct+1 dialer (группа) / 3 mixed с разными
   таргетами, на **1.19.31** и **1.19.32-compatible** (Windows compatible-бинар).
+
+## ADVANCED container reorg — 2026-10-02 (UI-only)
+
+Блок «⚙ Расширенный TUN stack» перенесён внутрь ADVANCED-контейнера; контейнер
+переименован в «ADVANCED — Расширенные настройки»; внутри две подсекции
+(TUN stack / Отдельный вход на каждый прокси). TUN Interface и MIPS остались
+снаружи. IDs, JS-логика, fail-safe клампы и DOM-tamper защита не менялись.
+
+- browser.cjs: расширена регрессия спойлера — в закрытом ADVANCED стек-контролы
+  скрыты, подсекции присутствуют внутри details, значения (master, advanced
+  stack, system) переживают open/close, YAML байт-идентичен до/после цикла;
+  состояния восстанавливаются для последующих фаз.
+- Battery: runtime 63/63, whitelist 10, masque 7, policy-routing 33+14,
+  browser 47+, vps-detection 54/54, failover 3/3, AWL PASS.
+- YAML parity vs `origin/main` (3680b5c): router/vps-gateway с расширенными
+  состояниями — byte-identical (перенос UI не меняет генерацию).
+
+
+## Contrast/readability pass — 2026-10-02 (CSS-only)
+
+Палитра централизована: `--link`/`--link-hover` (ссылки, заголовок, валидация-в-процессе),
+`--text`/`--muted` подняты; active-вкладка — светлый текст + синий underline; hints
+переведены с #484f58 на var(--muted); посещённые ссылки закреплены за --link
+(без фиолетового). WCAG-контраст на карточке: hint 2.09 → 7.11:1; ссылки 1.84 → 8.89:1;
+hover 11.25:1. Семантические green/yellow/red не менялись; разрозненные hex
+(#e3b341/#b8860b/#d9534f/#a5d6ff) переведены на переменные. Сгенерированный YAML
+не затронут (CSS-only). Полная батарея зелёная; browser.cjs 9/9 прогонов подряд.

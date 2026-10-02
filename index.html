@@ -6,14 +6,19 @@
 <title>WARP & Mihomo Unified Generator</title>
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 <style>
-  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#238636; --red:#da3633; --warn:#d29922; }
+  /* Цветовая модель dark-темы: --accent — только рамки/focus/checkbox/фон-тинт;
+     мелкий текст и ссылки читаются через --link/--link-hover/--muted (централизовано). */
+  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#e6edf3; --muted:#9ea7b3; --accent:#58a6ff; --link:#79c0ff; --link-hover:#a5d6ff; --green:#238636; --red:#da3633; --warn:#e3b341; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.5;padding:20px}
+  a{color:var(--link);text-decoration:none}
+  a:hover{color:var(--link-hover);text-decoration:underline}
+  a:visited{color:var(--link)}
   .container{max-width:850px;margin:0 auto}
-  h1{text-align:center;color:var(--accent);font-size:1.6rem;margin-bottom:20px}
+  h1{text-align:center;color:var(--link);font-size:1.6rem;margin-bottom:20px}
   .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px}
   .tab{flex:1;padding:12px;text-align:center;cursor:pointer;background:transparent;border:none;color:var(--muted);font-size:0.95rem;font-weight:600;transition:all .2s}
-  .tab.active{color:var(--accent);border-bottom:2px solid var(--accent);background:rgba(88,166,255,0.05)}
+  .tab.active{color:var(--text);border-bottom:2px solid var(--accent);background:rgba(88,166,255,0.05)}
   .tab:hover:not(.active){color:var(--text)}
   .tab-content{display:none}.tab-content.active{display:block}
   .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
@@ -28,13 +33,13 @@
   .btn:hover{opacity:.85}
   .btn-blue{background:#1f6feb}.btn-gray{background:var(--border)}.btn-red{background:var(--red)}.btn-purple{background:#8957e5}
   .link-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;position:relative}
-  .link-label{font-size:.8rem;color:var(--accent);font-weight:600;margin-bottom:6px}
-  .link-text{font-family:monospace;font-size:.8rem;color:#a5d6ff;word-break:break-all;line-height:1.6}
+  .link-label{font-size:.8rem;color:var(--link);font-weight:600;margin-bottom:6px}
+  .link-text{font-family:monospace;font-size:.8rem;color:var(--link-hover);word-break:break-all;line-height:1.6}
   .copy-btn{position:absolute;top:10px;right:10px;padding:4px 10px;font-size:.75rem;background:var(--border);border:none;border-radius:6px;color:var(--text);cursor:pointer}
   .copy-btn:hover{background:#484f58}
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--green);color:#fff;padding:10px 20px;border-radius:8px;opacity:0;transition:all .3s;z-index:1000;pointer-events:none}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
-  .hint{font-size:.75rem;color:#484f58;margin-top:4px}
+  .hint{font-size:.75rem;color:var(--muted);margin-top:4px}
   .field-filled{border-color:var(--green)!important}
   .parsed-badge{background:var(--green);color:#fff;font-size:.7rem;padding:2px 8px;border-radius:4px}
   #mihomoOutput{min-height:300px;font-size:.8rem}
@@ -72,15 +77,18 @@
   .advanced-panel summary{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;color:var(--text);cursor:pointer;list-style:none;padding:2px 0}
   .advanced-panel summary::-webkit-details-marker{display:none}
   .advanced-panel summary .advanced-badge{flex:none}
-  .advanced-badge{display:inline-block;padding:2px 7px;border:1px solid rgba(210,153,34,.7);border-radius:999px;color:#e3b341;background:rgba(210,153,34,.10);font-size:.68rem;letter-spacing:.05em}
+  .advanced-badge{display:inline-block;padding:2px 7px;border:1px solid rgba(210,153,34,.7);border-radius:999px;color:var(--warn);background:rgba(210,153,34,.10);font-size:.68rem;letter-spacing:.05em}
   .advanced-master{margin-top:10px;padding:10px 12px;border:1px solid rgba(210,153,34,.45);border-radius:8px;background:rgba(210,153,34,.08)}
   .advanced-master label{display:flex;align-items:center;gap:10px;margin:0;cursor:pointer;color:var(--text);font-weight:600}
   .advanced-master input[type="checkbox"]{width:18px;height:18px;accent-color:var(--warn)}
   .advanced-panel .checkbox-grid{margin-top:10px;padding-top:10px;border-top:1px solid rgba(210,153,34,.22)}
-  .advanced-panel .hint{color:var(--muted)}
+  .advanced-subsection{margin-top:10px}
+  .advanced-subsection-second{margin-top:14px;padding-top:12px;border-top:1px solid rgba(210,153,34,.22)}
+  .advanced-subsection-title{color:var(--warn);font-weight:600;font-size:.85rem;margin-bottom:4px}
+  .advanced-subsection .hint{margin-top:6px}
   button:disabled{opacity:.45;cursor:not-allowed}
   .validation-box{margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;font-size:.85rem;color:var(--muted)}
-  .validation-box.state-validating{color:var(--accent)}
+  .validation-box.state-validating{color:var(--link)}
   .validation-box.state-valid{border-color:var(--green);background:rgba(35,134,54,.08);color:var(--text)}
   .validation-box.state-invalid{border-color:var(--red);background:rgba(218,54,51,.08);color:var(--text)}
   .validation-issue{margin-top:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:monospace;font-size:.75rem;white-space:pre-wrap;word-break:break-word}
@@ -203,7 +211,7 @@
           <div class="row" style="margin-top:12px">
             <div><label>proxy-server-nameserver</label><input type="text" id="vpsProxyNs" value="1.1.1.1"></div>
           </div>
-          <div id="vpsDnsWarn" class="hint" style="color:#d9534f;margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
+          <div id="vpsDnsWarn" class="hint" style="color:var(--red);margin-top:6px">⚠️ 0.0.0.0:53 — публичный DNS-резолвер на VPS. Его нельзя бездумно оставлять доступным из интернета: ограничение доступа обеспечивается firewall/сетевым уровнем VPS и находится вне scope генератора.</div>
         </div>
         <div class="hint" style="margin-top:8px">⚠️ Для Mihomo 1.19.31 top-level tun.inet4-address не управляет адресом TUN: IPv4-префикс вычисляется из dns.fake-ip-range и приводится к /30. Поэтому VPS-профиль задаёт device + fake-ip-range, но не обещает отдельный inet4-address. Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
       </div>
@@ -238,7 +246,7 @@
         <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">Общий DNS override для всех WG/AWG профилей:</label>
         <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
         <div class="hint" style="margin-top: 5px;">Общий DNS для ВСЕХ загруженных WG/AWG-профилей (добавляет <code>dns</code>/<code>remote-dns-resolve</code> в каждый wireguard-outbound). Пусто — DNS удаляется из профилей.</div>
-        <div id="wgDnsWarning" class="hint" style="color: #d9534f; display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
+        <div id="wgDnsWarning" class="hint" style="color:var(--red); display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
       </div>
       <div style="margin-top: 15px;">
         <label class="label" for="wgDialerInput" style="display: block; margin-bottom: 5px;">Имя dialer-группы (определение группы):</label>
@@ -250,7 +258,7 @@
         <label class="label" for="wgDialerProviders" style="display: block; margin-bottom: 5px; margin-top: 10px;">URL-подписки для dialer-группы (по одному в строке, необязательно):</label>
         <textarea id="wgDialerProviders" rows="2" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="https://account.geodema.org/..."></textarea>
         <div class="hint" style="margin-top: 5px;">URL должен совпадать с одной из включённых URL-подписок — группа получает <code>use:</code> на этот provider (узлы не разворачиваются). Для WireGuard dialer вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения — состав подписки заранее неизвестен, поэтому проверяется только выбором.</div>
-        <div class="hint" style="color:#b8860b;margin-top:5px">⚠️ Переключение узла в dialer-группе не означает мгновенную смену уже установленного WireGuard-пути: в полевых тестах старый transport сохранялся более 150 секунд. Для гарантированной немедленной смены пути требуется пересоздание WireGuard outbound (reload/restart Mihomo). Смена colo (FRA/AMS) — наблюдение, не гарантия: Cloudflare выбирает ingress сам.</div>
+        <div class="hint" style="color:var(--warn);margin-top:5px">⚠️ Переключение узла в dialer-группе не означает мгновенную смену уже установленного WireGuard-пути: в полевых тестах старый transport сохранялся более 150 секунд. Для гарантированной немедленной смены пути требуется пересоздание WireGuard outbound (reload/restart Mihomo). Смена colo (FRA/AMS) — наблюдение, не гарантия: Cloudflare выбирает ingress сам.</div>
       </div>
     </div>
 
@@ -316,31 +324,37 @@
         <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: MIPS stack">?</button><span class="ctx-help-pop" role="note">TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor.</span></span></label>
       </div>
       <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
-      <div class="advanced-stack-control">
-        <label><input type="checkbox" id="cfgTunStackAdvanced"> ⚙ Расширенный TUN stack (system / mixed)</label>
-        <select id="cfgTunStackEx" style="display:none">
-          <option value="system">system</option>
-          <option value="mixed">mixed</option>
-        </select>
-        <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
-        <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
-      </div>
       <div id="perProxyAdvancedPanel" class="advanced-panel">
         <details id="perProxyAdvancedDetails">
-          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Отдельный вход на каждый прокси</span></summary>
-          <div class="advanced-master">
-            <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
+          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Расширенные настройки</span></summary>
+          <div class="advanced-subsection">
+            <div class="advanced-subsection-title">⚙ Расширенный TUN stack</div>
+            <div class="advanced-stack-control">
+              <label><input type="checkbox" id="cfgTunStackAdvanced"> Включить расширенный TUN stack (system / mixed)</label>
+              <select id="cfgTunStackEx" style="display:none">
+                <option value="system">system</option>
+                <option value="mixed">mixed</option>
+              </select>
+              <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
+              <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
+            </div>
+            <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
           </div>
-          <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен. Раскрытие секции само по себе ничего не включает и не сбрасывает.</div>
-          <div class="checkbox-grid">
-            <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
-            <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
+          <div class="advanced-subsection advanced-subsection-second">
+            <div class="advanced-subsection-title">🔀 Отдельный вход на каждый прокси</div>
+            <div class="advanced-master">
+              <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
+            </div>
+            <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен. Раскрытие секции само по себе ничего не включает и не сбрасывает.</div>
+            <div class="checkbox-grid">
+              <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
+              <label><input type="checkbox" id="cfgPerProxySocks"> 🔌 SOCKS-порт на каждый прокси</label>
+            </div>
+            <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
           </div>
         </details>
       </div>
-      <div class="hint">Обычный TUN и MIPS включены по умолчанию. Режимы отдельного входа на каждый прокси — за крышкой расширенного режима; system/mixed — за крышкой расширенного TUN stack.</div>
-      <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
-      <div class="hint">TUN на каждый прокси доступен только при включённом TUN Interface; SOCKS-порт на каждый прокси — только при включённом Mixed Port. Выключение родительской опции сбрасывает зависимую.</div>
+      <div class="hint">Обычный TUN и MIPS включены по умолчанию и настроены выше. Экспериментальный TUN stack (system / mixed) и режимы отдельного входа на каждый прокси собраны внутри ADVANCED-секции.</div>
 
       <label style="margin-top:16px">🏓 Ping server (health-check) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Ping server">?</button><span class="ctx-help-pop" role="note">URL, по которому Mihomo проверяет доступность узлов (url-test и health-check провайдеров). Обычно достаточно Google generate_204.</span></span></label>
       <select id="pingSelect"></select>
