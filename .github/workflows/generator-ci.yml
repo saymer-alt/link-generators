@@ -163,6 +163,15 @@ jobs:
       - name: WG/AWG profile manager browser regression
         run: node tests/wg-profiles-browser.cjs
 
+      - name: MagiTrickle import regression when present
+        shell: bash
+        run: |
+          if [ -f tests/magitrickle-import.cjs ]; then
+            node tests/magitrickle-import.cjs
+          else
+            echo 'MagiTrickle regression not present on this revision; skipping.'
+          fi
+
       - name: Auto-Whitelist browser regression
         run: node tests/whitelist.cjs
 
