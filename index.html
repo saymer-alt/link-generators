@@ -124,6 +124,13 @@
   .wg-target{flex:1;min-width:160px;padding:4px 8px;font-size:.85rem}
   .wg-list-del{padding:5px 14px;font-size:.85rem;line-height:1.2;font-family:inherit;background:linear-gradient(180deg,#fdfdfa,#e8e5d6);border:1px solid #a07070;border-radius:3px;color:var(--red);cursor:pointer;flex:none;align-self:flex-start}
   .wg-list-del:hover{box-shadow:inset 0 0 0 2px #ffc0c0}
+  .wg-rejected{margin:10px 0 0;padding:10px 12px;border:1px solid var(--red);border-radius:0;background:var(--red-bg)}
+  .wg-rejected-title{color:var(--red);font-weight:bold;font-size:.85rem;margin-bottom:6px}
+  .wg-rejected-item{padding:6px 0;border-bottom:1px dotted var(--border);font-size:.8rem;word-break:break-all}
+  .wg-rejected-item:last-child{border-bottom:none}
+  .wg-rejected-file{font-weight:bold}
+  .wg-rejected-human{display:block;margin:2px 0}
+  .wg-rejected-tech{display:block;color:var(--muted);font-size:.72rem;font-family:monospace}
   button:disabled{opacity:.55;cursor:not-allowed}
   input:disabled,select:disabled{background:#f0efe6;color:#8a8a80;border-color:#b8b4a4}
   .validation-box{margin-top:12px;padding:10px 12px;border:1px solid var(--field-border);border-radius:0;font-size:.85rem;color:var(--text);background:var(--field)}
@@ -282,6 +289,7 @@
         <span class="wg-status" id="wgStatus"></span>
       </div>
       <ul class="wg-list" id="wgList" role="list" hidden></ul>
+      <div id="wgRejected" class="wg-rejected" role="alert" hidden></div>
       <button class="btn btn-gray" id="wgClear" type="button" style="display:none;margin-top:6px" onclick="clearWgProfiles()">🧹 Очистить все WG/AWG</button>
       <div style="margin-top: 15px;">
         <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">Общий DNS override для всех WG/AWG профилей:</label>
@@ -691,7 +699,8 @@ function initPingSelector() {
 // создаётся клон с подставленным wireguard.dialerProxy (runtime-контракт per-profile).
 let wgProfiles = [];
 let wgBeans = [];
-let wgFiles = [];   // исходные имена файлов, параллельно wgBeans (для списка загрузки)
+let wgFiles = [];
+let wgRejected = []; // отклонённые при последней загрузке: {filename, human, technical}   // исходные имена файлов, параллельно wgBeans (для списка загрузки)
 let wgProfileSeq = 0;
 let wgUploadSeq = 0;
 let wgUploadPending = false;
@@ -822,6 +831,55 @@ function wgGlobalGroupFields() {
   return { members, providers };
 }
 
+// Человеческие сообщения для типовых ошибок runtime-валидации WG-бинов.
+// raw — техническое сообщение рантайма (показывается вторично).
+function humanizeWgError(raw, confText) {
+  const r = String(raw || '');
+  const t = String(confText || '');
+  if (r.includes('missing host')) {
+    if (t.includes('[Peer]') && !t.includes('Endpoint')) {
+      return 'Файл похож на серверный WireGuard-конфиг: в [Peer] нет Endpoint. Mihomo Builder ожидает клиентский WG/AWG-профиль — в [Peer] нужна строка Endpoint = host:port.';
+    }
+    return 'В [Peer] отсутствует или не распознан Endpoint. Для клиентского профиля нужна строка Endpoint = host:port.';
+  }
+  if (r.includes('invalid port')) return 'Некорректный порт в Endpoint.';
+  if (r.includes('PrivateKey') || r.includes('private-key')) return 'Нет PrivateKey в [Interface].';
+  if (r.includes('missing Address')) return 'Нет Address в [Interface].';
+  if (r.includes('missing PublicKey')) return 'Нет PublicKey в [Peer].';
+  if (r.includes('missing AllowedIPs')) return 'Нет AllowedIPs в [Peer].';
+  return '';
+}
+
+function renderWgRejected() {
+  const box = document.getElementById('wgRejected');
+  if (!box) return;
+  box.textContent = '';
+  if (!wgRejected.length) { box.hidden = true; return; }
+  const title = document.createElement('div');
+  title.className = 'wg-rejected-title';
+  title.textContent = '⚠ Не загружено: ' + wgRejected.length;
+  box.appendChild(title);
+  for (const item of wgRejected) {
+    const row = document.createElement('div');
+    row.className = 'wg-rejected-item';
+    const file = document.createElement('span');
+    file.className = 'wg-rejected-file';
+    file.textContent = '❌ ' + item.filename;
+    const human = document.createElement('span');
+    human.className = 'wg-rejected-human';
+    human.textContent = item.human;
+    row.append(file, human);
+    if (item.technical && item.technical !== item.human) {
+      const tech = document.createElement('span');
+      tech.className = 'wg-rejected-tech';
+      tech.textContent = 'Технически: ' + item.technical;
+      row.appendChild(tech);
+    }
+    box.appendChild(row);
+  }
+  box.hidden = false;
+}
+
 function initWgUpload() {
   const fileInput = document.getElementById('wgFile');
   const statusEl = document.getElementById('wgStatus');
@@ -855,22 +913,39 @@ function initWgUpload() {
     const freshNames = [];
     const seen = new Set(wgBeans.map(wgBeanKey));
     let skippedDup = 0;
+    const rejectedNow = [];
     for (const file of files) {
+      // Partial batch success: невалидный файл отклоняется поимённо с причиной,
+      // валидные соседние файлы продолжают загрузку.
+      let raw = '', text = '', bean = null, stageErr = '';
       try {
-        const raw = await file.text();
+        raw = await file.text();
         if (requestId !== wgUploadSeq) return;
-        const text = normalizeWgText(raw);
-        const bean = api.parseWireGuardConf(text, file.name);
-        if (!bean) continue;
-        const key = wgBeanKey(bean);
-        if (seen.has(key)) { skippedDup++; continue; }
-        seen.add(key);
-        fresh.push(bean);
-        freshNames.push(file.name);
+        text = normalizeWgText(raw);
+        bean = api.parseWireGuardConf(text, file.name);
+        if (!bean) { stageErr = 'файл не распознан как WireGuard/AmneziaWG'; }
       } catch (e) {
         if (requestId !== wgUploadSeq) return;
-        showToast(`Ошибка парсинга ${file.name}: ${e.message}`, true);
+        stageErr = e.message;
       }
+      if (stageErr) {
+        rejectedNow.push({ filename: file.name, human: humanizeWgError(stageErr, text) || 'Файл не распознан как WG/AWG-профиль.', technical: stageErr });
+        continue;
+      }
+      // Runtime-валидация до публикации профиля (та же, что на Build):
+      // bean с пустым host (серверный конфиг без Endpoint и т.п.) отклоняется сразу.
+      try {
+        api.validateBean(bean);
+      } catch (e) {
+        if (requestId !== wgUploadSeq) return;
+        rejectedNow.push({ filename: file.name, human: humanizeWgError(e.message, text) || e.message, technical: e.message });
+        continue;
+      }
+      const key = wgBeanKey(bean);
+      if (seen.has(key)) { skippedDup++; continue; }
+      seen.add(key);
+      fresh.push(bean);
+      freshNames.push(file.name);
     }
 
     // Более новый selection уже стартовал: старый async result не имеет права
@@ -882,6 +957,7 @@ function initWgUpload() {
     // Миграция старого сценария: если dialer-таргет уже задан глобально, новый
     // профиль по умолчанию наследует «Через промежуточный proxy» с этим таргетом.
     const globalTarget = document.getElementById('wgDialerInput').value.trim();
+    wgRejected = rejectedNow;
     const hasGroupSrc = globalTarget || wgGlobalGroupFields().members.length > 0 || wgGlobalGroupFields().providers.length > 0;
     fresh.forEach((bean, i) => {
       wgProfiles.push({
@@ -912,7 +988,12 @@ function initWgUpload() {
       }
     }
     updateWgStatus();
-    if (skippedDup > 0) showToast(`Дубликат(ов) пропущено: ${skippedDup} — идентичный конфиг уже загружен`);
+    renderWgRejected();
+    if (wgRejected.length) {
+      showToast(`Не загружено: ${wgRejected.length} — причина в списке профилей`, true);
+    } else if (skippedDup > 0) {
+      showToast(`Дубликат(ов) пропущено: ${skippedDup} — идентичный конфиг уже загружен`);
+    }
 
     // File input change invalidated state when selection started. This second
     // invalidation is required because a build may have completed while an old
@@ -1023,7 +1104,8 @@ function renderWgList() {
     list.appendChild(li);
   });
   list.hidden = wgProfiles.length === 0;
-  clearBtn.style.display = wgProfiles.length > 0 ? '' : 'none';
+  clearBtn.style.display = (wgProfiles.length > 0 || wgRejected.length > 0) ? '' : 'none';
+  renderWgRejected();
 }
 
 // Делегированный обработчик изменений per-profile режима (select/input карточек):
@@ -1065,6 +1147,8 @@ function removeWgProfile(index) {
 
 function clearWgProfiles() {
   wgProfiles = [];
+  wgFiles = [];
+  wgRejected = [];
   syncWgCollections();
   const dnsInput = document.getElementById('wgCustomDns');
   const dnsWarn = document.getElementById('wgDnsWarning');
