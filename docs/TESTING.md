@@ -542,3 +542,22 @@ recommended 1.19.32), merged-статус gateway-патчера (PR #33), ис�
 - Полная батарея перезапущена на ветке арки — см. финальный отчёт PR.
 - Generated YAML: byte/semantic parity с `origin/main` на представительных сценариях
   (router/vps-local/vps-gateway ± DNS, DPR, БС, WG+dialer) — требование контракта §24.
+
+## Per-profile WG/AWG manager — 2026-10-01
+
+Runtime-контракт web4core (`b2a56bb`/`0567353`+fix, ветка link-generators): bean-поле
+`wireguard.dialerProxy`, `wgDialerGroupOnly`, ремап dialer-таргетов при
+PRIMARY/FALLBACK-переименовании; DPR Fastest fix. Source-тесты форка: **171/171**;
+consumer runtime пересобран из форка (provenance в коммите runtime).
+
+- `tests/wg-profiles-browser.cjs` — **15 кейсов**: single, cancel-no-op, append,
+  список без секретов, remove, dup-skip, WG+AWG3.1, clear-all, коллизия имён,
+  per-profile dialer (Variant A), смешанный direct+dialer с разными таргетами,
+  пустой таргет fail-closed, UI-карточка (режим+таргет инвалидируют сборку),
+  re-add после удаления, async race.
+- Battery: runtime 63/63, whitelist 10, masque 7, policy-routing 33+14,
+  browser 47+, vps-detection 54/54, failover 3/3, AWL priority PASS.
+- Parity vs `origin/main` (3680b5c): **byte** — wg-single/router/vps-gateway;
+  **semantic** — wg-dialer (миграция глобального поля в per-profile наследование).
+- `mihomo -t`: 6/6 — 2 direct / 1 direct+1 dialer (группа) / 3 mixed с разными
+  таргетами, на **1.19.31** и **1.19.32-compatible** (Windows compatible-бинар).
