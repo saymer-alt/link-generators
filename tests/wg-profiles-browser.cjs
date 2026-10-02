@@ -221,6 +221,13 @@ const fx = n => path.join(__dirname, 'fixtures', n);
     await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 2 && wgBeans[1].name === 'wg-fast');
     ok('async race (slow A → fast B): медленный результат отброшен seq-guard-ом, fast добавлен');
 
+    // file picker: accept только поддерживаемые расширения (Windows TXT-first fix)
+    const accept = await page.evaluate(() => document.getElementById('wgFile').getAttribute('accept'));
+    assert.equal(accept, '.conf,.wg,.awg', 'accept ровно .conf,.wg,.awg');
+    assert.ok(!/text\/plain|\.txt/i.test(accept), 'text/plain|.txt не в accept');
+    assert.equal(await page.evaluate(() => document.getElementById('wgFile').multiple), true, 'multiple сохранён');
+    ok('file picker accept=.conf,.wg,.awg + multiple');
+
     assert.deepEqual(errors, [], 'нет pageerror');
     console.log(`WG-profiles: ${passed} проверок — PASS`);
   } finally {

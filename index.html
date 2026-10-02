@@ -35,21 +35,23 @@
   .tab-content{display:none;padding:14px}
   .tab-content.active{display:block}
   .card{background:var(--face);border:1px solid var(--border);border-radius:0;padding:18px 14px 12px;margin:16px 0 14px;position:relative;box-shadow:inset 1px 1px 0 #fff}
-  .card-title{position:absolute;top:-9px;left:10px;margin:0;padding:0 6px;background:var(--face);color:var(--info);font-size:.8rem;font-weight:bold;text-transform:none;letter-spacing:0;display:flex;align-items:center;gap:6px}
+  .card-title{position:absolute;top:-9px;left:10px;max-width:calc(100% - 24px);margin:0;padding:0 6px;background:var(--face);color:var(--info);font-size:.8rem;font-weight:bold;text-transform:none;letter-spacing:0;display:flex;align-items:center;gap:6px;line-height:1.3;overflow-wrap:anywhere}
   label{display:block;font-size:.85rem;color:var(--text);margin:12px 0 4px}
   input,select,textarea{background:var(--field);border:1px solid var(--field-border);border-radius:0;padding:6px 8px;color:var(--text);font-size:.9rem;font-family:monospace;transition:border-color .15s}
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--luna);box-shadow:0 0 0 1px var(--luna)}
   textarea{resize:vertical;min-height:120px}
   input:disabled,select:disabled,textarea:disabled{background:#f0efe6;color:#8a8a80;border-color:#b8b4a4}
-  .row{display:flex;gap:12px;flex-wrap:wrap}.row>*{flex:1;min-width:140px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}.row>*{flex:1 1 140px;min-width:0;max-width:100%}
   .btn-group{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
-  .btn{padding:5px 16px;border:1px solid #7a7a6e;border-radius:3px;font-size:.9rem;font-family:inherit;cursor:pointer;color:var(--text);
+  .btn{padding:6px 16px;border:1px solid #7a7a6e;border-radius:3px;font-size:.9rem;line-height:1.2;font-family:inherit;cursor:pointer;color:var(--text);vertical-align:middle;
        background:linear-gradient(180deg,#fdfdfa,#f4f2e8 48%,#e8e5d6 92%,#ddd9c8);
        box-shadow:inset 1px 1px 0 #fff,inset -1px -1px 0 #d5d1c0;transition:box-shadow .1s}
   .btn:hover{box-shadow:inset 0 0 0 2px #ffd9a0,inset 1px 1px 0 #fff}
   .btn:active{background:linear-gradient(180deg,#ddd9c8,#e8e5d6);box-shadow:inset 1px 1px 3px rgba(0,0,0,.25)}
   .btn:focus-visible{outline:2px dotted var(--accent);outline-offset:1px}
-  .btn-blue{border:2px solid var(--luna);font-weight:bold}
+  .btn-blue{box-shadow:inset 0 0 0 1px #fff,inset 0 0 0 3px var(--luna);font-weight:bold}
+  .btn-blue:hover{box-shadow:inset 0 0 0 1px #fff,inset 0 0 0 3px var(--luna),inset 0 0 0 5px #ffd9a0}
+  .btn-blue:active{box-shadow:inset 1px 1px 3px rgba(0,0,0,.25),inset 0 0 0 3px var(--luna)}
   .btn-gray{background:linear-gradient(180deg,#f2f0e6,#e4e1d2)}
   .btn-purple{border-color:#6a4a9a}
   .btn-red{color:var(--red);border-color:#a07070}
@@ -74,7 +76,7 @@
   label > input[type="checkbox"]{width:14px;height:14px;padding:0;flex:0 0 auto;accent-color:var(--luna)}
   .toggle-row{display:flex;align-items:center;gap:10px;margin-top:12px}
   .toggle-row label{margin:0;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text)}
-  .advanced-stack-control{margin-top:10px;padding:8px 10px;border:1px dotted var(--border);border-radius:0;background:rgba(255,255,255,.5)}
+  .advanced-stack-control{margin-top:6px;padding:2px 2px 0;background:transparent}
   .advanced-stack-control label{display:flex;align-items:center;gap:8px;margin:0;cursor:pointer;color:var(--text)}
   .advanced-stack-control select{margin-top:8px}
   .advanced-panel{margin-top:14px;padding:10px 12px;border:1px solid var(--border);border-radius:0;background:rgba(255,255,255,.35)}
@@ -82,7 +84,7 @@
   .advanced-panel summary::-webkit-details-marker{display:none}
   .advanced-panel summary .advanced-badge{flex:none}
   .advanced-badge{display:inline-block;padding:1px 7px;border:1px solid #b09a4a;border-radius:3px;color:#5a4a00;background:var(--warn-bg);font-size:.68rem;letter-spacing:.05em}
-  .advanced-master{margin-top:10px;padding:8px 10px;border:1px solid var(--field-border);background:var(--field)}
+  .advanced-master{margin-top:8px;padding:0;background:transparent}
   .advanced-master label{display:flex;align-items:center;gap:10px;margin:0;cursor:pointer;color:var(--text);font-weight:bold}
   .advanced-master input[type="checkbox"]{width:15px;height:15px;accent-color:var(--luna)}
   .advanced-panel .checkbox-grid{margin-top:10px;padding-top:10px;border-top:1px dotted var(--border)}
@@ -102,7 +104,7 @@
   .wg-target-row{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
   .wg-target-row label{margin:0;color:var(--text);font-size:.8rem}
   .wg-target{flex:1;min-width:160px;padding:4px 8px;font-size:.85rem}
-  .wg-list-del{padding:2px 10px;font-size:.75rem;font-family:inherit;background:linear-gradient(180deg,#fdfdfa,#e8e5d6);border:1px solid #a07070;border-radius:3px;color:var(--red);cursor:pointer}
+  .wg-list-del{padding:5px 14px;font-size:.85rem;line-height:1.2;font-family:inherit;background:linear-gradient(180deg,#fdfdfa,#e8e5d6);border:1px solid #a07070;border-radius:3px;color:var(--red);cursor:pointer;flex:none;align-self:flex-start}
   .wg-list-del:hover{box-shadow:inset 0 0 0 2px #ffc0c0}
   button:disabled{opacity:.55;cursor:not-allowed}
   input:disabled,select:disabled{background:#f0efe6;color:#8a8a80;border-color:#b8b4a4}
@@ -257,7 +259,7 @@
       <div class="file-upload-wrapper">
         <div class="file-upload">
           <button class="btn btn-gray" id="btnWg" title="Добавляет WireGuard/AmneziaWG конфиги к уже загруженным (каждый файл — отдельный proxy в YAML). Список и удаление — ниже.">📂 Загрузить .conf / .awg</button>
-          <input type="file" id="wgFile" accept=".conf,.wg,.awg,text/plain" multiple>
+          <input type="file" id="wgFile" accept=".conf,.wg,.awg" multiple>
         </div>
         <span class="wg-status" id="wgStatus"></span>
       </div>

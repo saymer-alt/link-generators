@@ -604,3 +604,13 @@ hover 11.25:1. Семантические green/yellow/red не менялись
 - `mihomo -t`: 6/6 (2 direct / dialer-группа / 3 mixed) на **1.19.31** и **1.19.32-compatible**.
 - Owner acceptance bundle: 12 скриншотов (builder/warp/profiles/WG manager/ADVANCED ±/DPR/
   validation ±/quick-start/mobile 390 main + WG cards).
+
+
+## XP layout polish + file picker accept — 2026-10-02 (CSS/DOM-attribute only)
+
+- Layout cleanup поверх XP-редизайна: одна Luna-titlebar (quick-start `h2` → section
+  headings), вложенные рамки ADVANCED упрощены, `.card-title` hardened, кнопки одной
+  высоты, WG-карточки без распирания; responsive 1440/1024/768/390.
+- `#wgFile accept=".conf,.wg,.awg"` (было `…,text/plain` — Windows TXT-first);
+  `multiple` сохранён; regression в `tests/wg-profiles-browser.cjs` (16-й кейс).
+- Theme-only parity: **13/13 byte-identical** к baseline 1fe6c5d; батарея зелёная.

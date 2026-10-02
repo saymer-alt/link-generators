@@ -24,9 +24,9 @@
   .back{display:inline-block;padding:5px 16px;border:1px solid #7a7a6e;border-radius:3px;color:var(--text);
     background:linear-gradient(180deg,#fdfdfa,#f4f2e8 48%,#e8e5d6 92%,#ddd9c8);box-shadow:inset 1px 1px 0 #fff;font-size:.9rem}
   .back:hover{box-shadow:inset 0 0 0 2px #ffd9a0;text-decoration:none;color:var(--text)}
-  h1{font-size:1.15rem;margin:8px 0 4px}
-  h2{font-size:1rem;margin:24px 0 8px;padding:4px 10px;color:#fff;border:1px solid var(--luna-deep);
-    background:linear-gradient(180deg,#0a6cf1 0%,var(--luna) 30%,var(--luna-deep) 100%);border-radius:3px}
+  h1{font-size:1.15rem;margin:10px 0 6px;color:var(--info)}
+  h2{font-size:1rem;margin:26px 0 10px;padding:0 0 5px;color:var(--info);font-weight:bold;
+    border:none;border-bottom:2px solid var(--border);border-radius:0}
   h3{font-size:.95rem;margin:14px 0 5px;color:var(--info)}
   p,li{font-size:.9rem;color:var(--text)}
   ul,ol{margin:6px 0 6px 22px}
@@ -35,12 +35,12 @@
   .warn{color:var(--warn);font-weight:bold}
   .err{color:var(--red);font-weight:bold}
   code{background:var(--field);border:1px solid var(--field-border);border-radius:0;padding:1px 5px;font-size:.85em;word-break:break-all}
-  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:.88rem;background:var(--field)}
+  table{border-collapse:collapse;table-layout:fixed;width:100%;margin:10px 0;font-size:.88rem;background:var(--field)}
   th,td{border:1px solid var(--field-border);padding:6px 9px;text-align:left;vertical-align:top}
   th{background:var(--face-dark);color:var(--text);font-weight:bold}
   .card{background:rgba(255,255,255,.5);border:1px solid var(--border);border-radius:0;padding:14px 16px;margin:12px 0;position:relative;box-shadow:inset 1px 1px 0 #fff}
   .steps li{margin:8px 0}
-  @media (max-width:640px){body{padding:6px}.wrap{padding:0 10px 10px}.titlebar{margin:0 -10px}table{font-size:.8rem;display:block;overflow-x:auto}.card{padding:10px 12px}}
+  @media (max-width:640px){body{padding:6px}.wrap{padding:0 10px 10px}.titlebar{margin:0 -10px}table{font-size:.8rem;display:block;overflow-x:auto;white-space:normal}.card{padding:10px 12px}h2{margin:20px 0 8px}}
 </style>
 </head>
 <body>
@@ -82,7 +82,7 @@
     <tr><th>Что у вас есть</th><th>Что делать</th></tr>
     <tr><td>Обычные ссылки <code>vless://</code>, <code>trojan://</code>, <code>ss://</code>, <code>masque://</code>…</td><td>Вставьте в большое поле; режим «📡 Использовать URL-подписки» выключите.</td></tr>
     <tr><td>Ссылка-подписка <code>https://…</code></td><td>Вставьте в то же поле; режим «📡 Использовать URL-подписки» оставьте включённым (он включён по умолчанию).</td></tr>
-    <tr><td>Файлы WireGuard / AmneziaWG <code>.conf/.wg/.awg</code></td><td>Кнопка «➕ Загрузить .conf / .awg» — файлы <b>добавляются</b> к уже загруженным; загруженные профили видны списком (удалить один — «✕», все — «🧹 Очистить все»). Идентичный файл повторно не добавляется.</td></tr>
+    <tr><td>Файлы WireGuard / AmneziaWG <code>.conf/.wg/.awg</code></td><td>Кнопка «➕ Загрузить .conf / .wg / .awg» — файлы <b>добавляются</b> к уже загруженным; загруженные профили видны списком (удалить один — «✕», все — «🧹 Очистить все»). Идентичный файл повторно не добавляется.</td></tr>
     <tr><td>Свои WARP-ссылки</td><td>Вкладка «⚡ WARP MASQUE Links»: вставьте YAML от WARP-бота → «Сгенерировать» → «🚀 В Mihomo Builder».</td></tr>
     <tr><td>Смесь (подписка + ссылки)</td><td>Можно вместе; режим подписок включён, если есть хотя бы один URL.</td></tr>
   </table>
@@ -106,7 +106,7 @@
     <h3>3. WARP / AmneziaWG</h3>
     <ol class="steps">
       <li>WARP: вкладка «⚡ WARP MASQUE Links» → YAML от бота → «Сгенерировать» → «🚀 В Mihomo Builder».</li>
-      <li>AWG: «➕ Загрузить .conf / .awg». Если в файле DNS <code>100.64.0.1</code> — подставятся публичные (с предупреждением).</li>
+      <li>AWG: «➕ Загрузить .conf / .wg / .awg». Если в файле DNS <code>100.64.0.1</code> — подставятся публичные (с предупреждением).</li>
       <li>«⚡ Build Config» → Copy. Несколько файлов станут несколькими WireGuard-прокси.</li>
     </ol>
     <h3>4. Xray → локальный Mihomo на VPS</h3>
