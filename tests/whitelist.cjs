@@ -31,16 +31,24 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     await page.locator('button.tab').filter({ hasText: 'Mihomo' }).click();
     assert.equal(await page.locator('#cfgAutoWhitelist').isChecked(), false);
     await page.evaluate(() => { document.getElementById('perProxyAdvancedDetails').open = true; });
+    // v1.6.2 контракт: БС — router-only, Per-Proxy — router-only, профиль не
+    // подменяется. В vps-gateway оба недоступны; Пер-Proxy state, выставленный
+    // в router, при визите в VPS эффективно выключен и восстановился обратно.
     await page.locator('#cfgPerProxyMaster').check();
     await page.locator('#cfgPerProxyTun').check();
     await page.locator('#cfgPerProxySocks').check();
     await page.locator('#cfgProfile').selectOption('vps-gateway');
+    assert.equal(await page.locator('#cfgAutoWhitelist').isDisabled(), true, 'vps-gateway: БС недоступен');
+    assert.equal(await page.locator('#cfgAutoWhitelist').isChecked(), false, 'vps-gateway: БС выключен');
+    assert.equal(await page.locator('#cfgPerProxyMaster').isDisabled(), true, 'vps-gateway: Per-Proxy недоступен');
+    assert.equal(await page.locator('#cfgPerProxyMaster').isChecked(), false, 'vps-gateway: Per-Proxy выключен');
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway', 'профиль не подменяется');
+    assert.equal(await page.locator('#vpsPanel').isVisible(), true, 'gateway panel видна');
+    await page.locator('#cfgProfile').selectOption('router');
+    assert.equal(await page.locator('#cfgAutoWhitelist').isDisabled(), false, 'router: БС доступен');
+    assert.equal(await page.locator('#cfgPerProxyMaster').isChecked(), true, 'router: Per-Proxy master восстановлен');
+    assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), true, 'router: Per-Proxy TUN восстановлен');
     await page.locator('#cfgAutoWhitelist').check();
-    for (const id of ['cfgPerProxyTun', 'cfgPerProxySocks', 'cfgProfile', 'vpsPanel', 'cfgPerProxyMaster']) assert.equal(await page.locator('#' + id).isVisible(), false);
-    for (const id of ['cfgTun', 'cfgTunMips', 'cfgLan', 'cfgSocks', 'cfgWebUI', 'cfgSubMode']) assert.equal(await page.locator('#' + id).isVisible(), true);
-    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway', 'БС сохраняет выбранный профиль');
-    assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), false);
-    assert.equal(await page.locator('#cfgPerProxySocks').isChecked(), false);
     for (const [name, primary, fallback, sub] of [
       ['one', a, b, false], ['many', a + '\n' + b, a + '\n' + b, false],
       ['subscriptions', 'https://example.invalid/a', 'https://example.invalid/b', true],
@@ -81,12 +89,20 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
       }
       count++;
     }
-    // Bypass hidden/disabled DOM controls: build still clamps all prohibited modes.
-    // Master switch stays OFF here — its clamp must keep children out on its own.
+    // v1.6.2 tamper-контракт №1: БС + профиль vps-gateway (value подменён через JS,
+    // без change-события) → сборка отклоняется с явной ошибкой, БЕЗ подмены профиля.
+    const yamlBeforeTamper = await page.evaluate(() => document.getElementById('mihomoOutput').value);
+    await page.evaluate(() => { document.getElementById('cfgProfile').value = 'vps-gateway'; });
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    assert.match(await page.evaluate(() => window.__lastToast || ''), /доступен только в профиле «Роутер/, 'БС+VPS → явная ошибка');
+    assert.equal(await page.evaluate(() => document.getElementById('mihomoOutput').value), yamlBeforeTamper, 'сборка не выполнялась: вывод не изменился');
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway', 'профиль не подменён молча');
+    await page.evaluate(() => { document.getElementById('cfgProfile').value = 'router'; });
+    // v1.6.2 tamper-контракт №2: БС ON + tampered Per-Proxy children → кламп:
+    // Per-Proxy конфигурация не генерируется (мастер-кламп работает сам).
     const guarded = await page.evaluate(() => {
       document.getElementById('cfgPerProxyTun').checked = true;
       document.getElementById('cfgPerProxySocks').checked = true;
-      document.getElementById('cfgProfile').value = 'vps-gateway';
       buildMihomo();
       return jsyaml.load(document.getElementById('mihomoOutput').value);
     });
@@ -96,7 +112,7 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.equal(guarded.profile['store-selected'], true);
     assert.equal(guarded.tun['auto-route'], false); // existing ordinary TUN contract
     assert.notEqual(guarded.tun.device, 'tun-mihomo');
-    assert.equal(guarded.tun.stack, 'mips'); // VPS наследует продуктовый дефолт MIPS
+    assert.equal(guarded.tun.stack, 'mips'); // продуктовый дефолт MIPS
     // Fail closed with an old runtime that would silently ignore fallbackInput.
     await page.evaluate(() => { const fn = web4core.buildMihomoPriorityConfig; delete web4core.buildMihomoPriorityConfig; buildMihomo(); web4core.buildMihomoPriorityConfig = fn; });
     assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
@@ -104,10 +120,12 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     await page.locator('button[onclick="buildMihomo()"]').click();
     assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true);
     await page.locator('#cfgAutoWhitelist').uncheck();
-    assert.equal(await page.locator('#cfgProfile').inputValue(), 'vps-gateway');
-    assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), true);
-    assert.equal(await page.locator('#cfgPerProxySocks').isChecked(), true);
-    assert.equal(await page.locator('#cfgTun').isDisabled(), true);
+    // v1.6.2: профиль оставался router на протяжении всего БС-блока; после БС off
+    // Per-Proxy снова доступен, но выключен (children сброшены при включении БС).
+    assert.equal(await page.locator('#cfgProfile').inputValue(), 'router');
+    assert.equal(await page.locator('#cfgPerProxyMaster').isDisabled(), false, 'БС off: Per-Proxy снова доступен');
+    assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), false, 'children выключены при БС');
+    assert.equal(await page.locator('#cfgPerProxySocks').isChecked(), false, 'children выключены при БС');
     // Зависимости UI (реальные клики): выключение родителя отключает и сбрасывает
     // зависимые чекбоксы; включение родителя возвращает доступность.
     await page.locator('#cfgProfile').selectOption('router');

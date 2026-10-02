@@ -170,12 +170,12 @@ const fx = n => path.join(__dirname, 'fixtures', n);
 
     // пустой таргет при режиме «Через proxy» — честная ошибка, не тихий direct
     // (таргет очищается через карточку: change инвалидирует результат, guard ловит пустоту)
-    await page.locator('.wg-target').nth(2).fill('');
+    await page.locator('.wg-target').nth(2).selectOption('');
     assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT', 'очистка таргета инвалидирует сборку');
     await page.locator('button[onclick="buildMihomo()"]').click();
     assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT');
     assert.match(await page.evaluate(() => window.__lastToast || ''), /Укажите proxy\/группу/);
-    await page.locator('.wg-target').nth(2).fill('VPS-EE');
+    await page.locator('.wg-target').nth(2).selectOption('VPS-EE');
     r = await build();
     assert.equal(r.state, 'VALID');
     ok('пустой таргет при «Через proxy» — fail-closed с понятной ошибкой');
@@ -195,12 +195,15 @@ const fx = n => path.join(__dirname, 'fixtures', n);
     assert.ok(!r.yaml.includes('dialer-proxy'), 'режим по умолчанию — Напрямую');
     await page.locator('.wg-mode').first().selectOption('proxy');
     assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'NOT_BUILT', 'смена режима инвалидирует результат');
+    await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#VPS-SE');
+    await page.waitForFunction(() => dialerTargetsCache.length > 0, null, { timeout: 10000 });
     const targetVal = await page.locator('.wg-target').first().inputValue();
     assert.equal(targetVal, '', 'таргет не выдумывается без группы');
-    await page.locator('.wg-target').first().fill('VPS-SE');
+    await page.locator('.wg-target').first().selectOption('VPS-SE');
     r = await build();
     assert.match(proxyBlockOf(r.yaml, 'wg-simple-a'), /dialer-proxy: VPS-SE/, 'карточка управляет dialer-proxy');
     ok('UI-карточка: Напрямую → Через proxy + таргет управляют сборкой');
+    await page.locator('#mihomoInput').fill(''); // вернуть исходное состояние поля для последующих шагов
 
     // повторное добавление после удаления разрешено
     await page.locator('.wg-list-del').first().click();
