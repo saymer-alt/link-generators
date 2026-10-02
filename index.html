@@ -224,7 +224,7 @@
 
   <!-- TAB 2: MIHOMO BUILDER -->
   <div id="tab-mihomo" class="tab-content active">
-    <div class="hint" style="margin-bottom:10px"><a href="quick-start.html">❓ Помощь / Быстрый старт</a> · <a href="docs/GENERATOR-GUIDE.md">📖 Короткая инструкция (MD)</a></div>
+    <div class="hint" style="margin-bottom:10px"><a href="quick-start.html">📖 Короткая инструкция по генератору</a> · <a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/GENERATOR-GUIDE.md">📖 Подробная инструкция</a></div>
     <div class="card" id="profileRow">
       <div class="card-title">🎯 Где будет работать Mihomo?</div>
       <select id="cfgProfile">
@@ -256,7 +256,7 @@
         </div>
         <div class="hint" style="margin-top:8px">⚠️ Для Mihomo 1.19.31 top-level tun.inet4-address не управляет адресом TUN: IPv4-префикс вычисляется из dns.fake-ip-range и приводится к /30. Поэтому VPS-профиль задаёт device + fake-ip-range, но не обещает отдельный inet4-address. Linux-часть (policy routing, iptables, Docker, AWG) генератором не создаётся. auto-route всегда false.</div>
       </div>
-      <div class="hint">Профиль задаёт только сценарий развёртывания: вход (TUN/SOCKS), базовые переключатели и gateway-настройки. Прокси, подписки, WireGuard, фильтры и остальные данные не затрагиваются. Подробно: <a href="docs/GENERATOR-GUIDE.md">GENERATOR-GUIDE.md</a>, <a href="docs/VPS-GATEWAY.md">VPS-GATEWAY.md</a>.</div>
+      <div class="hint">Профиль задаёт только сценарий развёртывания: вход (TUN/SOCKS), базовые переключатели и gateway-настройки. Прокси, подписки, WireGuard, фильтры и остальные данные не затрагиваются. Подробно: <a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/GENERATOR-GUIDE.md">подробная инструкция</a>, <a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/VPS-GATEWAY.md">VPS Gateway</a>.</div>
     </div>
     <div class="card">
       <div class="card-title">📋 Входные данные</div>

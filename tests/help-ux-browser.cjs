@@ -23,7 +23,10 @@ const root = path.resolve(__dirname, '..');
     }
     ok('quick-start.html: статическая, без JS/телеметрии');
     assert.ok(/href="index\.html"/.test(qsSrc), 'обратная ссылка на генератор');
-    ok('quick-start.html: ссылка «← Вернуться в генератор»');
+    const qsHrefs = (qsSrc.match(/href="([^"]+)"/g) || []).map(m => m.slice(6, -1));
+    const qsRawMd = qsHrefs.filter(h => /\.md$/.test(h) && !h.startsWith('https://github.com/'));
+    assert.deepEqual(qsRawMd, [], 'нет relative/raw .md ссылок в quick-start.html');
+    ok('quick-start.html: подробные .md только через GitHub rendered');
 
     const page = await browser.newPage();
     page.setDefaultTimeout(15000);
@@ -36,6 +39,19 @@ const root = path.resolve(__dirname, '..');
     // --- ссылка на quick-start в Builder ---
     assert.ok(await page.locator('a[href="quick-start.html"]').count() >= 1, 'ссылка quick-start.html в Builder');
     ok('Builder: ссылка «❓ Помощь / Быстрый старт» присутствует');
+
+    // Pages link contract: короткая инструкция = quick-start.html; пользовательский HTML
+    // не содержит relative docs/*.md (на Pages они отдаются как raw Markdown).
+    const shortGuide = await page.evaluate(() => {
+      const a = Array.from(document.querySelectorAll('a')).find(x => /Короткая инструкция/.test(x.textContent || ''));
+      return a ? a.getAttribute('href') : null;
+    });
+    assert.equal(shortGuide, 'quick-start.html', '«Короткая инструкция» ведёт на quick-start.html');
+    const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    const idxHrefs = (html.match(/href="([^"]+)"/g) || []).map(m => m.slice(6, -1));
+    const rawMd = idxHrefs.filter(h => /\.md$/.test(h) && !h.startsWith('https://github.com/'));
+    assert.deepEqual(rawMd, [], 'нет relative/raw .md ссылок в index.html');
+    ok('link contract: короткая инструкция → quick-start.html, raw .md отсутствуют');
 
     // --- help-маркеры существуют ---
     const helpCount = await page.locator('.ctx-help').count();
