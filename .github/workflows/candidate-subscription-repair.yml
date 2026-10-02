@@ -1,0 +1,65 @@
+name: Candidate subscription repair
+
+on:
+  push:
+    branches:
+      - feat/subscription-inspection-hwid
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/subscription-inspection-hwid
+      - run: python3 tools/candidate_subscription_repair.py
+      - name: Commit scope repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --quiet -- index.html; then
+            echo "Scope already correct"
+            exit 0
+          fi
+          git config user.name "candidate-repair"
+          git config user.email "candidate-repair@users.noreply.github.com"
+          git add index.html
+          git commit -m "fix(subscription): keep preview options in correct build scope"
+          git push origin HEAD:feat/subscription-inspection-hwid
+
+  test:
+    needs: repair
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/subscription-inspection-hwid
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install transient browser dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          deps="$RUNNER_TEMP/generator-ci-deps"
+          mkdir -p "$deps"
+          npm install --prefix "$deps" --no-save --no-package-lock playwright@1.55.0 js-yaml@4.1.0
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+          echo "JS_YAML_PATH=$deps/node_modules/js-yaml/dist/js-yaml.min.js" >> "$GITHUB_ENV"
+          echo "BROWSER_CHANNEL=chromium" >> "$GITHUB_ENV"
+          "$deps/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Candidate regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web4core.runtime.js
+          node tests/runtime.cjs web4core.runtime.js
+          node tests/browser.cjs
+          node tests/whitelist.cjs
+          node tests/profile-matrix.cjs
+          node tests/wg-dialer-selector.cjs
