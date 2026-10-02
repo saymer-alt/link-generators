@@ -258,7 +258,7 @@
       <div class="card-title">📂 WireGuard / AmneziaWG</div>
       <div class="file-upload-wrapper">
         <div class="file-upload">
-          <button class="btn btn-gray" id="btnWg" title="Добавляет WireGuard/AmneziaWG конфиги к уже загруженным (каждый файл — отдельный proxy в YAML). Список и удаление — ниже.">📂 Загрузить .conf / .awg</button>
+          <button class="btn btn-gray" id="btnWg" title="Добавляет WireGuard/AmneziaWG конфиги к уже загруженным (каждый файл — отдельный proxy в YAML). Список и удаление — ниже.">📂 Загрузить .conf / .wg / .awg</button>
           <input type="file" id="wgFile" accept=".conf,.wg,.awg" multiple>
         </div>
         <span class="wg-status" id="wgStatus"></span>
@@ -912,7 +912,7 @@ function initWgUpload() {
     } else {
       statusEl.textContent = '';
       statusEl.classList.remove('loaded');
-      btnEl.textContent = '📂 Загрузить .conf / .awg';
+      btnEl.textContent = '📂 Загрузить .conf / .wg / .awg';
     }
     renderWgList();
   }
@@ -1068,7 +1068,7 @@ function updateWgStatusTextOnly() {
   } else {
     statusEl.textContent = '';
     statusEl.classList.remove('loaded');
-    btnEl.textContent = '📂 Загрузить .conf / .awg';
+    btnEl.textContent = '📂 Загрузить .conf / .wg / .awg';
   }
   renderWgList();
 }

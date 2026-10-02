@@ -108,6 +108,13 @@ const fx = n => path.join(__dirname, 'fixtures', n);
     assert.match(await page.evaluate(() => window.__lastToast || ''), /Вставь ссылки|загрузи WG/);
     ok('очистка всех профилей + инвалидация состояния');
 
+    // кнопка в пустом состоянии называет все поддерживаемые расширения
+    const btnEmpty = await page.evaluate(() => document.getElementById('btnWg').textContent);
+    for (const ext of ['.conf', '.wg', '.awg']) {
+      assert.ok(btnEmpty.includes(ext), 'кнопка упоминает ' + ext);
+    }
+    ok('кнопка загрузки: .conf / .wg / .awg');
+
     // коллизия имён с разным контентом — рантайм переименовывает (fail-safe)
     await page.evaluate(() => {
       const p = (filename, addr, ep) => ({
