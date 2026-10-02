@@ -115,6 +115,80 @@ const root = path.resolve(__dirname, '..');
     assert.equal(yaml1, yaml2, 'YAML до/после help-взаимодействия идентичен');
     ok('генерация не изменена help-взаимодействием');
 
+    // --- HOVER-контракт (v1.6.2 regression): tooltip открывается hover'ом
+    // (CSS :hover/:focus-within), закрывается mouseleave, click/touch — .open
+    const popOf = label => page.locator('.ctx-help-wrap', { has: page.locator(`.ctx-help[aria-label="${label}"]`) }).locator('.ctx-help-pop');
+    const visOf = async label => {
+      const wrap = page.locator('.ctx-help-wrap', { has: page.locator(`.ctx-help[aria-label="${label}"]`) });
+      return wrap.evaluate(w => {
+        const pop = w.querySelector('.ctx-help-pop');
+        return pop && getComputedStyle(pop).display !== 'none';
+      });
+    };
+    const hoverLabel = 'Подсказка: Mixed Port';
+    await page.hover(`.ctx-help[aria-label="${hoverLabel}"]`);
+    assert.equal(await visOf(hoverLabel), true, 'hover открывает tooltip (CSS)');
+    await page.mouse.move(10, 10); // mouseleave
+    assert.equal(await visOf(hoverLabel), false, 'mouseleave закрывает hover-tooltip');
+    ok('hover: tooltip открывается наведением и закрывается уходом курсора');
+
+    // focus-within: фокус клавиатуры открывает, уход фокуса закрывает
+    const focusLabel = 'Подсказка: Allow LAN';
+    await page.locator(`.ctx-help[aria-label="${focusLabel}"]`).focus();
+    assert.equal(await visOf(focusLabel), true, 'фокус кнопки «?» открывает tooltip (:focus-within)');
+    await page.locator('#mihomoInput').focus();
+    assert.equal(await visOf(focusLabel), false, 'уход фокуса закрывает focus-tooltip');
+    ok('клавиатура: фокус на «?» показывает tooltip (:focus-within)');
+
+    // hover + click не конфликтуют: клик фиксирует (.open), mouseleave НЕ закрывает
+    await wrap.locator('.ctx-help').hover();
+    await wrap.locator('.ctx-help').click();
+    await page.mouse.move(10, 10);
+    assert.equal(await visOf('Подсказка: TUN Interface'), true, '.open держит tooltip после mouseleave');
+    await page.keyboard.press('Escape');
+    assert.equal(await visOf('Подсказка: TUN Interface'), false, 'Escape закрывает .open (вне hover)');
+    ok('hover/click конфликтов нет: .open переживает mouseleave, Escape закрывает');
+
+    // --- новые подсказки v1.6.2 присутствуют ---
+    const expectedHelps = [
+      'Подсказка: Использовать URL-подписки',
+      'Подсказка: Автоматический режим белых списков',
+      'Подсказка: Отдельный вход на каждый прокси',
+      'Подсказка: Импорт MagiTrickle',
+    ];
+    for (const label of expectedHelps) {
+      assert.ok(await page.locator(`.ctx-help[aria-label="${label}"]`).count() === 1, 'подсказка присутствует: ' + label);
+    }
+    ok('новые подсказки v1.6.2: Sub Mode, БС, Per-Proxy master, MagiTrickle import');
+    // WG-карточечные подсказки создаются динамически при загрузке профиля
+    await page.locator('#wgFile').setInputFiles(path.join(root, 'tests', 'fixtures', 'wg-simple-a.conf'));
+    await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 1);
+    const cardHelps = await page.evaluate(() => Array.from(document.querySelectorAll('#wgList .ctx-help[aria-label]')).map(b => b.getAttribute('aria-label')));
+    assert.ok(cardHelps.some(l => l.includes('Подключение')), 'карточка WG: подсказка «Подключение»');
+    assert.ok(cardHelps.some(l => l.includes('Промежуточный выход')), 'карточка WG: подсказка «Промежуточный выход»');
+    // текст §22: пример Endpoint-соединения и только существующие цели
+    const targetPop = await page.evaluate(() => {
+      const btn = document.querySelector('#wgList .ctx-help[aria-label="Подсказка: Промежуточный выход"]');
+      const wrap = btn && btn.closest('.ctx-help-wrap');
+      const pop = wrap && wrap.querySelector('.ctx-help-pop');
+      return pop ? pop.textContent : '';
+    });
+    assert.match(targetPop, /Endpoint/, 'подсказка таргета объясняет Endpoint-соединение');
+    assert.match(targetPop, /существуют в текущей конфигурации/, 'подсказка таргета: только существующие цели');
+    // MT mapping-подсказка появляется в preview
+    await page.locator('#cfgPolicyRouting').check();
+    await page.locator('#mtImportBtn').click();
+    await page.locator('#mtImportFile').setInputFiles(path.join(root, 'tests', 'fixtures', 'magitrickle-basic.mtrickle'));
+    await page.waitForFunction(() => mtPending !== null && mtPending.preview.activeRules > 0);
+    const mapHelp = await page.evaluate(() => {
+      const box = document.getElementById('mtImportMapping');
+      return box ? box.querySelector('.ctx-help-pop') : null;
+    });
+    assert.ok(mapHelp, 'MagiTrickle: подсказка у маппинга интерфейсов');
+    await page.locator('#mtImportCancel').click();
+    await page.locator('#cfgPolicyRouting').uncheck();
+    ok('динамические подсказки: WG-карточки (Подключение/Промежуточный выход) + MT-маппинг');
+
     assert.deepEqual(errors, [], 'нет pageerror');
     console.log(`Help-UX: ${passed} проверок — PASS`);
   } finally {

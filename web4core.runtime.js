@@ -2782,7 +2782,7 @@
       const value = line.slice(comma + 1).trim();
       if (DOMAIN_POLICY_RULE_TYPES.has(type)) {
         if (type === "IP-CIDR" || type === "IP-CIDR6") {
-          const cidr2 = normalizeDomainPolicyCidr(value);
+          const cidr2 = normalizeDomainPolicyCidr(value.replace(/,\s*no-resolve\s*$/i, ""));
           if (!cidr2) return { invalid: line };
           return { rule: `IP-CIDR,${cidr2},no-resolve` };
         }
@@ -2794,6 +2794,10 @@
           if (!value || !/^[a-z0-9._*?+|^$()\[\]{}\\-]+$/i.test(value)) return { invalid: line };
           return { rule: `${type},${value}` };
         }
+        if (type === "DOMAIN-WILDCARD") {
+          if (!value || !/^[a-z0-9_*?][a-z0-9_*?.-]*$/i.test(value) || !/[a-z0-9]/i.test(value) || value.includes("..")) return { invalid: line };
+          return { rule: `DOMAIN-WILDCARD,${value.toLowerCase()}` };
+        }
         if (!value || !DOMAIN_POLICY_HOSTNAME_RE.test(value)) return { invalid: line };
         return { rule: `${type},${value.toLowerCase()}` };
       }
@@ -2801,6 +2805,12 @@
     }
     const cidr = normalizeDomainPolicyCidr(line);
     if (cidr) return { rule: `IP-CIDR,${cidr},no-resolve` };
+    if (/[*?]/.test(line.slice(2))) {
+      if (/^[a-z0-9_*?][a-z0-9_*?.-]*$/i.test(line) && /[a-z0-9]/i.test(line) && !line.includes("..")) {
+        return { rule: `DOMAIN-WILDCARD,${line.toLowerCase()}` };
+      }
+      return { invalid: line };
+    }
     if (!DOMAIN_POLICY_HOSTNAME_RE.test(line)) return { invalid: line };
     return { rule: `DOMAIN-SUFFIX,${line.toLowerCase().replace(/^\*\./, "")}` };
   }
@@ -2849,42 +2859,53 @@
       }
       const slug = domainPolicySlug(name, index, usedSlugs);
       ruleProviders[slug] = { type: "inline", behavior: "classical", format: "yaml", payload };
-      rules.push(`RULE-SET,${slug},${name}`);
-      if (ctx.mode === "subscription") {
-        groups.push({
-          name: `${name}-AUTO`,
-          type: "url-test",
-          use: ctx.providerNames.slice(),
-          url: ctx.urlTest,
-          interval: PROXY_FETCH_INTERVAL,
-          tolerance: 50,
-          "expected-status": ctx.urlTestExpectedStatus,
-          "empty-fallback": "REJECT"
-        });
-        groups.push({
-          name,
-          type: "select",
-          // ⚡ Fastest is referenced only when it is actually emitted
-          // (a single-static config emits no Fastest group; referencing
-          // it would produce a dangling group target).
-          proxies: [`${name}-AUTO`, ...existingGroups.has(FASTEST_GROUP_NAME) ? [FASTEST_GROUP_NAME] : [], GLOBAL_GROUP_NAME, "DIRECT"]
-        });
-        existingGroups.add(`${name}-AUTO`);
-      } else if (ctx.mode === "static") {
-        groups.push({
-          name,
-          type: "select",
-          // ⚡ Fastest is referenced only when it is actually emitted (see above).
-          proxies: [...existingGroups.has(FASTEST_GROUP_NAME) ? [FASTEST_GROUP_NAME] : [], GLOBAL_GROUP_NAME, "DIRECT"]
-        });
-      } else {
-        groups.push({
-          name,
-          type: "select",
-          proxies: [GLOBAL_GROUP_NAME, "DIRECT"]
-        });
+      const rawTarget = String(policy?.target || "").trim().toUpperCase();
+      if (rawTarget !== "" && rawTarget !== "SELECT" && rawTarget !== "GLOBAL" && rawTarget !== "DIRECT" && rawTarget !== "REJECT") {
+        throw new Error(`Mihomo: domain policy target must be SELECT, GLOBAL, DIRECT or REJECT: "${rawTarget}"`);
       }
-      existingGroups.add(name);
+      const ruleTarget = rawTarget === "GLOBAL" || rawTarget === "DIRECT" || rawTarget === "REJECT" ? rawTarget : "SELECT";
+      if (ruleTarget === "SELECT") {
+        rules.push(`RULE-SET,${slug},${name}`);
+      } else {
+        rules.push(`RULE-SET,${slug},${ruleTarget}`);
+      }
+      if (ruleTarget === "SELECT") {
+        if (ctx.mode === "subscription") {
+          groups.push({
+            name: `${name}-AUTO`,
+            type: "url-test",
+            use: ctx.providerNames.slice(),
+            url: ctx.urlTest,
+            interval: PROXY_FETCH_INTERVAL,
+            tolerance: 50,
+            "expected-status": ctx.urlTestExpectedStatus,
+            "empty-fallback": "REJECT"
+          });
+          groups.push({
+            name,
+            type: "select",
+            // ⚡ Fastest is referenced only when it is actually emitted
+            // (a single-static config emits no Fastest group; referencing
+            // it would produce a dangling group target).
+            proxies: [`${name}-AUTO`, ...existingGroups.has(FASTEST_GROUP_NAME) ? [FASTEST_GROUP_NAME] : [], GLOBAL_GROUP_NAME, "DIRECT"]
+          });
+          existingGroups.add(`${name}-AUTO`);
+        } else if (ctx.mode === "static") {
+          groups.push({
+            name,
+            type: "select",
+            // ⚡ Fastest is referenced only when it is actually emitted (see above).
+            proxies: [...existingGroups.has(FASTEST_GROUP_NAME) ? [FASTEST_GROUP_NAME] : [], GLOBAL_GROUP_NAME, "DIRECT"]
+          });
+        } else {
+          groups.push({
+            name,
+            type: "select",
+            proxies: [GLOBAL_GROUP_NAME, "DIRECT"]
+          });
+        }
+        existingGroups.add(name);
+      }
     });
     return { ruleProviders, groups, rules, warnings };
   }
@@ -4799,6 +4820,13 @@
       if (!bean.stream.fp) bean.stream.fp = "chrome";
     }
   }
+  var DOMAIN_POLICY_TARGETS = /* @__PURE__ */ new Set(["SELECT", "GLOBAL", "DIRECT", "REJECT"]);
+  function normalizePolicyTarget(value) {
+    const t = String(value === void 0 || value === null ? "" : value).trim().toUpperCase();
+    if (!t) return "SELECT";
+    if (DOMAIN_POLICY_TARGETS.has(t)) return t;
+    throw new Error('Mihomo: domain policy target must be SELECT, GLOBAL, DIRECT or REJECT: "' + value + '"');
+  }
   function normalizeDomainPolicy(raw) {
     if (raw === void 0 || raw === null || raw === "") return [];
     if (!Array.isArray(raw)) throw new Error("Mihomo: domain policy must be an array of {name, domains}");
@@ -4813,7 +4841,8 @@
       if (seen.has(name)) throw new Error(`Mihomo: duplicate domain policy name: "${name}"`);
       seen.add(name);
       const domains = typeof item.domains === "string" ? item.domains.split(/\r?\n/) : Array.isArray(item.domains) ? item.domains.map((s) => String(s)) : [];
-      out.push({ name, domains });
+      const target = normalizePolicyTarget(item.target);
+      out.push({ name, domains, target });
     }
     return out;
   }

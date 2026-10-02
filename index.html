@@ -66,6 +66,16 @@
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--tooltip);color:var(--text);border:1px solid #000;padding:10px 18px;border-radius:0;box-shadow:3px 3px 6px rgba(0,0,0,.35);opacity:0;transition:all .3s;z-index:1000;pointer-events:none;max-width:80vw}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
   .hint{font-size:.75rem;color:var(--muted);margin-top:4px}
+  .policy-card{background:rgba(255,255,255,.5);border:1px solid var(--border);border-radius:0;min-width:0}
+  .policy-domains{width:100%;padding:6px 8px;box-sizing:border-box;font-family:monospace;font-size:.85rem}
+  .policy-target{padding:5px 8px;font-size:.85rem}
+  .policy-target-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .policy-target-row .label{margin:0}
+  .mt-group-row{display:flex;gap:8px;align-items:center;padding:3px 0;flex-wrap:wrap}
+  .mt-group-row .mt-iface{color:var(--muted)}
+  .mt-mapping-row{display:flex;gap:8px;align-items:center;padding:4px 0;flex-wrap:wrap}
+  .mt-mapping-row .mt-iface-name{font-weight:bold;min-width:120px}
+  .mt-import-groups{max-height:260px;overflow:auto;border:1px solid var(--border);padding:6px;background:rgba(255,255,255,.05)}
   .field-filled{border-color:var(--green)!important}
   .parsed-badge{background:var(--green);color:#fff;font-size:.7rem;padding:2px 8px;border-radius:3px}
   #mihomoOutput{min-height:300px;font-size:.8rem}
@@ -73,8 +83,10 @@
     #mihomoOutput{min-height:440px;font-size:.82rem}
     textarea{min-height:170px}
     .wg-card-mode{display:grid;grid-template-columns:auto 1fr;align-items:center}
-    .wg-target-row{display:grid;grid-template-columns:auto 1fr;align-items:center}
-    .wg-mode,.wg-target{width:100%}
+  .wg-target-row{display:grid;grid-template-columns:auto 1fr;align-items:center}
+  .wg-mode,.wg-target{width:100%}
+  .wg-target-manual{width:100%;padding:4px 8px;font-size:.85rem;margin-top:4px}
+  .wg-target-warn{color:var(--warn);font-size:.8rem;margin-top:4px}
     .wg-list-del{justify-self:end}
     .btn-group{max-width:560px}
   }
@@ -146,6 +158,10 @@
   .ctx-help{width:16px;height:16px;line-height:14px;padding:0;border-radius:3px;border:1px solid var(--luna);background:linear-gradient(180deg,#7ab3f7,var(--luna));color:#fff;font-size:.72rem;font-weight:bold;cursor:help;vertical-align:middle;font-family:Tahoma,Verdana,Arial,sans-serif}
   .ctx-help:hover,.ctx-help:focus-visible{box-shadow:0 0 0 2px #ffd9a0;outline:none}
   .ctx-help-pop{display:none;position:absolute;bottom:calc(100% + 8px);right:-8px;z-index:60;width:min(300px,78vw);padding:8px 10px;border:1px solid #000;background:var(--tooltip);color:var(--text);font-size:.8rem;font-weight:normal;line-height:1.45;box-shadow:3px 3px 6px rgba(0,0,0,.35);text-align:left}
+  /* Открытие: hover (мышь), focus-within (клавиатура), .open (клик/тач, через JS).
+     Все три пути ведут к одному и тому же поповеру; закрытие — mouseleave,
+     повторный клик/тап, клик снаружи и Escape (для .open). */
+  .ctx-help-wrap:hover .ctx-help-pop,.ctx-help-wrap:focus-within .ctx-help-pop{display:block}
   .ctx-help-wrap.open .ctx-help-pop{display:block}
   @media (max-width:640px){.ctx-help-pop{right:auto;left:50%;transform:translateX(-50%)}}
   /* Responsive */
@@ -270,7 +286,8 @@
       <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
       <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
       <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Если используете HTTP(S) URL подписки, оставьте включённым режим «URL-подписки» ниже. Если в поле только обычные proxy-ссылки — режим URL-подписок лучше выключить.</div>
-      <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> Автоматический режим белых списков</label></div>
+      <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> Автоматический режим белых списков <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Автоматический режим белых списков">?</button><span class="ctx-help-pop" role="note">Плоский резервный набор (PRIMARY → FALLBACK): GLOBAL сначала использует основной набор выходов, при их недоступности переключается на резервный. Health-check каждые 300 секунд, ускоренный при неудачах. Доступен только в профиле «Роутер / обычный TUN»: на VPS не используется.</span></span></label></div>
+      <div class="hint" id="awlRouterHint" style="display:none">Автоматический режим белых списков доступен только для профиля «Роутер / обычный TUN».</div>
       <div id="whitelistPanel" style="display:none">
         <label for="whitelistInput">Резерв для белых списков (ссылки / подписки)</label>
         <textarea id="whitelistInput" placeholder="vless://...&#10;https://sub.url/..."></textarea>
@@ -317,7 +334,7 @@
         <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Для домашнего роутера обычно включено; для VPS с локальным Xray/3X-UI выключите.</span></span></label>
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090.</span></span></label>
-        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки</label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено по умолчанию во всех профилях: строки http(s):// из поля ввода добавляются как proxy-providers (узлы подтягиваются самим Mihomo по расписанию). Если в поле только обычные proxy-ссылки (vless://, trojan://…) — выключите этот режим, они разбираются напрямую.</span></span></label>
       </div>
       <div id="subModeHint" class="hint"></div>
       <div id="webUiRow" style="margin-top:10px">
@@ -353,6 +370,27 @@
       <div id="policyRoutingPanel" style="display:none">
         <div class="hint">Доменное правило → стабильная логическая группа → <code>proxy-provider</code> подписки → текущий живой узел. Правила ссылаются на группы, а не на серверы: состав подписки может меняться — правила не требуют пересборки. Порядок политик = порядок правил; завершающее <code>MATCH,GLOBAL</code> остаётся правилом по умолчанию. Требуется Mihomo ≥ 1.19.27 (empty-fallback), инлайн rule-провайдеры ≥ 1.19.1.</div>
         <div id="policyCards"></div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button type="button" class="btn btn-gray" id="mtImportBtn">📂 Импорт MagiTrickle (.mtrickle)</button><span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Импорт MagiTrickle">?</button><span class="ctx-help-pop" role="note">Локальный импорт JSON-экспорта MagiTrickle: файл читается в браузере и никуда не отправляется. Группы превращаются в политики, маршруты-интерфейсы маппятся на таргеты (mitun0 → GLOBAL, blackhole → REJECT, остальные — «Пропустить»); отключённые правила/группы, дубли и неизвестные типы пропускаются с честным итогом. Повторный импорт добавляется к текущим политикам.</span></span>
+          <input type="file" id="mtImportFile" accept=".mtrickle,.json" hidden>
+          <span class="hint">локальный импорт: файл читается в браузере, никуда не отправляется</span>
+        </div>
+        <div id="mtImportPreview" class="policy-card" hidden>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <strong>Импорт MagiTrickle</strong>
+            <button type="button" class="btn btn-gray policy-del" id="mtImportCancel" style="padding:2px 10px">✕ Отмена</button>
+          </div>
+          <div id="mtImportStats" style="margin-top:8px;font-size:.85rem"></div>
+          <div id="mtImportGroups" style="margin-top:8px;font-size:.85rem"></div>
+          <div id="mtImportMapping" style="margin-top:10px"></div>
+          <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:.85rem;color:var(--text)">
+            <input type="checkbox" id="mtReplacePolicies"> Очистить текущие политики перед импортом
+          </label>
+          <div style="margin-top:10px">
+            <button type="button" class="btn" id="mtImportApply">Импортировать</button>
+          </div>
+        </div>
+        <div id="mtImportResult" class="hint" hidden></div>
         <div style="margin-top:8px">
           <button class="btn btn-gray" id="btnPolicyAdd" type="button">➕ Добавить политику</button>
           <span style="margin-left:8px">
@@ -392,8 +430,9 @@
           <div class="advanced-subsection advanced-subsection-second">
             <div class="advanced-subsection-title">🔀 Отдельный вход на каждый прокси</div>
             <div class="advanced-master">
-              <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим</label>
+              <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Отдельный вход на каждый прокси">?</button><span class="ctx-help-pop" role="note">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider — каждый выход получает собственный вход. Для обычных сценариев не требуется. Доступен только в профиле «Роутер / обычный TUN»; несовместим с режимом белых списков и «Политиками по доменам».</span></span></label>
             </div>
+            <div class="hint" id="perProxyRouterHint" style="display:none">Per-Proxy доступен только в профиле «Роутер / обычный TUN».</div>
             <div class="hint">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider. Для обычного использования не требуется. Дочерние параметры недоступны, пока этот режим выключен. Раскрытие секции само по себе ничего не включает и не сбрасывает.</div>
             <div class="checkbox-grid">
               <label><input type="checkbox" id="cfgPerProxyTun"> 🔒 TUN на каждый прокси</label>
@@ -442,11 +481,32 @@ function switchTab(e, name) {
 
 // === TOAST ===
 function showToast(msg, err) {
+  window.__lastToast = msg;
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.style.background = err ? 'var(--red)' : 'var(--green)';
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Контекстная подсказка «?» для динамически создаваемых контролов (WG-карточки,
+// MT-preview): та же структура/поведение, что у статической .ctx-help-разметки —
+// hover, focus, клик/тач (класс .open через делегированный обработчик), Escape.
+function makeCtxHelp(text, label) {
+  const wrap = document.createElement('span');
+  wrap.className = 'ctx-help-wrap';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ctx-help';
+  btn.setAttribute('aria-expanded', 'false');
+  btn.setAttribute('aria-label', 'Подсказка: ' + (label || 'подробнее'));
+  btn.textContent = '?';
+  const pop = document.createElement('span');
+  pop.className = 'ctx-help-pop';
+  pop.setAttribute('role', 'note');
+  pop.textContent = text;
+  wrap.append(btn, pop);
+  return wrap;
 }
 
 // === YAML PARSER ===
@@ -712,14 +772,157 @@ function syncWgCollections() {
 
 // Клон профиля для Build: dialer-proxy подставляется только в клон
 // (per-profile контракт web4core: bean.wireguard.dialerProxy).
-function wgProfileBuildBean(p) {
+function wgProfileBuildBean(p, opts) {
   const bean = JSON.parse(JSON.stringify(p.bean));
-  if (p.mode === 'proxy' && p.target.trim()) {
+  if (p.mode === 'proxy' && p.target.trim() && !(opts && opts.noDialer)) {
     bean.wireguard = bean.wireguard || {};
     bean.wireguard.dialerProxy = p.target.trim();
+  } else if (bean.wireguard) {
+    delete bean.wireguard.dialerProxy;
   }
   return bean;
 }
+
+// === DIALER TARGET REGISTRY (authoritative) ===
+// Список целей для «Промежуточный выход» НЕ ведётся вручную: он собирается
+// префлайт-сборкой текущего состояния через настоящий движок web4core —
+// поэтому значения опций совпадают с итоговыми именами YAML байт-в-байт,
+// включая авто-суффиксы дедупликации (VPS-SE-2) и переименования AWL
+// (PRIMARY-1: VPS-SE). Dialer-назначения профилей в префлайт не передаются:
+// имена прокси/групп от них не зависят, а сборка не должна падать из-за
+// ещё не выбранного/битого таргета.
+// ⚡ Fastest и GLOBAL исключаются (содержат сам WARP — цикл), как и группы,
+// чьи статические члены ссылаются на них: для них цикл гарантирован.
+let dialerTargetsCache = []; // [{value, label, kind}]
+let dialerWgNamesCache = []; // имена WG-outbound в порядке wgBeans (для self-exclusion)
+
+function dialerKindLabel(entry) {
+  if (entry.kind === 'group') return 'группа';
+  if (entry.type === 'wireguard') return 'WG/AWG';
+  return (entry.type || 'proxy').toUpperCase();
+}
+
+function computeDialerTargetsSync() {
+  const api = globalThis.web4core;
+  if (!api || !wgProfilesEnabled()) return [];
+  try {
+    const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
+    const masterEl = document.getElementById('cfgPerProxyMaster');
+    const addTun = document.getElementById('cfgTun').checked;
+    const addSocks = document.getElementById('cfgSocks').checked;
+    const tunStack = (addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor';
+    const dialedProfiles = wgProfiles.filter(p => p.mode === 'proxy');
+    const wgDialer = document.getElementById('wgDialerInput').value.trim();
+    const wgDialerMembers = document.getElementById('wgDialerMembers').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const wgDialerProviders = document.getElementById('wgDialerProviders').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const useDialerGroup = dialedProfiles.length > 0 && (wgDialerMembers.length > 0 || wgDialerProviders.length > 0);
+    const realityModern = parseRealityModernLines();
+    const result = api.buildFromRequest({
+      core: 'mihomo',
+      input: document.getElementById('mihomoInput').value,
+      ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}),
+      wgBeans: normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, { noDialer: true }))),
+      options: {
+        addSocks: addSocks,
+        addTun: addTun,
+        urlTest: document.getElementById('pingSelect').value || 'https://google.com/generate_204',
+        mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
+        excludeFilter: document.getElementById('excludeFilterInput').value,
+        deviceModel: document.getElementById('deviceModelInput').value,
+        mihomoPerProxyTun: false,
+        mihomoTunStack: tunStack,
+        perProxyPort: false,
+        mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined,
+        wgDialerProxy: useDialerGroup ? (wgDialer || undefined) : undefined,
+        wgDialerGroupMembers: useDialerGroup ? wgDialerMembers : undefined,
+        wgDialerProviders: useDialerGroup ? wgDialerProviders : undefined,
+        wgDialerGroupOnly: useDialerGroup ? true : undefined
+      }
+    });
+    const doc = jsyaml.load(typeof result.data === 'string' ? result.data : JSON.stringify(result.data));
+    if (!doc || typeof doc !== 'object') return [];
+    const badMembers = new Set(['GLOBAL', '⚡ Fastest']);
+    const out = [];
+    for (const p of (doc.proxies || [])) {
+      if (!p || typeof p !== 'object' || typeof p.name !== 'string' || !p.name) continue;
+      out.push({ value: p.name, label: p.name + ' — ' + dialerKindLabel({ kind: 'proxy', type: p.type }), kind: 'proxy', type: p.type });
+    }
+    for (const g of (doc['proxy-groups'] || [])) {
+      if (!g || typeof g !== 'object' || typeof g.name !== 'string' || !g.name) continue;
+      if (badMembers.has(g.name)) continue;
+      if (Array.isArray(g.proxies) && g.proxies.some(m => badMembers.has(m))) continue; // цикл через GLOBAL/Fastest
+      out.push({ value: g.name, label: g.name + ' — ' + dialerKindLabel({ kind: 'group' }), kind: 'group', type: 'group' });
+    }
+    // Имена WG-outbound в порядке wgBeans: движок сохраняет порядок бинов,
+    // поэтому i-й wireguard-proxy — это итоговое имя i-го загруженного профиля
+    // (включая суффиксы дедупликации — точный self-exclusion при коллизиях).
+    dialerWgNamesCache = (doc.proxies || []).filter(p => p && p.type === 'wireguard').map(p => p.name);
+    return out;
+  } catch (e) {
+    dialerWgNamesCache = [];
+    return []; // состояние ещё не собирается (например, пустой ввод) — список пуст
+  }
+}
+
+function refreshWgTargetSelectors() {
+  dialerTargetsCache = computeDialerTargetsSync();
+  const valid = new Set(dialerTargetsCache.map(t => t.value));
+  wgProfiles.forEach((p, idx) => {
+    // Сброс выбора, если цель исчезла из конфигурации ИЛИ стала итоговым именем
+    // самого профиля (коллизия после удаления: collide-2 → collide) — никаких
+    // скрытых dangling-ссылок и self-references.
+    const selfName = dialerWgNamesCache[idx] || p.bean.name || '';
+    if (p.mode === 'proxy' && p.targetSource !== 'manual' && p.target &&
+        (!valid.has(p.target) || p.target === selfName)) {
+      p.vanishedTarget = p.target;
+      p.target = '';
+    } else if (p.target && valid.has(p.target)) {
+      p.vanishedTarget = null;
+    }
+    const sel = document.getElementById('wgTarget' + p.id);
+    if (sel) fillWgTargetSelect(sel, p, idx);
+  });
+}
+
+function fillWgTargetSelect(sel, p, idx) {
+  sel.textContent = '';
+  const ph = document.createElement('option');
+  ph.value = '';
+  ph.textContent = p.mode === 'proxy' ? '— выберите цель —' : '';
+  sel.appendChild(ph);
+  // Сам профиль не может выбрать себя (§4): исключаем ИТОГОВОЕ имя своего
+  // outbound из реестра (i-й wireguard-proxy префлайт-сборки).
+  const selfName = dialerWgNamesCache[idx >= 0 ? idx : wgProfiles.indexOf(p)] || p.bean.name || '';
+  for (const t of dialerTargetsCache) {
+    if (selfName && t.value === selfName && t.kind === 'proxy' && t.type === 'wireguard') continue;
+    const o = document.createElement('option');
+    o.value = t.value;
+    o.textContent = t.label;
+    sel.appendChild(o);
+  }
+  const manual = document.createElement('option');
+  manual.value = '__manual__';
+  manual.textContent = 'Другое / вручную… (ADVANCED)';
+  sel.appendChild(manual);
+  if (p.targetSource === 'manual') sel.value = '__manual__';
+  else if (p.target && dialerTargetsCache.some(t => t.value === p.target)) sel.value = p.target;
+  else sel.value = '';
+  // Плашка vanish-пометки и ручной ввод живут в той же строке — синхронизируем
+  // их здесь, чтобы точечные обновления (refresh без полного renderWgList)
+  // не оставляли устаревший UI.
+  const row = sel.closest('.wg-target-row');
+  if (row) {
+    const manualInput = row.querySelector('.wg-target-manual');
+    if (manualInput) {
+      manualInput.style.display = p.targetSource === 'manual' ? '' : 'none';
+      if (p.targetSource !== 'manual') manualInput.value = '';
+    }
+    const warn = row.querySelector('.wg-target-warn');
+    if (warn) warn.textContent = p.vanishedTarget ? '⚠ Цель «' + p.vanishedTarget + '» недоступна для этого профиля — выберите заново.' : '';
+  }
+}
+
+function wgProfilesEnabled() { return wgProfiles.length > 0; }
 
 // AWG-патч 1/3: рантайм-парсер понимает только скаляры, а реальные AWG-конфиги
 // пишут диапазоны и словесные булевы: PersistentKeepalive = 25-35 (Premium и
@@ -1014,6 +1217,7 @@ function initWgUpload() {
       btnEl.textContent = '📂 Загрузить .conf / .wg / .awg';
     }
     renderWgList();
+    refreshWgTargetSelectors(); // новые профили = новые цели в селекторах
   }
 }
 
@@ -1071,6 +1275,7 @@ function renderWgList() {
     const modeLabel = document.createElement('label');
     modeLabel.textContent = 'Подключение:';
     modeLabel.htmlFor = 'wgMode' + p.id;
+    modeLabel.appendChild(makeCtxHelp('«Напрямую» — Endpoint этого WG/AWG профиля соединяется напрямую. «Через промежуточный proxy» — соединение с Endpoint идёт через выбранную цель (dialer-proxy): например, WARP-профиль через VPS-узел меняет страну входа в Cloudflare. Таргет обязан поддерживать UDP (VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет).', 'Подключение'));
     const modeSel = document.createElement('select');
     modeSel.id = 'wgMode' + p.id;
     modeSel.className = 'wg-mode';
@@ -1089,16 +1294,25 @@ function renderWgList() {
     targetRow.className = 'wg-target-row';
     if (p.mode !== 'proxy') targetRow.style.display = 'none';
     const targetLabel = document.createElement('label');
-    targetLabel.textContent = 'Proxy / группа:';
+    targetLabel.textContent = 'Промежуточный выход:';
     targetLabel.htmlFor = 'wgTarget' + p.id;
-    const targetInput = document.createElement('input');
-    targetInput.type = 'text';
-    targetInput.id = 'wgTarget' + p.id;
-    targetInput.className = 'wg-target';
-    targetInput.dataset.idx = i;
-    targetInput.value = p.target;
-    targetInput.placeholder = 'например: WARP-DIALER';
-    targetRow.append(targetLabel, targetInput);
+    targetLabel.appendChild(makeCtxHelp('Proxy или группа, через которую Mihomo установит соединение с Endpoint этого WG/AWG профиля. Например: WARP через SE-AWG означает SE-AWG → WARP. Список содержит только цели, которые существуют в текущей конфигурации (значение = точное имя в YAML, включая суффиксы дублей и переименования белых списков). Сам профиль и группы, содержащие этот WARP (GLOBAL, ⚡ Fastest), в списке не показываются. «Другое / вручную…» — для нестандартных случаев: имя проверяется при сборке.', 'Промежуточный выход'));
+    const targetSel = document.createElement('select');
+    targetSel.id = 'wgTarget' + p.id;
+    targetSel.className = 'wg-target';
+    targetSel.dataset.idx = i;
+    const targetManual = document.createElement('input');
+    targetManual.type = 'text';
+    targetManual.className = 'wg-target-manual';
+    targetManual.dataset.idx = i;
+    targetManual.placeholder = 'точное имя proxy/группы из YAML';
+    targetManual.value = p.targetSource === 'manual' ? p.target : '';
+    if (p.targetSource !== 'manual') targetManual.style.display = 'none';
+    const targetWarn = document.createElement('div');
+    targetWarn.className = 'wg-target-warn';
+    if (p.vanishedTarget) targetWarn.textContent = '⚠ Цель «' + p.vanishedTarget + '» недоступна для этого профиля — выберите заново.';
+    targetRow.append(targetLabel, targetSel, targetManual, targetWarn);
+    fillWgTargetSelect(targetSel, p, i);
 
     li.append(head, info, modeRow, targetRow);
     list.appendChild(li);
@@ -1115,23 +1329,51 @@ document.addEventListener('change', (e) => {
   if (!t.classList) return;
   const idx = Number(t.dataset && t.dataset.idx);
   if (!Number.isInteger(idx) || !(idx >= 0 && idx < wgProfiles.length)) return;
+  const invalidate = () => { mihomoValidationSeq++; resetCompatSummary(); setMihomoValidationState('NOT_BUILT'); };
   if (t.classList.contains('wg-mode')) {
     wgProfiles[idx].mode = t.value === 'proxy' ? 'proxy' : 'direct';
     if (wgProfiles[idx].mode === 'proxy' && !wgProfiles[idx].target.trim()) {
-      const g = document.getElementById('wgDialerInput');
-      wgProfiles[idx].target = (g && g.value.trim()) || 'WARP-DIALER';
+      // Пре-выбор: dialer-группа пользователя, если она реально существует
+      // в текущей конфигурации; иначе пусто (никаких выдуманных имён).
+      const g = (document.getElementById('wgDialerInput').value || '').trim();
+      const def = (g || 'WARP-DIALER');
+      if (dialerTargetsCache.some(x => x.value === def)) {
+        wgProfiles[idx].target = def;
+        wgProfiles[idx].targetSource = 'select';
+      }
     }
     const row = t.closest('.wg-card');
     const targetRow = row && row.querySelector('.wg-target-row');
-    if (targetRow) targetRow.style.display = wgProfiles[idx].mode === 'proxy' ? '' : 'none';
-    mihomoValidationSeq++;
-    resetCompatSummary();
-    setMihomoValidationState('NOT_BUILT');
+    if (targetRow) {
+      targetRow.style.display = wgProfiles[idx].mode === 'proxy' ? '' : 'none';
+      const sel = targetRow.querySelector('.wg-target');
+      if (sel) fillWgTargetSelect(sel, wgProfiles[idx], idx);
+    }
+    invalidate();
   } else if (t.classList.contains('wg-target')) {
+    const p = wgProfiles[idx];
+    if (t.value === '__manual__') {
+      p.targetSource = 'manual';
+      const row = t.closest('.wg-card');
+      const manual = row && row.querySelector('.wg-target-manual');
+      if (manual) { manual.style.display = ''; manual.focus(); }
+    } else {
+      p.targetSource = 'select';
+      p.target = t.value;
+      p.vanishedTarget = null;
+      const row = t.closest('.wg-card');
+      if (row) {
+        const manual = row.querySelector('.wg-target-manual');
+        if (manual) { manual.style.display = 'none'; manual.value = ''; }
+        const warn = row.querySelector('.wg-target-warn');
+        if (warn) warn.textContent = '';
+      }
+    }
+    invalidate();
+  } else if (t.classList.contains('wg-target-manual')) {
+    wgProfiles[idx].targetSource = 'manual';
     wgProfiles[idx].target = t.value;
-    mihomoValidationSeq++;
-    resetCompatSummary();
-    setMihomoValidationState('NOT_BUILT');
+    invalidate();
   }
 });
 
@@ -1143,6 +1385,7 @@ function removeWgProfile(index) {
   resetCompatSummary();
   setMihomoValidationState('NOT_BUILT');
   updateWgStatusTextOnly();
+  refreshWgTargetSelectors(); // состав целей изменился — селекторы и выборы обновляются
 }
 
 function clearWgProfiles() {
@@ -1158,6 +1401,7 @@ function clearWgProfiles() {
   resetCompatSummary();
   setMihomoValidationState('NOT_BUILT');
   updateWgStatusTextOnly();
+  refreshWgTargetSelectors();
 }
 
 function updateWgStatusTextOnly() {
@@ -1829,25 +2073,49 @@ function updateVpsDnsFields() {
 // Профиль владеет ТОЛЬКО сценарными переключателями (TUN/MIPS/stack/Mixed/LAN
 // и gateway-панелью). Прокси, подписки, WireGuard, фильтры, dialer, Web UI,
 // health-check и DPR-политики профилем не затрагиваются. Ручное состояние
-// router-профиля сохраняется в snapshot и восстанавливается при возврате.
+// каждого профиля (включая Sub Mode / БС / Per-Proxy) живёт в per-profile
+// snapshot и восстанавливается при возврате. Подмена профиля запрещена:
+// выбранное пользователем значение никогда не меняется молча.
 const PROFILE_HINTS = {
   router: 'Домашний роутер / обычный TUN: Mihomo поднимает TUN-интерфейс (MIPS stack), слушает Mixed Port 7890, разрешает доступ из локальной сети. Все параметры ниже можно менять вручную.',
   'vps-local': 'Для VPS, где Xray/3X-UI или другое локальное приложение отправляет трафик в Mihomo через 127.0.0.1:7890. TUN и системная маршрутизация VPS не используются.',
   'vps-gateway': 'Только для transparent-gateway с Linux policy routing / iptables / Docker/AWG. Генератор создаёт Mihomo-часть, но не Linux routing/firewall. Для обычного VPS с Xray/3X-UI используйте профиль «VPS — локальный Mihomo / SOCKS».',
 };
 const PROFILE_OWNED_IDS = ['cfgTun', 'cfgTunMips', 'cfgTunStackAdvanced', 'cfgTunStackEx', 'cfgSocks', 'cfgLan'];
+const PROFILE_IDS = ['router', 'vps-local', 'vps-gateway'];
 
-// effectiveProfile = профиль, чей UI-state сейчас применён.
-// БС навязывает router-контракт временно, не трогая выбранный пользователем профиль.
+// effectiveProfile = профиль, чей UI-state сейчас применён. Совпадает с
+// selectedProfile всегда: ни БС, ни что-либо ещё профиль больше не подменяют.
 let selectedProfile = 'router';   // пользовательский выбор (select value)
 let effectiveProfile = 'router';  // профиль, чей UI-state применён сейчас
-let bsTemporaryRouter = false;    // БС навязал router временно
-let routerOwnedSnapshot = null;   // ручное состояние router-owned чекбоксов
 
-// Применяет UI-state профиля. Path-independent: результат зависит ТОЛЬКО от
-// целевого профиля, не от пути перехода. snapshot не потребляет и не восстанавливает.
+// Per-profile snapshots ручного состояния. null = профиль ещё не настраивали
+// вручную — при первом входе применяются дефолты (Sub Mode ON, БС/Per-Proxy off).
+const profileSnapshots = { router: null, 'vps-local': null, 'vps-gateway': null };
+const PROFILE_USER_DEFAULTS = { subMode: true, awl: false, perProxyMaster: false };
+
+function snapshotProfileState(profile) {
+  const owned = {};
+  for (const id of PROFILE_OWNED_IDS) {
+    const el = document.getElementById(id);
+    owned[id] = el.type === 'checkbox' ? el.checked : el.value;
+  }
+  profileSnapshots[profile] = {
+    owned,
+    subMode: document.getElementById('cfgSubMode').checked,
+    awl: document.getElementById('cfgAutoWhitelist').checked,
+    perProxyMaster: document.getElementById('cfgPerProxyMaster').checked,
+    perProxyTun: document.getElementById('cfgPerProxyTun').checked,
+    perProxySocks: document.getElementById('cfgPerProxySocks').checked,
+  };
+}
+
 function applyProfileUiState(target) {
-  const bsOn = document.getElementById('cfgAutoWhitelist').checked;
+  const awl = document.getElementById('cfgAutoWhitelist');
+  const subMode = document.getElementById('cfgSubMode');
+  const master = document.getElementById('cfgPerProxyMaster');
+  const perTun = document.getElementById('cfgPerProxyTun');
+  const perSocks = document.getElementById('cfgPerProxySocks');
   const tun = document.getElementById('cfgTun');
   const mips = document.getElementById('cfgTunMips');
   const socks = document.getElementById('cfgSocks');
@@ -1856,10 +2124,35 @@ function applyProfileUiState(target) {
   const stackEx = document.getElementById('cfgTunStackEx');
   const panel = document.getElementById('vpsPanel');
   const hint = document.getElementById('profileHint');
+  const snap = profileSnapshots[target];
   hint.textContent = PROFILE_HINTS[target] || '';
-  panel.style.display = target === 'vps-gateway' && !bsOn ? 'block' : 'none';
+  // VPS-профили: БС и Per-Proxy недоступны по контракту (router-only).
+  // Отключение делается здесь, а не только в Build — но Build и не доверяет DOM.
+  const vps = target !== 'router';
+  awl.disabled = vps;
+  awl.checked = vps ? false : (snap ? snap.awl : PROFILE_USER_DEFAULTS.awl);
+  master.disabled = vps;
+  const masterOn = vps ? false : (snap ? snap.perProxyMaster : PROFILE_USER_DEFAULTS.perProxyMaster);
+  master.checked = masterOn;
+  perTun.checked = false; perSocks.checked = false;
+  perTun.disabled = true; perSocks.disabled = true;
+  document.getElementById('awlRouterHint').style.display = vps ? '' : 'none';
+  document.getElementById('perProxyRouterHint').style.display = vps ? '' : 'none';
+  document.getElementById('whitelistPanel').style.display = awl.checked ? 'block' : 'none';
+  panel.style.display = target === 'vps-gateway' ? 'block' : 'none';
   if (target === 'router') {
     for (const id of PROFILE_OWNED_IDS) document.getElementById(id).disabled = false;
+    if (snap) {
+      const owned = snap.owned;
+      for (const id of PROFILE_OWNED_IDS) {
+        const el = document.getElementById(id);
+        if (el.type === 'checkbox') el.checked = owned[id]; else el.value = owned[id];
+      }
+      // дочерние Per-Proxy восстанавливаются вместе с master (§17: прежнее
+      // ручное состояние router переживает визит в VPS-профиль)
+      perTun.checked = !!snap.perProxyTun;
+      perSocks.checked = !!snap.perProxySocks;
+    }
   } else if (target === 'vps-local') {
     tun.checked = false; tun.disabled = true;
     mips.checked = false; mips.disabled = true;
@@ -1873,59 +2166,41 @@ function applyProfileUiState(target) {
     socks.disabled = false;
     lan.disabled = false;
   }
+  subMode.checked = snap ? snap.subMode : PROFILE_USER_DEFAULTS.subMode;
   updateMihomoOptionStates();
+  updateExcludeFilterVisibility();
+  updateSubModeHint();
+  updatePolicyRoutingVisibility();
   updateVpsDnsFields();
-}
-
-function applyDeploymentProfileUi(opts) {
-  const temporary = !!(opts && opts.temporary);
-  const target = bsTemporaryRouter ? 'router' : selectedProfile;
-  effectiveProfile = target;
-  if (temporary) {
-    // временный router-state: чекбоксы не трогаем (пользователь может настроить
-    // router-профиль под БС), только disabled-state и hint. snapshot не трогаем.
-    // vpsPanel скрывается: эффективный контракт — router, gateway-настройки игнорируются.
-    for (const id of PROFILE_OWNED_IDS) document.getElementById(id).disabled = false;
-    document.getElementById('vpsPanel').style.display = 'none';
-    document.getElementById('profileHint').textContent = PROFILE_HINTS.router + ' (временно: режим Auto-Whitelist)';
-    updateMihomoOptionStates();
-    return;
-  }
-  applyProfileUiState(target);
 }
 
 function onProfileChange() {
   const select = document.getElementById('cfgProfile');
   const prev = selectedProfile;
   const next = select.value;
-  if (prev === next) { applyDeploymentProfileUi(); return; }
-  if (prev === 'router') {
-    // реальный пользовательский уход из router — сохранить ручное состояние
-    routerOwnedSnapshot = {
-      tun: document.getElementById('cfgTun').checked,
-      mips: document.getElementById('cfgTunMips').checked,
-      stackAdv: document.getElementById('cfgTunStackAdvanced').checked,
-      stackEx: document.getElementById('cfgTunStackEx').value,
-      socks: document.getElementById('cfgSocks').checked,
-      lan: document.getElementById('cfgLan').checked,
-    };
-  }
+  if (prev === next) { applyProfileUiState(next); return; }
+  snapshotProfileState(prev);
   selectedProfile = next;
   effectiveProfile = next;
   applyProfileUiState(next);
-  updateVpsDnsFields();
-  // восстановление router-owned ручного состояния при ВОЗВРАТЕ в router
-  if (next === 'router' && routerOwnedSnapshot) {
-    const snap = routerOwnedSnapshot;
-    document.getElementById('cfgTun').checked = snap.tun;
-    document.getElementById('cfgTunMips').checked = snap.mips;
-    document.getElementById('cfgTunStackAdvanced').checked = snap.stackAdv;
-    document.getElementById('cfgTunStackEx').value = snap.stackEx || '';
-    document.getElementById('cfgSocks').checked = snap.socks;
-    document.getElementById('cfgLan').checked = snap.lan;
-    routerOwnedSnapshot = null;
-    updateMihomoOptionStates();
+  refreshWgTargetSelectors();
+}
+
+// UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
+function onWhitelistChange() {
+  const awl = document.getElementById('cfgAutoWhitelist');
+  // Контракт router-only держится на трёх слоях: select профиля (disabled для
+  // VPS в applyProfileUiState), этот обработчик и кламп в buildMihomo, который
+  // не доверяет DOM (тампер через консоль → явная ошибка сборки, без подмены).
+  if (awl.checked && document.getElementById('cfgProfile').value !== 'router') {
+    awl.checked = false;
+    awl.disabled = true;
+    showToast('❌ Автоматический режим белых списков доступен только в профиле «Роутер / обычный TUN»', true);
   }
+  document.getElementById('whitelistPanel').style.display = awl.checked ? 'block' : 'none';
+  updateMihomoOptionStates();
+  updatePolicyRoutingVisibility();
+  refreshWgTargetSelectors();
 }
 
 // Зависимости inbound-опций: дочерние чекбоксы включаемы только при активном
@@ -1984,7 +2259,8 @@ function parseRealityModernLines() {
 }
 
 function updateMihomoOptionStates() {
-  const bsOn = document.getElementById('cfgAutoWhitelist').checked;
+  const awlOn = document.getElementById('cfgAutoWhitelist').checked;
+  const routerProfile = document.getElementById('cfgProfile').value === 'router';
   const tun = document.getElementById('cfgTun').checked;
   const socks = document.getElementById('cfgSocks').checked;
   const mips = document.getElementById('cfgTunMips');
@@ -2004,46 +2280,19 @@ function updateMihomoOptionStates() {
   const advancedStackActive = stackAdv.checked && (stackEx.value === 'system' || stackEx.value === 'mixed');
   mips.disabled = !tun || advancedStackActive;
   if (advancedStackActive) mips.checked = false; // единое состояние: нет «MIPS checked» при system/mixed в YAML
-  masterEl.disabled = bsOn;
-  perTun.disabled = !master || !tun || bsOn;
-  perSocks.disabled = !master || !socks || bsOn;
+  // Per-Proxy — router-only контракт: источник истины — select профиля
+  // (applyProfileUiState выставляет disabled для VPS, здесь состояние не теряется:
+  // повторный вызов на VPS снова выключает master, DOM-тампер не переживает).
+  masterEl.disabled = !routerProfile || awlOn;
+  if (!routerProfile || awlOn) masterEl.checked = false;
+  perTun.disabled = !master || !tun || awlOn;
+  perSocks.disabled = !master || !socks || awlOn;
   // DPR несовместим с per-proxy listeners (движок тоже отклоняет); с БС и
   // статикой совместим (цели урезаются движком).
   const policyEl = document.getElementById('cfgPolicyRouting');
   policyEl.disabled = master;
   if (master) policyEl.checked = false;
   updatePolicyRoutingVisibility();
-}
-
-// UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
-let whitelistUiState = null;
-function onWhitelistChange() {
-  const on = document.getElementById('cfgAutoWhitelist').checked;
-  const perTun = document.getElementById('cfgPerProxyTun');
-  const perSocks = document.getElementById('cfgPerProxySocks');
-  const profile = document.getElementById('cfgProfile');
-  if (on && !whitelistUiState) {
-    whitelistUiState = { perTun: perTun.checked, perSocks: perSocks.checked };
-    perTun.checked = perSocks.checked = false;
-    // БС навязывает router-контракт ВРЕМЕННО: выбранный пользователем профиль
-    // сохраняется, router-owned snapshot не потребляется. effectiveProfile
-    // становится 'router' через buildMihomo-клампы (autoWhitelist → router),
-    // UI показывает router-подсказку; при выключении БС UI восстанавливается.
-    bsTemporaryRouter = true;
-    applyDeploymentProfileUi({ temporary: true });
-  } else if (!on && whitelistUiState) {
-    perTun.checked = whitelistUiState.perTun;
-    perSocks.checked = whitelistUiState.perSocks;
-    bsTemporaryRouter = false;
-    applyDeploymentProfileUi();
-    whitelistUiState = null;
-  }
-  profile.disabled = on;
-  updateMihomoOptionStates();
-  const perProxyPanel = document.getElementById('perProxyAdvancedPanel');
-  if (perProxyPanel) perProxyPanel.style.display = on ? 'none' : '';
-  document.getElementById('profileRow').style.display = on ? 'none' : '';
-  document.getElementById('whitelistPanel').style.display = on ? 'block' : 'none';
 }
 
 // === DOMAIN POLICY ROUTING (UI) ===
@@ -2055,7 +2304,7 @@ const POLICY_PRESETS = {
   media: { name: 'MEDIA', domains: 'youtube.com\nyoutu.be\ngooglevideo.com\nytimg.com' },
   telegram: { name: 'TELEGRAM', domains: 'telegram.org\nt.me\ntelegram.me\ntelegram.dog\ntelesco.pe' },
   google: { name: 'GOOGLE', domains: 'google.com\ngstatic.com\ngoogleapis.com\ngoogleusercontent.com' },
-  direct: { name: 'DIRECT-LIST', domains: '# домены, которые пойдут мимо прокси (DIRECT)\nexample.com' }
+  direct: { name: 'DIRECT-LIST', domains: '# домены, которые пойдут мимо прокси (DIRECT)\nexample.com', target: 'DIRECT' }
 };
 
 function policyCardDom(card, index) {
@@ -2076,6 +2325,21 @@ function policyCardDom(card, index) {
   del.textContent = '✕ Удалить';
   del.addEventListener('click', () => wrap.remove());
   title.append(nameInput, del);
+  const targetRow = document.createElement('div');
+  targetRow.className = 'policy-target-row';
+  const targetLabel = document.createElement('label');
+  targetLabel.className = 'label';
+  targetLabel.textContent = 'Куда направлять:';
+  const targetSel = document.createElement('select');
+  targetSel.className = 'policy-target';
+  for (const [value, text] of [['SELECT', '🎛 Отдельная группа выбора'], ['GLOBAL', '🌐 GLOBAL'], ['DIRECT', '⬇ DIRECT'], ['REJECT', '🚫 REJECT']]) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    targetSel.appendChild(opt);
+  }
+  targetSel.value = card.target === 'GLOBAL' || card.target === 'DIRECT' || card.target === 'REJECT' ? card.target : 'SELECT';
+  targetRow.append(targetLabel, targetSel);
   const domainsLabel = document.createElement('label');
   domainsLabel.className = 'label';
   domainsLabel.style.cssText = 'display:block;margin-top:8px';
@@ -2089,13 +2353,308 @@ function policyCardDom(card, index) {
   const hint = document.createElement('div');
   hint.className = 'hint';
   hint.textContent = 'Голый домен = DOMAIN-SUFFIX (с поддоменами). Поддерживаются: DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, DOMAIN-REGEX, GEOSITE, CIDR (→ IP-CIDR,no-resolve). Нераспознанные строки пропускаются с предупреждением.';
-  wrap.append(title, domainsLabel, domains, hint);
+  wrap.append(title, targetRow, domainsLabel, domains, hint);
   return wrap;
 }
 
 function addPolicyCard(card) {
   document.getElementById('policyCards').appendChild(policyCardDom(card || {}));
 }
+
+// === MAGITRICKLE IMPORT (.mtrickle) ===
+// Локальный импорт экспорта MagiTrickle: файл читается в браузере через
+// FileReader, никуда не отправляется. MT-типы правил конвертируются в типы
+// правил Mihomo (namespace→DOMAIN-SUFFIX, domain→DOMAIN, wildcard→
+// DOMAIN-WILDCARD, regex→DOMAIN-REGEX, subnet→IP-CIDR /32 либо IP-CIDR6 для
+// IPv6-значений, subnet6→IP-CIDR6 /128).
+// Маршрут MagiTrickle (network interface) НЕ является правилом Mihomo: группы
+// интерфейсов маппятся на target правил (GLOBAL/DIRECT/REJECT/SELECT) в preview.
+let mtPending = null; // {groups, mapping, preview, disabledRows}
+
+// Известные интерфейсы MagiTrickle: mitun0 (вход в Mihomo) → GLOBAL,
+// blackhole (блокировка) → REJECT; остальное не угадываем молча — Пропустить.
+function mtDefaultMapping(iface) {
+  if (iface === 'mitun0') return 'GLOBAL';
+  if (iface === 'blackhole') return 'REJECT';
+  return 'skip';
+}
+
+function mtIsEnabled(value) {
+  if (value === true) return true;
+  if (value === false || value === undefined || value === null) return false;
+  const s = String(value).trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+}
+
+function mtCidr4(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const slash = raw.indexOf('/');
+  const addr = (slash === -1 ? raw : raw.slice(0, slash)).trim();
+  const prefixRaw = slash === -1 ? '' : raw.slice(slash + 1).trim();
+  if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(addr)) return null;
+  const octets = addr.split('.').map(Number);
+  if (octets.some(o => o > 255)) return null;
+  const prefix = prefixRaw === '' ? 32 : Number(prefixRaw);
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return null;
+  return addr + '/' + prefix;
+}
+
+function mtCidr6(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const slash = raw.indexOf('/');
+  const addr = (slash === -1 ? raw : raw.slice(0, slash)).trim().toLowerCase();
+  const prefixRaw = slash === -1 ? '' : raw.slice(slash + 1).trim();
+  if (!addr.includes(':') || !/^[0-9a-f:]+$/.test(addr) || (addr.match(/::/g) || []).length > 1) return null;
+  const prefix = prefixRaw === '' ? 128 : Number(prefixRaw);
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > 128) return null;
+  return addr + '/' + prefix;
+}
+
+function mtRuleToMihomo(rule) {
+  const value = String(rule && rule.rule || '').trim();
+  const type = String(rule && rule.type || '').trim().toLowerCase();
+  if (!value) return null;
+  if (type === 'namespace') return 'DOMAIN-SUFFIX,' + value.toLowerCase();
+  if (type === 'domain') return 'DOMAIN,' + value.toLowerCase();
+  if (type === 'wildcard') return 'DOMAIN-WILDCARD,' + value.toLowerCase();
+  if (type === 'regex') return 'DOMAIN-REGEX,' + value;
+  if (type === 'subnet') {
+    // Часть сборок MagiTrickle кладёт IPv6-подсети в общий тип subnet.
+    const c = mtCidr4(value) || mtCidr6(value);
+    return c ? (c.includes(':') ? 'IP-CIDR6,' + c + ',no-resolve' : 'IP-CIDR,' + c + ',no-resolve') : null;
+  }
+  if (type === 'subnet6') { const c = mtCidr6(value); return c ? 'IP-CIDR6,' + c + ',no-resolve' : null; }
+  return undefined; // неизвестный тип
+}
+
+function parseMagiTrickleExport(text) {
+  let doc;
+  try { doc = JSON.parse(text); }
+  catch (e) { return { error: 'Файл не является корректным JSON — это не похоже на экспорт MagiTrickle (.mtrickle). Конфиги WG/AWG импортируются через «Импорт WG/AWG» в разделе WireGuard.' }; }
+  if (!doc || typeof doc !== 'object' || !Array.isArray(doc.groups)) {
+    return { error: 'В файле нет массива groups — это не похоже на экспорт MagiTrickle.' };
+  }
+  const groups = [];
+  for (const g of doc.groups) {
+    if (!g || typeof g !== 'object' || !String(g.name || '').trim()) {
+      return { error: 'В файле есть группа без имени — структура не похожа на экспорт MagiTrickle.' };
+    }
+    groups.push(g);
+  }
+  return { groups };
+}
+
+function mtCollectStats(groups) {
+  const enabledGroups = groups.filter(g => mtIsEnabled(g.enable));
+  const typeCounts = {};
+  let activeRules = 0, skippedRules = 0, unknownTypes = 0;
+  const ifaces = new Set();
+  const groupRows = [];
+  const disabledRows = [];
+  // «Пропущено» = правила, которые не попадут в импорт: отключённые правила,
+  // отключённые группы (целиком), неизвестные типы и дубли внутри группы.
+  // Активное правило-дубликат остаётся в счётчиках «активно» и «типы» —
+  // в файле оно есть, в импорт пойдёт одна копия.
+  for (const g of groups) {
+    const name = String(g.name || '').trim();
+    if (!mtIsEnabled(g.enable)) {
+      skippedRules += Array.isArray(g.rules) ? g.rules.length : 0;
+      disabledRows.push(name);
+      continue;
+    }
+    const iface = String(g.interface || '').trim();
+    ifaces.add(iface);
+    const rows = Array.isArray(g.rules) ? g.rules : [];
+    let active = 0;
+    const types = {};
+    const seen = new Set();
+    for (const r of rows) {
+      if (!mtIsEnabled(r.enable)) { skippedRules++; continue; }
+      const mapped = mtRuleToMihomo(r);
+      if (mapped === undefined) { unknownTypes++; skippedRules++; continue; }
+      if (mapped === null) { skippedRules++; continue; }
+      if (seen.has(mapped)) { skippedRules++; }
+      else { seen.add(mapped); }
+      active++;
+      const rt = r.type;
+      types[rt] = (types[rt] || 0) + 1;
+    }
+    activeRules += active;
+    for (const [t, n] of Object.entries(types)) typeCounts[t] = (typeCounts[t] || 0) + n;
+    groupRows.push({ name, iface, active, types });
+  }
+  return { total: groups.length, enabled: enabledGroups.length, disabled: groups.length - enabledGroups.length,
+           activeRules, skippedRules, unknownTypes, types: typeCounts, ifaces: Array.from(ifaces), groupRows, disabledRows };
+}
+
+let mtMappingDraft = {}; // {interface: 'GLOBAL'|'SELECT'|'DIRECT'|'REJECT'|'skip'}
+
+function renderMagiTricklePreview() {
+  const pv = document.getElementById('mtImportPreview');
+  const stats = document.getElementById('mtImportStats');
+  const groupsBox = document.getElementById('mtImportGroups');
+  const mapBox = document.getElementById('mtImportMapping');
+  if (!pv || !mtPending) return;
+  const p = mtPending.preview;
+  stats.textContent = 'Групп: ' + p.total + ' · Активных: ' + p.enabled + ' · Отключённых: ' + p.disabled +
+    ' · Правил активно: ' + p.activeRules +
+    (p.skippedRules ? ' · Пропущено правил: ' + p.skippedRules : '') +
+    (p.unknownTypes ? ' · Неподдерживаемых типов: ' + p.unknownTypes : '');
+  const typeLine = Object.entries(p.types).map(([t, n]) => t + ': ' + n).join(', ');
+  if (typeLine) {
+    const tl = document.createElement('div');
+    tl.style.cssText = 'margin-top:4px';
+    tl.textContent = 'Типы активных правил: ' + typeLine;
+    stats.appendChild(tl);
+  }
+  groupsBox.textContent = '';
+  for (const row of p.groupRows) {
+    const div = document.createElement('div');
+    div.className = 'mt-group-row';
+    const mark = document.createElement('span');
+    mark.textContent = '✓ ';
+    mark.style.color = 'var(--green)';
+    const name = document.createElement('span');
+    name.textContent = row.name + ' — ' + row.active;
+    const iface = document.createElement('span');
+    iface.className = 'mt-iface';
+    iface.textContent = '· ' + row.iface;
+    div.append(mark, name, iface);
+    groupsBox.appendChild(div);
+  }
+  for (const name of p.disabledRows) {
+    const div = document.createElement('div');
+    div.className = 'mt-group-row';
+    const mark = document.createElement('span');
+    mark.textContent = '⏭ ';
+    const name2 = document.createElement('span');
+    name2.textContent = name + ' — группа отключена';
+    div.append(mark, name2);
+    groupsBox.appendChild(div);
+  }
+  mapBox.textContent = '';
+  const mapTitle = document.createElement('div');
+  mapTitle.className = 'label';
+  mapTitle.style.cssText = 'margin-bottom:4px';
+  mapTitle.textContent = 'Куда направлять группы каждого интерфейса:';
+  mapTitle.appendChild(makeCtxHelp('Маршрут MagiTrickle (network interface) — это не правило Mihomo: группы одного интерфейса получают общий таргет политики. Известные интерфейсы подставляются автоматически: mitun0 → GLOBAL, blackhole → REJECT. Для остальных по умолчанию выбрано «Пропустить» — молча маршрут не угадывается, выберите таргет вручную. «Отдельная группа выбора» создаёт категорию-группу, GLOBAL/DIRECT/REJECT ведут RULE-SET напрямую.'));
+  mapBox.appendChild(mapTitle);
+  for (const iface of p.ifaces) {
+    const row = document.createElement('div');
+    row.className = 'mt-mapping-row';
+    const label = document.createElement('label');
+    label.className = 'mt-iface-name';
+    label.textContent = 'Куда направлять группы интерфейса «' + iface + '»:';
+    const sel = document.createElement('select');
+    sel.className = 'mt-iface-map';
+    sel.dataset.iface = iface;
+    for (const [value, text] of [
+      ['GLOBAL', '🌐 GLOBAL'],
+      ['SELECT', '🎛 Отдельная группа выбора'],
+      ['DIRECT', '⬇ DIRECT'],
+      ['REJECT', '🚫 REJECT'],
+      ['skip', '⏭ Пропустить'],
+    ]) {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = text;
+      sel.appendChild(opt);
+    }
+    sel.value = mtMappingDraft[iface] || mtPending.mapping[iface] || 'skip';
+    sel.addEventListener('change', () => { mtMappingDraft[iface] = sel.value; });
+    row.append(label, sel);
+    mapBox.appendChild(row);
+  }
+  pv.hidden = false;
+}
+
+function applyMagiTrickleImport() {
+  if (!mtPending) return;
+  // Выбранные в preview маппинги перекрывают дефолтные; дефолт — не skip.
+  const mapping = Object.assign({}, mtPending.mapping, mtMappingDraft);
+  const counts = { groups: 0, rules: 0, targets: {}, skippedGroups: 0, skippedRules: 0, unknownTypes: 0, duplicateNames: 0 };
+  const replace = document.getElementById('mtReplacePolicies').checked;
+  if (replace) document.getElementById('policyCards').textContent = '';
+  const existingNames = new Set(Array.from(document.querySelectorAll('#policyCards .policy-name')).map(el => el.value.trim()));
+  for (const g of mtPending.groups) {
+    const iface = String(g.interface || '').trim();
+    const map = mapping[iface];
+    if (!mtIsEnabled(g.enable)) { counts.skippedGroups++; continue; }
+    if (!map || map === 'skip') { counts.skippedGroups++; continue; }
+    const seen = new Set();
+    const lines = [];
+    for (const r of Array.isArray(g.rules) ? g.rules : []) {
+      if (!mtIsEnabled(r.enable)) { counts.skippedRules++; continue; }
+      const mapped = mtRuleToMihomo(r);
+      if (mapped === undefined) { counts.unknownTypes++; continue; }
+      if (mapped === null) { counts.skippedRules++; continue; }
+      if (seen.has(mapped)) { counts.skippedRules++; continue; }
+      seen.add(mapped);
+      lines.push(mapped);
+    }
+    if (!lines.length) { counts.skippedGroups++; continue; }
+    let name = String(g.name || '').trim() || ('MT-' + iface);
+    while (existingNames.has(name)) {
+      const m = name.match(/-(\d+)$/);
+      name = m ? name.slice(0, m.index) + '-' + (Number(m[1]) + 1) : name + '-2';
+      counts.duplicateNames++;
+    }
+    existingNames.add(name);
+    const card = { name, domains: lines.join('\n'), target: map };
+    addPolicyCard(card);
+    counts.groups++;
+    counts.rules += lines.length;
+    counts.targets[map] = (counts.targets[map] || 0) + lines.length;
+  }
+  const result = document.getElementById('mtImportResult');
+  result.hidden = false;
+  result.textContent = '✅ MagiTrickle импортирован · Групп: ' + counts.groups +
+    ' · Правил: ' + counts.rules +
+    Object.entries(counts.targets).map(([t, n]) => ' · ' + t + ': ' + n).join('') +
+    (counts.skippedRules ? ' · Пропущено правил: ' + counts.skippedRules : '') +
+    (counts.skippedGroups ? ' · Пропущено групп: ' + counts.skippedGroups : '');
+  document.getElementById('mtImportPreview').hidden = true;
+  document.getElementById('mtImportFile').value = '';
+  mtPending = null;
+  mtMappingDraft = {};
+  showToast('MagiTrickle импортирован: групп ' + counts.groups + ', правил ' + counts.rules);
+}
+
+function initMagiTrickleImport() {
+  const btn = document.getElementById('mtImportBtn');
+  const fileInput = document.getElementById('mtImportFile');
+  if (!btn || !fileInput) return;
+  btn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    let text = '';
+    try { text = await file.text(); }
+    catch (e) { showToast('Не удалось прочитать файл: ' + e.message, true); return; }
+    const parsed = parseMagiTrickleExport(text);
+    if (parsed.error) { showToast(parsed.error, true); fileInput.value = ''; return; }
+    // Группа без имени уже отвергнута parseMagiTrickleExport; здесь — сводка.
+    mtPending = { groups: parsed.groups, mapping: {} };
+    const stats = mtCollectStats(parsed.groups);
+    mtPending.preview = stats;
+    // Дефолтный маппинг интерфейсов: mitun0 → GLOBAL, blackhole → REJECT,
+    // неизвестные интерфейсы — Пропустить (не угадываем молча).
+    mtPending.mapping = {};
+    for (const iface of stats.ifaces) mtPending.mapping[iface] = mtDefaultMapping(iface);
+    renderMagiTricklePreview();
+    document.getElementById('mtImportPreview').scrollIntoView({ block: 'nearest' });
+  });
+  document.getElementById('mtImportApply').addEventListener('click', applyMagiTrickleImport);
+  document.getElementById('mtImportCancel').addEventListener('click', () => {
+    mtPending = null;
+    mtMappingDraft = {};
+    document.getElementById('mtImportPreview').hidden = true;
+    document.getElementById('mtImportFile').value = '';
+  });
+}
+initMagiTrickleImport();
 
 function collectPolicyRouting() {
   const cards = Array.from(document.querySelectorAll('#policyCards .policy-card'));
@@ -2104,11 +2663,13 @@ function collectPolicyRouting() {
   for (let i = 0; i < cards.length; i++) {
     const name = cards[i].querySelector('.policy-name').value.trim();
     const domains = cards[i].querySelector('.policy-domains').value;
+    const targetSel = cards[i].querySelector('.policy-target');
+    const target = targetSel && targetSel.value === 'GLOBAL' || targetSel && targetSel.value === 'DIRECT' || targetSel && targetSel.value === 'REJECT' ? targetSel.value : 'SELECT';
     if (!name && !domains.trim()) continue; // пустая карточка — не политика
     if (!name) throw new Error('Политика #' + (i + 1) + ': укажите имя политики');
     if (seen.has(name)) throw new Error('Дублирующееся имя политики: «' + name + '»');
     seen.add(name);
-    policies.push({ name, domains });
+    policies.push({ name, domains, target });
   }
   return policies;
 }
@@ -2146,9 +2707,15 @@ function buildMihomo() {
   let addTun = document.getElementById('cfgTun').checked;
   let addSocks = document.getElementById('cfgSocks').checked;
   const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
-  // Deployment profile: router | vps-local | vps-gateway.
-  // БС-режим живёт на router-контракте (см. onWhitelistChange).
-  const deploymentProfile = autoWhitelist ? 'router' : document.getElementById('cfgProfile').value;
+  // Deployment profile: router | vps-local | vps-gateway. Выбранный пользователем
+  // профиль НИКОГДА не подменяется молча (в т.ч. режимом белых списков — он
+  // router-only, см. кламп ниже).
+  const deploymentProfile = document.getElementById('cfgProfile').value;
+  // БС — router-only контракт. Если чекбокс включён tamper'ом в VPS-профиле —
+  // явная ошибка, никакой silent-конверсии профиля.
+  if (autoWhitelist && deploymentProfile !== 'router') {
+    return showToast('❌ Ошибка: Автоматический режим белых списков доступен только в профиле «Роутер / обычный TUN»', true);
+  }
   // Fail-safe клампы профиля: не доверяем checked/disabled в DOM (могут быть
   // подменены расширением/консолью) — контракт профиля применяется здесь,
   // до передачи опций в runtime и до пост-патчей YAML.
@@ -2161,14 +2728,15 @@ function buildMihomo() {
   const lanChecked = document.getElementById('cfgLan').checked && deploymentProfile !== 'vps-local';
   // Fail-safe: не доверяем прямой подмене DOM — повторно проверяем зависимости
   // (MIPS и Per-Proxy TUN требуют TUN, Per-Proxy SOCKS требует Mixed Port);
-  // БС-режим принудительно исключает Per-Proxy и VPS.
-  const master = document.getElementById('cfgPerProxyMaster') && document.getElementById('cfgPerProxyMaster').checked === true;
-  const perProxyTun = (master && !autoWhitelist && addTun) ? document.getElementById('cfgPerProxyTun').checked : false;
+  // БС-режим и VPS-профили принудительно исключают Per-Proxy (router-only).
+  const perProxyAllowed = deploymentProfile === 'router' && !autoWhitelist;
+  const master = perProxyAllowed && document.getElementById('cfgPerProxyMaster') && document.getElementById('cfgPerProxyMaster').checked === true;
+  const perProxyTun = (master && addTun) ? document.getElementById('cfgPerProxyTun').checked : false;
   const stackAdvEl = document.getElementById('cfgTunStackAdvanced');
   const stackExEl = document.getElementById('cfgTunStackEx');
   const advancedStack = (addTun && stackAdvEl && stackAdvEl.checked === true && stackExEl && (stackExEl.value === 'system' || stackExEl.value === 'mixed')) ? stackExEl.value : null;
   const tunStack = advancedStack ? advancedStack : ((addTun && document.getElementById('cfgTunMips').checked) ? 'mips' : 'gvisor');
-  const perProxySocks = (master && !autoWhitelist && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
+  const perProxySocks = (master && addSocks) ? document.getElementById('cfgPerProxySocks').checked : false;
 
   // Domain Policy Routing: карточки политик. Кламп: per-proxy активен —
   // политики игнорируются (движок отклонил бы сборку; UI не доводит до ошибки).
@@ -2208,6 +2776,17 @@ function buildMihomo() {
   const badTargets = dialedProfiles.filter(p => p.target.trim() === 'GLOBAL' || p.target.trim() === '⚡ Fastest');
   if (badTargets.length) {
     return showToast('❌ Таргет не может быть GLOBAL или ⚡ Fastest (они содержат сам WARP): ' + badTargets.map(p => p.filename).join(', '), true);
+  }
+  // Ручные (и любые) таргеты проверяются против authoritative-реестра целей:
+  // никаких dangling dialer-proxy — цель обязана существовать в конфиге,
+  // который будет сгенерирован прямо сейчас.
+  const registryNow = computeDialerTargetsSync();
+  const knownTargets = new Set(registryNow.map(t => t.value));
+  knownTargets.add('DIRECT'); // валидное значение dialer-proxy в mihomo
+  const danglingTargets = dialedProfiles.filter(p => p.target.trim() && !knownTargets.has(p.target.trim()));
+  if (danglingTargets.length) {
+    const p = danglingTargets[0];
+    return showToast('❌ Ошибка: цель «' + p.target.trim() + '» не существует в генерируемом конфиге (профиль «' + (p.filename || p.bean.name) + '»). Выберите цель из списка «Промежуточный выход».', true);
   }
   const useDialerGroup = dialedProfiles.length > 0 && (wgDialerMembers.length > 0 || wgDialerProviders.length > 0);
 
@@ -2342,7 +2921,33 @@ updateExcludeFilterVisibility();
 updateSubModeHint();
 updateWebUiVisibility();
 updateMihomoOptionStates();
-applyDeploymentProfileUi(); // заполнить hint и применить состояние профиля при загрузке
+applyProfileUiState(selectedProfile); // заполнить hint и применить состояние профиля при загрузке
+// Селекторы dialer-целей и подписки на изменения, влияющие на состав целей:
+// (§28 dynamic refresh) ввод прокси/подписок, WG-файлы, dialer-группа,
+// Sub Mode, БС, DPR-политики, профиль.
+refreshWgTargetSelectors();
+let dialerRefreshTimer = 0;
+function scheduleDialerRefresh() { clearTimeout(dialerRefreshTimer); dialerRefreshTimer = setTimeout(refreshWgTargetSelectors, 250); }
+// Печать в поля, влияющие на состав целей, обновляет селекторы с лёгкой задержкой
+// (одна префлайт-сборка ~миллисекунды); 'change' выше покрывает коммиту-события.
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (!t) return;
+  if (t.id === 'mihomoInput' || t.id === 'wgDialerInput' || t.id === 'wgDialerMembers' || t.id === 'wgDialerProviders' ||
+      (t.classList && t.classList.contains('wg-target-manual'))) {
+    scheduleDialerRefresh();
+  }
+}, true);
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (!t || !t.id && !(t.classList && t.classList.contains)) return;
+  if (t.closest && t.closest('#policyCards')) { refreshWgTargetSelectors(); return; }
+  // ВАЖНО: контролы WG-карточек (wg-mode/wg-target/wg-target-manual) здесь НЕ
+  // обновляются — их собственный обработчик меняет p.target и перерисовывает
+  // селект точечно; capture-refresh раньше него сбросил бы выбор пользователя.
+  const refreshIds = new Set(['mihomoInput', 'wgDialerInput', 'wgDialerMembers', 'wgDialerProviders', 'cfgSubMode', 'cfgPolicyRouting', 'cfgProfile']);
+  if (refreshIds.has(t.id)) refreshWgTargetSelectors();
+}, true);
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
 // результат проверки недействительным — старый VALID не сохраняется
 ['input', 'change'].forEach(ev => document.addEventListener(ev, () => {
@@ -2372,8 +2977,10 @@ setMihomoValidationState('NOT_BUILT');
     if (e.key !== 'Escape') return;
     document.querySelectorAll('.ctx-help-wrap.open').forEach(function (w) {
       w.classList.remove('open');
-      const b = w.querySelector('.ctx-help'); if (b) b.setAttribute('aria-expanded', 'false');
+      const b = w.querySelector('.ctx-help'); if (b) { b.setAttribute('aria-expanded', 'false'); if (document.activeElement === b) b.blur(); }
     });
+    // фокус на «?» держит tooltip через :focus-within — Escape снимает и фокус
+    if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('ctx-help')) document.activeElement.blur();
   });
 })();
 </script>
