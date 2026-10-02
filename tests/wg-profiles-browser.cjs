@@ -209,6 +209,71 @@ const fx = n => path.join(__dirname, 'fixtures', n);
     await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 1);
     ok('после удаления тот же файл можно добавить снова');
 
+    // === Валидация при загрузке: невалидные файлы отклоняются поимённо, валидные остаются ===
+    await page.evaluate(() => { wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList(); renderWgRejected(); });
+    // 4 valid + 1 server-like (Peer без Endpoint) -> 4 загружено, 1 отклонён
+    await page.locator('#wgFile').setInputFiles([
+      fx('wg-simple-a.conf'), fx('wg-simple-b.conf'), fx('awg31.conf'), fx('wg-simple-c.conf'), fx('wg-server-like.conf'),
+    ]);
+    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 4);
+    let rej = await page.evaluate(() => wgRejected);
+    assert.equal(rej.length, 1, 'server-like отклонён');
+    assert.equal(rej[0].filename, 'wg-server-like.conf');
+    await page.locator('#wgRejected').evaluate(el => el.scrollIntoView());
+    const rejText = await page.locator('#wgRejected').innerText();
+    assert.match(rejText, /Не загружено: 1/);
+    assert.match(rejText, /серверный/);
+    assert.match(rejText, /Endpoint = host:port/);
+    r = await build();
+    assert.equal(r.state, 'VALID');
+    assert.equal(wgNames(r.yaml).length, 4, 'валидные 4 профиля в сборке');
+    ok('4 valid + 1 server-like: partial batch success');
+
+    // missing PrivateKey -> человекочитаемая причина
+    await page.locator('#wgFile').setInputFiles(fx('wg-missing-privatekey.conf'));
+    await page.waitForFunction(() => wgUploadPending === false && wgRejected.length === 1);
+    rej = await page.evaluate(() => wgRejected);
+    assert.equal(await page.evaluate(() => wgBeans.length), 4, 'невалидный не добавлен');
+    assert.match(rej[0].human, /PrivateKey/);
+    ok('missing PrivateKey: отклонён с понятной причиной');
+
+    // missing Address
+    await page.locator('#wgFile').setInputFiles(fx('wg-missing-address.conf'));
+    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 4 && wgRejected.length === 1);
+    rej = await page.evaluate(() => wgRejected);
+    assert.equal(await page.evaluate(() => wgBeans.length), 4, 'missing-address: невалидный не добавлен');
+    assert.match(rej[0].human, /Address/);
+    ok('missing Address: отклонён с понятной причиной');
+
+    // missing PublicKey
+    await page.locator('#wgFile').setInputFiles(fx('wg-missing-publickey.conf'));
+    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 4 && wgRejected.length === 1);
+    rej = await page.evaluate(() => wgRejected);
+    assert.equal(await page.evaluate(() => wgBeans.length), 4, 'missing-publickey: невалидный не добавлен');
+    assert.match(rej[0].human, /PublicKey/);
+    ok('missing PublicKey: отклонён с понятной причиной');
+
+    // missing AllowedIPs
+    await page.locator('#wgFile').setInputFiles(fx('wg-missing-allowedips.conf'));
+    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 4 && wgRejected.length === 1);
+    rej = await page.evaluate(() => wgRejected);
+    assert.equal(await page.evaluate(() => wgBeans.length), 4, 'missing-allowedips: невалидный не добавлен');
+    assert.match(rej[0].human, /AllowedIPs/);
+    ok('missing AllowedIPs: отклонён с понятной причиной');
+
+    // все невалидные -> 0 загружено, rejected виден
+    await page.evaluate(() => { wgProfiles = []; wgBeans = []; wgFiles = []; syncWgCollections(); renderWgList(); renderWgRejected(); });
+    await page.locator('#wgFile').setInputFiles([fx('wg-server-like.conf'), fx('wg-missing-privatekey.conf')]);
+    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 0 && wgRejected.length === 2);
+    assert.ok(await page.locator('#wgRejected').isVisible(), 'rejected-блок виден');
+    assert.match(await page.locator('#wgRejected').innerText(), /Не загружено: 2/);
+    ok('все невалидные: 0 загружено, обе причины в списке');
+
+    // clear сбрасывает rejected
+    await page.locator('#wgClear').click();
+    await page.waitForFunction(() => wgRejected.length === 0 && !document.getElementById('wgRejected').hidden === false);
+    ok('clear сбрасывает rejected-блок');
+
     // race: медленный A, быстрый B — старый async не затирает новое состояние
     await page.evaluate(() => {
       const original = File.prototype.text;
@@ -225,7 +290,7 @@ const fx = n => path.join(__dirname, 'fixtures', n);
         input.files = dt2.files; input.dispatchEvent(new Event('change'));
       }, 150);
     });
-    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 2 && wgBeans[1].name === 'wg-fast');
+    await page.waitForFunction(() => wgUploadPending === false && wgBeans.length === 1 && wgBeans[0].name === 'wg-fast');
     ok('async race (slow A → fast B): медленный результат отброшен seq-guard-ом, fast добавлен');
 
     // file picker: accept только поддерживаемые расширения (Windows TXT-first fix)
