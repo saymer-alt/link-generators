@@ -614,3 +614,33 @@ hover 11.25:1. Семантические green/yellow/red не менялись
 - `#wgFile accept=".conf,.wg,.awg"` (было `…,text/plain` — Windows TXT-first);
   `multiple` сохранён; regression в `tests/wg-profiles-browser.cjs` (16-й кейс).
 - Theme-only parity: **13/13 byte-identical** к baseline 1fe6c5d; батарея зелёная.
+
+## v1.6.2 (2026-10-02): dialer selector + profile contracts + ctx-help regression
+
+- Новый `tests/profile-matrix.cjs` — **11 кейсов**: матрица дефолтов (Sub Mode ON во
+  всех профилях, БС/Per-Proxy доступны только в router), переходы
+  router→vps-local→router / router→vps-gateway→router / vps-local→vps-gateway без
+  stale-флагов и silent-подмен, per-profile snapshots (ручное router-состояние
+  переживает визит в VPS: БС ON, Per-Proxy ON+children, ручной Sub Mode OFF),
+  DOM-tamper: БС в VPS → явная ошибка сборки без silent-конверсии; Per-Proxy в VPS →
+  Per-Proxy конфигурация не генерируется.
+- Новый `tests/wg-dialer-selector.cjs` — **12 кейсов**: authoritative registry
+  (префлайт-сборка движком; точные имена incl. `collide`/`collide-2`), self-exclusion
+  по итоговому имени, WG→WG / WG→static / WG→generated group / WG→provider-backed
+  group, manual-ADVANCED путь (dangling → ошибка «не существует в генерируемом
+  конфиге»), target removed → сброс + пометка, became-self после схлопывания
+  коллизии, dynamic refresh (ввод, WG-файлы, dialer-группа, Sub Mode), cycle
+  A→B→A отклоняется движком, AWL rename в dropdown.
+- `tests/help-ux-browser.cjs` расширен до **16 кейсов**: hover (`:hover`) и
+  focus (`:focus-within`) открывают tooltip, mouseleave закрывает, `.open`
+  переживает mouseleave, Escape закрывает и снимает фокус, новые подсказки
+  (Sub Mode, БС, Per-Proxy master, MagiTrickle, WG-карточки, MT-маппинг).
+- `tests/browser.cjs` переведён на контракт v1.6.2: Sub Mode явно задаётся после
+  каждого переключения профиля (per-profile default), vps-gateway без Per-Proxy
+  listeners + восстановление router-Per-Proxy после VPS, БС router-only
+  (профиль не подменяется), snapshot-блоки без БС-манипуляций в VPS.
+- `tests/whitelist.cjs` — открытие переведено на контракт router-only (БС/Per-Proxy
+  disabled в vps-gateway, восстановление router-children), tamper-блок: БС+VPS →
+  явная ошибка без сборки; БС+children → кламп.
+- Parity: 7/7 byte-identical vs main (5837cea); DPR-off байт-идентичен; `mihomo -t`
+  6 YAML × (1.19.31, 1.19.32) successful; HTML integrity clean.

@@ -441,3 +441,60 @@ git diff origin/main... -- index.html
 Если затем merge'ится ещё одна параллельная задача, затрагивающая `index.html`, tests, runtime или builder behavior, relevant regression battery нужно выполнить **снова на новом итоговом main**.
 
 Только после объединения всех выбранных задач и зелёного acceptance итоговый `main` можно продвигать отдельным PR в `stable`.
+
+---
+
+## 16. Контракт v1.6.2: router-only режимы, per-profile snapshots, dialer registry
+
+Действует с PR #91 (v1.6.2). Три слоя защиты контракта: UI-gating, обработчики
+состояния и build-клампы (DOM не доверяется).
+
+### 16.1 Router-only режимы
+
+- **Auto-Whitelist** и **Per-Proxy (master + children)** доступны только в профиле
+  `router`. В `vps-local`/`vps-gateway`: чекбоксы `disabled` + сняты, рядом подсказка
+  «Доступно только для профиля "Роутер / обычный TUN"».
+- **Silent profile substitution запрещён.** Механизм временного router-контракта БС
+  (прежний `deploymentProfile = autoWhitelist ? 'router' : …`, скрытие селектора
+  профиля, `bsTemporaryRouter`) удалён. Выбранный профиль не меняется никогда.
+- **Build-level fail-safe** (не доверяет DOM): БС + VPS-профиль → явная ошибка сборки
+  («доступен только в профиле "Роутер"»), без генерации и без конверсии; Per-Proxy +
+  VPS-профиль → Per-Proxy конфигурация не генерируется (кламп), профиль сохраняется.
+- Взаимная несовместимость БС × Per-Proxy внутри router сохранена (существующий
+  контракт движка).
+
+### 16.2 Per-profile snapshots
+
+- Каждый профиль владеет своим ручным состоянием: Sub Mode, БС, Per-Proxy master
+  (+ children perTun/perSocks) и сценарные переключатели router. Уход из профиля
+  сохраняет snapshot; вход применяет его; профиль без snapshot получает дефолты
+  (Sub Mode ON, БС/Per-Proxy off).
+- Следствия (проверены tests/profile-matrix.cjs): ручной Sub Mode OFF в router
+  восстанавливается после визита в VPS; первый вход в VPS = Sub Mode ON независимо
+  от router-ручного OFF; Per-Proxy ON в router переживает визит в VPS (в VPS
+  эффективно OFF/disabled); БС ON в router восстанавливается при возврате.
+
+### 16.3 Dialer target registry (WG/AWG «Промежуточный выход»)
+
+- Список целей НЕ ведётся вручную: строится префлайт-сборкой текущего состояния
+  движком web4core (computeDialerTargetsSync) ⇒ значения опций = точные итоговые
+  имена YAML (дедупликация, AW-переименования). Алгоритм именования в UI не
+  дублируется.
+- Исключения из списка: собственный outbound профиля (по итоговому имени, включая
+  коллизии), `GLOBAL`/`⚡ Fastest`, группы со статическими ссылками на них (гарантированный
+  цикл). Подписочные узлы не разворачиваются — для подписок предлагается
+  provider-backed dialer-группа.
+- Ручной ввод = «Другое / вручную… (ADVANCED)»; при сборке цель проверяется против
+  свежего реестра; неизвестная — ошибка «цель «…» не существует в генерируемом
+  конфиге» (никаких dangling dialer-proxy). Циклы ловит централизованный детектор
+  web4core (движок + валидатор).
+- Dynamic refresh: ввод прокси/подписок, WG upload/remove/clear, поля dialer-группы,
+  Sub Mode, БС, DPR-политики, переключение профиля. Исчезнувшая цель сбрасывается с
+  видимой пометкой «недоступна для этого профиля»; выбор, ставший именем самого
+  профиля (схлопывание коллизии), сбрасывается так же.
+
+### 16.4 Матрица проверки (owner acceptance)
+
+См. tests/profile-matrix.cjs (11), tests/wg-dialer-selector.cjs (12),
+tests/browser.cjs (profiles/БС/snapshot/tamper блоки), tests/whitelist.cjs
+(router-only открытие + tamper), tests/help-ux-browser.cjs (16, hover-контракт).
