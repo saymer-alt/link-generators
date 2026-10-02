@@ -75,6 +75,7 @@
   .mt-group-row .mt-iface{color:var(--muted)}
   .mt-mapping-row{display:flex;gap:8px;align-items:center;padding:4px 0;flex-wrap:wrap}
   .mt-mapping-row .mt-iface-name{font-weight:bold;min-width:120px}
+  #mtImportPreview{padding:10px 12px;margin-top:10px}
   .mt-import-groups{max-height:260px;overflow:auto;border:1px solid var(--border);padding:6px;background:rgba(255,255,255,.05)}
   .field-filled{border-color:var(--green)!important}
   .parsed-badge{background:var(--green);color:#fff;font-size:.7rem;padding:2px 8px;border-radius:3px}
@@ -314,18 +315,20 @@
         <div class="hint" style="margin-top: 5px;">Общий DNS для ВСЕХ загруженных WG/AWG-профилей (добавляет <code>dns</code>/<code>remote-dns-resolve</code> в каждый wireguard-outbound). Пусто — DNS удаляется из профилей.</div>
         <div id="wgDnsWarning" class="hint" style="color:var(--red); display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
       </div>
-      <div style="margin-top: 15px;">
-        <label class="label" for="wgDialerInput" style="display: block; margin-bottom: 5px;">Имя dialer-группы (определение группы):</label>
-        <input type="text" id="wgDialerInput" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Имя proxy или группы (пусто = выключено)">
-        <div class="hint" style="margin-top: 5px;">Определяет dialer-группу: имя + транзитные узлы/подписки ниже. КТО её использует — выбирается в карточке каждого WG/AWG-профиля («Через промежуточный proxy»). Новые профили наследуют это поле как таргет по умолчанию; таргет обязан поддерживать UDP (подходит VLESS/VMess/Trojan/SS/Hysteria2; HTTP — нет). Рекомендуется MTU 1200–1280 в .conf (без mtu Mihomo использует 1408). Избегайте GLOBAL/⚡ Fastest — они содержат сам WARP.</div>
-        <label class="label" for="wgDialerMembers" style="display: block; margin-bottom: 5px; margin-top: 10px;">Транзитные узлы dialer-группы (по одному в строке, необязательно):</label>
-        <textarea id="wgDialerMembers" rows="3" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="VPS-DK&#10;VPS-EE&#10;VPS-SE"></textarea>
-        <div class="hint" style="margin-top: 5px;">Если заполнено — создается select-группа (имя из поля выше или WARP-DIALER), и нижний транспорт WARP можно менять без пересборки. Эти узлы сами не получают dialer-proxy (иначе цикл). Избегайте GLOBAL/⚡ Fastest как таргета — они содержат сам WARP.</div>
-        <label class="label" for="wgDialerProviders" style="display: block; margin-bottom: 5px; margin-top: 10px;">URL-подписки для dialer-группы (по одному в строке, необязательно):</label>
-        <textarea id="wgDialerProviders" rows="2" style="width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace;" placeholder="https://account.geodema.org/..."></textarea>
-        <div class="hint" style="margin-top: 5px;">URL должен совпадать с одной из включённых URL-подписок — группа получает <code>use:</code> на этот provider (узлы не разворачиваются). Для WireGuard dialer вручную выбирайте в группе узел с поддержкой UDP relay; TCP-only узел приведёт к ошибке соединения — состав подписки заранее неизвестен, поэтому проверяется только выбором.</div>
-        <div class="hint" style="color:var(--warn);margin-top:5px">⚠️ Переключение узла в dialer-группе не означает мгновенную смену уже установленного WireGuard-пути: в полевых тестах старый transport сохранялся более 150 секунд. Для гарантированной немедленной смены пути требуется пересоздание WireGuard outbound (reload/restart Mihomo). Смена colo (FRA/AMS) — наблюдение, не гарантия: Cloudflare выбирает ingress сам.</div>
-      </div>
+      <details id="wgDialerAdvanced" class="advanced-panel" style="margin-top:15px">
+        <summary><span>▶</span> <span class="advanced-badge">ADVANCED</span> <span>Своя общая dialer-группа</span></summary>
+        <div class="hint">Обычно этот блок не нужен: в карточке каждого WG/AWG выберите «Через промежуточный proxy», затем нужный proxy, другой WG/AWG или URL-подписку. Генератор сам создаёт безопасную provider-backed группу для подписки. Здесь оставлена ручная сборка одной общей группы для сложных схем.</div>
+        <label class="label" for="wgDialerInput" style="display:block;margin-bottom:5px;">Переопределить имя группы (необязательно):</label>
+        <input type="text" id="wgDialerInput" style="width:100%;padding:8px;box-sizing:border-box;" placeholder="Пусто = WARP-DIALER">
+        <div class="hint" style="margin-top:5px;">Если имя не задано, используется <code>WARP-DIALER</code>. Это внутреннее имя Mihomo proxy-group, а не имя сервера.</div>
+        <label class="label" for="wgDialerMembers" style="display:block;margin-bottom:5px;margin-top:10px;">Статические участники группы (ADVANCED, точные имена proxy):</label>
+        <textarea id="wgDialerMembers" rows="3" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;" placeholder="VPS-DK&#10;VPS-EE&#10;VPS-SE"></textarea>
+        <div class="hint" style="margin-top:5px;">По одному уже существующему proxy в строке. Для обычного сценария ничего здесь не печатайте — выбирайте готовую цель прямо в карточке WG/AWG.</div>
+        <label class="label" for="wgDialerProviders" style="display:block;margin-bottom:5px;margin-top:10px;">URL-подписки общей группы (ADVANCED):</label>
+        <textarea id="wgDialerProviders" rows="2" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;" placeholder="https://subscription.example/..."></textarea>
+        <div class="hint" style="margin-top:5px;">Legacy/advanced путь: URL должен совпадать с подпиской из основного поля. В обычном сценарии повторно копировать URL больше не нужно — включённые подписки автоматически появляются в «Промежуточный выход» как «ПОДПИСКА».</div>
+        <div class="hint" style="color:var(--warn);margin-top:5px">⚠️ Выбранный транспорт должен поддерживать UDP relay. Переключение узла группы не гарантирует мгновенную смену уже установленного WireGuard-пути; для немедленной смены может потребоваться reload/restart Mihomo.</div>
+      </details>
     </div>
 
     <div class="card">
@@ -359,9 +362,9 @@
         <div class="hint">Передаётся серверу подписки как HTTP-заголовок <code>x-device-model</code> для каждого provider. Может использоваться панелью подписки для идентификации устройства. Пусто — заголовок не добавляется.</div>
       </div>
       <div id="realityModernRow" style="margin-top:10px">
-        <label for="realityModernInput">🌐 Modern REALITY (X25519+ML-KEM) — только для совместимых серверов (host или host:port, по одному в строке)</label>
+        <label for="realityModernInput">🌐 Modern REALITY / Post-Quantum (X25519MLKEM768) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Modern REALITY">?</button><span class="ctx-help-pop" role="note">Опционально только для VLESS + REALITY узлов с подтверждённой поддержкой X25519MLKEM768. Поддержка появилась в Xray-core 25.5.16, но одна только версия Xray не гарантирует совместимость конкретного сервера/клиента. Укажите host или host:port нужных REALITY-серверов — генератор применит modern override только к ним; обычные VLESS/TLS и остальные узлы не изменяются.</span></span></label>
         <textarea id="realityModernInput" rows="3" placeholder="pan.example&#10;pan2.example:8443&#10;[2001:db8::1]:443"></textarea>
-        <div class="hint">Только для REALITY-узлов этих серверов добавляется ML-KEM (X25519MLKEM768) и client-fingerprint chrome, если не задан; обычные VLESS/TLS и другие серверы не затрагиваются. X25519MLKEM768 появился в Xray v25.5.16; применяйте только к серверам, совместимость которых подтверждена — сама версия не гарантирует совместимость. Пусто — legacy-вывод без изменений.</div>
+        <div class="hint">По одному <code>host</code> или <code>host:port</code> в строке. Для указанных REALITY-узлов добавляется X25519MLKEM768 и <code>client-fingerprint: chrome</code>, если fingerprint не задан. Пусто — функция выключена и legacy-вывод не меняется.</div>
       </div>
       <div class="toggle-row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgPolicyRouting"> 🚦 Политики по доменам (Domain Policy Routing)</label>
@@ -381,7 +384,7 @@
             <button type="button" class="btn btn-gray policy-del" id="mtImportCancel" style="padding:2px 10px">✕ Отмена</button>
           </div>
           <div id="mtImportStats" style="margin-top:8px;font-size:.85rem"></div>
-          <div id="mtImportGroups" style="margin-top:8px;font-size:.85rem"></div>
+          <div id="mtImportGroups" class="mt-import-groups" style="margin-top:8px;font-size:.85rem"></div>
           <div id="mtImportMapping" style="margin-top:10px"></div>
           <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:.85rem;color:var(--text)">
             <input type="checkbox" id="mtReplacePolicies"> Очистить текущие политики перед импортом
@@ -774,7 +777,7 @@ function syncWgCollections() {
 // (per-profile контракт web4core: bean.wireguard.dialerProxy).
 function wgProfileBuildBean(p, opts) {
   const bean = JSON.parse(JSON.stringify(p.bean));
-  if (p.mode === 'proxy' && p.target.trim() && !(opts && opts.noDialer)) {
+  if (p.mode === 'proxy' && p.target.trim() && !(opts && opts.noDialer) && !isDialerProviderTarget(p.target)) {
     bean.wireguard = bean.wireguard || {};
     bean.wireguard.dialerProxy = p.target.trim();
   } else if (bean.wireguard) {
@@ -795,8 +798,14 @@ function wgProfileBuildBean(p, opts) {
 // чьи статические члены ссылаются на них: для них цикл гарантирован.
 let dialerTargetsCache = []; // [{value, label, kind}]
 let dialerWgNamesCache = []; // имена WG-outbound в порядке wgBeans (для self-exclusion)
+const DIALER_PROVIDER_PREFIX = '__provider__:';
+
+function isDialerProviderTarget(value) { return String(value || '').startsWith(DIALER_PROVIDER_PREFIX); }
+function dialerProviderTarget(name) { return DIALER_PROVIDER_PREFIX + String(name || ''); }
+function dialerProviderName(value) { return isDialerProviderTarget(value) ? String(value).slice(DIALER_PROVIDER_PREFIX.length) : ''; }
 
 function dialerKindLabel(entry) {
+  if (entry.kind === 'provider') return 'ПОДПИСКА';
   if (entry.kind === 'group') return 'группа';
   if (entry.type === 'wireguard') return 'WG/AWG';
   return (entry.type || 'proxy').toUpperCase();
@@ -852,6 +861,17 @@ function computeDialerTargetsSync() {
       if (badMembers.has(g.name)) continue;
       if (Array.isArray(g.proxies) && g.proxies.some(m => badMembers.has(m))) continue; // цикл через GLOBAL/Fastest
       out.push({ value: g.name, label: g.name + ' — ' + dialerKindLabel({ kind: 'group' }), kind: 'group', type: 'group' });
+    }
+    // URL-подписки — виртуальные UI-targets. dialer-proxy не может ссылаться
+    // прямо на proxy-provider, поэтому при Build для выбранной подписки ниже
+    // создаётся отдельная select-группа с use:[provider]. Содержимое подписки
+    // браузер не скачивает и не разворачивает.
+    const providerMap = doc['proxy-providers'];
+    if (providerMap && typeof providerMap === 'object' && !Array.isArray(providerMap)) {
+      for (const providerName of Object.keys(providerMap)) {
+        if (!providerName) continue;
+        out.push({ value: dialerProviderTarget(providerName), label: providerName + ' — ПОДПИСКА', kind: 'provider', type: 'provider', provider: providerName });
+      }
     }
     // Имена WG-outbound в порядке wgBeans: движок сохраняет порядок бинов,
     // поэтому i-й wireguard-proxy — это итоговое имя i-го загруженного профиля
@@ -920,6 +940,39 @@ function fillWgTargetSelect(sel, p, idx) {
     const warn = row.querySelector('.wg-target-warn');
     if (warn) warn.textContent = p.vanishedTarget ? '⚠ Цель «' + p.vanishedTarget + '» недоступна для этого профиля — выберите заново.' : '';
   }
+}
+
+function applyProviderDialerTargets(yaml) {
+  const wanted = wgProfiles.map((p, index) => ({ p, index, provider: dialerProviderName(p.target) }))
+    .filter(x => x.p.mode === 'proxy' && x.provider);
+  if (!wanted.length) return yaml;
+  const doc = jsyaml.load(String(yaml));
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('Не удалось применить subscription dialer-target: YAML не является объектом');
+  const providers = doc['proxy-providers'];
+  if (!providers || typeof providers !== 'object' || Array.isArray(providers)) throw new Error('Subscription dialer-target требует proxy-providers');
+  const proxies = Array.isArray(doc.proxies) ? doc.proxies : [];
+  const groups = Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : [];
+  const wireguards = proxies.filter(p => p && p.type === 'wireguard');
+  const usedNames = new Set([...proxies.map(p => p && p.name).filter(Boolean), ...groups.map(g => g && g.name).filter(Boolean)]);
+  const groupByProvider = new Map();
+  const ensureGroup = (provider) => {
+    if (groupByProvider.has(provider)) return groupByProvider.get(provider);
+    if (!Object.prototype.hasOwnProperty.call(providers, provider)) throw new Error('Подписка «' + provider + '» отсутствует в proxy-providers');
+    let base = 'DIALER-' + provider;
+    let name = base, n = 2;
+    while (usedNames.has(name)) name = base + '-' + n++;
+    usedNames.add(name);
+    groups.push({ name, type: 'select', use: [provider] });
+    groupByProvider.set(provider, name);
+    return name;
+  };
+  for (const { index, provider } of wanted) {
+    const outbound = wireguards[index];
+    if (!outbound) throw new Error('Не найден WireGuard outbound для subscription dialer-target #' + (index + 1));
+    outbound['dialer-proxy'] = ensureGroup(provider);
+  }
+  doc['proxy-groups'] = groups;
+  return jsyaml.dump(doc, { lineWidth: -1 });
 }
 
 function wgProfilesEnabled() { return wgProfiles.length > 0; }
@@ -1296,7 +1349,7 @@ function renderWgList() {
     const targetLabel = document.createElement('label');
     targetLabel.textContent = 'Промежуточный выход:';
     targetLabel.htmlFor = 'wgTarget' + p.id;
-    targetLabel.appendChild(makeCtxHelp('Proxy или группа, через которую Mihomo установит соединение с Endpoint этого WG/AWG профиля. Например: WARP через SE-AWG означает SE-AWG → WARP. Список содержит только цели, которые существуют в текущей конфигурации (значение = точное имя в YAML, включая суффиксы дублей и переименования белых списков). Сам профиль и группы, содержащие этот WARP (GLOBAL, ⚡ Fastest), в списке не показываются. «Другое / вручную…» — для нестандартных случаев: имя проверяется при сборке.', 'Промежуточный выход'));
+    targetLabel.appendChild(makeCtxHelp('Выберите, через что Mihomo будет соединяться с Endpoint этого WG/AWG. Доступны существующие proxy, другие WG/AWG и включённые URL-подписки. Для подписки генератор автоматически создаёт внутреннюю provider-backed группу; содержимое подписки браузер не скачивает, узлы загрузит сам Mihomo. Например: GeoDema → WARP означает сначала выбранный узел GeoDema, затем WARP. GLOBAL/⚡ Fastest и сам профиль скрыты во избежание циклов. «Другое / вручную…» — только для нестандартных случаев.', 'Промежуточный выход'));
     const targetSel = document.createElement('select');
     targetSel.id = 'wgTarget' + p.id;
     targetSel.className = 'wg-target';
@@ -2824,6 +2877,7 @@ function buildMihomo() {
     injectWgDns(result, buildBeans);
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
+    yaml = applyProviderDialerTargets(yaml);
 
     // PATCH: Deployment profile — только при профиле vps-gateway.
     // При router/vps-local пост-патч не выполняется вовсе (инвариант byte-for-byte).
