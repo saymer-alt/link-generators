@@ -598,7 +598,9 @@ const expectedAwg = {
     ]) assert.equal(await page.locator(id).inputValue(), want, 'независимое поле пережило round trip: ' + id);
     assert.equal(await checked2('#cfgTunMips'), false, 'router: ручное состояние MIPS восстановлено');
 
-    // dialer-proxy поля: заполняются и переживают mini round trip
+    // dialer-proxy поля теперь находятся в закрытом ADVANCED-блоке;
+    // явно раскрываем его перед legacy/state-preservation проверкой.
+    await page.locator('#wgDialerAdvanced').evaluate(el => { el.open = true; });
     await page.locator('#wgDialerInput').fill(INDEP.dialer);
     await page.locator('#wgDialerMembers').fill(INDEP.members);
     await page.locator('#wgDialerProviders').fill(INDEP.providers);
