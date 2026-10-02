@@ -1,0 +1,21 @@
+name: Candidate inline JS syntax
+
+on:
+  push:
+    branches:
+      - feat/subscription-inspection-hwid
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/subscription-inspection-hwid
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tools/check_candidate_inline_js.cjs
