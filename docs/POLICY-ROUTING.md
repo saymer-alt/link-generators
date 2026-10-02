@@ -104,8 +104,9 @@ rules:
   домен приносит сам клиент. Для TUN-трафика без секций `dns`/`sniffer`
   (обычный вывод генератора) Mihomo видит только IP: классификация работает
   для клиентов, передающих имя, и не работает для чистых IP-потоков. Полный
-  пакет домен-детекта (`tun.dns-hijack`, `sniffer`, fake-ip persistence) —
-  отдельная следующая арка (см. «VPS Gateway»).
+  пакет домен-детекта (`tun.dns-hijack`, `sniffer`, fake-ip persistence)
+  уже реализован как инвариант профиля vps-gateway — см. раздел
+  «VPS Gateway: Domain Detection Package» ниже и [VPS-GATEWAY.md](VPS-GATEWAY.md).
 - TLS ECH скрывает SNI, клиентский DoH/DoT проходит мимо hijack,
   hardcoded-IP приложения не классифицируются доменными правилами — это
   ограничения механизма Mihomo, не генератора.
@@ -153,11 +154,13 @@ Live-проверено: hijack внешнего :53 DNS, DoH/pure-IP/HTTP-host/
 cold-start провайдера. Инварианты (`auto-route: false`, `device`,
 `fake-ip-range`, MIPS/gVisor, mixed-port/controller) не тронуты.
 
-**Межпроектный контракт:** `amnezia-mihomo-gateway` до ветки
-`feat/domain-detection-store-fake-ip` принудительно переписывал
-`profile.store-fake-ip` в `false` при установке (патчер §2.7) — ветка/PR
+**Межпроектный контракт:** `amnezia-mihomo-gateway` до PR #33
+(`feat/domain-detection-store-fake-ip`, `8f41759`, merged в `main` gateway
+2026-10-01) принудительно переписывал
+`profile.store-fake-ip` в `false` при установке (патчер §2.7) — PR
 меняет патчер на сохранение значения генератора (при отсутствии ключа
-по-прежнему дописывается `false`). Неизвестные ключи (`tun.dns-hijack`,
+по-прежнему дописывается `false`); в stable-канал установщика попадёт после
+promotion в том репозитории. Неизвестные ключи (`tun.dns-hijack`,
 `sniffer`) патчер и раньше пропускал дословно — покрыто его тестом.
 Восстановление fake-ip маршрута после рестартов принадлежит gateway
 (`check-warp-routing.timer` ≤1 мин, `routing_ok` проверяет

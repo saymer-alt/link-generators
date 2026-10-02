@@ -345,15 +345,24 @@ node tests/runtime.cjs
    из `on`/`off` присутствуют как booleans).
 4. Allow LAN: `allow-lan: true` + `bind-address: "*"` в выводе (регэксп-патч не сломан).
 5. `web4core.runtime.js` воспроизводится сборкой fork; функциональные регрессии проходят.
-6. Профиль развёртывания: generic-вывод посимвольно равен эталону; при vps —
-   контракт из раздела «Профиль VPS Gateway» (auto-route false, dns-тумблер,
-   find-process-mode, store-*).
+6. Профиль развёртывания: вывод router/vps-local посимвольно равен эталону; при
+   vps-gateway — контракт из раздела «Профиль VPS Gateway» (auto-route false,
+   dns-тумблер, find-process-mode, store-*, DDP). Полный обязательный набор для
+   profile/UX-правок — [DEPLOYMENT-PROFILES-TEST-CONTRACT.md](DEPLOYMENT-PROFILES-TEST-CONTRACT.md) §9.
 
 ## Профиль VPS Gateway (opt-in; добавлен 2026-09-09)
 
-Селектор «Профиль развёртывания» (`#cfgProfile`), дефолт `generic`. Реализация —
-`applyDeploymentProfile()` в `index.html`, вызывается **только** при `vps` (после
-`injectWgDns`, до allow-lan патча). Прогон 2026-09-09 (базовый HEAD `b7af2b1`, до
+> **Историческая запись.** Этот раздел описывает прогоны 2026-09-09, когда модель
+> профилей называлась `generic`/`vps`. С PR #79 (2026-10-01) пользовательская модель —
+> `router` / `vps-local` / `vps-gateway` (дефолт `router`); «generic» в записях ниже
+> соответствует нынешнему router/vps-local-выводу, «vps» — профилю `vps-gateway`.
+> Актуальные прогоны новой модели — см. «Domain Policy Routing» и «VPS Domain
+> Detection Package» в конце файла.
+
+Селектор «Профиль развёртывания» (`#cfgProfile`); на момент прогона дефолт был
+`generic`. Реализация —
+`applyDeploymentProfile()` в `index.html`, вызывается **только** для gateway-профиля
+(после `injectWgDns`, до allow-lan патча). Прогон 2026-09-09 (базовый HEAD `b7af2b1`, до
 коммита): **все проверки зелёные**.
 
 Фикстуры: синтетическая vless-ссылка, trojan-ссылка, URL подписки, синтетический AWG 3.1
@@ -514,3 +523,94 @@ runtime `dcc16b68…` (Source: `saymer-alt/web4core@2daf383bde5257c1d8bd15a0f4c7
   (journal PID нового процесса), мисатрибуции нет; cold-start провайдера
   с пустым cache.db — 99 узлов (proxy: DIRECT контракт).
 
+
+## Docs/help reconciliation — 2026-10-01 (pre-release audit)
+
+Документационно-UX арка (без изменений генерации): речонсиляция доков под модель
+профилей `router / vps-local / vps-gateway`, версионный контракт (minimum 1.19.31 /
+recommended 1.19.32), merged-статус gateway-патчера (PR #33), исторические заголовки
+у датированных аудитов; новая страница [quick-start.html](../quick-start.html) и
+контекстная help-система `?` (`.ctx-help`) в Builder.
+
+- Новый `tests/help-ux-browser.cjs`: ссылка «❓ Помощь / Быстрый старт» ведёт на
+  существующий `quick-start.html`; обратная ссылка на генератор; страница без
+  `fetch`/`XMLHttpRequest`/`localStorage`/telemetry; help-маркеры `?` присутствуют,
+  открываются кликом и с клавиатуры (Enter/Escape), `aria-expanded` переключается;
+  клик по `?` НЕ меняет состояние чекбокса; YAML до/после help-взаимодействия
+  идентичен (x-hwid-нормализация); DPR-подсказка видна в выключенном состоянии;
+  gateway-подсказки присутствуют в панели vps-gateway.
+- Полная батарея перезапущена на ветке арки — см. финальный отчёт PR.
+- Generated YAML: byte/semantic parity с `origin/main` на представительных сценариях
+  (router/vps-local/vps-gateway ± DNS, DPR, БС, WG+dialer) — требование контракта §24.
+
+## Per-profile WG/AWG manager — 2026-10-01
+
+Runtime-контракт web4core (`b2a56bb`/`0567353`+fix, ветка link-generators): bean-поле
+`wireguard.dialerProxy`, `wgDialerGroupOnly`, ремап dialer-таргетов при
+PRIMARY/FALLBACK-переименовании; DPR Fastest fix. Source-тесты форка: **171/171**;
+consumer runtime пересобран из форка (provenance в коммите runtime).
+
+- `tests/wg-profiles-browser.cjs` — **15 кейсов**: single, cancel-no-op, append,
+  список без секретов, remove, dup-skip, WG+AWG3.1, clear-all, коллизия имён,
+  per-profile dialer (Variant A), смешанный direct+dialer с разными таргетами,
+  пустой таргет fail-closed, UI-карточка (режим+таргет инвалидируют сборку),
+  re-add после удаления, async race.
+- Battery: runtime 63/63, whitelist 10, masque 7, policy-routing 33+14,
+  browser 47+, vps-detection 54/54, failover 3/3, AWL priority PASS.
+- Parity vs `origin/main` (3680b5c): **byte** — wg-single/router/vps-gateway;
+  **semantic** — wg-dialer (миграция глобального поля в per-profile наследование).
+- `mihomo -t`: 6/6 — 2 direct / 1 direct+1 dialer (группа) / 3 mixed с разными
+  таргетами, на **1.19.31** и **1.19.32-compatible** (Windows compatible-бинар).
+
+## ADVANCED container reorg — 2026-10-02 (UI-only)
+
+Блок «⚙ Расширенный TUN stack» перенесён внутрь ADVANCED-контейнера; контейнер
+переименован в «ADVANCED — Расширенные настройки»; внутри две подсекции
+(TUN stack / Отдельный вход на каждый прокси). TUN Interface и MIPS остались
+снаружи. IDs, JS-логика, fail-safe клампы и DOM-tamper защита не менялись.
+
+- browser.cjs: расширена регрессия спойлера — в закрытом ADVANCED стек-контролы
+  скрыты, подсекции присутствуют внутри details, значения (master, advanced
+  stack, system) переживают open/close, YAML байт-идентичен до/после цикла;
+  состояния восстанавливаются для последующих фаз.
+- Battery: runtime 63/63, whitelist 10, masque 7, policy-routing 33+14,
+  browser 47+, vps-detection 54/54, failover 3/3, AWL PASS.
+- YAML parity vs `origin/main` (3680b5c): router/vps-gateway с расширенными
+  состояниями — byte-identical (перенос UI не меняет генерацию).
+
+
+## Contrast/readability pass — 2026-10-02 (CSS-only)
+
+Палитра централизована: `--link`/`--link-hover` (ссылки, заголовок, валидация-в-процессе),
+`--text`/`--muted` подняты; active-вкладка — светлый текст + синий underline; hints
+переведены с #484f58 на var(--muted); посещённые ссылки закреплены за --link
+(без фиолетового). WCAG-контраст на карточке: hint 2.09 → 7.11:1; ссылки 1.84 → 8.89:1;
+hover 11.25:1. Семантические green/yellow/red не менялись; разрозненные hex
+(#e3b341/#b8860b/#d9534f/#a5d6ff) переведены на переменные. Сгенерированный YAML
+не затронут (CSS-only). Полная батарея зелёная; browser.cjs 9/9 прогонов подряд.
+
+
+## Integration + XP Professional redesign — 2026-10-02
+
+Интеграция ночной цепочки (#82 docs/help → #84 WG manager/per-profile dialer/DPR+AWL fix → #86 contrast, #83 superseded #84, #85 внутри #86) в `integration/v1.6-xp-ui`; pre-theme baseline `1fe6c5d`.
+
+- Интеграционная батарея (11 suites) — зелёная до редизайна.
+- **Theme-only parity gate: 13/13 сценариев byte-identical** между 1fe6c5d и XP-деревом
+  (router, router+DPR, router+AWL, vps-local, vps-gateway ± DNS, WG single/multi direct,
+  WG per-profile dialer, WG/AWG mixed, Per-Proxy, advanced system, advanced mixed).
+- Батарея на XP-дереве: runtime 63/63, whitelist 10, masque 7, policy-routing 33+14,
+  browser 47+, policy-routing-browser 14, vps-detection 54/54, help-ux 10, wg-profiles 15,
+  failover 3/3, AWL priority PASS.
+- `mihomo -t`: 6/6 (2 direct / dialer-группа / 3 mixed) на **1.19.31** и **1.19.32-compatible**.
+- Owner acceptance bundle: 12 скриншотов (builder/warp/profiles/WG manager/ADVANCED ±/DPR/
+  validation ±/quick-start/mobile 390 main + WG cards).
+
+
+## XP layout polish + file picker accept — 2026-10-02 (CSS/DOM-attribute only)
+
+- Layout cleanup поверх XP-редизайна: одна Luna-titlebar (quick-start `h2` → section
+  headings), вложенные рамки ADVANCED упрощены, `.card-title` hardened, кнопки одной
+  высоты, WG-карточки без распирания; responsive 1440/1024/768/390.
+- `#wgFile accept=".conf,.wg,.awg"` (было `…,text/plain` — Windows TXT-first);
+  `multiple` сохранён; regression в `tests/wg-profiles-browser.cjs` (16-й кейс).
+- Theme-only parity: **13/13 byte-identical** к baseline 1fe6c5d; батарея зелёная.

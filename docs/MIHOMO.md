@@ -20,7 +20,7 @@ sub-toggle) и пассивный `sniffer` (TLS/QUIC/HTTP, `override-destinatio
 false`). Включение автоматическое — без нового toggle (пакет = инвариант
 профиля); от DPR не зависит. Инварианты gateway не тронуты; контракт с
 `amnezia-mihomo-gateway` (сохранение `store-fake-ip` в патчере
-установщика) — ветка `feat/domain-detection-store-fake-ip`. Подробности:
+установщика) — PR #33 (`8f41759`), merged в `main` gateway 2026-10-01. Подробности:
 [POLICY-ROUTING.md](POLICY-ROUTING.md), [VPS-GATEWAY.md](VPS-GATEWAY.md).
 
 ## Политики по доменам (Domain Policy Routing, Variant B)
@@ -52,12 +52,12 @@ select `[⚡ Fastest, GLOBAL, DIRECT]`; в БС-режиме — select `[GLOBAL
 | URL-подписки для dialer-группы | `wgDialerProviders` | `wgDialerProviders` | пусто | группа получает `use:` на СУЩЕСТВУЮЩИЕ proxy-providers (URL должен совпадать с одной из URL-подписок); узлы не разворачиваются; режим C ниже |
 | 🛡️ TUN Interface | `cfgTun` | `addTun` | ☑ | секция `tun:` (mitun0, default mips / снят чекбокс → gvisor, `auto-route: false`) |
 | ⚡ MIPS stack для TUN | `cfgTunMips` | `mihomoTunStack` | ☑ | `stack: mips`; снят → `gvisor`; Mihomo >= 1.19.31 (показывается в Compatibility Summary); требует `cfgTun`; продуктовый дефолт (NIGHT-09) |
-| ⚙ Расширенный TUN stack | `cfgTunStackAdvanced` + `cfgTunStackEx` | `mihomoTunStack` | ☐/— | `system`/`mixed` за крышкой; override снимает MIPS; невалидное значение → gvisor; Mihomo >= 1.19.31 |
+| ⚙ Расширенный TUN stack | `cfgTunStackAdvanced` + `cfgTunStackEx` | `mihomoTunStack` | ☐/— | `system`/`mixed` внутри ADVANCED-секции («Расширенные настройки»); override снимает MIPS; невалидное значение → gvisor; Mihomo >= 1.19.31 |
 | 🧩 Расширенный режим: отдельный вход | `cfgPerProxyMaster` | — | ☐ | защитная крышка; OFF → оба child выключены и сброшены; скрыт в БС-режиме |
 | 🔒 TUN на каждый прокси | `cfgPerProxyTun` | `mihomoPerProxyTun` | ☐ | TUN-листенеры по одному на прокси/группу; требует `cfgPerProxyMaster` + `cfgTun`; скрыт в БС-режиме |
 | 🔌 SOCKS-порт на каждый прокси | `cfgPerProxySocks` | `perProxyPort` | ☐ | `listeners: socks-<имя>` на портах 7890+i, `mixed-port` убирается; требует `cfgPerProxyMaster` + `cfgSocks`; скрыт в БС-режиме; static-листья чекаются скрытой группой «🌐 static-health» |
 | 🏓 Ping server | `pingSelect` | `urlTest` | Google | `url`/`expected-status` url-test группы и health-check провайдеров |
-| 🎯 Профиль развёртывания | `cfgProfile` | — (пост-патч страницы) | Универсальный | при «VPS Gateway» — gateway-постпатч YAML; подробно [VPS-GATEWAY.md](VPS-GATEWAY.md) |
+| 🎯 Профиль развёртывания | `cfgProfile` | — (пост-патч страницы) | Роутер / обычный TUN (Keenetic) | три профиля `router` / `vps-local` / `vps-gateway`; при vps-gateway — gateway-постпатч YAML; подробно [VPS-GATEWAY.md](VPS-GATEWAY.md) |
 
 Для Selective Modern REALITY реальная handshake-матрица (Xray + Mihomo + ML-KEM-capable TLS target)
 описана в [TESTING.md](TESTING.md#selective-modern-reality-реальный-handshake-e2e--2026-09-18).
@@ -178,6 +178,46 @@ Google (`google.com/generate_204`, 204), Cloudflare (`cp.cloudflare.com`, 204), 
 - Имена групп содержат emoji: `⚡ Fastest`, `🔒 <прокси>` — норма, не баг.
 - Правила: всегда ровно `MATCH,GLOBAL` — разделение трафика делает не конфиг, а
   потребитель (на роутере — MagiTrickle и т.п.).
+
+## Загрузка WG/AWG-профилей (append-модель, 2026-10-01)
+
+Кнопка «📂 Загрузить .conf / .wg / .awg» **добавляет** файлы к уже загруженным профилям
+(до 2026-10-01 повторное открытие picker'а молча заменяло весь набор). Загруженное
+видно списком (`✓ файл.conf — имя-proxy [WG/AWG]`) с удалением по одному («✕») и
+явной очисткой («🧹 Очистить все WG/AWG»). Отмена picker'а (0 файлов) — no-op.
+
+Контракт:
+
+- **Mihomo** поддерживает несколько `type: wireguard` outbound'ов (проверено
+  `mihomo -t` на v1.19.31); имена прокси уникальны — дубликат имени Mihomo
+  отвергает («is the duplicate name»). Один wireguard-outbound несёт **одного**
+  пира в топ-полях, но поддерживает и список `peers:` — .conf с несколькими
+  секциями `[Peer]` превращается в один прокси с массивом `peers` (обе модели
+  различаются: несколько файлов = несколько прокси, один файл с N peer'ов =
+  один прокси с N пирами);
+- **дедупликация на загрузке**: файл, чей транспорт посимвольно совпадает с уже
+  загруженным (без учёта имени), пропускается с уведомлением «Дубликат(ов)
+  пропущено»; на сборке рантайм дополнительно молча выкидывает идентичные
+  транспорты (deduplicateProxies) — пользовательский список при этом честный;
+- **коллизия имён** при разном содержимом разрешается рантаймом авто-суффиксом
+  (`collide` → `collide-2`) — в YAML имена всегда уникальны, сборка не падает;
+- **WireGuard DNS** — одно общее поле на ВСЕ WG/AWG-профили (`injectWgDns`
+  проставляет одинаковые `dns`/`remote-dns-resolve` каждому wireguard-outbound;
+  пустое поле — DNS удаляется). При добавлении файлов поле автозаполняется
+  только если оно пусто (ручное значение не затирается); замену значений из
+  .conf per-профильно движок не поддерживает;
+- **dialer-proxy — per-profile** (2026-10-01): в карточке каждого профиля выбирается
+  «Напрямую» (по умолчанию) или «Через промежуточный proxy» с индивидуальным таргетом
+  (имя proxy/группы). Глобальные поля описывают только dialer-ГРУППУ (имя + члены +
+  подписки): GROUP DEFINITION ≠ PROFILE ASSIGNMENT. Runtime-контракт: bean-поле
+  `wireguard.dialerProxy` (web4core `buildMihomoProxy`), группа строится опцией
+  `wgDialerGroupOnly` без глобального штампа; глобальный `wgDialerProxy` сохранён для
+  совместимости и не применяется к профилям с явным bean-assignment. В Auto-Whitelist
+  таргеты переименовываются вместе с листьями (`PRIMARY-1: VPS-SE`); в AW-режиме
+  dialer-таргет не может быть группой (fail-closed). Пустой таргет при «Через proxy» —
+  ошибка сборки с именем профиля;
+- приватность: карточки показывают только имя файла, сгенерированное имя прокси,
+  endpoint, Address и тип (WG/AWG по факту `amnezia-wg-option`); ключи в DOM не попадают.
 
 ## dialer-proxy: туннель в туннеле (WireGuard/WARP через промежуточный proxy)
 
