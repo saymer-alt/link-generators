@@ -293,14 +293,15 @@ Subscription inspection privacy/identity contract (binding):
 
 - Preview identity: `x-hwid` = random 32-hex from
   `localStorage['link-generators.subscription-preview-hwid.v1']` (memory-only fallback),
-  stable across builds; `x-device-model` = `Saymer Link Generators Preview` (a constant,
-  NOT the user's `📱 Device Model` field, which stays on the Mihomo provider).
+  stable across builds; `x-device-model` = the user's `📱 Device Model` value when
+  filled, falling back to `Saymer Link Generators Preview`; the provider-level
+  Device Model option is unaffected (same field, different transport).
 - Header allowlist is exactly `x-hwid` + `x-device-model`, enforced in the runtime and
   again in the worker; arbitrary headers never leave the caller.
 - CORS fallback `sub.web2core.workers.dev`: POST JSON `{url, headers}` contract with its
   own allowlist, redirect/timeout/size caps and `Cache-Control: no-store`; legacy
   `GET ?url=` preserved; the runtime degrades POST → GET on legacy deployments.
-- Network only on explicit user action (Build); no background polling, no telemetry;
+- Network only on explicit user action (Build for Sub OFF expansion; the list-fetch button for Sub ON preview); no background polling, no telemetry;
   subscription URLs, bodies and proxy credentials are never stored or logged.
 - `buildMihomo()` is async since inspection: it sets `VALIDATING` before the first await;
   tests must wait for VALID/INVALID, not for state ≠ VALIDATING right after the click.
@@ -323,7 +324,7 @@ the manual expression, regex-escaped). Selection persists across refresh
 (pruned to existing names); changing subscription input invalidates list
 and selection. Device Model: user value (if filled) is sent as
 x-device-model on preview fetches; fallback is
-`Saymer Link Generators Preview`; HWID is unaffected. HWID contract
+the user's Device Model value when filled (fallback `Saymer Link Generators Preview`); HWID is unaffected. HWID contract
 unchanged: stable per-browser identity, never random-per-request.
 
 ### buildFromRequest contract

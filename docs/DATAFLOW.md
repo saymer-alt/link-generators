@@ -107,7 +107,7 @@ per-proxy режимах — группы `SUB-<провайдер>`.
 proxies. Прямой fetch предпочтителен; при CORS-блокировке используется
 `sub.web2core.workers.dev`. Запрос несёт device-identity preview-клиента: `x-hwid`
 (случайный 32-hex, хранится в `localStorage['link-generators.subscription-preview-hwid.v1']`,
-это НЕ HWID Mihomo-провайдера) и `x-device-model: Saymer Link Generators Preview`. Worker
+это НЕ HWID Mihomo-провайдера) и `x-device-model` (пользовательское значение из поля Device Model, либо fallback `Saymer Link Generators Preview`). Worker
 и рантайм пересылают только эти два заголовка (allowlist; POST JSON контракт с деградацией
 до legacy GET). Приватность — см. раздел «Сеть и приватность» ниже.
 
@@ -257,7 +257,7 @@ masque:// links
   пользователя. При CORS-блокировке URL подписки раскрывается стороннему воркеру
   `sub.web2core.workers.dev`. Запрос идентифицируется стабильным случайным preview-HWID
   (`localStorage['link-generators.subscription-preview-hwid.v1']` — единственное, что
-  хранится persistently) и подписью `Saymer Link Generators Preview`; это НЕ HWID
+  хранится persistently) и подписью устройства (пользовательский Device Model или fallback `Saymer Link Generators Preview`); это НЕ HWID
   Mihomo-провайдера. Allowlist заголовков жёсткий (x-hwid, x-device-model); subscription
   URL, содержимое подписки и proxy credentials не сохраняются и не логируются; аналитики
   и телеметрии нет.
