@@ -311,6 +311,21 @@ Files `.conf` / `.wg` / `.awg` are parsed client-side by
 `parseWireGuardConf(text, fileName)`.
 AmneziaWG format (`Jc/Jmin/Jmax/…` parameters) is supported by the runtime.
 
+### Subscription server list (opt-in, issue #100)
+
+Toggle `cfgServerList` (OFF by default) gates browser-side subscription
+inspection. OFF: Build makes zero fetchSubscription calls in Sub Mode ON;
+provider YAML is built without network. ON: the explicit «Получить
+список» button triggers exactly one inspection per click; results fill a
+selectable checkbox list (search, select all/clear all, counters) that
+feeds exact-match exclusions into the combined Exclude Filter (OR with
+the manual expression, regex-escaped). Selection persists across refresh
+(pruned to existing names); changing subscription input invalidates list
+and selection. Device Model: user value (if filled) is sent as
+x-device-model on preview fetches; fallback is
+`Saymer Link Generators Preview`; HWID is unaffected. HWID contract
+unchanged: stable per-browser identity, never random-per-request.
+
 ### buildFromRequest contract
 
 `buildFromRequest({ core, input, wgBeans, options })` → `{ kind: "yaml", data: <string> }`.

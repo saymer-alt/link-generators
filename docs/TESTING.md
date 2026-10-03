@@ -668,7 +668,26 @@ hover 11.25:1. Семантические green/yellow/red не менялись
 шагах); пути к dependency-артефактам — copy-only; версии зависимостей
 зафиксированы (playwright 1.55.0, js-yaml 4.1.0, node 22).
 
-### Owner field test (не автоматизируется)
+#### Server list / subscription exclusion UX (issue #100, 2026-10-03)
+
+- Toggle `cfgServerList` OFF по умолчанию: Sub ON + Build = ноль
+  `fetchSubscription`-вызовов; provider YAML без browser inspection.
+- Toggle ON + явная кнопка «Получить список»: fetch ровно по клику;
+  список имён (только display names, без URI/UUID/кредов); счётчики
+  «Уникальных имён / исключается / останется».
+- Device Model: пусто → fallback `Saymer Link Generators Preview`;
+  заполнено → пользовательское значение в x-device-model; HWID
+  не меняется.
+- Selection: галочки → union с manual filter (exact-match escaping);
+  Sub ON/OFF — одинаковое исключение; search фильтрует только
+  отображение; select all / clear all; refresh prune.
+- Sub OFF: mandatory fetch с toggle OFF (inline expansion требует
+  содержимое подписки); union применяется к развёрнутым узлам.
+- Stale-safe: поздний/неудачный ответ не меняет output/state/Copy;
+  server list stale race отбрасывается.
+- WG/AWG hint: текст про несколько файлов/профилей.
+
+## Owner field test (не автоматизируется)
 
 Только то, что требует внешнего мира: реальная GeoDema/Remnawave account с
 device-лимитом (стабильность HWID между сборками на живой панели), production
