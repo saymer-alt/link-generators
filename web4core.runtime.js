@@ -172,7 +172,7 @@
     redirect: "follow"
   };
   var PUBLIC_CORS_FALLBACKS = [
-    (x) => "https://sub.web2core.workers.dev/?url=" + encodeURIComponent(x)
+    (x) => "https://sub.saymer-87.workers.dev/?url=" + encodeURIComponent(x)
   ];
   var CORE_PROTOCOL_SUPPORT = {
     singbox: {

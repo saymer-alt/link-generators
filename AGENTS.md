@@ -298,7 +298,7 @@ Subscription inspection privacy/identity contract (binding):
   Device Model option is unaffected (same field, different transport).
 - Header allowlist is exactly `x-hwid` + `x-device-model`, enforced in the runtime and
   again in the worker; arbitrary headers never leave the caller.
-- CORS fallback `sub.web2core.workers.dev`: POST JSON `{url, headers}` contract with its
+- CORS fallback `sub.saymer-87.workers.dev` (owner-controlled, deployed via GitHub Actions): POST JSON `{url, headers}` contract with its
   own allowlist, redirect/timeout/size caps and `Cache-Control: no-store`; legacy
   `GET ?url=` preserved; the runtime degrades POST → GET on legacy deployments.
 - Network only on explicit user action (Build for Sub OFF expansion; the list-fetch button for Sub ON preview); no background polling, no telemetry;
@@ -434,7 +434,7 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
   the UI may call `web4core.fetchSubscription()` to preview actual node names and, with Sub Mode
   OFF, expand the current subscription snapshot into static proxies. The request is user-triggered
   by Build, never background polling. Direct browser fetch is preferred; when CORS/direct fetch
-  fails the runtime may fall back to the public proxy `sub.web2core.workers.dev`, which necessarily
+  fails the runtime may fall back to the owner-controlled proxy `sub.saymer-87.workers.dev`, which necessarily
   discloses the subscription URL to that proxy.
 - The only persistent browser value introduced for inspection is a random preview identity HWID
   (`link-generators.subscription-preview-hwid.v1`). It is not a key and is deliberately stable so

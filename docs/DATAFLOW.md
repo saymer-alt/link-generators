@@ -105,7 +105,7 @@ per-proxy режимах — группы `SUB-<провайдер>`.
 подписки браузером через `web4core.fetchSubscription()`: Sub Mode ON — для preview
 фактических имён узлов и подбора Exclude Filter; OFF — для разворачивания в статические
 proxies. Прямой fetch предпочтителен; при CORS-блокировке используется
-`sub.web2core.workers.dev`. Запрос несёт device-identity preview-клиента: `x-hwid`
+`sub.saymer-87.workers.dev`. Запрос несёт device-identity preview-клиента: `x-hwid`
 (случайный 32-hex, хранится в `localStorage['link-generators.subscription-preview-hwid.v1']`,
 это НЕ HWID Mihomo-провайдера) и `x-device-model` (пользовательское значение из поля Device Model, либо fallback `Saymer Link Generators Preview`). Worker
 и рантайм пересылают только эти два заголовка (allowlist; POST JSON контракт с деградацией
@@ -255,7 +255,7 @@ masque:// links
 - **Subscription inspection (owner-approved 2026-10-02, issue #100):** при Build страница
   читает подписки через `web4core.fetchSubscription()` — только по явному действию
   пользователя. При CORS-блокировке URL подписки раскрывается стороннему воркеру
-  `sub.web2core.workers.dev`. Запрос идентифицируется стабильным случайным preview-HWID
+  `sub.saymer-87.workers.dev`. Запрос идентифицируется стабильным случайным preview-HWID
   (`localStorage['link-generators.subscription-preview-hwid.v1']` — единственное, что
   хранится persistently) и подписью устройства (пользовательский Device Model или fallback `Saymer Link Generators Preview`); это НЕ HWID
   Mihomo-провайдера. Allowlist заголовков жёсткий (x-hwid, x-device-model); subscription
