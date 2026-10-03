@@ -65,11 +65,13 @@ jobs:
           npm ci
           # Worker bundle is a gitignored build artifact required by amnezia.test.mjs.
           npm run build:worker
+          # Web runtime is built BEFORE tests: subscription-endpoint.test.mjs
+          # reads the built bundle to verify the production CORS endpoint.
+          npm run build:web:runtime
+          test -s src/web4core.runtime.js
           # Auto-discovery: every tools/tests/*.test.mjs runs here; adding a new
           # test file must not require workflow edits.
           node --test tools/tests/*.test.mjs
-          npm run build:web:runtime
-          test -s src/web4core.runtime.js
 
       - name: Check runtime
         run: |
