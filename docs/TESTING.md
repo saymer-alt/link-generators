@@ -668,7 +668,15 @@ hover 11.25:1. Семантические green/yellow/red не менялись
 шагах); пути к dependency-артефактам — copy-only; версии зависимостей
 зафиксированы (playwright 1.55.0, js-yaml 4.1.0, node 22).
 
-#### Server list / subscription exclusion UX (issue #100, 2026-10-03)
+#### Порядок сборки runtime в CI
+
+В Fork CI и Update runtime workflow веб-runtime собирается ДО запуска
+тестов: `subscription-endpoint.test.mjs` читает собранный бандл и
+доказывает, что production CORS endpoint совпадает с source. Если
+добавляется тест, читающий бандл, — порядок уже корректен (build → test).
+`build-runtime` в Update workflow использует тот же порядок.
+
+### Server list / subscription exclusion UX (issue #100, 2026-10-03)
 
 - Toggle `cfgServerList` OFF по умолчанию: Sub ON + Build = ноль
   `fetchSubscription`-вызовов; provider YAML без browser inspection.
@@ -691,7 +699,7 @@ hover 11.25:1. Семантические green/yellow/red не менялись
 
 Только то, что требует внешнего мира: реальная GeoDema/Remnawave account с
 device-лимитом (стабильность HWID между сборками на живой панели), production
-deployed worker `sub.web2core.workers.dev` (POST-контракт с device headers),
+deployed worker `sub.saymer-87.workers.dev` (POST-контракт с device headers + production smoke в deploy workflow),
 реальные CORS/сетевые особенности браузера, живой Keenetic/VPS при необходимости.
 Manual-сюиты (`*.manual.cjs`: reality-handshake matrix, awl-soak) — по явному
 запросу владельца, guard не даёт их случайно подключить к CI.
