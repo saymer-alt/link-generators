@@ -4381,12 +4381,22 @@
     };
     return map[status] || "";
   }
-  async function fetchSubscription(url) {
+  async function fetchSubscription(url, options = {}) {
     if (typeof fetch !== "function") throw new Error("Fetch API not available");
     const allowedSchemes = new Set(SUPPORTED_SCHEMES.filter((s) => s !== "http" && s !== "https"));
     const splitLines2 = (text) => (text || "").split(/\n/).map((s) => s.trim()).filter(Boolean);
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
+    const allowedRequestHeaders = /* @__PURE__ */ new Set(["x-hwid", "x-device-model"]);
+    const requestHeaders = {};
+    if (options && options.headers && typeof options.headers === "object") {
+      for (const [rawName, rawValue] of Object.entries(options.headers)) {
+        const name = String(rawName || "").trim().toLowerCase();
+        if (!allowedRequestHeaders.has(name) || rawValue === void 0 || rawValue === null) continue;
+        const value = String(rawValue).trim();
+        if (value) requestHeaders[name] = value;
+      }
+    }
     function hasRealSubscriptionLinks(text) {
       const lines2 = splitLines2(text);
       if (!lines2.length) return false;
@@ -4395,18 +4405,23 @@
         return allowedSchemes.has(scheme);
       });
     }
-    async function tryFetch(u) {
+    async function tryFetch(u, attempt) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
       try {
         const headers = new Headers(FETCH_INIT && FETCH_INIT.headers ? FETCH_INIT.headers : {});
         if (!headers.has("Accept")) headers.set("Accept", "text/plain, */*");
+        if (!attempt || attempt.deviceHeaders !== false) {
+          for (const [name, value] of Object.entries(requestHeaders)) headers.set(name, value);
+        }
         if (!isBrowser) {
           if (/github\.com|raw\.githubusercontent\.com/i.test(u)) {
             headers.set("Referer", "https://github.com/");
           }
         }
-        const resp = await fetch(u, Object.assign({}, FETCH_INIT, { headers, signal: controller.signal }));
+        const init = Object.assign({}, FETCH_INIT, { headers, signal: controller.signal });
+        if (attempt && attempt.init) Object.assign(init, attempt.init);
+        const resp = await fetch(u, init);
         if (!resp.ok) {
           const reason = resp.statusText || httpReason(resp.status) || "";
           const label = "HTTP " + resp.status + (reason ? " " + reason : "");
@@ -4491,12 +4506,29 @@
         }
         for (const makeUrl of PUBLIC_CORS_FALLBACKS) {
           const maxRetries = Math.max(0, Number(SUB_FALLBACK_RETRIES || 0));
-          for (let retry = 0; retry <= maxRetries; retry++) {
-            const result = await tryFetch(makeUrl(u));
-            const resolved = await consumeFetchResult(result);
-            if (resolved) return resolved;
-            if (result.error && retry < maxRetries) {
-              await sleep(500);
+          const fallbackAttempts = [];
+          if (Object.keys(requestHeaders).length) {
+            fallbackAttempts.push({
+              kind: "post",
+              attemptFor: (target) => ({
+                init: {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ url: target, headers: requestHeaders })
+                }
+              })
+            });
+          }
+          fallbackAttempts.push({ kind: "get", attemptFor: () => ({ deviceHeaders: false }) });
+          for (const attempt of fallbackAttempts) {
+            for (let retry = 0; retry <= maxRetries; retry++) {
+              const result = await tryFetch(makeUrl(u), attempt.attemptFor(u));
+              const resolved = await consumeFetchResult(result);
+              if (resolved) return resolved;
+              if (attempt.kind === "post" && result.error && /^HTTP\s+4(0[05])\b/.test(String(result.error.message || ""))) break;
+              if (result.error && retry < maxRetries) {
+                await sleep(500);
+              }
             }
           }
         }

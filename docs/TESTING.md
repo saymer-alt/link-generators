@@ -644,3 +644,54 @@ hover 11.25:1. Семантические green/yellow/red не менялись
   явная ошибка без сборки; БС+children → кламп.
 - Parity: 7/7 byte-identical vs main (5837cea); DPR-off байт-идентичен; `mihomo -t`
   6 YAML × (1.19.31, 1.19.32) successful; HTML integrity clean.
+
+---
+
+## CI automation vs owner field test (2026-10-03)
+
+Вся deterministic-батарея выполняется GitHub Actions на exact SHA — агент не
+прогоняет её руками при каждом изменении и в отчётах ссылается на runs
+(`run <id>`, commit, job, PASS/failure-анализ), а не на «я прогнал».
+
+### Что где выполняется (merge-gates)
+
+| Check | Workflow / job | Что покрывает |
+|---|---|---|
+| static + node | `generator-ci.yml` / static-and-node | repo-invariants, merge-маркеры, `node --check` (runtime + все tests/*.cjs + fieldtest), HTML-контракт (dup ids, raw .md links), **wiring-gate** (каждый не-manual `tests/*.cjs` обязан быть подключён к CI — новый сюит без workflow-правки ломает CI), `runtime.cjs`, policy-routing (node), fieldtest unit+secret-scan |
+| browser | `generator-ci.yml` / browser | `browser.cjs` (валидатор, DPR/профили/БС/snapshots/tamper, subscription inspection, **4 race-теста reordered-promise**: input/subMode mutation in flight, double Build, preview/inspected-cache), help-ux, MASQUE, policy-routing-browser, vps-detection, wg-profiles, magitrickle-import, **profile-matrix**, **wg-dialer-selector**, whitelist, **YAML parity vs merge-base** (`tests/parity.cjs`, BASE = merge-base с `main`; red = молча меняется дефолтный YAML) |
+| mihomo compat | `generator-ci.yml` / mihomo-compat (matrix) | whitelist + failover + awl-priority против **реального Mihomo**, версии **pinned 1.19.31/1.19.32 с sha256-верификацией архива** (новый релиз Mihomo сам не меняет смысл CI) |
+| runtime provenance | `update-web4core-runtime.yml` / build-runtime | полные fork-тесты web4core (auto-discovery `tools/tests/*.test.mjs` — вкл. subscription fetch/worker/exclude-filter/tun-stack/amnezia), deterministic rebuild, `node --check`, `runtime.cjs`, **tracked-vs-built provenance**; на push в main — write-back job (copy-only) |
+| stacked provenance | `update-web4core-runtime.yml` / stacked-runtime-provenance | для стековых PR: файл `.github/web4core-source-ref` объявляет candidate-ref web4core; job строит его, гоняет полный fork suite + `runtime.cjs` и требует байт-совпадение с tracked runtime. Production-проверка (build-runtime) от файла не зависит и остаётся красной до merge зависимости — это задокументированное исключение; после merge файл удаляется (guard: ref == published tip → job красный с напоминанием) |
+| fieldtest harness | `fieldtest-checks.yml` | offline unit + secret-scan; живые field-test режимы в CI запрещены guard-шагом |
+
+Правила: fail-closed (никаких `continue-on-error`/`|| true` на обязательных
+шагах); пути к dependency-артефактам — copy-only; версии зависимостей
+зафиксированы (playwright 1.55.0, js-yaml 4.1.0, node 22).
+
+#### Server list / subscription exclusion UX (issue #100, 2026-10-03)
+
+- Toggle `cfgServerList` OFF по умолчанию: Sub ON + Build = ноль
+  `fetchSubscription`-вызовов; provider YAML без browser inspection.
+- Toggle ON + явная кнопка «Получить список»: fetch ровно по клику;
+  список имён (только display names, без URI/UUID/кредов); счётчики
+  «Уникальных имён / исключается / останется».
+- Device Model: пусто → fallback `Saymer Link Generators Preview`;
+  заполнено → пользовательское значение в x-device-model; HWID
+  не меняется.
+- Selection: галочки → union с manual filter (exact-match escaping);
+  Sub ON/OFF — одинаковое исключение; search фильтрует только
+  отображение; select all / clear all; refresh prune.
+- Sub OFF: mandatory fetch с toggle OFF (inline expansion требует
+  содержимое подписки); union применяется к развёрнутым узлам.
+- Stale-safe: поздний/неудачный ответ не меняет output/state/Copy;
+  server list stale race отбрасывается.
+- WG/AWG hint: текст про несколько файлов/профилей.
+
+## Owner field test (не автоматизируется)
+
+Только то, что требует внешнего мира: реальная GeoDema/Remnawave account с
+device-лимитом (стабильность HWID между сборками на живой панели), production
+deployed worker `sub.web2core.workers.dev` (POST-контракт с device headers),
+реальные CORS/сетевые особенности браузера, живой Keenetic/VPS при необходимости.
+Manual-сюиты (`*.manual.cjs`: reality-handshake matrix, awl-soak) — по явному
+запросу владельца, guard не даёт их случайно подключить к CI.

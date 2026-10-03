@@ -286,7 +286,7 @@
       <div class="card-title">📋 Входные данные</div>
       <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
       <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
-      <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Если используете HTTP(S) URL подписки, оставьте включённым режим «URL-подписки» ниже. Если в поле только обычные proxy-ссылки — режим URL-подписок лучше выключить.</div>
+      <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Для HTTP(S) подписки режим ниже определяет результат: включён — динамический <code>proxy-provider</code>; выключен — подписка один раз читается браузером и её текущие узлы встраиваются как обычные <code>proxies:</code>.</div>
       <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> Автоматический режим белых списков <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Автоматический режим белых списков">?</button><span class="ctx-help-pop" role="note">Плоский резервный набор (PRIMARY → FALLBACK): GLOBAL сначала использует основной набор выходов, при их недоступности переключается на резервный. Health-check каждые 300 секунд, ускоренный при неудачах. Доступен только в профиле «Роутер / обычный TUN»: на VPS не используется.</span></span></label></div>
       <div class="hint" id="awlRouterHint" style="display:none">Автоматический режим белых списков доступен только для профиля «Роутер / обычный TUN».</div>
       <div id="whitelistPanel" style="display:none">
@@ -305,6 +305,7 @@
           <input type="file" id="wgFile" accept=".conf,.wg,.awg" multiple>
         </div>
         <span class="wg-status" id="wgStatus"></span>
+        <div class="hint" style="margin-top:4px">Можно выбрать сразу несколько WG/AWG-конфигов — каждый файл станет отдельным профилем в списке ниже. Добавлять можно и по очереди, несколькими загрузками.</div>
       </div>
       <ul class="wg-list" id="wgList" role="list" hidden></ul>
       <div id="wgRejected" class="wg-rejected" role="alert" hidden></div>
@@ -337,7 +338,7 @@
         <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Для домашнего роутера обычно включено; для VPS с локальным Xray/3X-UI выключите.</span></span></label>
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090.</span></span></label>
-        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено по умолчанию во всех профилях: строки http(s):// из поля ввода добавляются как proxy-providers (узлы подтягиваются самим Mihomo по расписанию). Если в поле только обычные proxy-ссылки (vless://, trojan://…) — выключите этот режим, они разбираются напрямую.</span></span></label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется отдельный стабильный HWID генератора, а не HWID Mihomo/Keenetic.</span></span></label>
       </div>
       <div id="subModeHint" class="hint"></div>
       <div id="webUiRow" style="margin-top:10px">
@@ -354,7 +355,35 @@
       <div id="excludeFilterRow" style="margin-top:10px">
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
         <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
-        <div class="hint">Regexp/keyword-фильтр Mihomo <code>exclude-filter</code>: узлы provider, чьи фактические имена совпали, исключаются. Например, латинский <code>ru|russia</code> не совпадёт с кириллическим именем <code>Россия</code>, поэтому для таких подписок добавляйте кириллический вариант. Применяется ко всем подпискам. Пусто — поле не добавляется.</div>
+        <div class="hint">Фильтр по фактическим именам узлов. При включённых URL-подписках передаётся Mihomo как <code>exclude-filter</code>; при выключенных применяется браузером к развёрнутым узлам до сборки YAML. Например, <code>(?i)ru|russia|россия</code>. Применяется ко всем подпискам. Пусто — фильтрации нет.</div>
+        <div class="toggle-row" style="margin-top:8px">
+          <label><input type="checkbox" id="cfgServerList"> 📋 Получить список серверов подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Получить список серверов подписки">?</button><span class="ctx-help-pop" role="note">Нужно только для просмотра узлов подписки и удобного выбора исключений галочками. По умолчанию выключено: подписка браузером не запрашивается, provider-YAML собирается без обращения к сети. Запрос к подписке выполняется только по нажатию «Получить список». При CORS может использоваться проектный fallback-воркер — тогда URL подписки виден его инфраструктуре; список и URL не сохраняются, локально хранится только стабильный идентификатор генератора.</span></span></label>
+        </div>
+        <div class="hint" id="serverListOffHint" style="display:none">Получение списка серверов нужно только для просмотра узлов и удобного выбора исключений. По умолчанию подписка браузером не запрашивается.</div>
+        <div id="serverListPanel" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button type="button" class="btn btn-gray" id="subListFetchBtn">📋 Получить список</button>
+            <span id="subListStats" class="hint" style="margin:0">Список ещё не получен.</span>
+          </div>
+          <div id="subListPrivacyHint" class="hint" style="margin-top:4px">Браузер запросит подписку напрямую; при CORS-блокировке — через проектный fallback-воркер (URL подписки при этом виден его инфраструктуре). Список, URL и содержимое не сохраняются; локально хранится только стабильный идентификатор генератора.</div>
+          <div id="subListControls" style="display:none;margin-top:6px">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" id="subListSearch" placeholder="поиск по имени…" style="flex:1;min-width:160px;padding:4px 8px">
+              <button type="button" class="btn btn-gray" id="subListAll" style="padding:2px 10px">Выбрать все</button>
+              <button type="button" class="btn btn-gray" id="subListNone" style="padding:2px 10px">Снять все</button>
+            </div>
+            <div id="subscriptionPreviewNames" style="max-height:220px;overflow:auto;margin-top:5px"></div>
+          </div>
+        </div>
+        <div id="subscriptionPreviewBox" class="hint" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)" aria-live="polite">
+          <div id="subscriptionPreviewStats"></div>
+          <div id="subscriptionPreviewWarning" style="display:none;color:var(--warn);margin-top:4px"></div>
+          <details id="subscriptionPreviewDetails" style="margin-top:6px">
+            <summary>Найденные имена узлов</summary>
+            <div id="subscriptionPreviewNamesLegacy" style="max-height:220px;overflow:auto;margin-top:5px;white-space:pre-wrap;font-family:monospace"></div>
+          </details>
+        </div>
+        <div class="hint" id="subSelectionNote" style="display:none;color:var(--warn)">Выбранные для исключения серверы продолжают действовать (объединяются с ручным фильтром через ИЛИ). Очистить — кнопкой «Снять все» в списке серверов.</div>
       </div>
       <div id="deviceModelRow" style="margin-top:10px">
         <label for="deviceModelInput">📱 Device Model (необязательно)</label>
@@ -811,6 +840,20 @@ function dialerKindLabel(entry) {
   return (entry.type || 'proxy').toUpperCase();
 }
 
+// Ввод для префлайт-реестра целей: после успешной Build — точный inspected
+// ввод (подписки уже развёрнуты в ссылки), до неё — сырой ввод без
+// subscription-URL строк (в не-подписочном режиме https://-строка парсится
+// как http-прокси — мусорные имена в списке; в подписочном режиме строки
+// обрабатывает сам префлайт, срезать их не нужно).
+let lastInspectedBuildInput = null;
+let lastInspectedFallbackInput = null;
+
+function preflightInputForRegistry(raw) {
+  if (lastInspectedBuildInput !== null) return lastInspectedBuildInput;
+  if (document.getElementById('cfgSubMode').checked) return raw;
+  return splitSubscriptionInputForPreview(raw).filter(e => !e.subscription).map(e => e.line).join('\n');
+}
+
 function computeDialerTargetsSync() {
   const api = globalThis.web4core;
   if (!api || !wgProfilesEnabled()) return [];
@@ -828,8 +871,8 @@ function computeDialerTargetsSync() {
     const realityModern = parseRealityModernLines();
     const result = api.buildFromRequest({
       core: 'mihomo',
-      input: document.getElementById('mihomoInput').value,
-      ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}),
+      input: preflightInputForRegistry(document.getElementById('mihomoInput').value),
+      ...(autoWhitelist ? { fallbackInput: lastInspectedFallbackInput !== null ? lastInspectedFallbackInput : document.getElementById('whitelistInput').value.trim() } : {}),
       wgBeans: normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, { noDialer: true }))),
       options: {
         addSocks: addSocks,
@@ -864,8 +907,8 @@ function computeDialerTargetsSync() {
     }
     // URL-подписки — виртуальные UI-targets. dialer-proxy не может ссылаться
     // прямо на proxy-provider, поэтому при Build для выбранной подписки ниже
-    // создаётся отдельная select-группа с use:[provider]. Содержимое подписки
-    // браузер не скачивает и не разворачивает.
+    // создаётся отдельная select-группа с use:[provider]. Browser preview может
+    // прочитать имена узлов, но provider в итоговом YAML остаётся динамическим.
     const providerMap = doc['proxy-providers'];
     if (providerMap && typeof providerMap === 'object' && !Array.isArray(providerMap)) {
       for (const providerName of Object.keys(providerMap)) {
@@ -2260,18 +2303,390 @@ function onWhitelistChange() {
 // родителе (MIPS и «TUN на каждый прокси» — при TUN; «SOCKS-порт на каждый
 // прокси» — при Mixed Port); выключение родителя сбрасывает зависимую опцию.
 // В БС-режиме Per-Proxy принудительно недоступны (плюс кламп в buildMihomo).
+const SUBSCRIPTION_PREVIEW_STORAGE_KEY = 'link-generators.subscription-preview-hwid.v1';
+const SUBSCRIPTION_PREVIEW_DEVICE_MODEL = 'Saymer Link Generators Preview';
+let subscriptionPreviewMemoryHwid = '';
+
+function subscriptionPreviewRandomHwid() {
+  const bytes = new Uint8Array(16);
+  try {
+    (globalThis.crypto || window.crypto).getRandomValues(bytes);
+  } catch (_) {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function getSubscriptionPreviewHwid() {
+  if (/^[A-Za-z0-9=-]{10,64}$/.test(subscriptionPreviewMemoryHwid)) return subscriptionPreviewMemoryHwid;
+  let stored = '';
+  try { stored = localStorage.getItem(SUBSCRIPTION_PREVIEW_STORAGE_KEY) || ''; } catch (_) {}
+  if (/^[A-Za-z0-9=-]{10,64}$/.test(stored)) {
+    subscriptionPreviewMemoryHwid = stored;
+    return stored;
+  }
+  subscriptionPreviewMemoryHwid = subscriptionPreviewRandomHwid();
+  try { localStorage.setItem(SUBSCRIPTION_PREVIEW_STORAGE_KEY, subscriptionPreviewMemoryHwid); } catch (_) {}
+  return subscriptionPreviewMemoryHwid;
+}
+
+function subscriptionPreviewHeaders() {
+  // Allowlist контракта fetchSubscription: ровно два заголовка с доказанной
+  // необходимостью (x-hwid — HWID-gate Geodema/Remnawave, x-device-model —
+  // подпись устройства). Больше ничего не отправляем.
+  // Device Model: значение пользователя (📱 Device Model), если заполнено —
+  // именно его видит панель подписки; иначе подпись web-генератора.
+  // HWID от Device Model не зависит (стабильный localStorage-идентификатор).
+  const userModel = (document.getElementById('deviceModelInput').value || '').trim();
+  return {
+    'x-hwid': getSubscriptionPreviewHwid(),
+    'x-device-model': userModel || SUBSCRIPTION_PREVIEW_DEVICE_MODEL
+  };
+}
+
+function splitSubscriptionInputForPreview(raw) {
+  const lines = String(raw || '').split(/\r?\n/);
+  return lines.map(line => {
+    const trimmed = line.trim();
+    if (!/^https?:\/\//i.test(trimmed)) return { line, subscription: false };
+    try {
+      const u = new URL(trimmed);
+      if (u.username || u.password) return { line, subscription: false };
+      return { line, url: trimmed, subscription: true };
+    } catch (_) {
+      return { line, subscription: false };
+    }
+  });
+}
+
+function compileSubscriptionExcludeFilter(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return { regex: null, error: '' };
+  let source = value;
+  let flags = '';
+  const prefix = source.match(/^\(\?([ims]+)\)/i);
+  if (prefix) {
+    flags = Array.from(new Set(prefix[1].toLowerCase().split(''))).join('');
+    source = source.slice(prefix[0].length);
+  }
+  try { return { regex: new RegExp(source, flags), error: '' }; }
+  catch (e) { return { regex: null, error: e && e.message ? e.message : String(e) }; }
+}
+
+function subscriptionLinkName(api, link) {
+  try {
+    const beans = api.buildBeansFromInput(String(link || '').trim());
+    const bean = Array.isArray(beans) && beans.length ? beans[0] : null;
+    if (bean) {
+      if (typeof bean.name === 'string' && bean.name.trim()) return bean.name.trim();
+      if (typeof api.computeTag === 'function') {
+        const tag = api.computeTag(bean);
+        if (typeof tag === 'string' && tag.trim()) return tag.trim();
+      }
+    }
+  } catch (_) {}
+  const hash = String(link || '').split('#', 2)[1] || '';
+  if (hash) {
+    try { return decodeURIComponent(hash).trim() || 'proxy'; } catch (_) { return hash.trim() || 'proxy'; }
+  }
+  return 'proxy';
+}
+
+function emptySubscriptionPreviewSummary() {
+  return { subscriptions: 0, found: 0, excluded: 0, names: [], warnings: [] };
+}
+
+function mergeSubscriptionPreviewSummary(target, source) {
+  target.subscriptions += source.subscriptions;
+  target.found += source.found;
+  target.excluded += source.excluded;
+  target.names.push(...source.names);
+  target.warnings.push(...source.warnings);
+  return target;
+}
+
+async function inspectSubscriptionInput(api, raw, options) {
+  const expand = !!(options && options.expand);
+  const filterRegex = options && options.filterRegex ? options.filterRegex : null;
+  const entries = splitSubscriptionInputForPreview(raw);
+  const output = [];
+  const summary = emptySubscriptionPreviewSummary();
+  let ordinal = 0;
+  for (const entry of entries) {
+    if (!entry.subscription) {
+      output.push(entry.line);
+      continue;
+    }
+    ordinal++;
+    summary.subscriptions++;
+    try {
+      const body = await api.fetchSubscription(entry.url, { headers: subscriptionPreviewHeaders() });
+      const links = String(body || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (!links.length) throw new Error('подписка не вернула поддерживаемых proxy-ссылок');
+      for (const link of links) {
+        const name = subscriptionLinkName(api, link);
+        summary.found++;
+        summary.names.push(name);
+        const excluded = !!(filterRegex && filterRegex.test(name));
+        if (excluded) summary.excluded++;
+        if (expand && !excluded) output.push(link);
+      }
+      if (!expand) output.push(entry.line);
+    } catch (e) {
+      const reason = String(e && e.message ? e.message : e).replace(/https?:\/\/\S+/gi, '[URL hidden]');
+      if (expand) throw new Error('Не удалось прочитать подписку #' + ordinal + ': ' + reason);
+      summary.warnings.push('Не удалось получить preview подписки #' + ordinal + ': ' + reason + '. Provider YAML будет собран без preview.');
+      output.push(entry.line);
+    }
+  }
+  return { input: output.join('\n'), summary };
+}
+
+function clearSubscriptionPreview() {
+  const box = document.getElementById('subscriptionPreviewBox');
+  if (box) box.style.display = 'none';
+}
+
+// === СПИСОК СЕРВЕРОВ ПОДПИСКИ (opt-in, issue #100) ===
+// Toggle «Получить список серверов подписки» (OFF по умолчанию) разрешает
+// браузерный запрос содержимого подписки ради selectable-списка узлов и
+// удобного выбора исключений. Сам по себе список/inspection конфиг не меняет:
+// исключают только явный выбор галочками и/или ручной Exclude Filter.
+let subscriptionPreviewSeq = 0;            // stale-guard сетевых list/preview-запросов
+let subscriptionListNames = [];            // уникальные имена (порядок появления)
+let subscriptionListNodes = 0;             // честное число узлов (без дедупликации)
+let subscriptionSelection = new Set();     // выбранные для исключения имена
+
+function escapeRegExpText(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function splitManualExcludeFilter(raw) {
+  const value = String(raw || '').trim();
+  const m = value.match(/^\(\?([ims]+)\)/i);
+  if (m) {
+    return { flags: Array.from(new Set(m[1].toLowerCase().split(''))).join(''), body: value.slice(m[0].length) };
+  }
+  return { flags: '', body: value };
+}
+
+// Итоговый Exclude Filter = ручное выражение ИЛИ выбранные серверы (exact
+// match, спецсимволы экранированы). Одинаковая строка применяется в обоих
+// режимах: Sub ON — как exclude-filter провайдера, Sub OFF — как JS RegExp
+// на фактических именах перед разворачиванием. Один выбор = одно исключение.
+function buildCombinedExcludeFilter(manualRaw) {
+  const manual = String(manualRaw || '').trim();
+  const selected = Array.from(subscriptionSelection);
+  if (!manual && !selected.length) return { filter: '', error: '' };
+  const { flags, body } = splitManualExcludeFilter(manual);
+  if (body) {
+    try { new RegExp(body, flags); }
+    catch (e) { return { filter: '', error: 'Exclude Filter: некорректное регулярное выражение: ' + (e && e.message ? e.message : e) }; }
+  }
+  // Без выбранных серверов — ручное выражение проходит как есть (байт-в-байт).
+  // С выбранными — OR-объединение: manual оборачивается в группу, каждое имя
+  // экранируется и становится отдельной exact-match альтернативой.
+  if (!selected.length) return { filter: manual, error: '' };
+  const parts = [];
+  if (body) parts.push('(?:' + body + ')');
+  for (const name of selected) parts.push('(?:' + escapeRegExpText(name) + ')');
+  return { filter: (flags ? '(?' + flags + ')' : '') + parts.join('|'), error: '' };
+}
+
+function compileCombinedExcludeFilter(combinedFilter) {
+  const { flags, body } = splitManualExcludeFilter(combinedFilter);
+  return new RegExp(body, flags);
+}
+
+function serverListCountExcluded(uniqueNames) {
+  const { flags, body } = splitManualExcludeFilter(document.getElementById('excludeFilterInput').value);
+  let manualRx = null;
+  if (body) {
+    try { manualRx = new RegExp(body, flags); } catch (_) { manualRx = null; }
+  }
+  let excluded = 0;
+  for (const name of uniqueNames) {
+    if (subscriptionSelection.has(name) || (manualRx && manualRx.test(name))) excluded++;
+  }
+  return excluded;
+}
+
+function renderServerList() {
+  const list = document.getElementById('subscriptionPreviewNames');
+  if (!list) return;
+  const search = (document.getElementById('subListSearch').value || '').trim().toLowerCase();
+  list.textContent = '';
+  for (const name of subscriptionListNames) {
+    if (search && !name.toLowerCase().includes(search)) continue; // поиск фильтрует только отображение
+    const label = document.createElement('label');
+    label.className = 'sub-list-item';
+    label.style.cssText = 'display:flex;gap:6px;align-items:center;padding:1px 0;cursor:pointer';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'sub-list-check';
+    box.dataset.name = name;
+    box.checked = subscriptionSelection.has(name);
+    box.addEventListener('change', () => {
+      if (box.checked) subscriptionSelection.add(name);
+      else subscriptionSelection.delete(name);
+      updateServerListStats();
+      updateSubSelectionNote();
+    });
+    const text = document.createElement('span');
+    text.textContent = name; // только display name: никаких URI/UUID/кредов
+    label.append(box, text);
+    list.appendChild(label);
+  }
+  if (!subscriptionListNames.length) {
+    const empty = document.createElement('div');
+    empty.textContent = 'Имена узлов недоступны.';
+    list.appendChild(empty);
+  }
+}
+
+function updateServerListStats() {
+  const unique = subscriptionListNames.length;
+  const excluded = serverListCountExcluded(subscriptionListNames);
+  const remaining = Math.max(0, unique - excluded);
+  const bits = ['Уникальных имён: ' + unique];
+  if (subscriptionListNodes && subscriptionListNodes !== unique) bits.unshift('Узлов: ' + subscriptionListNodes);
+  bits.push('исключается: ' + excluded, 'останется: ' + remaining);
+  document.getElementById('subListStats').textContent = bits.join(' · ');
+}
+
+function updateSubSelectionNote() {
+  const note = document.getElementById('subSelectionNote');
+  if (!note) return;
+  note.style.display = subscriptionSelection.size ? '' : 'none';
+}
+
+function applyServerListFromSummary(summary) {
+  // Честные счётчики: nodes = все узлы, names = уникальные имена (exclude-filter
+  // в Mihomo работает по именам, поэтому выбор name-based; дубликаты имён
+  // означают исключение всех совпадающих узлов).
+  subscriptionListNodes = summary.found;
+  subscriptionListNames = Array.from(new Set(summary.names));
+  // Selection переживает refresh для существующих имён; исчезнувшие удаляются.
+  const alive = new Set(subscriptionListNames);
+  for (const name of Array.from(subscriptionSelection)) {
+    if (!alive.has(name)) subscriptionSelection.delete(name);
+  }
+  updateServerListStats();
+  updateSubSelectionNote();
+  renderServerList();
+  updateServerListVisibility();
+}
+
+function updateServerListVisibility() {
+  const toggle = document.getElementById('cfgServerList');
+  const panel = document.getElementById('serverListPanel');
+  const offHint = document.getElementById('serverListOffHint');
+  if (!toggle || !panel) return;
+  panel.style.display = toggle.checked ? '' : 'none';
+  document.getElementById('subListControls').style.display = subscriptionListNames.length ? '' : 'none';
+  // Toggle выключен, но выбор осознанный — не теряем его молча: note показывает,
+  // что выбранные исключения продолжают действовать.
+  offHint.style.display = toggle.checked ? 'none' : '';
+  updateSubSelectionNote();
+}
+
+function fetchServerList() {
+  const api = globalThis.web4core;
+  const btn = document.getElementById('subListFetchBtn');
+  if (!api || typeof api.fetchSubscription !== 'function' || typeof api.buildBeansFromInput !== 'function') {
+    showToast('❌ Обновите web4core.runtime: требуется subscription inspection API', true);
+    return;
+  }
+  const raw = document.getElementById('mihomoInput').value;
+  const hasSubscription = splitSubscriptionInputForPreview(raw).some(e => e.subscription);
+  const whitelistRaw = document.getElementById('cfgAutoWhitelist').checked
+    ? document.getElementById('whitelistInput').value.trim()
+    : null;
+  const whitelistHasSubscription = !!(whitelistRaw && splitSubscriptionInputForPreview(whitelistRaw).some(e => e.subscription));
+  if (!hasSubscription && !whitelistHasSubscription) {
+    showToast('В поле ввода нет URL-подписок — список серверов брать неоткуда. Добавьте HTTP(S) подписку или выключите «Получить список серверов».', true);
+    return;
+  }
+  subscriptionPreviewSeq++;
+  const previewSeq = subscriptionPreviewSeq;
+  btn.textContent = 'Загрузка…';
+  const task = (async () => {
+    const summary = emptySubscriptionPreviewSummary();
+    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: false, filterRegex: null });
+    if (previewSeq !== subscriptionPreviewSeq) return;
+    mergeSubscriptionPreviewSummary(summary, mainInspected.summary);
+    if (whitelistRaw !== null) {
+      const fallbackInspected = await inspectSubscriptionInput(api, whitelistRaw, { expand: false, filterRegex: null });
+      if (previewSeq !== subscriptionPreviewSeq) return;
+      mergeSubscriptionPreviewSummary(summary, fallbackInspected.summary);
+    }
+    applyServerListFromSummary(summary);
+    renderSubscriptionPreview(summary); // per-build статистика (подписки/узлы/исключено дубликатов имён)
+  })();
+  task.catch(() => {}).finally(() => {
+    // Кнопка не блокируется: seq-guard предотвращает stale-запись, а повторный
+    // клик во время полёта просто инкрементирует seq и запускает новую загрузку.
+    if (previewSeq === subscriptionPreviewSeq && btn.textContent === 'Загрузка…') {
+      btn.textContent = '📋 Обновить список';
+    }
+  });
+}
+
+function initServerList() {
+  const toggle = document.getElementById('cfgServerList');
+  const btn = document.getElementById('subListFetchBtn');
+  if (!toggle || !btn) return;
+  toggle.addEventListener('change', () => {
+    subscriptionPreviewSeq++; // toggle меняет эпоху preview-запросов
+    updateServerListVisibility();
+  });
+  btn.addEventListener('click', fetchServerList);
+  document.getElementById('subListSearch').addEventListener('input', renderServerList);
+  document.getElementById('subListAll').addEventListener('click', () => {
+    // «Выбрать все» действует на видимый (отфильтрованный поиском) набор
+    const search = (document.getElementById('subListSearch').value || '').trim().toLowerCase();
+    for (const name of subscriptionListNames) {
+      if (!search || name.toLowerCase().includes(search)) subscriptionSelection.add(name);
+    }
+    renderServerList();
+    updateServerListStats();
+    updateSubSelectionNote();
+  });
+  document.getElementById('subListNone').addEventListener('click', () => {
+    subscriptionSelection.clear();
+    renderServerList();
+    updateServerListStats();
+    updateSubSelectionNote();
+  });
+}
+initServerList();
+
+function renderSubscriptionPreview(summary) {
+  const box = document.getElementById('subscriptionPreviewBox');
+  if (!box) return;
+  if (!summary || !summary.subscriptions) { clearSubscriptionPreview(); return; }
+  const remaining = Math.max(0, summary.found - summary.excluded);
+  document.getElementById('subscriptionPreviewStats').textContent =
+    'Подписок: ' + summary.subscriptions + ' · найдено узлов: ' + summary.found +
+    ' · после фильтра: ' + remaining + ' · исключено: ' + summary.excluded;
+  const warning = document.getElementById('subscriptionPreviewWarning');
+  warning.textContent = summary.warnings.join(' ');
+  warning.style.display = summary.warnings.length ? '' : 'none';
+  const names = document.getElementById('subscriptionPreviewNamesLegacy');
+  names.textContent = summary.names.length ? Array.from(new Set(summary.names)).join('\n') : 'Имена узлов недоступны.';
+  box.style.display = '';
+}
+
 function updateExcludeFilterVisibility() {
-  // Эти параметры имеют смысл только для proxy-providers (Mihomo + Sub Mode).
-  const visible = document.getElementById('cfgSubMode').checked ? '' : 'none';
-  document.getElementById('excludeFilterRow').style.display = visible;
-  document.getElementById('deviceModelRow').style.display = visible;
+  document.getElementById('excludeFilterRow').style.display = '';
+  document.getElementById('deviceModelRow').style.display = document.getElementById('cfgSubMode').checked ? '' : 'none';
 }
 
 function updateSubModeHint() {
   const on = document.getElementById('cfgSubMode').checked;
   document.getElementById('subModeHint').textContent = on
-    ? 'URL-подписки включены: HTTP(S) URL будут добавлены как proxy-providers. Обычные proxy-ссылки можно смешивать с ними. Если в поле только обычные ссылки, выключите этот режим.'
-    : 'URL-подписки выключены: обычные proxy-ссылки разбираются напрямую. Чтобы использовать HTTP(S) URL подписки, включите этот режим.';
+    ? 'URL-подписки включены: HTTP(S) URL останутся proxy-providers. При Build браузер может один раз прочитать подписку для preview имён и Exclude Filter; финальный YAML остаётся динамическим.'
+    : 'URL-подписки выключены: при Build HTTP(S) подписка читается один раз, Exclude Filter применяется к фактическим именам узлов, а оставшиеся узлы встраиваются в YAML как статические proxies.';
 }
 
 function updateWebUiVisibility() {
@@ -2743,7 +3158,7 @@ function updatePolicyRoutingVisibility() {
 }
 
 // === MIHOMO BUILDER (via web4core) ===
-function buildMihomo() {
+async function buildMihomo() {
   if (wgUploadPending) {
     mihomoValidationSeq++;
     resetCompatSummary();
@@ -2755,6 +3170,18 @@ function buildMihomo() {
   
   const api = globalThis.web4core;
   if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
+  const subMode = document.getElementById('cfgSubMode').checked;
+  const excludeFilterRaw = document.getElementById('excludeFilterInput').value.trim();
+  // Итоговый Exclude Filter = ручное выражение ИЛИ выбранные в списке серверов
+  // (exact match), объединённые через ИЛИ. Одна и та же строка применяется в
+  // обоих режимах: Sub ON — как exclude-filter провайдера, Sub OFF — как JS
+  // RegExp на фактических именах перед разворачиванием. Некорректное ручное
+  // выражение — fail-closed в ОБЕИХ режимах (нельзя молча потерять фильтр).
+  const combinedExclude = buildCombinedExcludeFilter(excludeFilterRaw);
+  if (combinedExclude.error) {
+    return showToast('❌ ' + combinedExclude.error, true);
+  }
+  const combinedExcludeRegex = combinedExclude.filter ? compileSubscriptionExcludeFilter(combinedExclude.filter).regex : null;
 
   const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
   let addTun = document.getElementById('cfgTun').checked;
@@ -2833,7 +3260,7 @@ function buildMihomo() {
   // Ручные (и любые) таргеты проверяются против authoritative-реестра целей:
   // никаких dangling dialer-proxy — цель обязана существовать в конфиге,
   // который будет сгенерирован прямо сейчас.
-  const registryNow = computeDialerTargetsSync();
+  const registryNow = dialedProfiles.length ? computeDialerTargetsSync() : [];
   const knownTargets = new Set(registryNow.map(t => t.value));
   knownTargets.add('DIRECT'); // валидное значение dialer-proxy в mihomo
   const danglingTargets = dialedProfiles.filter(p => p.target.trim() && !knownTargets.has(p.target.trim()));
@@ -2843,23 +3270,66 @@ function buildMihomo() {
   }
   const useDialerGroup = dialedProfiles.length > 0 && (wgDialerMembers.length > 0 || wgDialerProviders.length > 0);
 
+  // Сборка теперь асинхронная (inspection подписок): честно выставляем
+  // состояние «идёт сборка/проверка» до первого await — тесты и Copy-гейт
+  // видят промежуточное состояние, а не устаревший прошлый результат.
+  // Sequence-guard: изменение ввода (capture-слушатель инкрементирует счётчик)
+  // или повторный Build инвалидирует незавершённую сборку — устаревший fetch
+  // не имеет права перезаписать более новый результат.
+  mihomoValidationSeq++;
+  const buildSeq = mihomoValidationSeq;
+  setMihomoValidationState('VALIDATING');
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
+    if (!api.fetchSubscription || !api.buildBeansFromInput) throw new Error('Обновите web4core.runtime: требуется subscription inspection API');
+    let mainInput = raw;
+    let fallbackPrepared = autoWhitelist ? document.getElementById('whitelistInput').value.trim() : null;
+
+    if (!subMode) {
+      // Sub Mode OFF: содержимое подписки необходимо для YAML — blocking
+      // inspection (разворачивание + фильтр по фактическим именам). Этот
+      // fetch обязателен независимо от toggle «Получить список серверов»:
+      // toggle управляет preview/списком, а не mandatory-развёртыванием.
+      const previewSummary = emptySubscriptionPreviewSummary();
+      const mainInspected = await inspectSubscriptionInput(api, raw, { expand: true, filterRegex: combinedExcludeRegex });
+      if (buildSeq !== mihomoValidationSeq) return; // stale: ввод изменился / начата новая сборка
+      mergeSubscriptionPreviewSummary(previewSummary, mainInspected.summary);
+      if (autoWhitelist) {
+        const fallbackInspected = await inspectSubscriptionInput(api, fallbackPrepared, { expand: true, filterRegex: combinedExcludeRegex });
+        if (buildSeq !== mihomoValidationSeq) return; // stale
+        fallbackPrepared = fallbackInspected.input;
+        mergeSubscriptionPreviewSummary(previewSummary, fallbackInspected.summary);
+      }
+      // Реестр dialer-целей от этого момента строится из inspected-ввода —
+      // имена развёрнутых узлов совпадают с итоговым YAML (до инвалидиции).
+      mainInput = mainInspected.input;
+      lastInspectedBuildInput = mainInput;
+      lastInspectedFallbackInput = autoWhitelist ? fallbackPrepared : null;
+      renderSubscriptionPreview(previewSummary);
+      // Список серверов (если toggle включён) наполняется из обязательного
+      // inspection — отдельный сетевой запрос не нужен.
+      if (document.getElementById('cfgServerList').checked) {
+        applyServerListFromSummary(previewSummary);
+      }
+    }
+    // Sub Mode ON: provider YAML строится сразу; содержимое подписки не нужно.
+    // Список серверов — только по явной кнопке «Получить список» (fetchServerList);
+    // Build сетевых запросов за списком не делает никогда.
     const realityModern = parseRealityModernLines();
     const buildBeans = wgProfiles.map(wgProfileBuildBean);
     const result = api.buildFromRequest({
       core: 'mihomo',
-      input: raw,
-      ...(autoWhitelist ? { fallbackInput: document.getElementById('whitelistInput').value.trim() } : {}),
+      input: mainInput,
+      ...(autoWhitelist ? { fallbackInput: fallbackPrepared } : {}),
       wgBeans: normalizeWgBeans(buildBeans),
       options: {
         addSocks: addSocks,
         addTun: addTun,
         webUI: webUiEnabled,
         urlTest: urlTest,
-        mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
-        excludeFilter: document.getElementById('excludeFilterInput').value,
-        deviceModel: document.getElementById('deviceModelInput').value,
+        mihomoSubscriptionMode: subMode,
+        excludeFilter: (subMode && combinedExclude.filter) ? combinedExclude.filter : undefined,
+        deviceModel: subMode ? document.getElementById('deviceModelInput').value : undefined,
         webUiDashboard: webUiEnabled ? webUiChoice : undefined,
         webUiCustomUrl: webUiEnabled && webUiChoice === 'custom' ? webUiCustomUrl : undefined,
         mihomoPerProxyTun: perProxyTun,
@@ -2961,7 +3431,27 @@ document.getElementById('cfgTunStackEx').addEventListener('change', updateMihomo
 document.getElementById('cfgSubMode').addEventListener('change', () => {
   updateExcludeFilterVisibility();
   updateSubModeHint();
+  clearSubscriptionPreview();
 });
+for (const id of ['mihomoInput', 'whitelistInput', 'excludeFilterInput']) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', () => {
+    // inspected-ввод устарел вместе с preview: реестр целей возвращается
+    // к префлайту сырого состояния, фоновый preview инвалидируется
+    lastInspectedBuildInput = null;
+    lastInspectedFallbackInput = null;
+    subscriptionPreviewSeq++;
+    clearSubscriptionPreview();
+    // Смена подписок/фильтра: старый список серверов и выбор инвалидируются
+    // (контракт §10 issue #100: URL изменился — старые имена невалидны).
+    subscriptionListNames = [];
+    subscriptionListNodes = 0;
+    subscriptionSelection.clear();
+    updateServerListStats();
+    renderServerList();
+    updateSubSelectionNote();
+  });
+}
 document.getElementById('cfgWebUI').addEventListener('change', updateWebUiVisibility);
 document.getElementById('webUiSelect').addEventListener('change', updateWebUiVisibility);
 document.getElementById('cfgPolicyRouting').addEventListener('change', updatePolicyRoutingVisibility);
@@ -2990,6 +3480,18 @@ document.addEventListener('input', (e) => {
   if (t.id === 'mihomoInput' || t.id === 'wgDialerInput' || t.id === 'wgDialerMembers' || t.id === 'wgDialerProviders' ||
       (t.classList && t.classList.contains('wg-target-manual'))) {
     scheduleDialerRefresh();
+  }
+}, true);
+// Любое изменение состояния (включая чекбоксы) обесценивает inspected-ввод
+// и фоновый preview: реестр целей и итоговая сборка должны соответствовать
+// текущему UI.
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (!t || !t.id) return;
+  if (t.id === 'mihomoInput' || t.id === 'whitelistInput' || t.id === 'excludeFilterInput' || t.id === 'cfgSubMode') {
+    lastInspectedBuildInput = null;
+    lastInspectedFallbackInput = null;
+    subscriptionPreviewSeq++;
   }
 }, true);
 document.addEventListener('change', (e) => {
