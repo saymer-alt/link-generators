@@ -3028,6 +3028,11 @@ async function buildMihomo() {
   // Сборка теперь асинхронная (inspection подписок): честно выставляем
   // состояние «идёт сборка/проверка» до первого await — тесты и Copy-гейт
   // видят промежуточное состояние, а не устаревший прошлый результат.
+  // Sequence-guard: изменение ввода (capture-слушатель инкрементирует счётчик)
+  // или повторный Build инвалидирует незавершённую сборку — устаревший fetch
+  // не имеет права перезаписать более новый результат.
+  mihomoValidationSeq++;
+  const buildSeq = mihomoValidationSeq;
   setMihomoValidationState('VALIDATING');
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
@@ -3039,11 +3044,13 @@ async function buildMihomo() {
       previewSummary.warnings.push('Preview не смог проверить Exclude Filter в браузере; Mihomo применит исходное выражение сам.');
     }
     const mainInspected = await inspectSubscriptionInput(api, raw, { expand: !subMode, filterRegex });
+    if (buildSeq !== mihomoValidationSeq) return; // stale: ввод изменился / начата новая сборка
     mergeSubscriptionPreviewSummary(previewSummary, mainInspected.summary);
     let fallbackPrepared;
     if (autoWhitelist) {
       const fallbackRaw = document.getElementById('whitelistInput').value.trim();
       const fallbackInspected = await inspectSubscriptionInput(api, fallbackRaw, { expand: !subMode, filterRegex });
+      if (buildSeq !== mihomoValidationSeq) return; // stale
       fallbackPrepared = fallbackInspected.input;
       mergeSubscriptionPreviewSummary(previewSummary, fallbackInspected.summary);
     }

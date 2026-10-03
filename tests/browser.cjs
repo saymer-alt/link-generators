@@ -268,6 +268,37 @@ const expectedAwg = {
         throw new Error('offline test stub: subscription fetch unavailable');
       };
     });
+
+    // Async-build race regression (issue #100 review): медленный inspection не
+    // имеет права перезаписать результат после изменения ввода. До фикса
+    // устаревший fetch завершался валидным YAML и ставил VALID поверх нового
+    // NOT_BUILT-состояния (stale-вывод с копированием).
+    {
+      await page.evaluate(() => {
+        globalThis.__raceOriginal = web4core.fetchSubscription;
+        web4core.fetchSubscription = () => new Promise(resolve => {
+          globalThis.__raceResolve = () => resolve('vless://00000000-0000-4000-8000-000000000099@192.0.2.199:443?encryption=none&type=tcp#STALE-NODE');
+        });
+      });
+      await page.locator('#mihomoInput').fill('https://keep.example.example/slow');
+      const outBefore = await page.evaluate(() => document.getElementById('mihomoOutput').value);
+      await page.locator('button[onclick="buildMihomo()"]').click();
+      assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'VALIDATING', 'асинхронная сборка в процессе');
+      await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#FRESH');
+      await page.evaluate(() => globalThis.__raceResolve());
+      await page.waitForTimeout(300); // даём устаревшему fetch дойти до записи
+      const race = await page.evaluate(() => ({
+        state: MIHOMO_VALIDATION_STATE.state,
+        out: document.getElementById('mihomoOutput').value,
+      }));
+      assert.equal(race.state, 'NOT_BUILT', 'после изменения ввода stale-сборка не выставляет VALID');
+      assert.equal(race.out, outBefore, 'stale-сборка не перезаписывает вывод');
+      assert.ok(!race.out.includes('STALE-NODE'), 'узел из stale-подписки не попал в вывод');
+      await page.evaluate(() => { web4core.fetchSubscription = globalThis.__raceOriginal; delete globalThis.__raceOriginal; delete globalThis.__raceResolve; });
+      const normal = await build('after-race-guard'); // build() ждёт VALID
+      assert.ok(normal.doc.proxies.some(p => p.name === 'FRESH'), 'нормальная сборка после гонки работает');
+      console.log('  async-build race: stale fetch не перезаписывает результат (seq-guard) — passed');
+    }
     await page.locator('#excludeFilterInput').fill('');
     await page.locator('#cfgSubMode').setChecked(false);
     await page.locator('#mihomoInput').fill(input);
