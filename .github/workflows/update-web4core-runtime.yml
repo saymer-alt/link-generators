@@ -65,11 +65,13 @@ jobs:
           npm ci
           # Worker bundle is a gitignored build artifact required by amnezia.test.mjs.
           npm run build:worker
+          # Web runtime is built BEFORE tests: subscription-endpoint.test.mjs
+          # reads the built bundle to verify the production CORS endpoint.
+          npm run build:web:runtime
+          test -s src/web4core.runtime.js
           # Auto-discovery: every tools/tests/*.test.mjs runs here; adding a new
           # test file must not require workflow edits.
           node --test tools/tests/*.test.mjs
-          npm run build:web:runtime
-          test -s src/web4core.runtime.js
 
       - name: Check runtime
         run: |
@@ -106,6 +108,10 @@ jobs:
         run: |
           echo "Tracked web4core.runtime.js is not the runtime built and tested from the checked-out web4core source."
           echo "Regenerate/update the tracked runtime before this PR/stable revision can pass validation."
+          echo "Стековый PR (runtime из candidate-ветки web4core): добавь ref в файл"
+          echo ".github/web4core-source-ref — тогда job 'stacked runtime provenance' провалидирует"
+          echo "blob против объявленного источника. Перед merge в main этот файл удаляется,"
+          echo "а настоящий (production) provenance обязан стать зелёным — см. документацию."
           exit 1
 
       - name: Upload checked runtime
@@ -115,6 +121,101 @@ jobs:
           path: web4core-source/src/web4core.runtime.js
           if-no-files-found: error
           retention-days: 7
+
+  # Стековый PR: runtime собран из candidate-ветки web4core, которая ещё не
+  # смержена в link-generators. Обязательный production-проверка выше остаётся
+  # красной до merge зависимости (задокументированное исключение). Этот job —
+  # дополнительная СТРОГАЯ проверка против явно объявленного источника:
+  # если .github/web4core-source-ref существует, blob обязан байт-в-байт
+  # совпадать со сборкой этого ref, иначе job красный. Файл удаляется при
+  # merge зависимости; production-проверка от него не зависит и не ослабляется.
+  stacked-runtime-provenance:
+    name: stacked runtime provenance (declared candidate source)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout link-generators
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Read declared candidate source ref
+        id: declared-ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f .github/web4core-source-ref ]; then
+            echo "Файл .github/web4core-source-ref отсутствует — стековая проверка не объявлена."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ref="$(tr -d ' \t\r\n' < .github/web4core-source-ref)"
+          case "$ref" in
+            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;; # full/short sha
+            [A-Za-z0-9._/-]*) ;;                                                    # branch name
+            *) echo "Некорректный ref: '$ref'"; exit 1 ;;
+          esac
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Dependency merged — remove the stale ref file
+        if: steps.declared-ref.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          published="$(git ls-remote https://github.com/saymer-alt/web4core.git refs/heads/link-generators | cut -f1)"
+          declared="${{ steps.declared-ref.outputs.ref }}"
+          if [ "$published" = "$declared" ]; then
+            echo "Зависимость уже смержена (link-generators tip == объявленному ref)."
+            echo "Удали .github/web4core-source-ref — production-проверка выше теперь зелёная."
+            exit 1
+          fi
+          echo "Объявленный source '$declared' ещё не опубликован в link-generators ($published) — стековая валидация уместна."
+
+      - name: Checkout declared web4core source
+        if: steps.declared-ref.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: saymer-alt/web4core
+          ref: ${{ steps.declared-ref.outputs.ref }}
+          path: web4core-source
+          persist-credentials: false
+
+      - name: Setup Node.js
+        if: steps.declared-ref.outputs.skip == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build and test declared source
+        if: steps.declared-ref.outputs.skip == 'false'
+        working-directory: web4core-source
+        run: |
+          set -euo pipefail
+          npm ci --no-fund --no-audit
+          npm run build:worker
+          node --test tools/tests/*.test.mjs
+          npm run build:web:runtime
+          test -s src/web4core.runtime.js
+
+      - name: Verify tracked runtime against declared source
+        if: steps.declared-ref.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web4core-source/src/web4core.runtime.js
+          node tests/runtime.cjs web4core-source/src/web4core.runtime.js
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          tracked = Path("web4core.runtime.js").read_bytes().replace(b"\r\n", b"\n")
+          built = Path("web4core-source/src/web4core.runtime.js").read_bytes().replace(b"\r\n", b"\n")
+          print(f"tracked-normalized-sha256={hashlib.sha256(tracked).hexdigest()}")
+          print(f"declared-built-normalized-sha256={hashlib.sha256(built).hexdigest()}")
+          if tracked != built:
+              raise SystemExit("Tracked runtime does NOT match the declared candidate source build.")
+          print("Tracked runtime matches the declared candidate source build.")
+          PY
 
   update-runtime:
     needs: build-runtime

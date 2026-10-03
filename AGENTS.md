@@ -283,16 +283,49 @@ The Mihomo core accepts (CORE_PROTOCOL_SUPPORT): `vmess, vless, trojan, anytls, 
 http, hy2, tuic, wireguard, masque, mieru, trusttunnel`.
 
 Subscriptions: an `http(s)://…` line without username/password in the URL is considered a
-subscription (in Sub Mode — proxy-providers with 43200 s refresh and fallback retries);
-a URL with credentials is treated as a normal link. `fetchSubscription` in the browser is
-subject to CORS — only sources returning CORS headers work; this is a platform limitation,
-not a bug.
+subscription. In Sub Mode it becomes a proxy-provider (43200 s refresh, fallback retries);
+with Sub Mode OFF the page fetches it once at Build (subscription inspection, issue #100,
+owner-approved 2026-10-02) and inlines the current nodes as static `proxies:` — the old
+behaviour (parsing the URL as a bogus http-proxy) is gone. Fetch failure in OFF mode fails
+the build with a clear error; in ON mode the preview is non-fatal.
+
+Subscription inspection privacy/identity contract (binding):
+
+- Preview identity: `x-hwid` = random 32-hex from
+  `localStorage['link-generators.subscription-preview-hwid.v1']` (memory-only fallback),
+  stable across builds; `x-device-model` = the user's `📱 Device Model` value when
+  filled, falling back to `Saymer Link Generators Preview`; the provider-level
+  Device Model option is unaffected (same field, different transport).
+- Header allowlist is exactly `x-hwid` + `x-device-model`, enforced in the runtime and
+  again in the worker; arbitrary headers never leave the caller.
+- CORS fallback `sub.saymer-87.workers.dev` (owner-controlled, deployed via GitHub Actions): POST JSON `{url, headers}` contract with its
+  own allowlist, redirect/timeout/size caps and `Cache-Control: no-store`; legacy
+  `GET ?url=` preserved; the runtime degrades POST → GET on legacy deployments.
+- Network only on explicit user action (Build for Sub OFF expansion; the list-fetch button for Sub ON preview); no background polling, no telemetry;
+  subscription URLs, bodies and proxy credentials are never stored or logged.
+- `buildMihomo()` is async since inspection: it sets `VALIDATING` before the first await;
+  tests must wait for VALID/INVALID, not for state ≠ VALIDATING right after the click.
 
 ### WireGuard / AmneziaWG
 
 Files `.conf` / `.wg` / `.awg` are parsed client-side by
 `parseWireGuardConf(text, fileName)`.
 AmneziaWG format (`Jc/Jmin/Jmax/…` parameters) is supported by the runtime.
+
+### Subscription server list (opt-in, issue #100)
+
+Toggle `cfgServerList` (OFF by default) gates browser-side subscription
+inspection. OFF: Build makes zero fetchSubscription calls in Sub Mode ON;
+provider YAML is built without network. ON: the explicit «Получить
+список» button triggers exactly one inspection per click; results fill a
+selectable checkbox list (search, select all/clear all, counters) that
+feeds exact-match exclusions into the combined Exclude Filter (OR with
+the manual expression, regex-escaped). Selection persists across refresh
+(pruned to existing names); changing subscription input invalidates list
+and selection. Device Model: user value (if filled) is sent as
+x-device-model on preview fetches; fallback is
+the user's Device Model value when filled (fallback `Saymer Link Generators Preview`); HWID is unaffected. HWID contract
+unchanged: stable per-browser identity, never random-per-request.
 
 ### buildFromRequest contract
 
@@ -394,17 +427,20 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
 
 ## Privacy and security
 
-- Users paste secrets here: WARP private/public keys, addresses, SNI. Currently
-  the page sends nothing and stores nothing: `index.html` contains no `fetch`,
-  `XMLHttpRequest`, `sendBeacon`, `localStorage`, or `sessionStorage` — only clipboard
-  writes. It must stay this way: DO NOT add telemetry, analytics, data transmission,
-  or persistence of keys.
-- Runtime nuance: `web4core.fetchSubscription()` can fetch subscription text from
-  the browser and, when direct fetch fails, falls back to the public CORS proxy
-  `sub.web2core.workers.dev` (upstream infrastructure). The current UI does NOT call it —
-  Mihomo itself fetches subscriptions through `proxy-providers`. Connecting fetchSubscription
-  is a decision to disclose the subscription URL to a third party — explicit owner approval
-  is required.
+- Users paste secrets here: WARP private/public keys, addresses, SNI and subscription URLs.
+  WARP/WG keys and configs stay local; DO NOT add telemetry or analytics and never persist keys,
+  subscription URLs, subscription bodies or proxy credentials.
+- Owner-approved subscription inspection (2026-10-02): when Build sees an HTTP(S) subscription,
+  the UI may call `web4core.fetchSubscription()` to preview actual node names and, with Sub Mode
+  OFF, expand the current subscription snapshot into static proxies. The request is user-triggered
+  by Build, never background polling. Direct browser fetch is preferred; when CORS/direct fetch
+  fails the runtime may fall back to the owner-controlled proxy `sub.saymer-87.workers.dev`, which necessarily
+  discloses the subscription URL to that proxy.
+- The only persistent browser value introduced for inspection is a random preview identity HWID
+  (`link-generators.subscription-preview-hwid.v1`). It is not a key and is deliberately stable so
+  device-limited subscription panels do not register a new device on every Build. The preview uses
+  a recognizable generator `x-device-model`; it never reuses the generated Mihomo/Keenetic identity.
+  If storage is unavailable (including some `file://` contexts), keep the HWID in memory only.
 - User input is untrusted (bot YAML, links, files): parse inside try/catch and show
   a clear toast error, as currently implemented.
 - Treat user-derived WARP values as untrusted text. `generateWarp()` may clear its output
