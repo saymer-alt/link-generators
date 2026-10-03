@@ -406,6 +406,111 @@ const expectedAwg = {
       await page.evaluate(() => { web4core.fetchSubscription = globalThis.__raceOriginal; delete globalThis.__raceOriginal; delete globalThis.__raceResolve; });
       console.log('  race D (preview/inspected cache): поздний ответ не подменяет кэш и preview — passed');
     }
+
+    // Sub Mode ON: preview НЕ блокирует provider build. Зависший fetch не
+    // мешает VALID; поздний resolve только обновляет preview — output,
+    // validation state и Copy-gейт не меняются.
+    {
+      await page.evaluate(() => {
+        globalThis.__raceOriginal = web4core.fetchSubscription;
+        web4core.fetchSubscription = () => new Promise(resolve => {
+          globalThis.__raceResolve = () => resolve('vless://00000000-0000-4000-8000-0000000000ff@192.0.2.175:443?encryption=none&type=tcp#LATE-PREVIEW-NODE');
+        });
+      });
+      await page.locator('#cfgSubMode').check();
+      await page.locator('#mihomoInput').fill('https://keep.example.example/hung');
+      await page.locator('button[onclick="buildMihomo()"]').click();
+      // provider YAML обязана собраться, НЕ дожидаясь preview-fetch
+      await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID', null, { timeout: 10000 });
+      await page.waitForFunction(() => !document.getElementById('copyYamlBtn').disabled, null, { timeout: 5000 }); // кнопка догоняет state
+      const whileHung = await page.evaluate(() => ({
+        yaml: document.getElementById('mihomoOutput').value,
+        previewHidden: document.getElementById('subscriptionPreviewBox').style.display === 'none',
+        copyDisabled: document.getElementById('copyYamlBtn').disabled,
+      }));
+      assert.ok(whileHung.yaml.includes('proxy-providers:'), 'provider YAML собран при зависшем preview');
+      assert.equal(whileHung.previewHidden, true, 'preview ещё не показан');
+      await page.evaluate(() => globalThis.__raceResolve());
+      await page.waitForFunction(() => document.getElementById('subscriptionPreviewBox').style.display !== 'none', null, { timeout: 10000 });
+      const afterLate = await page.evaluate(() => ({
+        yaml: document.getElementById('mihomoOutput').value,
+        state: MIHOMO_VALIDATION_STATE.state,
+        copyDisabled: document.getElementById('copyYamlBtn').disabled,
+        names: document.getElementById('subscriptionPreviewNames').textContent,
+      }));
+      assert.equal(afterLate.yaml, whileHung.yaml, 'поздний preview не меняет YAML');
+      assert.equal(afterLate.state, 'VALID', 'validation state не меняется');
+      assert.equal(afterLate.copyDisabled, whileHung.copyDisabled, 'Copy-eligibility не меняется поздним preview');
+      assert.match(afterLate.names, /LATE-PREVIEW-NODE/, 'поздние имена показаны в preview');
+      console.log('  provider preview: build не ждёт сеть; поздний preview только обновляет имена — passed');
+    }
+
+    // Sub Mode ON, preview failure: поздний reject — только warning в
+    // preview; VALID/output/Copy не трогаются.
+    {
+      await page.evaluate(() => {
+        web4core.fetchSubscription = () => new Promise((_, reject) => {
+          globalThis.__raceReject = () => reject(new Error('preview failed late'));
+        });
+      });
+      await page.locator('#mihomoInput').fill('https://keep.example.example/fail');
+      await page.locator('button[onclick="buildMihomo()"]').click();
+      await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID', null, { timeout: 10000 });
+      await page.waitForFunction(() => !document.getElementById('copyYamlBtn').disabled, null, { timeout: 5000 }); // кнопка догоняет state
+      const snap = await page.evaluate(() => ({
+        yaml: document.getElementById('mihomoOutput').value,
+        copyDisabled: document.getElementById('copyYamlBtn').disabled,
+      }));
+      await page.evaluate(() => globalThis.__raceReject());
+      await page.waitForFunction(() => document.getElementById('subscriptionPreviewBox').style.display !== 'none', null, { timeout: 10000 });
+      const afterFail = await page.evaluate(() => ({
+        yaml: document.getElementById('mihomoOutput').value,
+        state: MIHOMO_VALIDATION_STATE.state,
+        copyDisabled: document.getElementById('copyYamlBtn').disabled,
+        preview: document.getElementById('subscriptionPreviewBox').innerText,
+      }));
+      assert.equal(afterFail.yaml, snap.yaml, 'output не очищен');
+      assert.equal(afterFail.state, 'VALID', 'VALID не сброшен');
+      assert.equal(afterFail.copyDisabled, snap.copyDisabled, 'Copy-eligibility не изменилась');
+      assert.match(afterFail.preview, /Не удалось получить preview/);
+      assert.ok(!afterFail.preview.includes('keep.example.example'), 'URL не раскрыт в предупреждении');
+      console.log('  provider preview failure: только warning, VALID/Copy не тронуты — passed');
+    }
+
+    // Reordered previews: медленный preview A, быстрый Build B — UI показывает
+    // только B; поздний A discarded.
+    {
+      const slowUrl = 'https://keep.example.example/preview-slow';
+      const fastUrl = 'https://keep.example.example/preview-fast';
+      await page.evaluate(({ slowUrl, fastUrl }) => {
+        web4core.fetchSubscription = (url) => {
+          if (String(url) === slowUrl) {
+            return new Promise(resolve => {
+              globalThis.__raceResolve = () => resolve('vless://00000000-0000-4000-8000-000000000100@192.0.2.176:443?encryption=none&type=tcp#STALE-PREVIEW-NODE');
+            });
+          }
+          return Promise.resolve('vless://00000000-0000-4000-8000-000000000101@192.0.2.177:443?encryption=none&type=tcp#FRESH-PREVIEW-NODE');
+        };
+      }, { slowUrl, fastUrl });
+      await page.locator('#mihomoInput').fill(slowUrl);
+      await page.locator('button[onclick="buildMihomo()"]').click();
+      await page.locator('#mihomoInput').fill(fastUrl);
+      await page.locator('button[onclick="buildMihomo()"]').click();
+      await page.waitForFunction(() => document.getElementById('subscriptionPreviewNames').textContent.includes('FRESH-PREVIEW-NODE'), null, { timeout: 10000 });
+      await page.evaluate(() => globalThis.__raceResolve());
+      await page.waitForTimeout(300);
+      const reordered = await page.evaluate(() => ({
+        names: document.getElementById('subscriptionPreviewNames').textContent,
+        stats: document.getElementById('subscriptionPreviewStats').textContent,
+      }));
+      assert.ok(!reordered.names.includes('STALE-PREVIEW-NODE'), 'поздний preview A не перезаписал B');
+      assert.match(reordered.names, /FRESH-PREVIEW-NODE/, 'preview B на месте');
+      assert.match(reordered.stats, /найдено узлов: 1/, 'статистика от B');
+      await page.evaluate(() => { web4core.fetchSubscription = globalThis.__raceOriginal; delete globalThis.__raceOriginal; delete globalThis.__raceResolve; });
+      await page.locator('#cfgSubMode').uncheck();
+      await page.locator('#mihomoInput').fill(input);
+      console.log('  reordered previews: UI показывает только свежий preview — passed');
+    }
     await page.locator('#excludeFilterInput').fill('');
     await page.locator('#cfgSubMode').setChecked(false);
     await page.locator('#mihomoInput').fill(input);

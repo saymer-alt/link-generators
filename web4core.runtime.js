@@ -4405,20 +4405,22 @@
         return allowedSchemes.has(scheme);
       });
     }
-    async function tryFetch(u, initOverride) {
+    async function tryFetch(u, attempt) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
       try {
         const headers = new Headers(FETCH_INIT && FETCH_INIT.headers ? FETCH_INIT.headers : {});
         if (!headers.has("Accept")) headers.set("Accept", "text/plain, */*");
-        for (const [name, value] of Object.entries(requestHeaders)) headers.set(name, value);
+        if (!attempt || attempt.deviceHeaders !== false) {
+          for (const [name, value] of Object.entries(requestHeaders)) headers.set(name, value);
+        }
         if (!isBrowser) {
           if (/github\.com|raw\.githubusercontent\.com/i.test(u)) {
             headers.set("Referer", "https://github.com/");
           }
         }
         const init = Object.assign({}, FETCH_INIT, { headers, signal: controller.signal });
-        if (initOverride) Object.assign(init, initOverride);
+        if (attempt && attempt.init) Object.assign(init, attempt.init);
         const resp = await fetch(u, init);
         if (!resp.ok) {
           const reason = resp.statusText || httpReason(resp.status) || "";
@@ -4508,17 +4510,19 @@
           if (Object.keys(requestHeaders).length) {
             fallbackAttempts.push({
               kind: "post",
-              init: (target) => ({
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: target, headers: requestHeaders })
+              attemptFor: (target) => ({
+                init: {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ url: target, headers: requestHeaders })
+                }
               })
             });
           }
-          fallbackAttempts.push({ kind: "get", init: (target) => ({}) });
+          fallbackAttempts.push({ kind: "get", attemptFor: () => ({ deviceHeaders: false }) });
           for (const attempt of fallbackAttempts) {
             for (let retry = 0; retry <= maxRetries; retry++) {
-              const result = await tryFetch(makeUrl(u), attempt.init(u));
+              const result = await tryFetch(makeUrl(u), attempt.attemptFor(u));
               const resolved = await consumeFetchResult(result);
               if (resolved) return resolved;
               if (attempt.kind === "post" && result.error && /^HTTP\s+4(0[05])\b/.test(String(result.error.message || ""))) break;

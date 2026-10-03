@@ -2422,6 +2422,33 @@ function clearSubscriptionPreview() {
   if (box) box.style.display = 'none';
 }
 
+// Фоновый preview для Sub Mode ON: provider-YAML собирается без ожидания
+// сети, inspection идёт параллельно и обновляет только preview-box.
+// stale-safe: свой monotonic subscriptionPreviewSeq; любая мутация входных
+// данных или новый Build инкрементирует его, и поздний ответ отбрасывается
+// целиком — он не трогает output, validation state, Copy-gейт, inspected
+// cache и dialer targets (в ON-режиме кэш inspected-ввода не пишется:
+// provider-based YAML не зависит от имён узлов подписки).
+let subscriptionPreviewSeq = 0;
+function runSubscriptionPreviewBackground(api, previewSeq, raw, whitelistRaw, filterRegex, filterHasError) {
+  const task = (async () => {
+    const summary = emptySubscriptionPreviewSummary();
+    if (filterHasError) {
+      summary.warnings.push('Preview не смог проверить Exclude Filter в браузере; Mihomo применит исходное выражение сам.');
+    }
+    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: false, filterRegex });
+    if (previewSeq !== subscriptionPreviewSeq) return; // stale preview
+    mergeSubscriptionPreviewSummary(summary, mainInspected.summary);
+    if (whitelistRaw !== null) {
+      const fallbackInspected = await inspectSubscriptionInput(api, whitelistRaw, { expand: false, filterRegex });
+      if (previewSeq !== subscriptionPreviewSeq) return; // stale preview
+      mergeSubscriptionPreviewSummary(summary, fallbackInspected.summary);
+    }
+    renderSubscriptionPreview(summary);
+  })();
+  task.catch(() => {}); // preview никогда не фейлит сборку; сетевые ошибки уже внутри warnings
+}
+
 function renderSubscriptionPreview(summary) {
   const box = document.getElementById('subscriptionPreviewBox');
   if (!box) return;
@@ -3037,33 +3064,44 @@ async function buildMihomo() {
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
     if (!api.fetchSubscription || !api.buildBeansFromInput) throw new Error('Обновите web4core.runtime: требуется subscription inspection API');
-    const previewSummary = emptySubscriptionPreviewSummary();
     let filterRegex = filterCompiled.regex;
-    if (subMode && filterCompiled.error) {
-      filterRegex = null;
-      previewSummary.warnings.push('Preview не смог проверить Exclude Filter в браузере; Mihomo применит исходное выражение сам.');
+    let filterHasError = !!filterCompiled.error;
+    let mainInput = raw;
+    let fallbackPrepared = autoWhitelist ? document.getElementById('whitelistInput').value.trim() : null;
+
+    if (!subMode) {
+      // Sub Mode OFF: содержимое подписки необходимо для YAML — blocking
+      // inspection (разворачивание + фильтр по фактическим именам).
+      const previewSummary = emptySubscriptionPreviewSummary();
+      const mainInspected = await inspectSubscriptionInput(api, raw, { expand: true, filterRegex });
+      if (buildSeq !== mihomoValidationSeq) return; // stale: ввод изменился / начата новая сборка
+      mergeSubscriptionPreviewSummary(previewSummary, mainInspected.summary);
+      if (autoWhitelist) {
+        const fallbackInspected = await inspectSubscriptionInput(api, fallbackPrepared, { expand: true, filterRegex });
+        if (buildSeq !== mihomoValidationSeq) return; // stale
+        fallbackPrepared = fallbackInspected.input;
+        mergeSubscriptionPreviewSummary(previewSummary, fallbackInspected.summary);
+      }
+      // Реестр dialer-целей от этого момента строится из inspected-ввода —
+      // имена развёрнутых узлов совпадают с итоговым YAML (до инвалидиции).
+      mainInput = mainInspected.input;
+      lastInspectedBuildInput = mainInput;
+      lastInspectedFallbackInput = autoWhitelist ? fallbackPrepared : null;
+      renderSubscriptionPreview(previewSummary);
+    } else {
+      // Sub Mode ON: финальный YAML provider-based — содержимое подписки для
+      // него не нужно, preview строится В ФОНЕ и не задерживает сборку.
+      // Мёртвая/медленная подписка не мешает provider-YAML: preview остаётся
+      // best-effort, non-fatal и stale-safe (свой sequence + guard).
+      subscriptionPreviewSeq++;
+      const previewSeq = subscriptionPreviewSeq;
+      runSubscriptionPreviewBackground(api, previewSeq, raw, autoWhitelist ? fallbackPrepared : null, filterRegex, filterHasError);
     }
-    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: !subMode, filterRegex });
-    if (buildSeq !== mihomoValidationSeq) return; // stale: ввод изменился / начата новая сборка
-    mergeSubscriptionPreviewSummary(previewSummary, mainInspected.summary);
-    let fallbackPrepared;
-    if (autoWhitelist) {
-      const fallbackRaw = document.getElementById('whitelistInput').value.trim();
-      const fallbackInspected = await inspectSubscriptionInput(api, fallbackRaw, { expand: !subMode, filterRegex });
-      if (buildSeq !== mihomoValidationSeq) return; // stale
-      fallbackPrepared = fallbackInspected.input;
-      mergeSubscriptionPreviewSummary(previewSummary, fallbackInspected.summary);
-    }
-    // Реестр dialer-целей от этого момента строится из inspected-ввода —
-    // имена развёрнутых узлов совпадают с итоговым YAML (до инвалидиции).
-    lastInspectedBuildInput = mainInspected.input;
-    lastInspectedFallbackInput = autoWhitelist ? fallbackPrepared : null;
-    renderSubscriptionPreview(previewSummary);
     const realityModern = parseRealityModernLines();
     const buildBeans = wgProfiles.map(wgProfileBuildBean);
     const result = api.buildFromRequest({
       core: 'mihomo',
-      input: mainInspected.input,
+      input: mainInput,
       ...(autoWhitelist ? { fallbackInput: fallbackPrepared } : {}),
       wgBeans: normalizeWgBeans(buildBeans),
       options: {
@@ -3181,9 +3219,10 @@ for (const id of ['mihomoInput', 'whitelistInput', 'excludeFilterInput']) {
   const el = document.getElementById(id);
   if (el) el.addEventListener('input', () => {
     // inspected-ввод устарел вместе с preview: реестр целей возвращается
-    // к префлайту сырого состояния
+    // к префлайту сырого состояния, фоновый preview инвалидируется
     lastInspectedBuildInput = null;
     lastInspectedFallbackInput = null;
+    subscriptionPreviewSeq++;
     clearSubscriptionPreview();
   });
 }
@@ -3217,14 +3256,16 @@ document.addEventListener('input', (e) => {
     scheduleDialerRefresh();
   }
 }, true);
-// Любое изменение состояния (включая чекбоксы) обесценивает inspected-ввод:
-// реестр целей и итоговая сборка должны соответствовать текущему UI.
+// Любое изменение состояния (включая чекбоксы) обесценивает inspected-ввод
+// и фоновый preview: реестр целей и итоговая сборка должны соответствовать
+// текущему UI.
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (!t || !t.id) return;
   if (t.id === 'mihomoInput' || t.id === 'whitelistInput' || t.id === 'excludeFilterInput' || t.id === 'cfgSubMode') {
     lastInspectedBuildInput = null;
     lastInspectedFallbackInput = null;
+    subscriptionPreviewSeq++;
   }
 }, true);
 document.addEventListener('change', (e) => {
