@@ -20,14 +20,17 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 | Вход | Как попадает | Куда идёт |
 |---|---|---|
 | Ссылки (`vmess://`, `vless://`, …) | textarea `#mihomoInput` | `web4core.buildBeansFromInput()` → beans |
-| Подписки (HTTP(S) URL) | та же textarea, **только в Sub Mode** | `proxy-providers` в YAML (браузером не скачиваются) |
+| Подписки (HTTP(S) URL) | та же textarea, любой режим | Sub Mode ON → `proxy-providers` (скачивает Mihomo); OFF → браузер читает подписку и встраивает текущие узлы в `proxies` |
 | Файлы `.conf` / `.wg` / `.awg` | `<input type="file" id="wgFile">`, multiple | `web4core.parseWireGuardConf()` → `wgBeans` |
 
-В обычном (не Sub) режиме http(s)-URL в textarea трактуется как **ссылка на http-прокси**
-(проверено: `https://sub.example.com/list` даёт прокси `type: http, name: proxy`) — то есть
-мусор. Подписки имеют смысл только в Sub Mode: там URL без кредов уходит в провайдеры, а
-URL **с** кредами и все не-URL строки парсятся как обычные ссылки
-(`splitMihomoSubscriptionInput`).
+В обычном (не Sub) режиме http(s)-URL в textarea раньше трактовался как **ссылка на
+http-прокси** (мусор). С subscription-inspection это исправлено: при Build без Sub Mode
+страница один раз читает подписку (`web4core.fetchSubscription`, см. ниже), разворачивает
+её в обычные proxy-links и передаёт их статическому builder'у — пользователь получает
+актуальные `proxies:` вместо мусорного http-прокси. URL **с** кредами и все не-URL строки
+парсятся как обычные ссылки. Если подписку прочитать не удалось, сборка в OFF-режиме
+падает с понятной ошибкой (молча терять узлы нельзя); в ON-режиме (provider) неудача
+preview не мешает сборке.
 
 ## Beans — внутреннее представление
 
@@ -95,10 +98,18 @@ proxy-providers:
 ```
 
 Группы: `"⚡ Fastest"` (url-test) и `GLOBAL` ссылаются на провайдеров через `use:`; при
-per-proxy режимах — группы `SUB-<провайдер>`. Скачивание подписки выполняет **сам Mihomo**
-на устройстве пользователя, а не страница. Функция `web4core.fetchSubscription()` (браузерный
-fetch с CORS-фолбэком через сторонний `sub.web2core.workers.dev`) в текущем UI **не
-вызывается** — это важно для приватности, см. раздел «Сеть и приватность» ниже.
+per-proxy режимах — группы `SUB-<провайдер>`.
+
+**Subscription inspection (owner-approved 2026-10-02, issue #100).** В обоих режимах
+страница при Build (только по явному действию пользователя, без фоновых запросов) читает
+подписки браузером через `web4core.fetchSubscription()`: Sub Mode ON — для preview
+фактических имён узлов и подбора Exclude Filter; OFF — для разворачивания в статические
+proxies. Прямой fetch предпочтителен; при CORS-блокировке используется
+`sub.saymer-87.workers.dev`. Запрос несёт device-identity preview-клиента: `x-hwid`
+(случайный 32-hex, хранится в `localStorage['link-generators.subscription-preview-hwid.v1']`,
+это НЕ HWID Mihomo-провайдера) и `x-device-model` (пользовательское значение из поля Device Model, либо fallback `Saymer Link Generators Preview`). Worker
+и рантайм пересылают только эти два заголовка (allowlist; POST JSON контракт с деградацией
+до legacy GET). Приватность — см. раздел «Сеть и приватность» ниже.
 
 ## WireGuard / AmneziaWG → YAML
 
@@ -238,15 +249,20 @@ masque:// links
 
 ## Сеть и приватность
 
-- Страница (`index.html`) не содержит `fetch`/`XMLHttpRequest`/`sendBeacon` и не пишет в
-  localStorage/sessionStorage. Ключи, ссылки и сгенерированный YAML никуда не отправляются.
+- Страница (`index.html`) не содержит `fetch`/`XMLHttpRequest`/`sendBeacon`. Ключи, ссылки
+  и сгенерированный YAML никуда не отправляются.
 - С CDN jsdelivr грузится только `js-yaml@4.1.0` (код библиотеки, не данные).
-- Подписки скачивает Mihomo на устройстве пользователя (proxy-providers), не браузер.
-  `web4core.fetchSubscription()` — единственная функция рантайма, способная скачать текст
-  подписки из браузера, и при неудаче прямого fetch она использует публичный CORS-прокси
-  `sub.web2core.workers.dev` (инфраструктура апстрима web4core) — **в текущем UI не
-  вызывается**. Если когда-нибудь понадобится клиентский fetch подписок — сначала решить,
-  допустимо ли отдавать URL подписки стороннему воркеру.
+- **Subscription inspection (owner-approved 2026-10-02, issue #100):** при Build страница
+  читает подписки через `web4core.fetchSubscription()` — только по явному действию
+  пользователя. При CORS-блокировке URL подписки раскрывается стороннему воркеру
+  `sub.saymer-87.workers.dev`. Запрос идентифицируется стабильным случайным preview-HWID
+  (`localStorage['link-generators.subscription-preview-hwid.v1']` — единственное, что
+  хранится persistently) и подписью устройства (пользовательский Device Model или fallback `Saymer Link Generators Preview`); это НЕ HWID
+  Mihomo-провайдера. Allowlist заголовков жёсткий (x-hwid, x-device-model); subscription
+  URL, содержимое подписки и proxy credentials не сохраняются и не логируются; аналитики
+  и телеметрии нет.
+- В Sub Mode ON финальный YAML остаётся provider-based: скачивание выполняет Mihomo на
+  устройстве пользователя.
 - Буфер обмена (`navigator.clipboard.writeText`) — единственный «экспорт» данных.
 
 ## Связанные документы

@@ -141,9 +141,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      # fetch-depth: 0 — tests/parity.cjs строит merge-base с main как
+      # BASE-дерево (см. шаг "YAML parity vs merge-base").
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -163,6 +166,17 @@ jobs:
 
       - name: Main browser regression
         run: node tests/browser.cjs
+
+      - name: YAML parity vs merge-base
+        shell: bash
+        env:
+          PARITY_OUT_DIR: ${{ runner.temp }}/parity-diffs
+        run: |
+          set -euo pipefail
+          base="$(git merge-base HEAD origin/main)"
+          echo "parity base: $base"
+          git worktree add "$RUNNER_TEMP/parity-base" "$base"
+          node tests/parity.cjs "$RUNNER_TEMP/parity-base" .
 
       - name: Help UX regression
         run: node tests/help-ux-browser.cjs
