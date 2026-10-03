@@ -299,6 +299,113 @@ const expectedAwg = {
       assert.ok(normal.doc.proxies.some(p => p.name === 'FRESH'), 'нормальная сборка после гонки работает');
       console.log('  async-build race: stale fetch не перезаписывает результат (seq-guard) — passed');
     }
+
+    // Race A (reordered promises): double Build на одном вводе — сборка B
+    // (второй клик) обязана победить; отложенная A отбрасывается целиком,
+    // даже завершившись последней.
+    {
+      await page.evaluate(() => {
+        globalThis.__raceOriginal = web4core.fetchSubscription;
+        let call = 0;
+        web4core.fetchSubscription = () => {
+          call++;
+          if (call === 1) {
+            return new Promise(resolve => {
+              globalThis.__raceResolveSlow = () => resolve('vless://00000000-0000-4000-8000-0000000000aa@192.0.2.170:443?encryption=none&type=tcp#SLOW-FIRST-CLICK');
+            });
+          }
+          return Promise.resolve('vless://00000000-0000-4000-8000-0000000000bb@192.0.2.171:443?encryption=none&type=tcp#FAST-SECOND-CLICK');
+        };
+      });
+      await page.locator('#mihomoInput').fill('https://keep.example.example/double');
+      await page.locator('button[onclick="buildMihomo()"]').click(); // A — медленная
+      await page.locator('button[onclick="buildMihomo()"]').click(); // B — быстрая
+      await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID', null, { timeout: 15000 });
+      const afterB = await page.evaluate(() => document.getElementById('mihomoOutput').value);
+      assert.ok(afterB.includes('FAST-SECOND-CLICK'), 'победила сборка B');
+      await page.evaluate(() => globalThis.__raceResolveSlow());
+      await page.waitForTimeout(300); // A завершается последней
+      const afterA = await page.evaluate(() => ({
+        state: MIHOMO_VALIDATION_STATE.state,
+        out: document.getElementById('mihomoOutput').value,
+      }));
+      assert.equal(afterA.state, 'VALID', 'VALID остаётся от сборки B');
+      assert.ok(!afterA.out.includes('SLOW-FIRST-CLICK'), 'поздняя A не перезаписала результат B');
+      assert.ok(afterA.out.includes('FAST-SECOND-CLICK'), 'результат B на месте');
+      await page.evaluate(() => { web4core.fetchSubscription = globalThis.__raceOriginal; delete globalThis.__raceOriginal; delete globalThis.__raceResolveSlow; });
+      console.log('  race A (double build, reordered): поздняя сборка отброшена — passed');
+    }
+
+    // Race C (subMode mutation during fetch): мутация данных, влияющих на YAML,
+    // в полёте инвалидирует сборку — stale-результат не пишется, preview скрыт.
+    {
+      await page.evaluate(() => {
+        globalThis.__raceOriginal = web4core.fetchSubscription;
+        web4core.fetchSubscription = () => new Promise(resolve => {
+          globalThis.__raceResolve = () => resolve('vless://00000000-0000-4000-8000-0000000000cc@192.0.2.172:443?encryption=none&type=tcp#SUBMODE-RACE');
+        });
+      });
+      await page.locator('#mihomoInput').fill('https://keep.example.example/submode-race');
+      await page.locator('button[onclick="buildMihomo()"]').click();
+      await page.locator('#cfgSubMode').check(); // change инкрементирует счётчик
+      const outBefore = await page.evaluate(() => document.getElementById('mihomoOutput').value);
+      await page.evaluate(() => globalThis.__raceResolve());
+      await page.waitForTimeout(300);
+      const raceC = await page.evaluate(() => ({
+        state: MIHOMO_VALIDATION_STATE.state,
+        out: document.getElementById('mihomoOutput').value,
+        previewHidden: document.getElementById('subscriptionPreviewBox').style.display === 'none',
+      }));
+      assert.equal(raceC.state, 'NOT_BUILT', 'subMode-мутация инвалидирует сборку');
+      assert.equal(raceC.out, outBefore, 'вывод не перезаписан stale-сборкой');
+      assert.equal(raceC.previewHidden, true, 'stale preview не показан');
+      await page.locator('#cfgSubMode').uncheck();
+      await page.evaluate(() => { web4core.fetchSubscription = globalThis.__raceOriginal; delete globalThis.__raceOriginal; delete globalThis.__raceResolve; });
+      console.log('  race C (subMode mutation in flight): stale отброшена, preview скрыт — passed');
+    }
+
+    // Race D (inspected-cache / dialer registry): поздний ответ старой сборки
+    // не восстанавливает старые имена и не подменяет кэш новой сборки.
+    {
+      const slowUrl = 'https://keep.example.example/cache-race-slow';
+      const fastUrl = 'https://keep.example.example/cache-race-fast';
+      await page.evaluate(({ slowUrl, fastUrl }) => {
+        globalThis.__raceOriginal = web4core.fetchSubscription;
+        web4core.fetchSubscription = (url) => {
+          if (String(url) === slowUrl) {
+            return new Promise(resolve => {
+              globalThis.__raceResolve = () => resolve('vless://00000000-0000-4000-8000-0000000000dd@192.0.2.173:443?encryption=none&type=tcp#STALE-CACHE-NODE');
+            });
+          }
+          return Promise.resolve('vless://00000000-0000-4000-8000-0000000000ee@192.0.2.174:443?encryption=none&type=tcp#FRESH-CACHE-NODE');
+        };
+      }, { slowUrl, fastUrl });
+      await page.locator('#mihomoInput').fill(slowUrl);
+      await page.locator('button[onclick="buildMihomo()"]').click(); // A — медленная
+      await page.locator('#mihomoInput').fill(fastUrl);
+      await page.locator('button[onclick="buildMihomo()"]').click(); // B — быстрая
+      await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID', null, { timeout: 15000 });
+      const mid = await page.evaluate(() => ({
+        cache: lastInspectedBuildInput,
+        names: document.getElementById('subscriptionPreviewNames').textContent,
+      }));
+      assert.ok(mid.cache && mid.cache.includes('FRESH-CACHE-NODE'), 'кэш inspected-input от сборки B');
+      assert.ok(mid.names.includes('FRESH-CACHE-NODE'), 'preview-имена от сборки B');
+      await page.evaluate(() => globalThis.__raceResolve()); // A завершается последней
+      await page.waitForTimeout(300);
+      const late = await page.evaluate(() => ({
+        cache: lastInspectedBuildInput,
+        names: document.getElementById('subscriptionPreviewNames').textContent,
+        stats: document.getElementById('subscriptionPreviewStats').textContent,
+        out: document.getElementById('mihomoOutput').value,
+      }));
+      assert.ok(late.cache && late.cache.includes('FRESH-CACHE-NODE'), 'кэш остался от сборки B');
+      assert.ok(!late.names.includes('STALE-CACHE-NODE'), 'stale имена не вернулись в preview');
+      assert.ok(!late.out.includes('STALE-CACHE-NODE'), 'stale узлы не вернулись в YAML');
+      assert.match(late.stats, /найдено узлов: 1/, 'preview-статистика не откатилась');
+      await page.evaluate(() => { web4core.fetchSubscription = globalThis.__raceOriginal; delete globalThis.__raceOriginal; delete globalThis.__raceResolve; });
+      console.log('  race D (preview/inspected cache): поздний ответ не подменяет кэш и preview — passed');
+    }
     await page.locator('#excludeFilterInput').fill('');
     await page.locator('#cfgSubMode').setChecked(false);
     await page.locator('#mihomoInput').fill(input);
