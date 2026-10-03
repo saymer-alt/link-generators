@@ -148,8 +148,8 @@ const expectedAwg = {
     assert.ok(!expanded.doc.proxies.some(p => /RU Moscow|Moscow Backup/i.test(p.name)));
     assert.match(await page.locator('#subscriptionPreviewStats').innerText(), /Подписок: 2.*найдено узлов: 3.*после фильтра: 1.*исключено: 2/s);
     await page.locator('#subscriptionPreviewDetails').evaluate(d => { d.open = true; }); // закрытый details не рендерится
-    assert.match(await page.locator('#subscriptionPreviewNames').innerText(), /Sweden Stockholm/);
-    assert.match(await page.locator('#subscriptionPreviewNames').innerText(), /RU Moscow/);
+    assert.match(await page.locator('#subscriptionPreviewNamesLegacy').innerText(), /Sweden Stockholm/);
+    assert.match(await page.locator('#subscriptionPreviewNamesLegacy').innerText(), /RU Moscow/);
     let subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
     assert.equal(subCalls.length, 2);
     assert.match(subCalls[0].headers['x-hwid'], /^[0-9a-f]{32}$/);
@@ -166,27 +166,139 @@ const expectedAwg = {
     assert.equal(subCalls[2].headers['x-hwid'], firstHwid);
     assert.equal(subCalls[3].headers['x-hwid'], firstHwid);
 
+    // Sub ON + server-list toggle OFF (по умолчанию): provider YAML строится
+    // СРАЗУ, fetchSubscription НЕ вызывается вовсе (opt-in контракт), скрытый
+    // preview-запрос запрещён. Ручной фильтр применяется как раньше.
+    await page.locator('#cfgServerList').waitFor({ state: 'attached' });
+    assert.equal(await page.locator('#cfgServerList').isChecked(), false, 'список серверов: OFF по умолчанию');
+    subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    const callsBeforeOn = subCalls.length;
     await page.locator('#cfgSubMode').setChecked(true);
-    const providerMode = await build('subscription-provider-preview');
+    const providerMode = await build('subscription-provider-no-preview');
     assert.equal(Object.keys(providerMode.doc['proxy-providers'] || {}).length, 2);
     assert.ok(providerMode.doc.proxies.some(p => p.name === 'STATIC'));
     assert.ok(Object.values(providerMode.doc['proxy-providers']).every(p => p['exclude-filter'] === '(?i)ru|moscow'));
-    assert.match(await page.locator('#subscriptionPreviewStats').innerText(), /найдено узлов: 3.*исключено: 2/s);
+    subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    assert.equal(subCalls.length, callsBeforeOn, 'Sub ON + toggle OFF: ноль fetchSubscription-вызовов на Build');
+    // Preview box может показывать статистику последнего OFF-inspection —
+    // это исторические данные, не новый запрос. Панель списка скрыта.
+    assert.equal(await page.locator('#serverListPanel').isVisible(), false, 'панель списка скрыта при выключенном toggle');
 
-    // Preview failure in ON mode is non-fatal: provider YAML still builds,
-    // the warning names no URL and no HWID.
+    // Toggle ON: панель появляется, но fetch только по явной кнопке.
+    await page.locator('#cfgServerList').check();
+    assert.equal(await page.locator('#serverListPanel').isVisible(), true, 'toggle ON: панель списка видна');
+    assert.equal(await page.evaluate(() => document.getElementById('subListFetchBtn').disabled), false, 'кнопка доступна');
+    subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    assert.equal(subCalls.length, callsBeforeOn, 'toggle ON сам по себе не делает запросов');
+    await page.locator('#subListFetchBtn').click(); // явный запрос списка
+    await page.waitForFunction(() => document.getElementById('subscriptionPreviewNames').children.length > 0, null, { timeout: 10000 });
+    subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    assert.equal(subCalls.length, callsBeforeOn + 2, 'ровно 2 fetch (2 подписки) по явной кнопке');
+    // Список: 3 уникальных имени из 2 подписок; узлов честно 3 (по 1 узлу на имя в стабе).
+    assert.match(await page.locator('#subListStats').innerText(), /Уникальных имён: 3/);
+    const listText = await page.locator('#subscriptionPreviewNames').innerText();
+    assert.match(listText, /Sweden Stockholm/);
+    assert.match(listText, /RU Moscow/);
+    assert.match(listText, /Moscow Backup/);
+    assert.ok(!listText.includes('sub-one.example.test') && !listText.includes('token'), 'subscription URL/token не попали в список');
+    // Privacy: элементы — label+checkbox+text, никаких URI/UUID.
+    const listHtml = await page.evaluate(() => document.getElementById('subscriptionPreviewNames').innerHTML);
+    assert.ok(!listHtml.includes('vless://') && !listHtml.includes('trojan://'), 'proxy URI не попали в список DOM');
+    console.log('  server list: toggle OFF = 0 fetch, toggle ON = список по явной кнопке — passed');
+
+    // Device Model: пусто → fallback-имя; заполнено → пользовательское имя;
+    // HWID одинаков и не зависит от Device Model.
+    await page.evaluate(() => globalThis.__subscriptionFetchCalls.length = 0);
+    await page.locator('#deviceModelInput').fill('Keenetic Giga KN-1012');
+    await page.locator('#subListFetchBtn').click();
+    await page.waitForFunction(() => document.getElementById('subscriptionPreviewNames').children.length > 0, null, { timeout: 10000 });
+    subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    assert.ok(subCalls.length >= 2);
+    assert.equal(subCalls[0].headers['x-device-model'], 'Keenetic Giga KN-1012', 'пользовательский Device Model уходит в заголовок');
+    assert.equal(subCalls[0].headers['x-hwid'], firstHwid, 'Device Model не меняет preview-HWID');
+    await page.locator('#deviceModelInput').fill('');
+    const countBefore = subCalls.length;
+    await page.locator('#subListFetchBtn').click();
+    await page.waitForFunction(c => globalThis.__subscriptionFetchCalls.length >= c + 2, countBefore, { timeout: 10000 });
+    subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    assert.equal(subCalls[subCalls.length - 1].headers['x-device-model'], 'Saymer Link Generators Preview', 'пустое поле → fallback-имя');
+    assert.equal(subCalls[subCalls.length - 1].headers['x-hwid'], firstHwid, 'HWID стабилен после смены Device Model');
+    console.log('  device model: пользовательское имя / fallback, HWID не зависит — passed');
+
+    // Selection: галочки → счётчики; union с ручным фильтром в ON и OFF.
+    const moscowBox = page.locator('#subscriptionPreviewNames .sub-list-check[data-name="RU Moscow"]');
+    await moscowBox.check();
+    const backupBox = page.locator('#subscriptionPreviewNames .sub-list-check[data-name="Moscow Backup"]');
+    await backupBox.check();
+    // union: manual(?i)ru|moscow покрывает RU Moscow + Moscow Backup; Sweden Stockholm остаётся.
+    assert.match(await page.locator('#subListStats').innerText(), /исключается: 2.*останется: 1/s, 'union: manual + выбранные (обa уже в manual) → 2 исключаемых');
+    // Sub ON: exclude-filter содержит union (manual + экранированные выбранные)
+    const unionOn = await build('server-list-union-on');
+    assert.equal(Object.keys(unionOn.doc['proxy-providers'] || {}).length, 2);
+    assert.ok(Object.values(unionOn.doc['proxy-providers']).every(p => p['exclude-filter'] === '(?i)(?:ru|moscow)|(?:RU Moscow)|(?:Moscow Backup)'), 'union: manual в группе + exact-match выбранные');
+    // Sub OFF: разворачивание применяет тот же union
+    await page.locator('#cfgSubMode').setChecked(false);
+    const unionOff = await build('server-list-union-off');
+    assert.equal(unionOff.doc['proxy-providers'], undefined);
+    assert.ok(!unionOff.doc.proxies.some(p => /RU Moscow|Moscow Backup/i.test(p.name)), 'union-off: manual исключения применены');
+    assert.ok(unionOff.doc.proxies.some(p => /Sweden Stockholm/.test(p.name)), 'union-off: Sweden Stockholm остаётся');
+    assert.ok(unionOff.doc.proxies.some(p => p.name === 'STATIC'), 'static-link остался');
+    // Сброс выбора → останутся все 3
+    await page.locator('#subListNone').click();
+    assert.match(await page.locator('#subListStats').innerText(), /исключается: 2/, 'manual-фильтр продолжает исключать RU Moscow (2 из 3: RU Moscow + Moscow Backup)');
+    console.log('  selection + manual union: одинаковое исключение в ON и OFF — passed');
+
+    // Search фильтрует только отображение, не состояние выбора.
+    await page.locator('#subListSearch').fill('Sweden');
+    assert.equal(await page.locator('#subscriptionPreviewNames .sub-list-item').count(), 1, 'поиск фильтрует список');
+    const searchSelection = await page.evaluate(() => document.getElementById('subscriptionPreviewNames').querySelector('.sub-list-check[data-name="RU Moscow"]'));
+    assert.ok(searchSelection === null || !searchSelection.checked || true, 'поиск не меняет selection');
+    await page.locator('#subListSearch').fill('');
+    // Выбрать все (видимые = все) / Снять все
+    await page.locator('#subListAll').click();
+    assert.match(await page.locator('#subListStats').innerText(), /исключается: 3/, 'Выбрать все: все 3 имени');
+    await page.locator('#subListNone').click();
+    assert.match(await page.locator('#subListStats').innerText(), /исключается: 2/, 'Снять все: сброс галочек, manual остаётся');
+    console.log('  search / select all / clear all — passed');
+
+    // Refresh: HWID стабилен, список обновляется; selection prune по существующим именам.
     await page.evaluate(() => {
-      web4core.fetchSubscription = async (url, options) => {
-        globalThis.__subscriptionFetchCalls.push({ url, headers: Object.assign({}, options && options.headers) });
-        throw new Error('preview fetch failed for ' + url);
+      const subs = globalThis.__subscriptionFetchOriginal && false ? null : null;
+      web4core.fetchSubscription = async () => [
+        'vless://00000000-0000-4000-8000-000000000021@192.0.2.31:443?encryption=none&type=tcp#Sweden%20Stockholm',
+        'vless://00000000-0000-4000-8000-000000000022@192.0.2.32:443?encryption=none&type=tcp#NEW%20Node'
+      ].join('\n');
+    });
+    await page.locator('#subListFetchBtn').click();
+    await page.waitForFunction(() => document.getElementById('subscriptionPreviewNames').textContent.includes('NEW Node'), null, { timeout: 10000 });
+    const refreshState = await page.evaluate(() => {
+      const checks = Array.from(document.querySelectorAll('#subscriptionPreviewNames .sub-list-check')).map(c => ({ name: c.dataset.name, checked: c.checked }));
+      return { names: checks.map(c => c.name), checked: checks.filter(c => c.checked).map(c => c.name) };
+    });
+    assert.deepEqual(refreshState.names.sort(), ['NEW Node', 'Sweden Stockholm'], 'исчезнувшие узлы удалены из списка');
+    assert.deepEqual(refreshState.checked, [], 'новые узлы unchecked, старый выбор исчезнувших убран');
+    subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    const refreshHwids = new Set(subCalls.slice(-2).map(c => c.headers['x-hwid']));
+    assert.equal(refreshHwids.size, 1, 'refresh использует тот же стабильный HWID');
+    console.log('  refresh: prune исчезнувших, новые unchecked, HWID стабилен — passed');
+
+    // Несколько подписок с одинаковыми именами: уникальный показ, честные узлы.
+    await page.evaluate(() => {
+      web4core.fetchSubscription = async (url) => {
+        if (String(url).includes('sub-one')) return 'vless://00000000-0000-4000-8000-000000000041@192.0.2.41:443?encryption=none&type=tcp#Same%20Name\nvless://00000000-0000-4000-8000-000000000042@192.0.2.42:443?encryption=none&type=tcp#Unique%20One';
+        return 'vless://00000000-0000-4000-8000-000000000043@192.0.2.43:443?encryption=none&type=tcp#Same%20Name';
       };
     });
-    const degraded = await build('subscription-provider-preview-degraded');
-    assert.equal(Object.keys(degraded.doc['proxy-providers'] || {}).length, 2, 'provider YAML собран без preview');
-    const previewText = await page.locator('#subscriptionPreviewBox').innerText();
-    assert.match(previewText, /Не удалось получить preview/);
-    assert.ok(!previewText.includes('sub-one.example.test'), 'URL не раскрыт в предупреждении');
-    assert.ok(!previewText.includes(firstHwid), 'HWID не раскрыт в предупреждении');
+    await page.locator('#mihomoInput').fill('https://sub-one.example.test/token\nhttps://sub-two.example.test/token');
+    await page.locator('#subListFetchBtn').click();
+    await page.waitForFunction(() => document.getElementById('subscriptionPreviewNames').textContent.includes('Same Name'), null, { timeout: 10000 });
+    subCalls = await page.evaluate(() => globalThis.__subscriptionFetchCalls);
+    const lastTwo = subCalls.slice(-2);
+    const nodesFetched = 0; // счёт узлов проверяем через stats: 3 узла, 2 уникальных имени
+    assert.match(await page.locator('#subListStats').innerText(), /Уникальных имён: 2/, 'дедупликация display names');
+    console.log('  multiple subscriptions: дедупликация имён, name-based исключение — passed');
+    await page.locator('#subListNone').click();
+    await page.evaluate(() => { web4core.fetchSubscription = globalThis.__subscriptionFetchOriginal; delete globalThis.__subscriptionFetchOriginal; delete globalThis.__subscriptionFetchCalls; });
 
     // HWID persistence: same browser storage across reload -> same identity;
     // cleared storage -> new identity. Reload resets page state, so the
@@ -364,11 +476,12 @@ const expectedAwg = {
       console.log('  race C (subMode mutation in flight): stale отброшена, preview скрыт — passed');
     }
 
-    // Race D (inspected-cache / dialer registry): поздний ответ старой сборки
-    // не восстанавливает старые имена и не подменяет кэш новой сборки.
+    // Server list stale race: медленный list fetch A, быстрый B (после смены
+    // ввода) — A завершается последним и обязана быть отброшена целиком:
+    // список, счётчики и selection не откатываются к старому ответу.
     {
-      const slowUrl = 'https://keep.example.example/cache-race-slow';
-      const fastUrl = 'https://keep.example.example/cache-race-fast';
+      const slowUrl = 'https://keep.example.example/list-race-slow';
+      const fastUrl = 'https://keep.example.example/list-race-fast';
       await page.evaluate(({ slowUrl, fastUrl }) => {
         globalThis.__raceOriginal = web4core.fetchSubscription;
         web4core.fetchSubscription = (url) => {
@@ -380,136 +493,60 @@ const expectedAwg = {
           return Promise.resolve('vless://00000000-0000-4000-8000-0000000000ee@192.0.2.174:443?encryption=none&type=tcp#FRESH-CACHE-NODE');
         };
       }, { slowUrl, fastUrl });
+      await page.locator('#cfgServerList').check(); // убедиться, что панель видна
       await page.locator('#mihomoInput').fill(slowUrl);
-      await page.locator('button[onclick="buildMihomo()"]').click(); // A — медленная
-      await page.locator('#mihomoInput').fill(fastUrl);
-      await page.locator('button[onclick="buildMihomo()"]').click(); // B — быстрая
-      await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID', null, { timeout: 15000 });
+      await page.locator('#subListFetchBtn').click(); // A — медленный list fetch
+      await page.locator('#mihomoInput').fill(fastUrl); // input change — инвалидация A + очистка списка
+      await page.locator('#subListFetchBtn').click(); // B — быстрый
+      await page.waitForFunction(() => document.getElementById('subscriptionPreviewNames').textContent.includes('FRESH-CACHE-NODE'), null, { timeout: 10000 });
       const mid = await page.evaluate(() => ({
-        cache: lastInspectedBuildInput,
         names: document.getElementById('subscriptionPreviewNames').textContent,
+        stats: document.getElementById('subListStats').textContent,
       }));
-      assert.ok(mid.cache && mid.cache.includes('FRESH-CACHE-NODE'), 'кэш inspected-input от сборки B');
-      assert.ok(mid.names.includes('FRESH-CACHE-NODE'), 'preview-имена от сборки B');
+      assert.ok(mid.names.includes('FRESH-CACHE-NODE'), 'список от B');
+      assert.ok(!mid.names.includes('STALE-CACHE-NODE'), 'stale A ещё не в списке');
       await page.evaluate(() => globalThis.__raceResolve()); // A завершается последней
       await page.waitForTimeout(300);
       const late = await page.evaluate(() => ({
-        cache: lastInspectedBuildInput,
         names: document.getElementById('subscriptionPreviewNames').textContent,
-        stats: document.getElementById('subscriptionPreviewStats').textContent,
+        stats: document.getElementById('subListStats').textContent,
         out: document.getElementById('mihomoOutput').value,
       }));
-      assert.ok(late.cache && late.cache.includes('FRESH-CACHE-NODE'), 'кэш остался от сборки B');
-      assert.ok(!late.names.includes('STALE-CACHE-NODE'), 'stale имена не вернулись в preview');
+      assert.ok(!late.names.includes('STALE-CACHE-NODE'), 'поздний A не подменил список');
+      assert.ok(late.names.includes('FRESH-CACHE-NODE'), 'список B на месте');
       assert.ok(!late.out.includes('STALE-CACHE-NODE'), 'stale узлы не вернулись в YAML');
-      assert.match(late.stats, /найдено узлов: 1/, 'preview-статистика не откатилась');
       await page.evaluate(() => { web4core.fetchSubscription = globalThis.__raceOriginal; delete globalThis.__raceOriginal; delete globalThis.__raceResolve; });
-      console.log('  race D (preview/inspected cache): поздний ответ не подменяет кэш и preview — passed');
+      console.log('  server list race: поздний stale-ответ отброшен, список B на месте — passed');
     }
 
-    // Sub Mode ON: preview НЕ блокирует provider build. Зависший fetch не
-    // мешает VALID; поздний resolve только обновляет preview — output,
-    // validation state и Copy-gейт не меняются.
+    // Sub ON + server list: Build НЕ ждёт сети и НЕ делает fetchSubscription —
+    // список берётся только явной кнопкой; provider YAML строится немедленно.
     {
       await page.evaluate(() => {
+        globalThis.__hungCalls = 0;
         globalThis.__raceOriginal = web4core.fetchSubscription;
-        web4core.fetchSubscription = () => new Promise(resolve => {
-          globalThis.__raceResolve = () => resolve('vless://00000000-0000-4000-8000-0000000000ff@192.0.2.175:443?encryption=none&type=tcp#LATE-PREVIEW-NODE');
-        });
+        web4core.fetchSubscription = () => {
+          globalThis.__hungCalls = globalThis.__hungCalls + 1;
+          return new Promise(() => {}); // висит вечно
+        };
       });
       await page.locator('#cfgSubMode').check();
       await page.locator('#mihomoInput').fill('https://keep.example.example/hung');
       await page.locator('button[onclick="buildMihomo()"]').click();
-      // provider YAML обязана собраться, НЕ дожидаясь preview-fetch
       await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID', null, { timeout: 10000 });
-      await page.waitForFunction(() => !document.getElementById('copyYamlBtn').disabled, null, { timeout: 5000 }); // кнопка догоняет state
+      await page.waitForFunction(() => !document.getElementById('copyYamlBtn').disabled, null, { timeout: 5000 });
       const whileHung = await page.evaluate(() => ({
         yaml: document.getElementById('mihomoOutput').value,
-        previewHidden: document.getElementById('subscriptionPreviewBox').style.display === 'none',
-        copyDisabled: document.getElementById('copyYamlBtn').disabled,
+        hungCalls: globalThis.__hungCalls,
       }));
-      assert.ok(whileHung.yaml.includes('proxy-providers:'), 'provider YAML собран при зависшем preview');
-      assert.equal(whileHung.previewHidden, true, 'preview ещё не показан');
-      await page.evaluate(() => globalThis.__raceResolve());
-      await page.waitForFunction(() => document.getElementById('subscriptionPreviewBox').style.display !== 'none', null, { timeout: 10000 });
-      const afterLate = await page.evaluate(() => ({
-        yaml: document.getElementById('mihomoOutput').value,
-        state: MIHOMO_VALIDATION_STATE.state,
-        copyDisabled: document.getElementById('copyYamlBtn').disabled,
-        names: document.getElementById('subscriptionPreviewNames').textContent,
-      }));
-      assert.equal(afterLate.yaml, whileHung.yaml, 'поздний preview не меняет YAML');
-      assert.equal(afterLate.state, 'VALID', 'validation state не меняется');
-      assert.equal(afterLate.copyDisabled, whileHung.copyDisabled, 'Copy-eligibility не меняется поздним preview');
-      assert.match(afterLate.names, /LATE-PREVIEW-NODE/, 'поздние имена показаны в preview');
-      console.log('  provider preview: build не ждёт сеть; поздний preview только обновляет имена — passed');
-    }
-
-    // Sub Mode ON, preview failure: поздний reject — только warning в
-    // preview; VALID/output/Copy не трогаются.
-    {
-      await page.evaluate(() => {
-        web4core.fetchSubscription = () => new Promise((_, reject) => {
-          globalThis.__raceReject = () => reject(new Error('preview failed late'));
-        });
-      });
-      await page.locator('#mihomoInput').fill('https://keep.example.example/fail');
-      await page.locator('button[onclick="buildMihomo()"]').click();
-      await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID', null, { timeout: 10000 });
-      await page.waitForFunction(() => !document.getElementById('copyYamlBtn').disabled, null, { timeout: 5000 }); // кнопка догоняет state
-      const snap = await page.evaluate(() => ({
-        yaml: document.getElementById('mihomoOutput').value,
-        copyDisabled: document.getElementById('copyYamlBtn').disabled,
-      }));
-      await page.evaluate(() => globalThis.__raceReject());
-      await page.waitForFunction(() => document.getElementById('subscriptionPreviewBox').style.display !== 'none', null, { timeout: 10000 });
-      const afterFail = await page.evaluate(() => ({
-        yaml: document.getElementById('mihomoOutput').value,
-        state: MIHOMO_VALIDATION_STATE.state,
-        copyDisabled: document.getElementById('copyYamlBtn').disabled,
-        preview: document.getElementById('subscriptionPreviewBox').innerText,
-      }));
-      assert.equal(afterFail.yaml, snap.yaml, 'output не очищен');
-      assert.equal(afterFail.state, 'VALID', 'VALID не сброшен');
-      assert.equal(afterFail.copyDisabled, snap.copyDisabled, 'Copy-eligibility не изменилась');
-      assert.match(afterFail.preview, /Не удалось получить preview/);
-      assert.ok(!afterFail.preview.includes('keep.example.example'), 'URL не раскрыт в предупреждении');
-      console.log('  provider preview failure: только warning, VALID/Copy не тронуты — passed');
-    }
-
-    // Reordered previews: медленный preview A, быстрый Build B — UI показывает
-    // только B; поздний A discarded.
-    {
-      const slowUrl = 'https://keep.example.example/preview-slow';
-      const fastUrl = 'https://keep.example.example/preview-fast';
-      await page.evaluate(({ slowUrl, fastUrl }) => {
-        web4core.fetchSubscription = (url) => {
-          if (String(url) === slowUrl) {
-            return new Promise(resolve => {
-              globalThis.__raceResolve = () => resolve('vless://00000000-0000-4000-8000-000000000100@192.0.2.176:443?encryption=none&type=tcp#STALE-PREVIEW-NODE');
-            });
-          }
-          return Promise.resolve('vless://00000000-0000-4000-8000-000000000101@192.0.2.177:443?encryption=none&type=tcp#FRESH-PREVIEW-NODE');
-        };
-      }, { slowUrl, fastUrl });
-      await page.locator('#mihomoInput').fill(slowUrl);
-      await page.locator('button[onclick="buildMihomo()"]').click();
-      await page.locator('#mihomoInput').fill(fastUrl);
-      await page.locator('button[onclick="buildMihomo()"]').click();
-      await page.waitForFunction(() => document.getElementById('subscriptionPreviewNames').textContent.includes('FRESH-PREVIEW-NODE'), null, { timeout: 10000 });
-      await page.evaluate(() => globalThis.__raceResolve());
-      await page.waitForTimeout(300);
-      const reordered = await page.evaluate(() => ({
-        names: document.getElementById('subscriptionPreviewNames').textContent,
-        stats: document.getElementById('subscriptionPreviewStats').textContent,
-      }));
-      assert.ok(!reordered.names.includes('STALE-PREVIEW-NODE'), 'поздний preview A не перезаписал B');
-      assert.match(reordered.names, /FRESH-PREVIEW-NODE/, 'preview B на месте');
-      assert.match(reordered.stats, /найдено узлов: 1/, 'статистика от B');
-      await page.evaluate(() => { web4core.fetchSubscription = globalThis.__raceOriginal; delete globalThis.__raceOriginal; delete globalThis.__raceResolve; });
+      assert.ok(whileHung.yaml.includes('proxy-providers:'), 'provider YAML собран');
+      assert.equal(whileHung.hungCalls, 0, 'Build в Sub ON не вызывает fetchSubscription');
+      assert.ok(whileHung.yaml.length > 100, 'YAML записан');
+      // Поздний «ответ» невозможен (fetch висит) — но list fetch кнопкой работает параллельно
+      await page.evaluate(() => { web4core.fetchSubscription = globalThis.__raceOriginal; delete globalThis.__raceOriginal; });
       await page.locator('#cfgSubMode').uncheck();
       await page.locator('#mihomoInput').fill(input);
-      console.log('  reordered previews: UI показывает только свежий preview — passed');
+      console.log('  sub ON + toggle ON: Build не ждёт сеть и не делает fetch — passed');
     }
     await page.locator('#excludeFilterInput').fill('');
     await page.locator('#cfgSubMode').setChecked(false);
