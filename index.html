@@ -335,7 +335,7 @@
     <div class="card">
       <div class="card-title">⚙️ Настройки Mihomo</div>
       <div class="checkbox-grid">
-        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Для домашнего роутера обычно включено; для VPS с локальным Xray/3X-UI выключите.</span></span></label>
+        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Доступно только в профиле «Роутер / обычный TUN»; в обоих VPS-профилях отключено.</span></span></label>
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090.</span></span></label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется отдельный стабильный HWID генератора, а не HWID Mihomo/Keenetic.</span></span></label>
@@ -2260,7 +2260,7 @@ function applyProfileUiState(target) {
     mips.disabled = false;
     stackAdv.disabled = false;
     socks.disabled = false;
-    lan.disabled = false;
+    lan.checked = false; lan.disabled = true;
   }
   subMode.checked = snap ? snap.subMode : PROFILE_USER_DEFAULTS.subMode;
   updateMihomoOptionStates();
@@ -3205,7 +3205,9 @@ async function buildMihomo() {
   } else if (deploymentProfile === 'vps-gateway') {
     addTun = true; // gateway без TUN невозможен; auto-route: false остаётся в пост-патче
   }
-  const lanChecked = document.getElementById('cfgLan').checked && deploymentProfile !== 'vps-local';
+  // Allow LAN — router-only контракт (не доверяем DOM: tamper чекбокса в
+  // VPS-профиле не должен иметь эффекта; профиль молча не подменяется).
+  const lanChecked = deploymentProfile === 'router' && document.getElementById('cfgLan').checked;
   // Fail-safe: не доверяем прямой подмене DOM — повторно проверяем зависимости
   // (MIPS и Per-Proxy TUN требуют TUN, Per-Proxy SOCKS требует Mixed Port);
   // БС-режим и VPS-профили принудительно исключают Per-Proxy (router-only).
@@ -3356,8 +3358,9 @@ async function buildMihomo() {
       yaml = applyDeploymentProfile(yaml, 'vps', tunStack);
     }
 
-    // PATCH: Allow LAN
-    if (lanChecked) {
+    // PATCH: Allow LAN — router-only: lanChecked уже вычислен с гейтом профиля,
+    // здесь дублируем проверку явно (второй слой того же контракта).
+    if (deploymentProfile === 'router' && lanChecked) {
       yaml = yaml.replace(/^allow-lan:\s*false\s*$/m, 'allow-lan: true');
       if (!yaml.includes('bind-address')) {
         yaml = yaml.replace(/^(allow-lan:\s*true\s*)$/m, '$1\nbind-address: "*"');

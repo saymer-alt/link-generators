@@ -44,7 +44,7 @@
 - TUN: ON;
 - MIPS: ON;
 - Mixed Port 7890: ON;
-- Allow LAN: ON;
+- Allow LAN: ON — router-only опция, доступна пользователю только здесь;
 - пользователь может менять router-owned параметры вручную.
 
 Ключевой инвариант: уход из `router` и последующий возврат обязан восстановить пользовательский router-owned state.
@@ -76,13 +76,16 @@ UI должен механически обеспечивать:
 - TUN: ON + locked;
 - gateway panel: visible;
 - `device: tun-mihomo` по текущему deployment contract;
-- MIPS / Advanced TUN stack / Mixed / LAN получают корректный gateway-owned enabled-state независимо от предыдущего профиля.
+- MIPS / Advanced TUN stack / Mixed получают корректный gateway-owned enabled-state независимо от предыдущего профиля;
+- Allow LAN: OFF + disabled (router-only контракт, v1.7.x: чекбокс не протекает из router и не влияет на YAML даже при DOM-tamper).
 
 Сгенерированный YAML обязан иметь:
 
 - `tun:`;
 - `device: tun-mihomo`;
 - `auto-route: false`;
+- `allow-lan: false`;
+- **без** `bind-address: "*"`;
 - **никогда** `auto-route: true`.
 
 `auto-route: false` — hard invariant, а не UI default.
@@ -242,7 +245,8 @@ cfgLan.checked = true;
 - TUN;
 - `device: tun-mihomo`;
 - `auto-route: false`;
-- отсутствие `auto-route: true`.
+- `allow-lan: false` (в т.ч. при `cfgLan.disabled = false; cfgLan.checked = true` через консоль);
+- отсутствие `auto-route: true` и `bind-address: "*"`.
 
 ### Зачем
 
