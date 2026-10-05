@@ -88,7 +88,6 @@ Docker / AmneziaWG / Linux policy routing / iptables
 |---|---|---|---|
 | `#vpsDevice` | `tun.device` | `tun-mihomo` | имя, которое ищут routing-скрипт и watchdog |
 | `#vpsMtu` | `tun.mtu` | `1420` | двойная инкапсуляция AWG+WARP; вместе с TCPMSS clamp на Linux-стороне давал ~2x |
-| `#vpsControllerPort` | `external-controller` (порт) | `9090` | bind всегда `127.0.0.1` в VPS-профилях; поле общее для vps-local/vps-gateway; коллизии с 7890/DNS ловятся при Build |
 | `#vpsFakeIp` | `dns.fake-ip-range` | `198.18.0.0/16` | диапазон fake-ip; должен совпадать с main-маршрутом в routing-скрипте |
 | `#vpsDnsEnabled` | секция `dns:` целиком | включён | DNS-перехват (fake-ip); выключение удаляет `dns` без остатков |
 | `#vpsDnsListen` | `dns.listen` | `0.0.0.0:53` | адрес DNS-слушателя Mihomo (см. ниже) |

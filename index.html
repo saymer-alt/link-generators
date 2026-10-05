@@ -337,7 +337,7 @@
       <div class="checkbox-grid">
         <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Доступно только в профиле «Роутер / обычный TUN»; в обоих VPS-профилях отключено.</span></span></label>
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
-        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd). На VPS controller доступен только локально (127.0.0.1, порт — в поле «Controller Port»); для удалённого управления используйте SSH-туннель.</span></span></label>
+        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090. На VPS controller доступен только локально (127.0.0.1:9090); для удалённого управления используйте SSH-туннель (локальный forwarded-порт — свой на каждый VPS).</span></span></label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется отдельный стабильный HWID генератора, а не HWID Mihomo/Keenetic.</span></span></label>
       </div>
       <div id="subModeHint" class="hint"></div>
@@ -351,11 +351,6 @@
         </select>
         <input type="text" id="webUiCustomUrl" placeholder="https://example.com/dashboard.zip" style="display:none;margin-left:8px">
         <div class="hint">Архив дашборда, который Mihomo скачает в каталог external-ui. MetaCubeXD — по умолчанию. Custom: абсолютный http/https URL архива (.zip/.tgz); URL только генерируется в конфиг, не проверяется из браузера.</div>
-      </div>
-      <div id="vpsControllerRow" style="display:none;margin-top:10px">
-        <label for="vpsControllerPort">🎛️ Controller Port (VPS)</label>
-        <input type="number" id="vpsControllerPort" value="9090" min="1" max="65535" style="width:130px;margin-left:8px">
-        <div class="hint">Локальный порт API/Web UI Mihomo на VPS; controller в VPS-профилях всегда слушает только <code>127.0.0.1</code>. Для нескольких VPS можно назначить разные порты, например 9091, 9092, 9093 — рекомендуются непривилегированные 1024–65535. При SSH/PuTTY port-forwarding можно также оставить 9090 на всех VPS и использовать разные локальные forwarded-порты.</div>
       </div>
       <div id="excludeFilterRow" style="margin-top:10px">
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
@@ -2251,9 +2246,6 @@ function applyProfileUiState(target) {
   perTun.disabled = true; perSocks.disabled = true;
   document.getElementById('awlRouterHint').style.display = vps ? '' : 'none';
   document.getElementById('perProxyRouterHint').style.display = vps ? '' : 'none';
-  // VPS Controller Port — общий для обоих VPS-профилей (одна настройка, не
-  // per-profile snapshot): DOM-значение переживает переключения естественно.
-  document.getElementById('vpsControllerRow').style.display = vps ? '' : 'none';
   document.getElementById('whitelistPanel').style.display = awl.checked ? 'block' : 'none';
   panel.style.display = target === 'vps-gateway' ? 'block' : 'none';
   if (target === 'router') {
@@ -3262,29 +3254,6 @@ async function buildMihomo() {
     return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
   }
 
-  // VPS Controller Port: настраивается только в VPS-профилях, bind всегда
-  // 127.0.0.1 (в YAML попадает только порт). Диапазон 1..65535 (рекомендуются
-  // непривилегированные 1024+); конфликт с другими локальными listeners
-  // генератора (Mixed Port, DNS listen) — явная ошибка до Build.
-  let vpsControllerPort = 9090;
-  if (deploymentProfile !== 'router') {
-    const rawPort = document.getElementById('vpsControllerPort').value.trim();
-    const portNum = Number(rawPort);
-    if (!rawPort || !Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      return showToast('❌ Ошибка: Controller Port должен быть целым числом 1..65535 (рекомендуются непривилегированные 1024..65535)', true);
-    }
-    const conflicts = [];
-    if (addSocks && portNum === 7890) conflicts.push('Mixed Port 7890');
-    if (deploymentProfile === 'vps-gateway' && document.getElementById('vpsDnsEnabled').checked) {
-      const dnsPort = (document.getElementById('vpsDnsListen').value.match(/:(\d+)\s*$/) || [])[1];
-      if (dnsPort && Number(dnsPort) === portNum) conflicts.push('DNS listen порт ' + dnsPort);
-    }
-    if (conflicts.length) {
-      return showToast('❌ Ошибка: Controller Port ' + portNum + ' конфликтует с ' + conflicts.join(', ') + ' — выберите другой порт', true);
-    }
-    vpsControllerPort = portNum;
-  }
-
   // dialer-proxy (туннель в туннеле): per-profile модель. Назначение — в карточке
   // каждого WG/AWG-профиля (mode 'direct'|'proxy' + таргет); глобальные поля ниже
   // описывают только dialer-ГРУППУ (имя + транзитные узлы + URL-подписки).
@@ -3415,13 +3384,13 @@ async function buildMihomo() {
     }
 
     // PATCH: VPS controller bind — security default: в VPS-профилях контроллер
-    // доступен только с самого VPS, удалённое управление — через SSH-туннель.
-    // Порт настраивается полем «Controller Port» (по умолчанию 9090), но bind
-    // всегда 127.0.0.1: никакой ввод не даёт 0.0.0.0 в VPS-профилях.
-    // Build-level кламп: tamper чекбоксов/полей не влияет; router не
-    // затрагивается — вывод байт-в-байт прежний.
+    // доступен только с самого VPS (127.0.0.1:9090), удалённое управление —
+    // через SSH-туннель (локальный forwarded-порт выбирает пользователь, это
+    // отдельное понятие от порта на VPS). Build-level кламп: tamper не влияет;
+    // router не затрагивается — вывод байт-в-байт прежний. Конфликт нескольких
+    // VPS решается локальными SSH-forward портами, а не портами на VPS.
     if (deploymentProfile !== 'router') {
-      yaml = yaml.replace(/^external-controller:\s*0\.0\.0\.0:(\d+)\s*$/m, 'external-controller: 127.0.0.1:' + vpsControllerPort);
+      yaml = yaml.replace(/^external-controller:\s*0\.0\.0\.0:9090\s*$/m, 'external-controller: 127.0.0.1:9090');
     }
 
     document.getElementById('mihomoOutput').value = yaml;
