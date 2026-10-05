@@ -3072,15 +3072,15 @@
       const cpaMinB = pr.cpaSet ? pr.cpaMin ?? 0 : 0;
       let ovhMax;
       if (pr.cpaSet) {
-        ovhMax = 32 + pr.s4 + (pr.cpaMax ?? 0);
+        ovhMax = pr.s4 + (pr.cpaMax ?? 0);
       } else if (pr.rt) {
         ovhMax = null;
       } else {
-        ovhMax = 32 + pr.s4 + 15;
+        ovhMax = pr.s4;
       }
       r.overhead = {
         min: 32 + pr.s4 + cpaMinB,
-        max: ovhMax,
+        max: 32 + (ovhMax !== null ? ovhMax + 15 : null),
         deterministic: pr.cpaSet || !pr.rt
       };
       const dialer = pr.dialer;
@@ -3099,9 +3099,12 @@
           r.confidence = outer.confidence !== "proven" ? outer.confidence : "unknown";
           r.effective = pr.importedMtu;
           if (ovhMax === null) r.reason.push("AWG RandomTrailers: \u0441\u0442\u0440\u043E\u0433\u0430\u044F \u0432\u0435\u0440\u0445\u043D\u044F\u044F \u0433\u0440\u0430\u043D\u0438\u0446\u0430 overhead \u043D\u0435 \u0432\u044B\u0432\u043E\u0434\u0438\u0442\u0441\u044F \u0438\u0437 \u043A\u043E\u043D\u0444\u0438\u0433\u0430 \u2014 \u0440\u0430\u0441\u0447\u0451\u0442 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D, \u0438\u0441\u0445\u043E\u0434\u043D\u044B\u0439 MTU \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D");
-          if (outer.confidence !== "proven") r.reason.push("\u0432\u043D\u0435\u0448\u043D\u0438\u0439 hop \xAB" + dialer + "\xBB \u043D\u0435 \u0438\u043C\u0435\u0435\u0442 \u0434\u043E\u043A\u0430\u0437\u0430\u043D\u043D\u043E\u0433\u043E \u0431\u044E\u0434\u0436\u0435\u0442\u0430");
+          if (outer.confidence !== "proven") {
+            r.reason.push("\u0432\u043D\u0435\u0448\u043D\u0438\u0439 hop \xAB" + dialer + "\xBB \u043D\u0435 \u0438\u043C\u0435\u0435\u0442 \u0434\u043E\u043A\u0430\u0437\u0430\u043D\u043D\u043E\u0433\u043E \u0431\u044E\u0434\u0436\u0435\u0442\u0430");
+            (outer.reason || []).forEach((rs) => r.reason.push("\u21B3 " + rs));
+          }
         } else {
-          r.ceiling = outer.effective - (ovhMax + 15 + 28);
+          r.ceiling = outer.effective - (32 + (ovhMax !== null ? ovhMax : 15) + 15 + 28);
           if (r.ceiling < PRACTICAL_MIN) {
             r.confidence = "error";
             r.effective = pr.importedMtu;
