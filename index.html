@@ -453,6 +453,13 @@
             <button type="button" class="btn btn-gray" id="rdTestBtn">Проверить</button>
           </div>
           <div id="rdResult" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+          <details id="ruleProviderExplorer" style="margin-top:8px">
+            <summary style="cursor:pointer"><span>▶</span> <span>Rule Provider Explorer</span></summary>
+            <div class="hint">Инвентарь <code>rule-providers</code> итогового конфига (результат последнего Build), в порядке YAML. Inline-содержимое доступно локально; содержимое внешних провайдеров браузером не загружается (fetch/HEAD не выполняются), MRS не декодируется. Поиск — case-insensitive подстрока по уже доступному inline-payload, без сохранения. Только чтение — конфиг не меняется.</div>
+            <div id="rpeSummary" class="hint" style="margin-top:8px;white-space:pre-line"></div>
+            <div id="rpeMissing" class="hint" style="margin-top:6px;white-space:pre-line;display:none;border:1px solid var(--border);padding:6px;background:rgba(255,170,0,.08)"></div>
+            <div id="rpeProviders" style="margin-top:8px"></div>
+          </details>
         </details>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -3552,6 +3559,117 @@ function routingDprHumanNames(policies) {
   });
   return map;
 }
+function rdUtf8Bytes(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.codePointAt(i);
+    if (c > 0xffff) i++;
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c < 0x10000) n += 3;
+    else n += 4;
+  }
+  return n;
+}
+function routingProviderReferences(doc) {
+  const rules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const providers = (doc && doc['rule-providers'] && typeof doc['rule-providers'] === 'object') ? doc['rule-providers'] : {};
+  const refs = {};
+  const missing = [];
+  rules.forEach((raw, i) => {
+    const parsed = rdParseRule(raw);
+    if (parsed.type !== 'RULE-SET' || !parsed.value) return;
+    const p = providers[parsed.value];
+    if (p && typeof p === 'object') {
+      if (!refs[parsed.value]) refs[parsed.value] = [];
+      refs[parsed.value].push({ index: i, target: parsed.target });
+    } else {
+      missing.push({ index: i, name: parsed.value, target: parsed.target });
+    }
+  });
+  return { refs, missing };
+}
+function routingProviderPayloadStats(provider) {
+  const p = provider && typeof provider === 'object' ? provider : {};
+  const type = String(p.type || '').trim().toLowerCase();
+  if (type !== 'inline') {
+    // «external» — только доказуемо внешние типы; unknown/other нельзя называть внешними.
+    const kind = (type === 'http' || type === 'file') ? 'external' : 'unknown';
+    return { kind, entries: null, bytes: null, payloadMalformed: false };
+  }
+  if (!Array.isArray(p.payload)) {
+    return { kind: 'inline', entries: 0, bytes: 0, payloadMalformed: p.payload !== undefined && p.payload !== null };
+  }
+  let entries = 0;
+  let bytes = 0;
+  for (const raw of p.payload) {
+    const line = String(raw === null || raw === undefined ? '' : raw);
+    if (!line.trim()) continue;
+    entries++;
+    bytes += rdUtf8Bytes(line);
+  }
+  return { kind: 'inline', entries, bytes, payloadMalformed: false };
+}
+function routingProviderSearch(provider, query) {
+  const q = String(query === null || query === undefined ? '' : query).toLowerCase();
+  const p = provider && typeof provider === 'object' ? provider : {};
+  // поиск допустим только по локально известному inline-payload;
+  // accidental payload[] у http/file/unknown — не локальное содержимое
+  const payload = String(p.type || '').trim().toLowerCase() === 'inline' && Array.isArray(p.payload) ? p.payload : [];
+  const matches = [];
+  for (const raw of payload) {
+    const line = String(raw === null || raw === undefined ? '' : raw);
+    if (!line.trim()) continue;
+    if (q === '' || line.toLowerCase().includes(q)) matches.push(line);
+  }
+  return { query: String(query === null || query === undefined ? '' : query), matches, total: matches.length };
+}
+function routingProviderInventory(doc) {
+  const providers = (doc && doc['rule-providers'] && typeof doc['rule-providers'] === 'object') ? doc['rule-providers'] : {};
+  const { refs, missing } = routingProviderReferences(doc);
+  const items = Object.keys(providers).map(name => {
+    const p = providers[name];
+    const safe = p && typeof p === 'object' ? p : {};
+    const typeRaw = String(safe.type || '').trim().toLowerCase();
+    const behaviorRaw = String(safe.behavior || '').trim().toLowerCase();
+    const formatPresent = safe.format !== undefined && safe.format !== null && String(safe.format).trim() !== '';
+    const format = formatPresent ? String(safe.format).trim().toLowerCase() : 'default';
+    let source = 'unknown';
+    if (typeRaw === 'inline') source = 'inline';
+    else if (safe.url !== undefined && safe.url !== null && String(safe.url).trim() !== '') source = String(safe.url);
+    else if (safe.path !== undefined && safe.path !== null && String(safe.path).trim() !== '') source = String(safe.path);
+    const metadata = [];
+    for (const [k, v] of Object.entries(safe)) {
+      if (k === 'type' || k === 'behavior' || k === 'format' || k === 'payload') continue;
+      if (v === null || v === undefined) continue;
+      const t = typeof v;
+      if (t === 'string' || t === 'number' || t === 'boolean') metadata.push([k, String(v)]);
+    }
+    return {
+      name,
+      type: typeRaw || 'unknown',
+      behavior: behaviorRaw || 'unknown',
+      format,
+      source,
+      metadata,
+      used: refs[name] || [],
+      stats: routingProviderPayloadStats(safe),
+      // локальное содержимое разрешено ТОЛЬКО inline-провайдеру: http/file/unknown/other
+      // с accidental payload[] не экспонируют его через модель (external contents unknown offline)
+      payload: typeRaw === 'inline' && Array.isArray(safe.payload) ? safe.payload.map(v => String(v === null || v === undefined ? '' : v)) : null
+    };
+  });
+  const summary = {
+    providers: items.length,
+    used: items.filter(i => i.used.length > 0).length,
+    unused: items.filter(i => !(i.used.length > 0)).length,
+    inline: items.filter(i => i.type === 'inline').length,
+    external: items.filter(i => i.type === 'http' || i.type === 'file').length, // только доказуемо внешние
+    otherUnknown: items.filter(i => i.type !== 'inline' && i.type !== 'http' && i.type !== 'file').length,
+    missingReferences: missing.length
+  };
+  return { items, missing, summary };
+}
 /* === ROUTING DIAGNOSTICS CORE — RD-CORE-END === */
 
 // === ROUTING DIAGNOSTICS UI (read-only; только отображает результаты ядра) ===
@@ -3583,18 +3701,19 @@ function updateRoutingDiagnostics(yaml) {
       if (s.kind === 'unreachable-after-match') lines.push('⚠ Правила после #' + (s.shadowedBy + 1) + ' (MATCH) недостижимы: #' + (s.index + 1) + '–#' + (s.until + 1));
       else lines.push('⚠ Правило #' + (s.index + 1) + ' перекрыто #' + (s.shadowedBy + 1) + ' (' + s.via + ') — ' + s.detail);
     });
-    const providerNames = doc['rule-providers'] ? Object.keys(doc['rule-providers']) : [];
-    providerNames.forEach(name => {
-      const used = doc.rules.some(r => typeof r === 'string' && r.toUpperCase().startsWith('RULE-SET,') && r.split(',')[1] && r.split(',')[1].trim() === name);
-      if (!used) lines.push('⚠ Провайдер «' + name + '» не используется ни одним RULE-SET');
+    const providerRefs = routingProviderReferences(doc).refs; // единый source-of-truth с Rule Provider Explorer
+    Object.keys(doc['rule-providers'] || {}).forEach(name => {
+      if (!(providerRefs[name] && providerRefs[name].length)) lines.push('⚠ Провайдер «' + name + '» не используется ни одним RULE-SET');
     });
     summary.textContent = lines.join(RD_NL);
     const preview = routingPreview(doc, lastRoutingHumanNames);
     previewEl.textContent = preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + (p.target || '—')).join(RD_NL);
+    renderRuleProviderExplorer(doc);
   } catch (e) {
     summary.textContent = 'Diagnostics недоступен: ' + (e.message || e);
     previewEl.textContent = '';
     resultEl.textContent = '';
+    renderRuleProviderExplorer(null);
   }
 }
 function runRoutingInspector() {
@@ -3640,6 +3759,129 @@ function runRoutingInspector() {
 document.addEventListener('click', (e) => {
   if (e.target && e.target.id === 'rdTestBtn') { e.preventDefault(); runRoutingInspector(); }
 });
+
+// === RULE PROVIDER EXPLORER UI (read-only; только отображает модель routingProviderInventory) ===
+const RPE_RENDER_CAP = 500;
+function rpeFormatBytes(n) {
+  if (n < 1024) return n + ' B';
+  return (n / 1024).toFixed(1) + ' KiB';
+}
+function rpeLine(parent, text, cls) {
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  div.textContent = text;
+  parent.appendChild(div);
+  return div;
+}
+function rpeRenderPayloadView(pre, infoEl, provider, query) {
+  const res = routingProviderSearch(provider, query); // поиск всегда по ПОЛНОМУ payload
+  const shown = res.matches.slice(0, RPE_RENDER_CAP); // cap — только на отображение
+  pre.textContent = shown.join(RD_NL);
+  let label = 'Matches: ' + res.total;
+  if (res.total > RPE_RENDER_CAP) label += ' · Showing first ' + RPE_RENDER_CAP + ' of ' + res.total;
+  infoEl.textContent = label;
+}
+function rpeBuildBody(card, item, provider) {
+  const body = document.createElement('div');
+  body.className = 'rpe-body';
+  body.style.cssText = 'margin:6px 0 0 14px;font-size:.85rem';
+  card.appendChild(body);
+  rpeLine(body, 'type: ' + item.type);
+  rpeLine(body, 'behavior: ' + item.behavior);
+  rpeLine(body, 'format: ' + (item.format === 'default' ? 'default (omitted)' : item.format));
+  rpeLine(body, 'source: ' + item.source);
+  item.metadata.forEach(([k, v]) => rpeLine(body, k + ': ' + v));
+  if (item.used.length === 1) {
+    rpeLine(body, 'used by: rule #' + (item.used[0].index + 1) + ' → ' + (item.used[0].target || '—'));
+  } else if (item.used.length > 1) {
+    rpeLine(body, 'used by:');
+    item.used.forEach(u => rpeLine(body, '#' + (u.index + 1) + ' → ' + (u.target || '—')));
+  } else {
+    rpeLine(body, 'used by: UNUSED (нет ни одного RULE-SET)', 'hint');
+  }
+  const stats = item.stats;
+  if (item.type === 'inline') {
+    if (stats.payloadMalformed) {
+      rpeLine(body, '⚠ payload не является списком — содержимое недоступно', 'hint');
+    } else {
+      rpeLine(body, 'payload: ' + stats.entries + ' entries');
+      rpeLine(body, 'payload text size: ' + rpeFormatBytes(stats.bytes) + ' (локальный размер текста payload)', 'hint');
+      const search = document.createElement('input');
+      search.type = 'text';
+      search.className = 'rpe-search';
+      search.placeholder = 'Поиск в payload (подстрока, без сохранения)';
+      search.style.cssText = 'margin-top:6px;padding:4px 8px;min-width:220px';
+      body.appendChild(search);
+      const infoEl = document.createElement('div');
+      infoEl.className = 'hint rpe-matches';
+      infoEl.style.marginTop = '4px';
+      body.appendChild(infoEl);
+      const pre = document.createElement('pre');
+      pre.className = 'rpe-pre';
+      pre.style.cssText = 'margin:4px 0 0;max-height:220px;overflow:auto;border:1px solid var(--border);padding:6px;background:rgba(255,255,255,.45);font-size:.8rem;white-space:pre-wrap';
+      body.appendChild(pre);
+      rpeRenderPayloadView(pre, infoEl, provider, '');
+      search.addEventListener('input', () => rpeRenderPayloadView(pre, infoEl, provider, search.value));
+    }
+  } else if (item.type === 'http' || item.type === 'file') {
+    rpeLine(body, 'payload: unavailable offline', 'hint');
+    rpeLine(body, 'External provider contents are not loaded by the browser.', 'hint');
+    if (item.format === 'mrs') rpeLine(body, 'Contents: unavailable offline (Format: MRS — декодирование не выполняется)', 'hint');
+  } else {
+    // unknown/other: тип не доказан как внешний — нельзя писать «External …»
+    rpeLine(body, 'payload: unavailable offline (тип провайдера не inline — локального содержимого нет)', 'hint');
+  }
+}
+function rpeRenderCard(item, provider) {
+  const card = document.createElement('details');
+  card.className = 'rpe-provider';
+  const sum = document.createElement('summary');
+  sum.style.cursor = 'pointer';
+  const nameEl = document.createElement('span');
+  nameEl.className = 'rpe-name';
+  nameEl.textContent = item.name;
+  nameEl.style.fontWeight = 'bold';
+  sum.appendChild(nameEl);
+  const badge = document.createElement('span');
+  badge.className = 'hint';
+  badge.textContent = ' — ' + item.type + ' · ' + item.behavior + ' · ' + (item.format === 'default' ? 'format: default (omitted)' : 'format: ' + item.format) + ' · ' + (item.used.length ? 'USED' : 'UNUSED');
+  sum.appendChild(badge);
+  card.appendChild(sum);
+  let bodyBuilt = false; // ленивый рендер: тело карточки строится при первом раскрытии
+  card.addEventListener('toggle', () => {
+    if (card.open && !bodyBuilt) { bodyBuilt = true; rpeBuildBody(card, item, provider); }
+  });
+  return card;
+}
+function renderRuleProviderExplorer(doc) {
+  const box = document.getElementById('rpeProviders');
+  const summaryEl = document.getElementById('rpeSummary');
+  const missingEl = document.getElementById('rpeMissing');
+  if (!box || !summaryEl || !missingEl) return;
+  box.textContent = '';
+  summaryEl.textContent = '';
+  missingEl.textContent = '';
+  missingEl.style.display = 'none';
+  if (!doc || typeof doc !== 'object') return;
+  const model = routingProviderInventory(doc);
+  summaryEl.textContent = 'Провайдеры: ' + model.summary.providers +
+    ' · Используются: ' + model.summary.used +
+    ' · Не используются: ' + model.summary.unused + RD_NL +
+    'Inline: ' + model.summary.inline +
+    ' · Внешние: ' + model.summary.external +
+    (model.summary.otherUnknown > 0 ? ' · Other/Unknown: ' + model.summary.otherUnknown : '') +
+    ' · Отсутствующие ссылки: ' + model.summary.missingReferences;
+  if (model.missing.length) {
+    const lines = ['Referenced but missing:'];
+    model.missing.forEach(m => lines.push(m.name + ' — rule #' + (m.index + 1) + ' → ' + (m.target || '—')));
+    missingEl.textContent = lines.join(RD_NL);
+    missingEl.style.display = 'block';
+  }
+  model.items.forEach(item => {
+    box.appendChild(rpeRenderCard(item, (doc['rule-providers'] || {})[item.name]));
+  });
+  if (!model.items.length) rpeLine(box, 'rule-providers отсутствуют в текущем конфиге.', 'hint');
+}
 
 // === MIHOMO BUILDER (via web4core) ===
 async function buildMihomo() {
