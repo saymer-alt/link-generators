@@ -93,7 +93,7 @@ function requestThrough(port) {
       const interval = mode === 'nested-repro' ? 3600 : 1;
       for (const g of groups) { assert.equal(g.lazy, false); g.url = url; g.interval = interval; g.timeout = 300; }
       for (const p of Object.values(doc['proxy-providers'] || {})) {
-        assert.deepEqual({ ...p['health-check'], __comments: undefined }, { enable: true, interval: 300, url: 'https://google.com/generate_204', 'expected-status': 204, lazy: false, __comments: undefined });
+        assert.deepEqual({ ...p['health-check'], __comments: undefined }, { enable: true, interval: 300, url: 'https://www.gstatic.com/generate_204', 'expected-status': 204, lazy: false, __comments: undefined });
         Object.assign(p['health-check'], { url, interval, timeout: 300 });
       }
       const control = await freePort(), mixed = await freePort();
