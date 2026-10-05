@@ -124,8 +124,6 @@ jobs:
       - name: Routing Diagnostics core regression
         run: node tests/routing-inspector.cjs
 
-      - name: Health-check URL regression
-        run: node tests/health-check-url.cjs
 
       - name: Fieldtest harness offline unit tests
         run: node --test tools/warp-dialer-fieldtest/fieldtest.test.mjs
@@ -192,6 +190,8 @@ jobs:
 
       - name: Domain Policy Routing browser regression
         run: node tests/policy-routing-browser.cjs
+      - name: Health-check URL browser regression
+        run: node tests/health-check-url.cjs
 
       - name: VPS domain-detection browser regression
         run: node tests/vps-detection-browser.cjs
