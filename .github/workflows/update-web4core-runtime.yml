@@ -194,8 +194,8 @@ jobs:
           set -euo pipefail
           npm ci --no-fund --no-audit
           npm run build:worker
-          node --test tools/tests/*.test.mjs
           npm run build:web:runtime
+          node --test tools/tests/*.test.mjs
           test -s src/web4core.runtime.js
 
       - name: Verify tracked runtime against declared source
