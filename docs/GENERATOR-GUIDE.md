@@ -130,6 +130,13 @@ Mihomo сам скачивает и обновляет списки узлов (
 Подробно: [POLICY-ROUTING.md](POLICY-ROUTING.md).
 
 
+### WG/AWG: IPv4-only режим
+
+Импортированные WG/AWG-профили нормализуются в IPv4-only режим: IPv6-поля
+(Address/AllowedIPs/DNS) из импортированного профиля не попадают в итоговый Mihomo YAML,
+endpoint-транспорт закреплён за IPv4 (`ip-version: ipv4`). IPv6-only профили и профили
+с IPv6 literal endpoint отклоняются с понятной ошибкой. MTU при этом не меняется.
+
 ### Routing Inspector / Diagnostics
 
 Внутри панели политик — сворачиваемый блок «DIAGNOSTICS — Routing Inspector / Diagnostics».

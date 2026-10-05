@@ -457,6 +457,80 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   assert.match(awgCard, /I1: signature-пакет 123 B/, 'размер I1 вычислен точно (48+13+8+54): ' + JSON.stringify(awgCard));
   ok('AWG-диагностика: missing-MTU default + I1 signature-размер на карточке');
 
+  // 19. NIGHT-04: строгий IPv4-only контракт — reject-матрица и exact-YAML факты.
+  await page.evaluate(() => {
+    wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList();
+    const inp = document.getElementById('mihomoInput');
+    inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  // IPv6-only профиль отклоняется на upload с понятной формулировкой
+  await page.locator('#wgFile').setInputFiles(fx('wg-ipv6-only.conf'));
+  await page.waitForFunction(() => wgUploadPending === false, null, { timeout: 15000 });
+  assert.equal(await page.evaluate(() => wgProfiles.length), 0, 'IPv6-only профиль не попадает в wgProfiles');
+  const rej6 = await page.evaluate(() => wgRejected[0] || {});
+  assert.match(String(rej6.human) + String(rej6.technical), /IPv6-адрес интерфейса|IPv6 interface address/, 'IPv6-only: понятная причина отказа');
+  ok('IPv6-only профиль: reject на upload с понятной причиной');
+
+  // IPv6 literal endpoint — reject целиком (partial peer filtering unsafe)
+  await page.evaluate(() => { wgRejected = []; renderWgList(); });
+  await page.locator('#wgFile').setInputFiles(fx('wg-ipv6-endpoint.conf'));
+  await page.waitForFunction(() => wgUploadPending === false, null, { timeout: 15000 });
+  assert.equal(await page.evaluate(() => wgProfiles.length), 0, 'IPv6 literal endpoint не попадает в wgProfiles');
+  const rejEp = await page.evaluate(() => wgRejected[0] || {});
+  assert.match(String(rejEp.human) + String(rejEp.technical), /IPv6 literal endpoint|IPv6-endpoint/, 'endpoint: понятная причина');
+  ok('IPv6 literal endpoint: reject всего профиля без магической конвертации');
+
+  // dual-stack DNS fixture: normalize + точные YAML факты
+  await page.evaluate(() => { wgRejected = []; renderWgList(); });
+  await page.locator('#wgFile').setInputFiles(fx('wg-dual-stack-dns.conf'));
+  await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 1, null, { timeout: 15000 });
+  await page.waitForFunction(() => dialerTargetsCache.length >= 1, null, { timeout: 10000 });
+  r = await build();
+  assert.equal(r.state, 'VALID');
+  const ds = await page.evaluate(y => {
+    const d = jsyaml.load(y);
+    return (d.proxies || []).find(p => p.type === 'wireguard');
+  }, r.yaml);
+  assert.equal(ds.ipv6, undefined, 'no proxy.ipv6');
+  assert.equal(ds.ip, '10.66.0.2', 'IPv4 address сохранён');
+  assert.deepEqual(ds['allowed-ips'], ['0.0.0.0/0'], '::/0 и fd00::/8 удалены');
+  assert.equal(ds.mtu, 1300, 'MTU сохранён');
+  assert.equal(ds['ip-version'], 'ipv4', 'ip-version pinned');
+  assert.equal(ds.name, 'wg-dual-stack-dns', 'имя прокси не изменилось');
+  assert.ok(!JSON.stringify(ds).includes('2606:4700') && !JSON.stringify(ds).includes('fd00:'), 'никаких IPv6-строк');
+  ok('dual-stack (addr/DNS/AllowedIPs): IPv4-only YAML, MTU и имя нетронуты, ip-version: ipv4');
+
+  // hostname endpoint: ip-version: ipv4 защищает от AAAA
+  await page.evaluate(() => { wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList(); });
+  await page.locator('#wgFile').setInputFiles(fx('wg-hostname-endpoint.conf'));
+  await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 1, null, { timeout: 15000 });
+  r = await build();
+  assert.equal(r.state, 'VALID');
+  const hn = await page.evaluate(y => {
+    const d = jsyaml.load(y);
+    const p = (d.proxies || []).find(p => p.type === 'wireguard');
+    return { server: p.server, ipver: p['ip-version'] };
+  }, r.yaml);
+  assert.equal(hn.server, 'wg-poc.example.net');
+  assert.equal(hn.ipver, 'ipv4', 'hostname endpoint: ip-version: ipv4 (AAAA protection)');
+  ok('hostname endpoint: ip-version: ipv4 закреплён в YAML');
+
+  // AWG dual-stack (ranges/HPK/CPA): AWG-опции сохранены, IPv6 удалён
+  await page.locator('#wgFile').setInputFiles(fx('wg-awg-dual-stack-like.conf'));
+  await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 2, null, { timeout: 15000 });
+  r = await build();
+  assert.equal(r.state, 'VALID');
+  const awgDs = await page.evaluate(y => {
+    const d = jsyaml.load(y);
+    return (d.proxies || []).find(p => p.type === 'wireguard' && p.name === 'wg-awg-dual-stack-like');
+  }, r.yaml);
+  assert.ok(awgDs['amnezia-wg-option'], 'AWG options preserved');
+  assert.deepEqual(awgDs['amnezia-wg-option']['content-padding-addition'], '5-40', 'CPA range сохранён дословно');
+  assert.equal(awgDs.mtu, undefined, 'fixture без MTU -> mtu не выдумывается (missing-MTU passthrough)');
+  assert.ok(!JSON.stringify(awgDs).includes('fd00:'), 'IPv6 удалён и из AWG-профиля');
+  ok('AWG dual-stack: IPv4-only вывод при полном сохранении AWG-опций');
+
   assert.deepEqual(errors, [], 'нет pageerror');
   console.log(`WG-dialer-selector: ${passed} проверок — PASS`);
   await browser.close();
