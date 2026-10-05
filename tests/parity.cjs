@@ -54,11 +54,19 @@ async function runScenario(browser, root, candRoot, name, actions) {
     },
     'vps-gateway': async p => {
       await p.selectOption('#cfgProfile', 'vps-gateway');
+      // Осознанное изменение контракта (fix/vps-allow-lan-router-only): Allow LAN
+      // стал router-only, в VPS-профилях выключается принудительно. Пользователь
+      // в сценарии явно выключает чекбокс: на старом коде он протекал из router
+      // default (allow-lan: true + bind-address: "*"), на новом уже disabled+OFF.
+      // Дефолтный контракт vps-gateway (allow-lan: false без действий) закреплён
+      // в tests/profile-matrix.cjs.
+      if (await p.locator('#cfgLan').isEnabled()) await p.locator('#cfgLan').uncheck();
       await p.fill('#mihomoInput', 'ss://YWVzLTI1Ni1nY206dGVzdHBhc3M=@192.0.2.1:443#s1');
       await p.locator('#cfgSubMode').uncheck();
     },
     'vps-gateway-dns-off': async p => {
       await p.selectOption('#cfgProfile', 'vps-gateway');
+      if (await p.locator('#cfgLan').isEnabled()) await p.locator('#cfgLan').uncheck();
       await p.locator('#vpsDnsEnabled').uncheck();
       await p.fill('#mihomoInput', 'ss://YWVzLTI1Ni1nY206dGVzdHBhc3M=@192.0.2.1:443#s1');
       await p.locator('#cfgSubMode').uncheck();

@@ -27,6 +27,8 @@ Mihomo работает на домашнем роутере и поднимае
 Docker / AmneziaWG. Генератор создаёт **только Mihomo-часть** (TUN `tun-mihomo`,
 DNS-перехват fake-ip, `auto-route: false`); Linux routing и firewall настраивает
 [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway).
+Allow LAN в этом профиле выключен принудительно (router-only опция) — gateway
+принимает трафик через TUN + policy routing, а не через LAN-listener.
 Для обычного VPS с Xray/3X-UI используйте предыдущий профиль.
 
 Подробности: [VPS-GATEWAY.md](VPS-GATEWAY.md). В панели gateway у полей есть
@@ -54,7 +56,7 @@ WARP-конфиги: вкладка **⚡ WARP MASQUE Links** генерируе
 | 🛡️ TUN Interface | Системный TUN: весь трафик устройства через Mihomo. Нужен на роутере; на VPS с локальным Xray — выключен. |
 | ⚡ MIPS stack | Стек обработки TUN-трафика (не процессор!). По умолчанию MIPS; требует Mihomo ≥ 1.19.31, иначе gVisor. |
 | 🔌 Mixed Port 7890 | Локальный HTTP+SOCKS вход Mihomo. |
-| 🌐 Allow LAN | Доступ к Mihomo из локальной сети (добавляет `bind-address: "*"`). На VPS — выключать. |
+| 🌐 Allow LAN | Доступ к Mihomo из локальной сети (добавляет `bind-address: "*"`). Доступно только в профиле «Роутер / обычный TUN»; в обоих VPS-профилях выключено принудительно. |
 | 🖥️ Web UI | Веб-дашборд управления (MetaCubeXD) на порту 9090. |
 | ⚙ Расширенный TUN stack | `system`/`mixed` — экспериментальные (внутри ADVANCED-секции); обычно достаточно MIPS/gVisor. |
 

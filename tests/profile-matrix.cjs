@@ -31,6 +31,8 @@ const root = path.resolve(__dirname, '..');
     master: document.getElementById('cfgPerProxyMaster').checked,
     masterDisabled: document.getElementById('cfgPerProxyMaster').disabled,
     perHint: document.getElementById('perProxyRouterHint').style.display !== 'none',
+    lan: document.getElementById('cfgLan').checked,
+    lanDisabled: document.getElementById('cfgLan').disabled,
     effective: effectiveProfile,
   }));
   const build = async () => {
@@ -47,7 +49,9 @@ const root = path.resolve(__dirname, '..');
   assert.equal(m.profile, 'router');
   assert.equal(m.awlDisabled, false, 'router: БС доступен');
   assert.equal(m.masterDisabled, false, 'router: Per-Proxy доступен');
-  ok('ROUTER: БС и Per-Proxy доступны');
+  assert.equal(m.lan, true, 'router: Allow LAN доступен пользователю (default ON)');
+  assert.equal(m.lanDisabled, false, 'router: Allow LAN не disabled');
+  ok('ROUTER: БС и Per-Proxy доступны, Allow LAN доступен');
 
   // Sub Mode default ON проверяется на чистой странице ниже (transitions-блок).
 
@@ -59,14 +63,18 @@ const root = path.resolve(__dirname, '..');
   assert.equal(m.master, false, 'vps-local: Per-Proxy выключен');
   assert.equal(m.masterDisabled, true, 'vps-local: Per-Proxy недоступен');
   assert.equal(m.perHint, true, 'vps-local: подсказка Per-Proxy router-only');
+  assert.equal(m.lan, false, 'vps-local: Allow LAN выключен');
+  assert.equal(m.lanDisabled, true, 'vps-local: Allow LAN недоступен');
   assert.equal(m.profile, 'vps-local', 'профиль не подменён');
-  ok('VPS-LOCAL: БС/Per-Proxy выключены и недоступны, профиль сохранён');
+  ok('VPS-LOCAL: БС/Per-Proxy/Allow LAN выключены и недоступны, профиль сохранён');
 
   await page.selectOption('#cfgProfile', 'vps-gateway');
   m = await state();
   assert.equal(m.awlDisabled, true, 'vps-gateway: БС недоступен');
   assert.equal(m.masterDisabled, true, 'vps-gateway: Per-Proxy недоступен');
-  ok('VPS-GATEWAY: БС/Per-Proxy выключены и недоступны');
+  assert.equal(m.lan, false, 'vps-gateway: Allow LAN выключен');
+  assert.equal(m.lanDisabled, true, 'vps-gateway: Allow LAN недоступен');
+  ok('VPS-GATEWAY: БС/Per-Proxy выключены и недоступны, Allow LAN OFF+disabled');
 
   // === Sub Mode default ON для всех профилей (на чистой странице) ===
   const page2 = await browser.newPage();
@@ -143,8 +151,25 @@ const root = path.resolve(__dirname, '..');
   assert.equal(m.subMode, true, 'vps-gateway: своё per-profile Sub Mode (default ON), не ручной OFF из router');
   ok('profile-local Sub Mode: состояния независимы per-profile (router OFF ≠ VPS default ON)');
 
+  // === §24b Allow LAN round-trip: router LAN=true → vps-gateway → router ===
+  await page.selectOption('#cfgProfile', 'router');
+  await page.evaluate(() => { document.getElementById('cfgLan').checked = true; });
+  m = await state();
+  assert.equal(m.lan, true, 'router: ручное Allow LAN ON');
+  assert.equal(m.lanDisabled, false, 'router: Allow LAN доступен');
+  await page.selectOption('#cfgProfile', 'vps-gateway');
+  m = await state();
+  assert.equal(m.lan, false, 'vps-gateway: Allow LAN принудительно OFF');
+  assert.equal(m.lanDisabled, true, 'vps-gateway: Allow LAN disabled');
+  await page.selectOption('#cfgProfile', 'router');
+  m = await state();
+  assert.equal(m.lan, true, 'возврат в router: прежнее Allow LAN ON восстановлено');
+  assert.equal(m.lanDisabled, false, 'возврат в router: Allow LAN снова доступен');
+  ok('Allow LAN round-trip: router(ON) → vps-gateway(OFF+disabled) → router(ON restored)');
+
   // === §25 DOM tamper: Build не нарушает deployment contract ===
   // 1) БС tamper в vps-gateway → явная ошибка, профиль не подменён
+  await page.selectOption('#cfgProfile', 'vps-gateway');
   await page.evaluate(() => {
     const el = document.getElementById('cfgAutoWhitelist');
     el.disabled = false; el.checked = true;
@@ -171,6 +196,36 @@ const root = path.resolve(__dirname, '..');
   const perProxyGroups = (r.yaml.match(/name: [^\n]*-(TUN|SOCKS)\b/g) || []).length;
   assert.equal(perProxyGroups, 0, 'нет per-proxy групп');
   ok('tamper: Per-Proxy в vps-gateway → Per-Proxy конфигурация не генерируется');
+
+  // 3) Allow LAN tamper в vps-gateway: disabled+checked через консоль — Build не
+  //    доверяет DOM, allow-lan:true/bind-address:"*" не появляются (UI disabled —
+  //    не единственный слой защиты)
+  await page.evaluate(() => {
+    document.getElementById('cfgLan').disabled = false;
+    document.getElementById('cfgLan').checked = true;
+  });
+  const rLanGw = await build();
+  assert.equal(rLanGw.state, 'VALID', 'тампер LAN в vps-gateway: сборка проходит');
+  assert.doesNotMatch(rLanGw.yaml, /^allow-lan:\s*true$/m, 'vps-gateway tamper: в YAML нет allow-lan: true');
+  assert.doesNotMatch(rLanGw.yaml, /^bind-address:\s*"\*"$/m, 'vps-gateway tamper: в YAML нет bind-address: "*"');
+  assert.match(rLanGw.yaml, /^allow-lan:\s*false$/m, 'vps-gateway tamper: allow-lan остался false');
+  assert.equal(await page.evaluate(() => document.getElementById('cfgProfile').value), 'vps-gateway', 'профиль не подменён тампером LAN');
+  ok('tamper: Allow LAN в vps-gateway → YAML не открывает LAN listener');
+
+  // 4) Allow LAN tamper в vps-local — тот же fail-safe
+  await page.selectOption('#cfgProfile', 'vps-local');
+  await page.evaluate(() => {
+    document.getElementById('cfgSubMode').checked = false; // вход в профиль применил per-profile default ON
+    document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('cfgLan').disabled = false;
+    document.getElementById('cfgLan').checked = true;
+  });
+  const rLanLocal = await build();
+  assert.equal(rLanLocal.state, 'VALID', 'тампер LAN в vps-local: сборка проходит');
+  assert.doesNotMatch(rLanLocal.yaml, /^allow-lan:\s*true$/m, 'vps-local tamper: в YAML нет allow-lan: true');
+  assert.doesNotMatch(rLanLocal.yaml, /^bind-address:\s*"\*"$/m, 'vps-local tamper: в YAML нет bind-address: "*"');
+  assert.match(rLanLocal.yaml, /^allow-lan:\s*false$/m, 'vps-local tamper: allow-lan остался false');
+  ok('tamper: Allow LAN в vps-local → YAML не открывает LAN listener');
 
   assert.deepEqual(errors, [], 'нет pageerror');
   console.log(`Profile-matrix: ${passed} проверок — PASS`);
