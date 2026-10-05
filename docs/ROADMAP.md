@@ -67,7 +67,22 @@ Reference для будущего исследования: **OpenCCK IP List** 
 
 ## 4. MTU auto-planner (заблокирован live-PoC гейтом)
 
-Исследование v1.8.0 (source-pinned): формула вложенности `innerA + 32 (WG hdr+tag) + S4/contentPadding-worst ≤ MTU_B` структурно подтверждена исходниками (wireguard-go MessageTransportSize=32; amneziawg-go v3 `elem.padding = paddings.transport` пер-пакетно; calculatePaddingSize с cap по mtu), НО auto-correction в v1.8.0 **не включён**. Для включения нужны live-PoC на управляемых endpoints: 1–4 хопа (WG/WG, WG/AWG, AWG/WG, AWG/AWG), ping DF max-payload, TCP/UDP throughput, packet capture wire sizes, сравнение auto-MTU vs known-safe ручной MTU на 1.19.31 и 1.19.32. До этого: imported MTU сохраняется, diagnostics-only.
+Исследование v1.8.0 (source-pinned, docs/research/WG-MTU-MIHOMO.md + AWG-MTU-OVERHEAD.md):
+формула вложенности `innerA + 32 (WG hdr+tag) + S4/contentPadding-worst + 28 (inner IP/UDP) ≤ MTU_B`
+структурно подтверждена исходниками И userspace runtime PoC на gVisor-стеке (UDP budget = MTU−28
+байт-в-байт; самофрагментация при превышении). **Auto-correction в v1.8.0 не включён.**
+
+ shipped в v1.8.0 (diagnostics-only): `web4core.planWireGuardMtu(doc)` — чистая модель цепочки
+ dialer-proxy среди WG/AWG (направление outermost→inner, worst-case −75/хоп IPv4, −S4/−CPA-max
+ учтены, RandomTrailers → confidence unknown, non-WG dialer target → analysis stops, циклы/минимум
+ 576 помечаются), отображается на карточках профилей; generated YAML планировщик не меняет.
+
+Для включения auto-MTU нужны live-PoC на управляемых endpoints: 1–4 хопа (WG/WG, WG/AWG,
+AWG/WG, AWG/AWG), ping DF max-payload, TCP/UDP throughput, packet capture wire sizes, сравнение
+auto-MTU vs known-safe ручной MTU на 1.19.31 и 1.19.32, **плюс mipstack runtime PoC**
+(в 1.19.32 auto→безусловный mips — все WG-прокси дефолтных билдов идут через mipstack,
+runtime-поведение которого для размеров пакетов не тестировалось). До этого: imported MTU
+сохраняется, диагностика цепочек отображается.
 
 ## 5. Остальной backlog link-generators
 
