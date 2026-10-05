@@ -45,6 +45,7 @@ let cases = 0;
   const sumA = await page.locator('#rpeSummary').textContent();
   assert.match(sumA, /Провайдеры: 2 · Используются: 2 · Не используются: 0/);
   assert.match(sumA, /Inline: 2 · Внешние: 0 · Отсутствующие ссылки: 0/); cases += 2;
+  assert.doesNotMatch(sumA, /Other\/Unknown/, 'Other/Unknown не показывается при нулевых неизвестных типах'); cases += 1;
   for (const name of ['policy-ai', 'policy-google']) {
     await openCard(name);
     const card = cardOf(name);
@@ -172,6 +173,99 @@ let cases = 0;
   const yamlH = await page.evaluate(() => document.getElementById('mihomoOutput').value);
   assert.equal(yamlH, yamlAfterBuild, 'Explorer/Inspector interactions не меняют generated YAML'); cases += 3;
   assert.deepEqual(requests.filter(u => u.includes('provider-sentinel.invalid')), [], '0 запросов к sentinel-хосту за всю сессию'); cases += 1;
+
+  // === I. Other/Unknown: Внешние = только http|file; unknown/other честно и без accidental payload ===
+  const yamlMixed = [
+    'mixed-port: 7890',
+    'rule-providers:',
+    '  inl:',
+    '    type: inline',
+    '    behavior: domain',
+    '    payload:',
+    '      - a.example',
+    '  http1:',
+    '    type: http',
+    '    behavior: domain',
+    '    url: https://example.net/h.yaml',
+    '  file1:',
+    '    type: file',
+    '    behavior: domain',
+    '    path: ./f.txt',
+    '  noname:',
+    '    url: https://example.net/x',
+    '  custom:',
+    '    type: SmbShare',
+    '    behavior: domain',
+    'rules:',
+    '  - RULE-SET,inl,DIRECT',
+    '  - MATCH,GLOBAL'
+  ].join('\n');
+  await page.evaluate(y => updateRoutingDiagnostics(y), yamlMixed);
+  await openDiagnostics();
+  const sumI = await page.locator('#rpeSummary').textContent();
+  assert.match(sumI, /Inline: 1 · Внешние: 2 · Other\/Unknown: 2/, 'External = только http|file; unknown/custom отдельной строкой');
+  assert.match(sumI, /Провайдеры: 5/);
+  cases += 2;
+  await openCard('noname');
+  const unknownBody = await cardOf('noname').locator('.rpe-body').textContent();
+  assert.match(unknownBody, /type: unknown/, 'отсутствующий type честно unknown');
+  assert.match(unknownBody, /payload: unavailable offline/);
+  assert.doesNotMatch(unknownBody, /External provider contents are not loaded by the browser/, 'unknown-тип не называется External');
+  cases += 3;
+  const yamlAcc = [
+    'mixed-port: 7890',
+    'rule-providers:',
+    '  acc:',
+    '    type: http',
+    '    behavior: domain',
+    '    url: https://example.net/rules.yaml',
+    '    payload:',
+    '      - secret.example',
+    'rules:',
+    '  - RULE-SET,acc,PROXY',
+    '  - MATCH,GLOBAL'
+  ].join('\n');
+  await page.evaluate(y => updateRoutingDiagnostics(y), yamlAcc);
+  await openDiagnostics();
+  await openCard('acc');
+  const accBody = await cardOf('acc').locator('.rpe-body').textContent();
+  assert.match(accBody, /payload: unavailable offline/, 'http: содержимое недоступно офлайн');
+  assert.doesNotMatch(accBody, /secret\.example/, 'accidental payload[] не экспонируется в UI');
+  assert.equal(await cardOf('acc').locator('.rpe-pre').count(), 0, 'http: payload-view не строится');
+  assert.equal(await cardOf('acc').locator('.rpe-search').count(), 0, 'http: поиск не строится');
+  cases += 4;
+
+  // === J. Search query privacy: sentinel не персистится нигде ===
+  const SENTINEL_Q = 'rpe-search-private-sentinel-84721';
+  await page.evaluate(y => updateRoutingDiagnostics(y), yamlAfterBuild);
+  await openDiagnostics();
+  await openCard('policy-ai');
+  const searchJ = cardOf('policy-ai').locator('.rpe-search');
+  await searchJ.fill('openai');
+  assert.match(await cardOf('policy-ai').locator('.rpe-matches').textContent(), /Matches: [1-9]/, 'search работает на живом запросе');
+  await searchJ.fill(SENTINEL_Q);
+  assert.match(await cardOf('policy-ai').locator('.rpe-matches').textContent(), /Matches: 0/, 'sentinel query обработан (no-match)');
+  cases += 2;
+  const dumpStorages = () => page.evaluate(() => {
+    const dump = o => { const r = {}; for (let i = 0; i < o.length; i++) { const k = o.key(i); r[k] = o.getItem(k); } return JSON.stringify(r); };
+    return JSON.stringify({ ls: dump(localStorage), ss: dump(sessionStorage), search: location.search, hash: location.hash });
+  });
+  const stBefore = await dumpStorages();
+  assert.ok(!stBefore.includes(SENTINEL_Q), 'sentinel отсутствует в localStorage/sessionStorage/URL ДО reload'); cases += 1;
+  await page.reload();
+  await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+  const stAfter = await dumpStorages();
+  assert.ok(!stAfter.includes(SENTINEL_Q), 'sentinel отсутствует в localStorage/sessionStorage/URL ПОСЛЕ reload'); cases += 1;
+  // после reload DPR-панель (родитель routingDiagnostics) скрыта — вернуть чекбокс, чтобы открыть Diagnostics
+  await page.evaluate(() => {
+    const d = document.getElementById('cfgPolicyRouting');
+    if (!d.checked) { d.checked = true; d.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+  await page.evaluate(y => updateRoutingDiagnostics(y), yamlAfterBuild);
+  await openDiagnostics();
+  await openCard('policy-ai');
+  assert.equal(await cardOf('policy-ai').locator('.rpe-search').inputValue(), '', 'search input не восстановлен после reload'); cases += 1;
+  assert.deepEqual(requests.filter(u => u.includes(SENTINEL_Q)), [], 'sentinel query не уходит в сеть'); cases += 1;
 
   assert.deepEqual(errors, [], 'no page errors'); cases += 1;
   console.log('Rule-provider-explorer browser: ' + cases + ' cases passed');

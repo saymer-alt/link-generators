@@ -176,14 +176,23 @@ const ok = () => cases++;
 // 19. unknown type/behavior/format displayed honestly (absent → unknown; values not invented)
 {
   const d = { rules: ['RULE-SET,weird,PROXY'], 'rule-providers': { weird: { url: 'https://example.net/x' } } };
-  const it = api.routingProviderInventory(d).items[0];
+  const inv = api.routingProviderInventory(d);
+  const it = inv.items[0];
   assert.equal(it.type, 'unknown');
   assert.equal(it.behavior, 'unknown');
   assert.equal(it.format, 'default');
   assert.equal(it.source, 'https://example.net/x');
+  // unknown-тип не считается доказуемо внешним: ни в summary, ни в stats.kind
+  assert.equal(it.stats.kind, 'unknown');
+  assert.equal(inv.summary.external, 0, 'unknown provider NOT counted as External');
+  assert.equal(inv.summary.otherUnknown, 1);
+  assert.equal(it.payload, null, 'unknown provider payload не экспонируется');
   // нестандартное значение type не подменяется «ближайшим известным»
-  const d2 = { rules: ['MATCH,GLOBAL'], 'rule-providers': { s: { type: 'SmbShare', behavior: 'domain', payload: [] } } };
-  assert.equal(api.routingProviderInventory(d2).items[0].type, 'smbshare');
+  const d2 = { rules: ['MATCH,GLOBAL'], 'rule-providers': { s: { type: 'SmbShare', behavior: 'domain', payload: ['a.com'] } } };
+  const it2 = api.routingProviderInventory(d2).items[0];
+  assert.equal(it2.type, 'smbshare');
+  assert.equal(it2.stats.kind, 'unknown');
+  assert.equal(it2.payload, null, 'custom type с accidental payload[] не экспонирует содержимое');
   ok();
 }
 // 20. external contents are never claimed as known
@@ -207,7 +216,7 @@ const ok = () => cases++;
     }
   };
   const inv = api.routingProviderInventory(d);
-  assert.deepEqual(inv.summary, { providers: 4, used: 3, unused: 1, inline: 2, external: 2, missingReferences: 1 });
+  assert.deepEqual(inv.summary, { providers: 4, used: 3, unused: 1, inline: 2, external: 2, otherUnknown: 0, missingReferences: 1 });
   ok();
 }
 // 22. RULE-SET без имени и no-resolve-флаг не ломают references
@@ -225,6 +234,41 @@ const ok = () => cases++;
   assert.equal(inv.items.length, 2, 'corrupted provider остаётся в инвентаре');
   assert.equal(inv.items[0].type, 'unknown', 'corrupted provider показан честно как unknown');
   assert.deepEqual(inv.missing, [{ index: 2, name: 'ai', target: 'PROXY' }], 'corrupted provider не считается пригодным для ссылки');
+  ok();
+}
+// 24. BLOCKER regression: External = только http|file; unknown/custom → Other/Unknown
+{
+  const d = {
+    rules: ['MATCH,GLOBAL'],
+    'rule-providers': {
+      inl: { type: 'inline', behavior: 'domain', payload: ['a.com'] },
+      http: { type: 'http', behavior: 'domain', url: 'https://example.net/h.yaml' },
+      file: { type: 'file', behavior: 'domain', path: './f.txt' },
+      none: { url: 'https://example.net/x' }, // type отсутствует → unknown
+      custom: { type: 'SmbShare', behavior: 'domain', payload: ['b.com'] } // кастомный тип
+    }
+  };
+  const inv = api.routingProviderInventory(d);
+  assert.equal(inv.summary.inline, 1);
+  assert.equal(inv.summary.external, 2, 'только http+file считаются External');
+  assert.equal(inv.summary.otherUnknown, 2, 'unknown + custom type → Other/Unknown');
+  assert.equal(inv.summary.providers, 5);
+  ok();
+}
+// 25. BLOCKER regression: external provider с accidental payload[] не экспонирует содержимое
+{
+  const http = { type: 'http', behavior: 'domain', url: 'https://example.net/rules.yaml', payload: ['secret.example'] };
+  const invH = api.routingProviderInventory({ rules: ['RULE-SET,h,PROXY'], 'rule-providers': { h: http } });
+  assert.equal(invH.items[0].payload, null, 'http + payload[] → item.payload === null');
+  assert.equal(invH.items[0].stats.entries, null);
+  assert.equal(invH.items[0].stats.bytes, null);
+  assert.equal(invH.items[0].stats.kind, 'external');
+  assert.equal(api.routingProviderSearch(http, 'secret').total, 0, 'поиск не видит accidental payload внешнего провайдера');
+  const file = { type: 'file', behavior: 'domain', path: './f.txt', payload: ['secret.example'] };
+  const invF = api.routingProviderInventory({ rules: ['RULE-SET,f,DIRECT'], 'rule-providers': { f: file } });
+  assert.equal(invF.items[0].payload, null, 'file + payload[] → item.payload === null');
+  assert.equal(invF.items[0].stats.entries, null);
+  assert.equal(invF.items[0].stats.bytes, null);
   ok();
 }
 

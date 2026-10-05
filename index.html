@@ -3592,7 +3592,11 @@ function routingProviderReferences(doc) {
 function routingProviderPayloadStats(provider) {
   const p = provider && typeof provider === 'object' ? provider : {};
   const type = String(p.type || '').trim().toLowerCase();
-  if (type !== 'inline') return { kind: 'external', entries: null, bytes: null, payloadMalformed: false };
+  if (type !== 'inline') {
+    // «external» — только доказуемо внешние типы; unknown/other нельзя называть внешними.
+    const kind = (type === 'http' || type === 'file') ? 'external' : 'unknown';
+    return { kind, entries: null, bytes: null, payloadMalformed: false };
+  }
   if (!Array.isArray(p.payload)) {
     return { kind: 'inline', entries: 0, bytes: 0, payloadMalformed: p.payload !== undefined && p.payload !== null };
   }
@@ -3608,7 +3612,10 @@ function routingProviderPayloadStats(provider) {
 }
 function routingProviderSearch(provider, query) {
   const q = String(query === null || query === undefined ? '' : query).toLowerCase();
-  const payload = provider && Array.isArray(provider.payload) ? provider.payload : [];
+  const p = provider && typeof provider === 'object' ? provider : {};
+  // поиск допустим только по локально известному inline-payload;
+  // accidental payload[] у http/file/unknown — не локальное содержимое
+  const payload = String(p.type || '').trim().toLowerCase() === 'inline' && Array.isArray(p.payload) ? p.payload : [];
   const matches = [];
   for (const raw of payload) {
     const line = String(raw === null || raw === undefined ? '' : raw);
@@ -3647,7 +3654,9 @@ function routingProviderInventory(doc) {
       metadata,
       used: refs[name] || [],
       stats: routingProviderPayloadStats(safe),
-      payload: Array.isArray(safe.payload) ? safe.payload.map(v => String(v === null || v === undefined ? '' : v)) : null
+      // локальное содержимое разрешено ТОЛЬКО inline-провайдеру: http/file/unknown/other
+      // с accidental payload[] не экспонируют его через модель (external contents unknown offline)
+      payload: typeRaw === 'inline' && Array.isArray(safe.payload) ? safe.payload.map(v => String(v === null || v === undefined ? '' : v)) : null
     };
   });
   const summary = {
@@ -3655,7 +3664,8 @@ function routingProviderInventory(doc) {
     used: items.filter(i => i.used.length > 0).length,
     unused: items.filter(i => !(i.used.length > 0)).length,
     inline: items.filter(i => i.type === 'inline').length,
-    external: items.filter(i => i.type !== 'inline').length,
+    external: items.filter(i => i.type === 'http' || i.type === 'file').length, // только доказуемо внешние
+    otherUnknown: items.filter(i => i.type !== 'inline' && i.type !== 'http' && i.type !== 'file').length,
     missingReferences: missing.length
   };
   return { items, missing, summary };
@@ -3813,10 +3823,13 @@ function rpeBuildBody(card, item, provider) {
       rpeRenderPayloadView(pre, infoEl, provider, '');
       search.addEventListener('input', () => rpeRenderPayloadView(pre, infoEl, provider, search.value));
     }
-  } else {
+  } else if (item.type === 'http' || item.type === 'file') {
     rpeLine(body, 'payload: unavailable offline', 'hint');
     rpeLine(body, 'External provider contents are not loaded by the browser.', 'hint');
     if (item.format === 'mrs') rpeLine(body, 'Contents: unavailable offline (Format: MRS — декодирование не выполняется)', 'hint');
+  } else {
+    // unknown/other: тип не доказан как внешний — нельзя писать «External …»
+    rpeLine(body, 'payload: unavailable offline (тип провайдера не inline — локального содержимого нет)', 'hint');
   }
 }
 function rpeRenderCard(item, provider) {
@@ -3856,6 +3869,7 @@ function renderRuleProviderExplorer(doc) {
     ' · Не используются: ' + model.summary.unused + RD_NL +
     'Inline: ' + model.summary.inline +
     ' · Внешние: ' + model.summary.external +
+    (model.summary.otherUnknown > 0 ? ' · Other/Unknown: ' + model.summary.otherUnknown : '') +
     ' · Отсутствующие ссылки: ' + model.summary.missingReferences;
   if (model.missing.length) {
     const lines = ['Referenced but missing:'];
