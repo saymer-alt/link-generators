@@ -9,7 +9,9 @@ let cases = 0;
   const page = await (await browser.newContext()).newPage();
   page.setDefaultTimeout(15000);
   const errors = [];
+  const requests = [];
   page.on('pageerror', e => errors.push(e.message));
+  page.on('request', r => requests.push(r.url()));
   if (process.env.JS_YAML_PATH) await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ path: process.env.JS_YAML_PATH, contentType: 'text/javascript' }));
   await page.goto(pathToFileURL(path.join(process.cwd(), 'index.html')).href);
   await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
@@ -20,7 +22,10 @@ let cases = 0;
   assert.equal(g.url, 'https://www.gstatic.com/generate_204', 'Google official');
   assert.equal(cf.url, 'https://cp.cloudflare.com', 'Cloudflare official');
   assert.ok(['apple', 'microsoft', 'ubuntu', 'fedora'].every(id => choices.some(c => c.id === id)), 'other presets exist');
-  cases += 2;
+  // Anti-rollback pin: legacy-дефолт https://google.com/generate_204 не должен
+  // тихо вернуться — единственная легальная Google-строка теперь gstatic.
+  assert.ok(!choices.some(c => c.url === 'https://google.com/generate_204'), 'legacy google.com/generate_204 не вернулся в пресеты');
+  cases += 3;
   // 2. Label renamed + hint mentions HTTP(S)/не ICMP
   const labelText = await page.evaluate(() => document.body.textContent.includes('Health-check URL (latency test)'));
   const hintOk = await page.evaluate(() => /HTTP\(S\)/.test(document.body.textContent) && /не ICMP/.test(document.body.textContent));
@@ -37,7 +42,8 @@ let cases = 0;
   await page.locator('button[onclick="buildMihomo()"]').click();
   await page.waitForFunction(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state), null, { timeout: 20000 });
   const yGoogle = await page.evaluate(() => document.getElementById('mihomoOutput').value);
-  assert.match(yGoogle, /url: "?https:\/\/www\.gstatic\.com\/generate_204"?/); cases += 1;
+  assert.match(yGoogle, /url: "?https:\/\/www\.gstatic\.com\/generate_204"?/);
+  assert.ok(!yGoogle.includes('https://google.com/generate_204'), 'дефолтный build не откатился на legacy google.com URL'); cases += 2;
   // 6. Cloudflare preset → official URL in YAML
   await page.evaluate(() => {
     const sel = document.getElementById('pingSelect');
@@ -84,12 +90,31 @@ let cases = 0;
     sel.value = 'https://www.gstatic.com/generate_204'; sel.dispatchEvent(new Event('change', { bubbles: true }));
   });
   assert.equal(await page.locator('#pingCustomUrl').isVisible(), false, 'field hidden on preset'); cases += 1;
-  // 12. privacy: custom URL not persisted
-  await page.evaluate(v => { const el = document.getElementById('pingCustomUrl'); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, '#pingCustomUrl');
+  // 12. privacy + no-probe: реальный custom URL (sentinel) не персистится и ни разу
+  // не запрашивается браузером — ни fetch/XHR, ни image/script probe, ни navigation.
+  // Записи requests собираются с самого открытия страницы (слушатель выше).
+  const SENTINEL = 'https://privacy-sentinel.invalid/generate_204?token=do-not-store';
+  await page.evaluate(() => {
+    const sel = document.getElementById('pingSelect');
+    const opt = Array.from(sel.options).find(o => o.value === '__custom__');
+    sel.value = '__custom__'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  assert.equal(await page.locator('#pingCustomUrl').isVisible(), true, 'custom field видно при выбранном Custom'); cases += 1;
+  await page.evaluate(v => { const el = document.getElementById('pingCustomUrl'); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, SENTINEL);
+  await page.locator('button[onclick="buildMihomo()"]').click();
+  await page.waitForFunction(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state), null, { timeout: 20000 });
+  const ySentinel = await page.evaluate(() => document.getElementById('mihomoOutput').value);
+  assert.ok(ySentinel.includes(SENTINEL), 'sentinel попадает в YAML дословно (контроль 1)'); cases += 1;
+  const dumpLs = () => page.evaluate(() => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); o[k] = localStorage.getItem(k); } return JSON.stringify(o); });
+  const lsBefore = await dumpLs();
+  assert.ok(!lsBefore.includes('privacy-sentinel.invalid'), 'sentinel отсутствует в localStorage ДО reload (контроль 2)'); cases += 1;
   await page.reload();
   await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
-  const ls = await page.evaluate(() => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); o[k] = localStorage.getItem(k); } return JSON.stringify(o); });
-  assert.doesNotMatch(ls, /private-host|my\.example\.net/, 'custom URL not persisted'); cases += 1;
+  const lsAfter = await dumpLs();
+  assert.ok(!lsAfter.includes('privacy-sentinel.invalid'), 'sentinel отсутствует в localStorage ПОСЛЕ reload (контроль 3a)'); cases += 1;
+  assert.equal(await page.locator('#pingCustomUrl').inputValue(), '', 'custom input не восстановил sentinel после reload (контроль 3b)');
+  assert.equal(await page.locator('#pingSelect').inputValue(), 'https://www.gstatic.com/generate_204', 'после reload активен дефолтный preset, не custom'); cases += 2;
+  assert.deepEqual(requests.filter(u => u.includes('privacy-sentinel.invalid')), [], '0 запросов браузера к sentinel-хосту (контроль 4)'); cases += 1;
 
   assert.deepEqual(errors, [], 'no page errors'); cases += 1;
   // 13. Coexistence: Routing Diagnostics (#107) + health-check Custom (#108) одновременно
@@ -128,6 +153,8 @@ let cases = 0;
   assert.match(yCo, /RULE-SET,policy-ai/, 'DPR rules в YAML');
   assert.equal(await page.evaluate(() => document.getElementById('mihomoOutput').value), yCo, 'Inspector не меняет YAML (coexistence)');
   cases += 7;
+
+  assert.deepEqual(requests.filter(u => u.includes('privacy-sentinel.invalid')), [], '0 запросов к sentinel-хосту за всю сессию'); cases += 1;
 
   console.log('Health-check browser: ' + cases + ' cases passed');
   await browser.close();
