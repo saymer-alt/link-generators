@@ -173,6 +173,9 @@ jobs:
       - name: Main browser regression
         run: node tests/browser.cjs
 
+      - name: YAML scalar hardening regression
+        run: node tests/yaml-scalar-hardening.cjs
+
       - name: YAML parity vs merge-base
         shell: bash
         env:

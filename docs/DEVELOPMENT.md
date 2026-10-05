@@ -1,5 +1,30 @@
 # DEVELOPMENT — как разрабатывать и проверять
 
+## YAML scalar type safety (NIGHT-09)
+
+Пользовательские строковые значения эмитятся типобезопасно: не выполнять
+`String(value)` над всеми полями подряд (ломает numbers/booleans/arrays);
+рискованные YAML-скаляры в строковых полях (`yes`, `no`, `null`, `0123`, даты)
+экранирует автоматический YAML-эмиттер; raw-вставка пользовательского YAML
+сохраняет его YAML-семантику. Контракт и верификация: docs/VALIDATION.md,
+tests/yaml-scalar-hardening.cjs.
+
+## Version/channel metadata (v1.8.0+)
+
+Видимая версия генератора живёт в шапке страницы (бейдж справа от заголовка) и имеет
+**один** production source-of-truth — константа `GENERATOR_META` в `index.html`
+(см. тест `tests/version-badge.cjs`):
+
+- development build: `version = '1.8.0-dev'`, `channel = 'main'` → бейдж `v1.8.0-dev · MAIN`;
+- release build: `version = '1.8.0'`, `channel = 'stable'` → бейдж `v1.8.0 · STABLE`.
+
+`channel` — это metadata конкретной сборки, а **не** определение git-ветки в рантайме:
+браузер не знает ветку, и никакой hostname/URL/API-эвристики для этого сознательно нет.
+При release promotion (`main → stable`) владелец отдельно переводит значения в
+`GENERATOR_META`; следующий development cycle отдельно возвращает `*-dev` на `main`.
+Значения не дублировать в HTML/tests/JS — бейдж и accessible title вычисляются из
+константы.
+
 ## Primary/fallback
 
 Дополнительно к командам ниже запускать
