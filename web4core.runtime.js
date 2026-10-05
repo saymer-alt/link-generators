@@ -3029,6 +3029,97 @@
       }
     };
   }
+  function planWireGuardMtu(doc) {
+    const proxies = doc && Array.isArray(doc.proxies) ? doc.proxies.filter((p) => p && p.type === "wireguard" && p.name) : [];
+    const byName = new Map(proxies.map((p) => [p.name, p]));
+    const profiles = proxies.map((p) => {
+      const awg = p["amnezia-wg-option"] && typeof p["amnezia-wg-option"] === "object" ? p["amnezia-wg-option"] : {};
+      const num = (v) => Number.isFinite(v) ? v : /^\d+$/.test(String(v ?? "")) ? parseInt(v, 10) : null;
+      const cpaRaw = String(awg["content-padding-addition"] || "").trim();
+      const cpaRange = cpaRaw.match(/^(\d+)-(\d+)$/);
+      return {
+        name: p.name,
+        dialer: typeof p["dialer-proxy"] === "string" && p["dialer-proxy"].trim() ? p["dialer-proxy"].trim() : null,
+        importedMtu: Number.isFinite(p.mtu) && p.mtu > 0 ? p.mtu : null,
+        s4: num(awg.s4) || 0,
+        cpaMin: cpaRange ? parseInt(cpaRange[1], 10) : num(cpaRaw) !== null ? num(cpaRaw) : null,
+        cpaMax: cpaRange ? parseInt(cpaRange[2], 10) : num(cpaRaw) !== null ? num(cpaRaw) : null,
+        cpaSet: !!cpaRaw,
+        rt: awg["random-trailers"] === true
+      };
+    });
+    const byProfile = new Map(profiles.map((p) => [p.name, p]));
+    const PRACTICAL_MIN = 576;
+    const memo = /* @__PURE__ */ new Map();
+    const visiting = /* @__PURE__ */ new Set();
+    function plan(name) {
+      if (memo.has(name)) return memo.get(name);
+      if (visiting.has(name)) {
+        const r2 = { name, confidence: "cycle", ceiling: null, effective: null, reason: ["\u0446\u0438\u043A\u043B dialer-proxy \u2014 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044F authoritative cycle detection \u043F\u0440\u0438 \u0441\u0431\u043E\u0440\u043A\u0435"] };
+        memo.set(name, r2);
+        return r2;
+      }
+      visiting.add(name);
+      const pr = byProfile.get(name);
+      const r = { name, chain: [name], confidence: "proven", ceiling: null, effective: null, overhead: null, reason: [] };
+      if (!pr) {
+        r.confidence = "unknown";
+        r.reason.push("\u043F\u0440\u043E\u0444\u0438\u043B\u044C \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D \u0432 \u043A\u043E\u043D\u0444\u0438\u0433\u0435");
+        memo.set(name, r);
+        return r;
+      }
+      r.importedMtu = pr.importedMtu;
+      const cpaMinB = pr.cpaSet ? pr.cpaMin ?? 0 : 0;
+      let ovhMax;
+      if (pr.cpaSet) {
+        ovhMax = 32 + pr.s4 + (pr.cpaMax ?? 0);
+      } else if (pr.rt) {
+        ovhMax = null;
+      } else {
+        ovhMax = 32 + pr.s4 + 15;
+      }
+      r.overhead = {
+        min: 32 + pr.s4 + cpaMinB,
+        max: ovhMax,
+        deterministic: pr.cpaSet || !pr.rt
+      };
+      const dialer = pr.dialer;
+      if (!dialer) {
+        r.reason.push("outermost: \u0442\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442 \u2014 \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441");
+        r.effective = pr.importedMtu !== null ? pr.importedMtu : 1408;
+        r.mtuSource = pr.importedMtu !== null ? "imported" : "engine-default";
+      } else if (!byProfile.has(dialer)) {
+        r.confidence = "stopped";
+        r.reason.push("MTU chain analysis stops at non-WG/AWG dialer target \xAB" + dialer + "\xBB");
+        r.effective = pr.importedMtu;
+      } else {
+        const outer = plan(dialer);
+        r.chain = [name].concat(outer.chain || []);
+        if (outer.confidence !== "proven" || outer.effective === null || ovhMax === null) {
+          r.confidence = outer.confidence !== "proven" ? outer.confidence : "unknown";
+          r.effective = pr.importedMtu;
+          if (ovhMax === null) r.reason.push("AWG RandomTrailers: \u0441\u0442\u0440\u043E\u0433\u0430\u044F \u0432\u0435\u0440\u0445\u043D\u044F\u044F \u0433\u0440\u0430\u043D\u0438\u0446\u0430 overhead \u043D\u0435 \u0432\u044B\u0432\u043E\u0434\u0438\u0442\u0441\u044F \u0438\u0437 \u043A\u043E\u043D\u0444\u0438\u0433\u0430 \u2014 \u0440\u0430\u0441\u0447\u0451\u0442 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D, \u0438\u0441\u0445\u043E\u0434\u043D\u044B\u0439 MTU \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D");
+          if (outer.confidence !== "proven") r.reason.push("\u0432\u043D\u0435\u0448\u043D\u0438\u0439 hop \xAB" + dialer + "\xBB \u043D\u0435 \u0438\u043C\u0435\u0435\u0442 \u0434\u043E\u043A\u0430\u0437\u0430\u043D\u043D\u043E\u0433\u043E \u0431\u044E\u0434\u0436\u0435\u0442\u0430");
+        } else {
+          r.ceiling = outer.effective - (ovhMax + 15 + 28);
+          if (r.ceiling < PRACTICAL_MIN) {
+            r.confidence = "error";
+            r.effective = pr.importedMtu;
+            r.reason.push("\u0446\u0435\u043F\u043E\u0447\u043A\u0430 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 MTU " + r.ceiling + " \u2014 \u043D\u0438\u0436\u0435 \u043F\u0440\u0430\u043A\u0442\u0438\u0447\u043D\u043E\u0433\u043E \u043C\u0438\u043D\u0438\u043C\u0443\u043C\u0430 " + PRACTICAL_MIN);
+          } else {
+            r.effective = pr.importedMtu !== null ? Math.min(pr.importedMtu, r.ceiling) : r.ceiling;
+            r.mtuSource = "planned-ceiling";
+            r.reason.push("dialer-proxy: " + dialer, "outer effective MTU: " + outer.effective, "IPv4 worst-case per hop: 60 (32 + align 15 + inner IP/UDP 28)");
+          }
+        }
+      }
+      visiting.delete(name);
+      memo.set(name, r);
+      return r;
+    }
+    const out = profiles.map((p) => plan(p.name));
+    return { profiles: out, note: "diagnostics-only: YAML/mtu \u043D\u0435 \u0438\u0437\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F" };
+  }
 
   // src/core/mihomo.js
   var FASTEST_GROUP_NAME = "\u26A1 Fastest";
@@ -5251,6 +5342,7 @@
     validateWireGuardIpv4Only,
     computeAmneziaTagJunkSize,
     analyzeWireGuardProfile,
+    planWireGuardMtu,
     fetchSubscription,
     buildFromRequest
   });
