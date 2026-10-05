@@ -183,6 +183,13 @@ Google (`www.gstatic.com/generate_204`, 204 — Mihomo recommended), Cloudflare 
 - Правила: всегда ровно `MATCH,GLOBAL` — разделение трафика делает не конфиг, а
   потребитель (на роутере — MagiTrickle и т.п.).
 
+## WG/AWG: IPv4-only контракт и MTU-диагностика (v1.8.0)
+
+- **IPv4-only** (source-first, web4core build-слой): Mihomo WG/AWG-proxy эмитятся без IPv6 — `ipv6` не эмитится, IPv6-записи (включая `::/0`) фильтруются из `allowed-ips` (топ-уровень и peers). Парсер `parseWireGuardConf` остаётся faithful: raw-данные бина сохраняются. Это устраняет отказ mihomo 1.19.32 `IPv6 requires an MTU of at least 1280` для dual-stack профилей с низким MTU (`mihomo -t` green на 1.19.31 и 1.19.32).
+- **MTU semantics**: `importedMtu` из файла передаётся в YAML **без изменений**; auto-correction в v1.8.0 не выполняется (инвариант `effectiveMtu ≤ importedMtu` тривиален: effective = imported). При отсутствии MTU в YAML ничего не эмитится — Mihomo применяет **default 1408** (source-pinned: `adapter/outbound/wireguard.go`, `if mtu == 0 { mtu = 1408 }`).
+- **Диагностика** (`web4core.analyzeWireGuardProfile`, один source-of-truth с YAML): карточка профиля показывает `MTU: N` (или `— (default 1408)`) и notes: IPv6-нормализация (INFO), классификация AWG-параметров — S4 = пер-транспортный junk (A), S1–S3 = handshake-only (B), Jc/Jmin/Jmax = отдельные junk-пакеты (C; WARN при Jmax > 1408), H1–H4 = замена типа сообщения, длину не меняют (D), I1–I5 = отдельные handshake-time signature-пакеты с точно вычислимым размером (C; WARN при > 1408 или неизвестных тегах), ContentPaddingAddition = пер-пакетный padding с worst-case = max диапазона (A), RandomTrailers = случайные хвосты без конфигурационной верхней границы (WARN, F).
+- **Source-pinned**: стек WG в mihomo 1.19.31 и 1.19.32 идентичен — metacubex/wireguard-go@a6cecdd7f57f (MessageTransportSize=32, PaddingMultiple=16, MessageInitiationSize=148, MessageResponseSize=92), metacubex/amneziawg-go@0c1c6f40ecd7 (device_v1 = AWG 1.5: J/S/H/I; device = AWG v3: paddings/headers/ipackets/ContentPaddingAddition/RandomTrailers), metacubex/sing-wireguard@c3ae17d19f9e; единственное различие версий — sing-tun 0.4.24→0.4.27 (TUN-стек, не WG).
+
 ## Загрузка WG/AWG-профилей (append-модель, 2026-10-01)
 
 Кнопка «📂 Загрузить .conf / .wg / .awg» **добавляет** файлы к уже загруженным профилям

@@ -419,6 +419,44 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   assert.equal(await page.evaluate(() => dialerRegistryDegraded), true, 'matrix A: деградация честно помечена');
   ok('matrix A (VLESS + Sub-ON, sequential 3): WG-цели в dropdown после каждой загрузки');
 
+  // 18. IPv4-only contract + MTU/AWG-диагностика (web4core engine, v1.8.0):
+  // dual-stack WARP-профиль → YAML без IPv6, imported MTU без изменений,
+  // карточка показывает MTU/notes из web4core.analyzeWireGuardProfile.
+  await page.evaluate(() => {
+    const sub = document.getElementById('cfgSubMode');
+    if (sub.checked) { sub.checked = false; sub.dispatchEvent(new Event('change', { bubbles: true })); }
+    wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList();
+    const inp = document.getElementById('mihomoInput');
+    inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.locator('#wgFile').setInputFiles(fx('wg-warp-like.conf'));
+  await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 1);
+  await page.waitForFunction(() => dialerTargetsCache.length >= 1, null, { timeout: 10000 });
+  const warpCard = await page.evaluate(() => document.querySelector('.wg-card-info').textContent);
+  assert.match(warpCard, /MTU: 1200/, 'карточка показывает imported MTU: ' + JSON.stringify(warpCard));
+  assert.match(warpCard, /IPv4-only contract/, 'карточка показывает IPv6-нормализацию');
+  r = await build();
+  assert.equal(r.state, 'VALID', 'dual-stack вход собирается VALID');
+  const wgProxy = await page.evaluate(y => {
+    const d = jsyaml.load(y);
+    return (d.proxies || []).find(p => p.type === 'wireguard');
+  }, r.yaml);
+  assert.equal(wgProxy.ipv6, undefined, 'ipv6 не эмитится');
+  assert.equal(wgProxy.ip, '172.16.0.2', 'IPv4 address сохранён');
+  assert.deepEqual(wgProxy['allowed-ips'], ['0.0.0.0/0'], '::/0 отфильтрован');
+  assert.equal(wgProxy.mtu, 1200, 'imported MTU 1200 не изменён (auto-correction выключен)');
+  assert.ok(!JSON.stringify(wgProxy).includes('2606:4700'), 'никаких IPv6-строк в WG proxy');
+  ok('IPv4-only contract: dual-stack вход → IPv4-only YAML, MTU passthrough, notes на карточке');
+
+  // missing MTU + AWG I-диагностика на втором профиле
+  await page.locator('#wgFile').setInputFiles(fx('wg-awg-i-like.conf'));
+  await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 2);
+  await page.waitForTimeout(300);
+  const awgCard = await page.evaluate(() => document.querySelectorAll('.wg-card-info')[1].textContent);
+  assert.match(awgCard, /MTU: — \(default 1408\)/, 'missing MTU: честный default 1408: ' + JSON.stringify(awgCard));
+  assert.match(awgCard, /I1: signature-пакет 123 B/, 'размер I1 вычислен точно (48+13+8+54): ' + JSON.stringify(awgCard));
+  ok('AWG-диагностика: missing-MTU default + I1 signature-размер на карточке');
+
   assert.deepEqual(errors, [], 'нет pageerror');
   console.log(`WG-dialer-selector: ${passed} проверок — PASS`);
   await browser.close();

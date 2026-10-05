@@ -65,7 +65,11 @@ Reference для будущего исследования: **OpenCCK IP List** 
   (см. [GIST-SUBSCRIPTION.md](GIST-SUBSCRIPTION.md));
 - **coverage comparison** — сравнение покрытия наших списков с внешними источниками.
 
-## 4. Остальной backlog link-generators
+## 4. MTU auto-planner (заблокирован live-PoC гейтом)
+
+Исследование v1.8.0 (source-pinned): формула вложенности `innerA + 32 (WG hdr+tag) + S4/contentPadding-worst ≤ MTU_B` структурно подтверждена исходниками (wireguard-go MessageTransportSize=32; amneziawg-go v3 `elem.padding = paddings.transport` пер-пакетно; calculatePaddingSize с cap по mtu), НО auto-correction в v1.8.0 **не включён**. Для включения нужны live-PoC на управляемых endpoints: 1–4 хопа (WG/WG, WG/AWG, AWG/WG, AWG/AWG), ping DF max-payload, TCP/UDP throughput, packet capture wire sizes, сравнение auto-MTU vs known-safe ручной MTU на 1.19.31 и 1.19.32. До этого: imported MTU сохраняется, diagnostics-only.
+
+## 5. Остальной backlog link-generators
 
 - **YAML 1.1 scalar hardening** — аккуратность с `yes/no/on/off/y/n` как булевыми
   скалярами YAML 1.1 в пользовательских вводах и примерах.

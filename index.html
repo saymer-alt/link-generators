@@ -94,6 +94,8 @@
   .wg-target-manual{width:100%;padding:4px 8px;font-size:.85rem;margin-top:4px}
   .wg-target-warn{color:var(--warn);font-size:.8rem;margin-top:4px}
   .wg-target-degraded{color:var(--muted);font-size:.78rem;margin-top:2px}
+  .wg-mtu-note{color:var(--muted);font-size:.78rem;margin-top:2px;white-space:pre-line}
+  .wg-mtu-note-warn{color:var(--warn)}
     .wg-list-del{justify-self:end}
     .btn-group{max-width:560px}
   }
@@ -1494,6 +1496,21 @@ function renderWgList() {
     if (ep) bits.push('endpoint: ' + ep);
     if (bean.wireguard && bean.wireguard.ip) bits.push('address: ' + bean.wireguard.ip);
     info.textContent = bits.join(' · ');
+
+    // MTU/IPv6/AWG-диагностика — только отображение решений движка
+    // (web4core.analyzeWireGuardProfile: imported MTU, IPv4-only contract,
+    // классификация AWG-параметров; auto-correction в v1.8.0 не выполняется).
+    const mtuInfo = (typeof web4core.analyzeWireGuardProfile === 'function') ? web4core.analyzeWireGuardProfile(bean) : null;
+    if (mtuInfo) {
+      const mtuBits = ['MTU: ' + (mtuInfo.importedMtu !== null ? mtuInfo.importedMtu : '— (default ' + mtuInfo.engineDefaultMtu + ')')];
+      info.textContent += (info.textContent ? ' · ' : '') + mtuBits.join(' · ');
+      for (const note of (mtuInfo.notes || [])) {
+        const noteEl = document.createElement('div');
+        noteEl.className = 'wg-mtu-note' + (note.level === 'warn' ? ' wg-mtu-note-warn' : '');
+        noteEl.textContent = (note.level === 'warn' ? '⚠ ' : 'ℹ ') + note.text;
+        info.appendChild(noteEl);
+      }
+    }
 
     const modeRow = document.createElement('div');
     modeRow.className = 'wg-card-mode';
