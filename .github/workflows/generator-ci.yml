@@ -121,6 +121,9 @@ jobs:
       - name: Domain Policy Routing regression
         run: node tests/policy-routing.cjs
 
+      - name: Routing Diagnostics core regression
+        run: node tests/routing-inspector.cjs
+
       - name: Fieldtest harness offline unit tests
         run: node --test tools/warp-dialer-fieldtest/fieldtest.test.mjs
 
