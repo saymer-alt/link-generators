@@ -40,7 +40,12 @@ async function runScenario(browser, root, candRoot, name, actions) {
   // 'ip-version: ipv4' (endpoint AAAA protection). Строка есть только в
   // candidate-выводе; снятие — задокументированное ожидаемое отличие контракта,
   // любые ДРУГИе отличия по-прежнему дают PARITY-DIFF.
+  // EXPECTED v1.8.0 contract change (NIGHT-06): PersistentKeepalive range
+  // ('25-35') больше не эмитится (Mihomo принимает только целое); в base
+  // consumer collapse давал 'persistent-keepalive: 25' — строка снимается,
+  // candidate её не содержит.
   return yaml
+    .replace(/^[ \t]*persistent-keepalive: 25\n/gm, '')
     .replace(/^[ \t]*ip-version: ipv4\n/gm, '')
     .replace(/^[ \t]+- [0-9a-f]{32}$/gm, 'XHWID');
 }

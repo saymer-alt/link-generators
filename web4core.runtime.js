@@ -2689,8 +2689,14 @@
     };
     const parseCsv = (v) => String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
     const parseAddrList = (v) => parseCsv(v).map((x) => x.replace(/\s+/g, "")).filter(Boolean);
+    const awgReport = [];
+    const report = (key, rawValue, status, note) => {
+      awgReport.push({ key: String(key || ""), rawValue: String(rawValue ?? ""), status, note: note || "" });
+    };
+    const UINT32_MAX = 4294967295;
     const setAwgOpt = (target, key, value) => {
       const k = String(key || "").trim().toLowerCase();
+      const raw = String(value ?? "").trim();
       const map = {
         jc: "jc",
         jmin: "jmin",
@@ -2726,18 +2732,55 @@
       if (!map[k]) return false;
       if (!target["amnezia-wg-option"]) target["amnezia-wg-option"] = {};
       const outKey = map[k];
-      const raw = String(value || "").trim();
       const numericKeys = /* @__PURE__ */ new Set(["version", "jc", "jmin", "jmax", "s1", "s2", "s3", "s4", "itime"]);
+      const uintKeys = /* @__PURE__ */ new Set(["jc", "jmin", "jmax", "s1", "s2", "s3", "s4"]);
       const booleanKeys = /* @__PURE__ */ new Set(["random-trailers", "disable-cookies"]);
-      if (numericKeys.has(outKey) && /^-?\d+$/.test(raw)) {
-        target["amnezia-wg-option"][outKey] = parseInt(raw, 10);
-      } else if (booleanKeys.has(outKey)) {
-        const boolValue = raw.toLowerCase();
-        if (!["1", "true", "yes", "0", "false", "no"].includes(boolValue)) return false;
-        target["amnezia-wg-option"][outKey] = ["1", "true", "yes"].includes(boolValue);
-      } else {
-        target["amnezia-wg-option"][outKey] = raw;
+      if (numericKeys.has(outKey)) {
+        if (!/^-?\d+$/.test(raw)) {
+          target["amnezia-wg-option"][outKey] = raw;
+          report(outKey, raw, "INVALID", "\u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C \u0446\u0435\u043B\u043E\u0435 \u0447\u0438\u0441\u043B\u043E, Mihomo \u0442\u0430\u043A\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u043E\u0442\u0432\u0435\u0440\u0433\u043D\u0435\u0442");
+          return true;
+        }
+        const n = parseInt(raw, 10);
+        if (n < 0 || uintKeys.has(outKey) && n > UINT32_MAX) {
+          target["amnezia-wg-option"][outKey] = raw;
+          report(outKey, raw, "INVALID", "\u0432\u043D\u0435 \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D\u0430 uint32");
+          return true;
+        }
+        target["amnezia-wg-option"][outKey] = n;
+        report(outKey, raw, "SUPPORTED");
+        return true;
       }
+      if (booleanKeys.has(outKey)) {
+        const boolValue = raw.toLowerCase();
+        if (!["1", "true", "yes", "0", "false", "no"].includes(boolValue)) {
+          target["amnezia-wg-option"][outKey] = raw;
+          report(outKey, raw, "UNSUPPORTED", "\u043D\u0435\u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u043D\u043E\u0435 \u0431\u0443\u043B\u0435\u0432\u043E \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 (\u043E\u0436\u0438\u0434\u0430\u0435\u0442\u0441\u044F 1/true/yes/0/false/no)");
+          return true;
+        }
+        target["amnezia-wg-option"][outKey] = ["1", "true", "yes"].includes(boolValue);
+        report(outKey, raw, "SUPPORTED");
+        return true;
+      }
+      if (outKey === "header-protection-key") {
+        target["amnezia-wg-option"][outKey] = raw;
+        report(outKey, "(present)", "SUPPORTED");
+        return true;
+      }
+      if (outKey === "content-padding-addition") {
+        const okSyntax = /^\d+(-\d+)?$/.test(raw);
+        target["amnezia-wg-option"][outKey] = raw;
+        report(outKey, raw, okSyntax ? "SUPPORTED" : "INVALID", okSyntax ? "" : "\u043E\u0436\u0438\u0434\u0430\u0435\u0442\u0441\u044F N \u0438\u043B\u0438 N-M");
+        return true;
+      }
+      if (["rekey-after-time", "rekey-timeout", "reject-after-time", "keepalive-timeout", "max-handshake-attempts"].includes(outKey)) {
+        const okSyntax = /^\d+(-\d+)?$/.test(raw);
+        target["amnezia-wg-option"][outKey] = raw;
+        report(outKey, raw, okSyntax ? "SUPPORTED" : "INVALID", okSyntax ? "" : "\u043E\u0436\u0438\u0434\u0430\u0435\u0442\u0441\u044F N \u0438\u043B\u0438 N-M (\u0441\u0435\u043A\u0443\u043D\u0434\u044B)");
+        return true;
+      }
+      target["amnezia-wg-option"][outKey] = raw;
+      report(outKey, raw, "SUPPORTED");
       return true;
     };
     const parseReserved = (v) => {
@@ -2750,6 +2793,7 @@
       }
       return s;
     };
+    const unmatched = [];
     for (const rawLine of lines) {
       const ln = cleanLine(rawLine);
       if (!ln) continue;
@@ -2770,6 +2814,7 @@
       const value = kv.v;
       const keyLower = key.toLowerCase();
       if (setAwgOpt(iface, key, value)) continue;
+      unmatched.push({ key: key.trim(), value, section });
       if (section === "interface") {
         if (keyLower === "privatekey") iface.privateKey = value;
         else if (keyLower === "address") iface.addresses = parseAddrList(value);
@@ -2782,18 +2827,63 @@
         } else if (keyLower === "ipstackcongestioncontroller") {
           if (!iface.ipStack) iface.ipStack = {};
           iface.ipStack["congestion-controller"] = value;
+        } else if (["listenport", "table", "saveconfig", "preup", "postup", "predown", "postdown", "fwmark"].includes(keyLower)) {
+          report(key, value, "IGNORED_BY_POLICY", "\u043F\u043E\u043B\u0435 WireGuard-\u043E\u043A\u0440\u0443\u0436\u0435\u043D\u0438\u044F, \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u043C\u043E\u0435 \u043A Mihomo proxy");
         }
       } else if (section === "peer" && curPeer) {
         if (keyLower === "publickey") curPeer.publicKey = value;
         else if (keyLower === "presharedkey") curPeer.preSharedKey = value;
         else if (keyLower === "allowedips") curPeer.allowedIPs = parseAddrList(value);
         else if (keyLower === "endpoint") curPeer.endpoint = value;
-        else if (keyLower === "persistentkeepalive") curPeer.persistentKeepalive = /^\d+$/.test(value) ? parseInt(value, 10) : void 0;
-        else if (keyLower === "reserved") {
+        else if (keyLower === "persistentkeepalive") {
+          if (/^\d+$/.test(value)) {
+            curPeer.persistentKeepalive = parseInt(value, 10);
+            report(
+              "persistent-keepalive",
+              value,
+              value === "0" ? "SUPPORTED_NORMALIZED" : "SUPPORTED",
+              value === "0" ? "0 = keepalive \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D (Mihomo \u043E\u043F\u0443\u0441\u0442\u0438\u0442 \u043F\u043E\u043B\u0435)" : ""
+            );
+          } else if (/^\d+-\d+$/.test(value)) {
+            curPeer.pkRaw = value;
+            report("persistent-keepalive", value, "UNSUPPORTED", "Mihomo \u043E\u0436\u0438\u0434\u0430\u0435\u0442 \u0446\u0435\u043B\u043E\u0435 persistent-keepalive \u2014 \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D \u043D\u0435 \u043F\u0435\u0440\u0435\u043D\u0435\u0441\u0451\u043D");
+          } else {
+            curPeer.pkRaw = value;
+            report("persistent-keepalive", value, "INVALID", "\u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C \u0446\u0435\u043B\u043E\u0435 \u0447\u0438\u0441\u043B\u043E (\u0438\u043B\u0438 \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D)");
+          }
+        } else if (keyLower === "reserved") {
           curPeer.reserved = parseReserved(value);
+        } else if (["listenport", "table", "saveconfig", "preup", "postup", "predown", "postdown", "fwmark"].includes(keyLower)) {
+          report(key, value, "IGNORED_BY_POLICY", "\u043F\u043E\u043B\u0435 WireGuard-\u043E\u043A\u0440\u0443\u0436\u0435\u043D\u0438\u044F, \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u043C\u043E\u0435 \u043A Mihomo proxy");
         } else {
           setAwgOpt(iface, key, value);
         }
+      }
+    }
+    const KNOWN_BASE = /* @__PURE__ */ new Set([
+      "privatekey",
+      "address",
+      "dns",
+      "mtu",
+      "name",
+      "endpoint",
+      "persistentkeepalive",
+      "publickey",
+      "presharedkey",
+      "allowedips",
+      "reserved",
+      "listenport",
+      "table",
+      "saveconfig",
+      "preup",
+      "postup",
+      "predown",
+      "postdown",
+      "fwmark"
+    ]);
+    for (const u of unmatched) {
+      if (!KNOWN_BASE.has(u.key.toLowerCase())) {
+        report(u.key, u.value, "UNKNOWN", "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E\u0435 \u043F\u043E\u043B\u0435 \u2014 \u0432 YAML \u043D\u0435 \u043F\u043E\u043F\u0430\u0434\u0430\u0435\u0442");
       }
     }
     const chosenPeer = peers[0] || {};
@@ -2846,12 +2936,14 @@
         remoteDnsResolve: Array.isArray(iface.dns) && iface.dns.length ? true : false,
         ipStack: iface.ipStack && typeof iface.ipStack === "object" ? iface.ipStack : void 0,
         mtu: iface.mtu,
-        persistentKeepalive: keepalive
+        persistentKeepalive: keepalive,
+        persistentKeepaliveRaw: peers.map((p) => p.pkRaw).find((v) => v !== void 0)
       }
     };
     if (iface["amnezia-wg-option"]) {
       bean.wireguard["amnezia-wg-option"] = iface["amnezia-wg-option"];
     }
+    bean.awgFieldReport = awgReport;
     return bean;
   }
   function isIpv6AddrEntry(entry) {
@@ -2950,6 +3042,19 @@
     const importedMtu = Number.isFinite(wg.mtu) && wg.mtu > 0 ? wg.mtu : null;
     const notes = [];
     const awg = wg["amnezia-wg-option"] && typeof wg["amnezia-wg-option"] === "object" ? wg["amnezia-wg-option"] : {};
+    const reportIssues = (bean.awgFieldReport || []).filter((r) => ["UNSUPPORTED", "INVALID", "UNKNOWN"].includes(r.status));
+    for (const issue of reportIssues.slice(0, 4)) {
+      notes.push({
+        level: "warn",
+        text: "AWG " + issue.key + " = " + issue.rawValue + " \u2014 " + issue.note + " (\u0432 YAML \u043D\u0435 \u043F\u0435\u0440\u0435\u043D\u0435\u0441\u0435\u043D\u043E)"
+      });
+    }
+    if (reportIssues.length > 4) {
+      notes.push({ level: "warn", text: "\u2026 \u0438 \u0435\u0449\u0451 " + (reportIssues.length - 4) + " \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u0430 AWG \u0442\u0440\u0435\u0431\u0443\u044E\u0442 \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u044F" });
+    }
+    (bean.awgFieldReport || []).filter((r) => r.status === "SUPPORTED_NORMALIZED").slice(0, 2).forEach((r) => {
+      notes.push({ level: "info", text: "AWG " + r.key + " = " + r.rawValue + " \u2014 " + r.note });
+    });
     const num = (v) => Number.isFinite(v) ? v : /^\d+$/.test(String(v || "")) ? parseInt(v, 10) : null;
     if (norm.ipv6Removed) {
       notes.push({ level: "info", text: "IPv6 detected in imported WG/AWG profile. Removed by link-generators IPv4-only contract." });
@@ -3775,7 +3880,13 @@
       if (hasPeers) p.peers = peers.map(mapPeer).filter(Boolean);
       if (wg.ipStack && typeof wg.ipStack === "object" && Object.keys(wg.ipStack).length) p["ip-stack"] = wg.ipStack;
       if (wg["amnezia-wg-option"] && typeof wg["amnezia-wg-option"] === "object") {
-        p["amnezia-wg-option"] = wg["amnezia-wg-option"];
+        const badKeys = new Set((bean.awgFieldReport || []).filter((r) => r.status === "INVALID" || r.status === "UNSUPPORTED").map((r) => String(r.key).toLowerCase()));
+        const cleanOpt = {};
+        for (const [k, v] of Object.entries(wg["amnezia-wg-option"])) {
+          if (badKeys.has(String(k).toLowerCase())) continue;
+          cleanOpt[k] = v;
+        }
+        if (Object.keys(cleanOpt).length) p["amnezia-wg-option"] = cleanOpt;
       }
       applyCommon(p);
       return p;
