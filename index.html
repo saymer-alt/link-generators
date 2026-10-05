@@ -478,8 +478,9 @@
       </div>
       <div class="hint">Обычный TUN и MIPS включены по умолчанию и настроены выше. Экспериментальный TUN stack (system / mixed) и режимы отдельного входа на каждый прокси собраны внутри ADVANCED-секции.</div>
 
-      <label style="margin-top:16px">🏓 Ping server (health-check) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Ping server">?</button><span class="ctx-help-pop" role="note">URL, по которому Mihomo проверяет доступность узлов (url-test и health-check провайдеров). Обычно достаточно Google generate_204.</span></span></label>
+      <label style="margin-top:16px">📍 Health-check URL (latency test) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Health-check URL">?</button><span class="ctx-help-pop" role="note">Mihomo выполняет HTTP(S)-проверку задержки/доступности узлов (url-test и health-check провайдеров). Это не ICMP ping. Google и Cloudflare — официальные Mihomo-recommended URL; Custom URL браузером не проверяется — health-check выполняет сам Mihomo.</span></span></label>
       <select id="pingSelect"></select>
+      <input type="text" id="pingCustomUrl" placeholder="https://example.com/generate_204" style="display:none;margin-top:6px" autocomplete="off">
 
       <div class="btn-group">
         <button class="btn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" onclick="buildMihomo()">⚡ Build Config</button>
@@ -773,16 +774,55 @@ function sendToMihomo() {
 function initPingSelector() {
   const choices = (globalThis.web4core?.URLTEST_CHOICES || []);
   const sel = document.getElementById('pingSelect');
+  const customField = document.getElementById('pingCustomUrl');
+  const applyCustomVisibility = () => {
+    if (customField) customField.style.display = sel.value === '__custom__' ? '' : 'none';
+  };
+  sel.addEventListener('change', applyCustomVisibility);
+  const addOption = (value, text) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    sel.appendChild(opt);
+  };
   if (!choices.length) {
-    sel.innerHTML = '<option value="https://google.com/generate_204">Google (default)</option>';
+    addOption('https://www.gstatic.com/generate_204', 'Google (Mihomo recommended)');
+    addOption('__custom__', 'Custom URL…');
+    applyCustomVisibility();
     return;
   }
-  choices.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.url;
-    opt.textContent = c.label || c.url;
-    sel.appendChild(opt);
-  });
+  const recommended = choices.filter(c => c.group === 'mihomo-recommended');
+  const other = choices.filter(c => c.group !== 'mihomo-recommended');
+  if (recommended.length) {
+    const g = document.createElement('optgroup');
+    g.label = 'Mihomo recommended';
+    recommended.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.url;
+      opt.textContent = (c.label || c.url) + ' — ' + c.url.replace(/^https:\/\//, '');
+      g.appendChild(opt);
+    });
+    sel.appendChild(g);
+  }
+  if (other.length) {
+    const g = document.createElement('optgroup');
+    g.label = 'Other presets';
+    other.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.url;
+      opt.textContent = c.label || c.url;
+      g.appendChild(opt);
+    });
+    sel.appendChild(g);
+  }
+  const gCustom = document.createElement('optgroup');
+  gCustom.label = 'Custom';
+  const customOpt = document.createElement('option');
+  customOpt.value = '__custom__';
+  customOpt.textContent = 'Custom URL…';
+  gCustom.appendChild(customOpt);
+  sel.appendChild(gCustom);
+  applyCustomVisibility();
 }
 
 // === WIREGUARD UPLOAD ===
@@ -3197,7 +3237,20 @@ async function buildMihomo() {
   }
   const combinedExcludeRegex = combinedExclude.filter ? compileSubscriptionExcludeFilter(combinedExclude.filter).regex : null;
 
-  const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
+  let urlTest = document.getElementById('pingSelect').value || 'https://www.gstatic.com/generate_204';
+  if (urlTest === '__custom__') {
+    const customUrl = (document.getElementById('pingCustomUrl') || {}).value || '';
+    const trimmed = customUrl.trim();
+    let parsed = null;
+    try { parsed = new URL(trimmed); } catch (_) {}
+    const creds = parsed && (parsed.username || parsed.password);
+    if (!trimmed) return showToast('❌ Ошибка: выбран Custom URL, но поле пусто — укажите http/https URL', true);
+    if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) {
+      return showToast('❌ Ошибка: Custom health-check URL должен быть абсолютным http/https URL (javascript:, data:, file: и др. запрещены)', true);
+    }
+    if (creds) return showToast('❌ Ошибка: Custom health-check URL не должен содержать учётные данные (user:pass@host)', true);
+    urlTest = trimmed;
+  }
   let addTun = document.getElementById('cfgTun').checked;
   let addSocks = document.getElementById('cfgSocks').checked;
   const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;

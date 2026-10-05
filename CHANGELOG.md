@@ -2,6 +2,15 @@
 
 Все заметные изменения проекта. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- **Custom health-check URL** для Mihomo latency-тестов: опция «Custom URL…» в селекторе health-check с валидацией (только абсолютные http/https, без учётных данных); значение попадает в тот же `url-test`/`health-check` контракт, что и пресеты. URL браузером не проверяется и нигде не сохраняется — health-check выполняет сам Mihomo.
+
+### Changed
+- Селектор health-check различает **Mihomo-recommended** URL (Google `https://www.gstatic.com/generate_204`, Cloudflare `https://cp.cloudflare.com`) и дополнительные presets проекта (Apple/Microsoft/Ubuntu/Fedora); переименован «Ping server» → «📍 Health-check URL (latency test)» с честной подсказкой (HTTP(S)-проверка, не ICMP).
+- **Default Google переключен на официальный Mihomo-documented endpoint** `https://www.gstatic.com/generate_204` (был `https://google.com/generate_204`) — осознанное behavior change v1.8.0, source-first через web4core `URLTEST_CHOICES` (runtime пересобран штатным esbuild, provenance: wc@3c5676c, merge 1f6f321).
+
 ## [1.7.1] - 2026-10-05
 
 > CHANGELOG-недосмотр прежних релизов: секции `[1.6.0]`–`[1.7.0]` не создавались,
