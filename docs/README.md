@@ -15,6 +15,7 @@ README.md в корне репозитория — пользовательск�
 |---|---|
 | Быстро понять, что нажимать | [quick-start.html](../quick-start.html) |
 | Короткая инструкция по генератору | [GENERATOR-GUIDE.md](GENERATOR-GUIDE.md) |
+| Своя URL-подписка через Secret GitHub Gist | [GIST-SUBSCRIPTION.md](GIST-SUBSCRIPTION.md) |
 | Фильтр узлов подписки (в т.ч. кириллица) | [EXCLUDE-FILTER.md](EXCLUDE-FILTER.md) |
 | WARPSCOUT: Windows / Keenetic / VPS | [WARPSCOUT-WINDOWS.md](WARPSCOUT-WINDOWS.md), [WARPSCOUT-KEENETIC.md](WARPSCOUT-KEENETIC.md), [WARPSCOUT-VPS.md](WARPSCOUT-VPS.md) |
 
