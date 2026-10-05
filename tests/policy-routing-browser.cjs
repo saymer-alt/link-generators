@@ -117,6 +117,74 @@ const root = path.resolve(__dirname, '..');
     }
     cases += 1 + newPresets.length * 2;
 
+    // 10. Routing Diagnostics: preview order, winner, alternative, UNKNOWN, YAML untouched, no persistence
+    await page.evaluate(() => { document.getElementById('policyCards').textContent = ''; });
+    await page.selectOption('#policyPresetSelect', 'ai');
+    await page.locator('#btnPolicyAdd').click();
+    await page.selectOption('#policyPresetSelect', 'google');
+    await page.locator('#btnPolicyAdd').click();
+    await page.fill('#mihomoInput', 'https://subs.example.invalid/token');
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID', null, { timeout: 15000 });
+    await page.locator('#routingDiagnostics').evaluate(el => { el.open = true; });
+    const rdVisible = await page.locator('#routingDiagnostics').isVisible();
+    assert.equal(rdVisible, true, 'Diagnostics появляется при включённом DPR');
+    cases += 1;
+    const yamlBefore = await page.locator('#mihomoOutput').inputValue();
+    const previewText = await page.locator('#rdPreview').textContent();
+    assert.match(previewText, /1\. AI → AI/, 'preview line 1: политика AI → её select-группа AI');
+    assert.match(previewText, /2\. GOOGLE → GOOGLE/, 'preview line 2: политика GOOGLE → своя группа');
+    assert.match(previewText, /Всё остальное → GLOBAL/, 'fallback line present');
+    cases += 3;
+    // Inspector: gemini.google.com → победитель AI (DOMAIN,gemini.google.com в payload AI), альтернатива Google
+    await page.fill('#rdTestInput', 'gemini.google.com');
+    await page.locator('#rdTestBtn').click();
+    const resultText = await page.locator('#rdResult').textContent();
+    assert.match(resultText, /Победившее правило/, 'winner block shown');
+    assert.match(resultText, /policy-ai/, 'winner references policy-ai provider');
+    assert.match(resultText, /Также совпало/, 'alternative matches shown');
+    assert.match(resultText, /policy-google/, 'alternative references policy-google');
+    assert.match(resultText, /первое подходящее/, 'first-match explanation shown');
+    cases += 5;
+    // Inspector не меняет YAML
+    const yamlAfter = await page.locator('#mihomoOutput').inputValue();
+    assert.equal(yamlAfter, yamlBefore, 'Inspector не изменил YAML');
+    cases += 1;
+    // UNKNOWN отображается честно: подменяем doc синтетическим GEOSITE-правилом (генератор такое не создаёт — проверяем только рендер честности)
+    await page.evaluate(() => {
+      const synthetic = { rules: ['GEOSITE,youtube,PROXY', 'MATCH,GLOBAL'], 'rule-providers': {} };
+      lastRoutingDoc = synthetic; // только для рендер-проверки UI
+    });
+    await page.fill('#rdTestInput', 'youtube.com');
+    await page.locator('#rdTestBtn').click();
+    const unknownText = await page.locator('#rdResult').textContent();
+    assert.match(unknownText, /UNKNOWN/, 'UNKNOWN вердикт виден');
+    assert.match(unknownText, /GEOSITE/, 'UNKNOWN причина названа');
+    cases += 2;
+    // query не сохраняется в localStorage
+    const ls = await page.evaluate(() => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); o[k] = localStorage.getItem(k); } return JSON.stringify(o); });
+    assert.doesNotMatch(ls, /gemini\.google\.com/, 'запрос не персистится');
+    cases += 1;
+
+    // 11. FALLBACK path (review fix B2): заведомо нематчующий домен доходит до MATCH,GLOBAL.
+    // Статический билд без подписок (с подпиской честный вердикт — UNKNOWN из-за
+    // внешнего provider). конфиг без MATCH-в-конце построить нельзя, поэтому
+    // берём обычный статический DPR-конфиг и домен, не совпадающий ни с чем.
+    await page.evaluate(() => {
+      document.getElementById('cfgSubMode').checked = false;
+      document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.fill('#mihomoInput', 'vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#A\nvless://00000000-0000-4000-8000-000000000002@192.0.2.2:443#B');
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    await page.waitForFunction(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state), null, { timeout: 20000 });
+    await page.fill('#rdTestInput', 'definitely-unmatched.example');
+    await page.locator('#rdTestBtn').click();
+    const fbText = await page.locator('#rdResult').textContent();
+    assert.match(fbText, /Fallback/, 'Fallback block shown');
+    assert.match(fbText, /MATCH → GLOBAL/, 'Fallback target GLOBAL');
+    assert.equal(errors.filter(Boolean).length, 0, 'FALLBACK path: 0 page errors');
+    cases += 3;
+
     assert.deepEqual(errors, [], 'no page errors');
     cases += 1;
 

@@ -32,9 +32,10 @@ async function runScenario(browser, root, candRoot, name, actions) {
   await page.close();
   // x-hwid — случайный per-subscription идентификатор Mihomo-провайдера;
   // нормализуем, он не является частью сравниваемого контракта.
-  // EXPECTED v1.8.0 default change: Google health-check URL заменён на официальный
-  // https://www.gstatic.com/generate_204 (осознанное решение, CHANGELOG [Unreleased]);
-  // нормализуем к старому, чтобы parity ловила только посторонние изменения.
+  // EXPECTED v1.8.0 default change (web4core#13): Google health-check URL
+  // заменён на официальный https://www.gstatic.com/generate_204 — нормализуем
+  // к старому, чтобы parity ловила только посторонние изменения.
+
   yaml = yaml.replace(/https:\/\/www\.gstatic\.com\/generate_204/g, 'https://google.com/generate_204');
   return yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, 'XHWID');
 }
