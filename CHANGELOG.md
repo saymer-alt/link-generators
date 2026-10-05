@@ -2,7 +2,15 @@
 
 Все заметные изменения проекта. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 
-## [Unreleased]
+## [1.7.1] - 2026-10-05
+
+> CHANGELOG-недосмотр прежних релизов: секции `[1.6.0]`–`[1.7.0]` не создавались,
+> их записи копились в Unreleased. Ниже сохранены все накопленные записи; **фактически
+> новыми в v1.7.1** являются: «Allow LAN стал router-only», «Безопасный дефолт контроллера
+> в VPS-профилях», «Server List opt-in вынесен…», «Новые шаблоны политик по доменам»,
+> «Уточнено описание поля Device Model», запись про XP-hover-подсказки осталась от
+> прежнего цикла, а также всё из «Security / Hardening» и «Documentation»-дельты
+> (SRI js-yaml, docs drift, regression-тесты).
 
 ### Added
 - **Новые шаблоны политик по доменам**: «🐙 GitHub / Development» (github.com, githubusercontent.com, githubassets.com, ghcr.io), «🪟 Microsoft» (microsoft.com, microsoftonline.com, office.com, office365.com, windowsupdate.com, live.com, xbox.com), «🍎 Apple» (apple.com, icloud.com, mzstatic.com, me.com), «💬 Social Networks» (facebook.com, instagram.com, x.com, twitter.com, reddit.com, tiktok.com). Шаблоны — стартовые списки: после вставки их можно свободно редактировать; набор сознательно ограничен стабильными доменами (Messengers не дублирует существующий Telegram-шаблон, Cloud/CDN не добавлен как неограничиваемый малым списком).
