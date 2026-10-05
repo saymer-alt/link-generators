@@ -339,6 +339,7 @@
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090. На VPS controller доступен только локально (127.0.0.1:9090); для удалённого управления используйте SSH-туннель (локальный forwarded-порт — свой на каждый VPS).</span></span></label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется отдельный стабильный HWID генератора, а не HWID Mihomo/Keenetic.</span></span></label>
+        <label><input type="checkbox" id="cfgServerList"> 📋 Показать серверы подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Показать серверы подписки">?</button><span class="ctx-help-pop" role="note">Позволяет браузеру получить имена узлов подписки для просмотра и выбора исключений. По умолчанию выключено — без этого генератор не запрашивает подписку браузером. Отдельная функция просмотра: работает в обоих режимах «Использовать URL-подписки», список и выбор исключений появляются в разделе Exclude Filter. При CORS может использоваться проектный fallback-воркер; список и URL не сохраняются, локально хранится только стабильный идентификатор генератора.</span></span></label>
       </div>
       <div id="subModeHint" class="hint"></div>
       <div id="webUiRow" style="margin-top:10px">
@@ -356,10 +357,7 @@
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
         <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
         <div class="hint">Фильтр по фактическим именам узлов. При включённых URL-подписках передаётся Mihomo как <code>exclude-filter</code>; при выключенных применяется браузером к развёрнутым узлам до сборки YAML. Например, <code>(?i)ru|russia|россия</code>. Применяется ко всем подпискам. Пусто — фильтрации нет.</div>
-        <div class="toggle-row" style="margin-top:8px">
-          <label><input type="checkbox" id="cfgServerList"> 📋 Получить список серверов подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Получить список серверов подписки">?</button><span class="ctx-help-pop" role="note">Нужно только для просмотра узлов подписки и удобного выбора исключений галочками. По умолчанию выключено: подписка браузером не запрашивается, provider-YAML собирается без обращения к сети. Запрос к подписке выполняется только по нажатию «Получить список». При CORS может использоваться проектный fallback-воркер — тогда URL подписки виден его инфраструктуре; список и URL не сохраняются, локально хранится только стабильный идентификатор генератора.</span></span></label>
-        </div>
-        <div class="hint" id="serverListOffHint" style="display:none">Получение списка серверов нужно только для просмотра узлов и удобного выбора исключений. По умолчанию подписка браузером не запрашивается.</div>
+        <div class="hint" id="serverListOffHint" style="display:none">Список серверов нужен только для просмотра узлов и удобного выбора исключений. По умолчанию подписка браузером не запрашивается.</div>
         <div id="serverListPanel" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)">
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button type="button" class="btn btn-gray" id="subListFetchBtn">📋 Получить список</button>
@@ -388,7 +386,7 @@
       <div id="deviceModelRow" style="margin-top:10px">
         <label for="deviceModelInput">📱 Device Model — имя устройства для панели подписки (необязательно)</label>
         <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
-        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах «Получить список серверов» — например: <code>Keenetic Giga KN-1012</code>, <code>VPS-SE</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
+        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>VPS-SE</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
       </div>
       <div id="realityModernRow" style="margin-top:10px">
         <label for="realityModernInput">🌐 Modern REALITY / Post-Quantum (X25519MLKEM768) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Modern REALITY">?</button><span class="ctx-help-pop" role="note">Опционально только для VLESS + REALITY узлов с подтверждённой поддержкой X25519MLKEM768. Поддержка появилась в Xray-core 25.5.16, но одна только версия Xray не гарантирует совместимость конкретного сервера/клиента. Укажите host или host:port нужных REALITY-серверов — генератор применит modern override только к ним; обычные VLESS/TLS и остальные узлы не изменяются.</span></span></label>
@@ -2460,7 +2458,7 @@ function clearSubscriptionPreview() {
 }
 
 // === СПИСОК СЕРВЕРОВ ПОДПИСКИ (opt-in, issue #100) ===
-// Toggle «Получить список серверов подписки» (OFF по умолчанию) разрешает
+// Toggle «Показать серверы подписки» (OFF по умолчанию) разрешает
 // браузерный запрос содержимого подписки ради selectable-списка узлов и
 // удобного выбора исключений. Сам по себе список/inspection конфиг не меняет:
 // исключают только явный выбор галочками и/или ручной Exclude Filter.
@@ -2616,7 +2614,7 @@ function fetchServerList() {
     : null;
   const whitelistHasSubscription = !!(whitelistRaw && splitSubscriptionInputForPreview(whitelistRaw).some(e => e.subscription));
   if (!hasSubscription && !whitelistHasSubscription) {
-    showToast('В поле ввода нет URL-подписок — список серверов брать неоткуда. Добавьте HTTP(S) подписку или выключите «Получить список серверов».', true);
+    showToast('В поле ввода нет URL-подписок — список серверов брать неоткуда. Добавьте HTTP(S) подписку или выключите «Показать серверы подписки».', true);
     return;
   }
   subscriptionPreviewSeq++;
@@ -3306,7 +3304,7 @@ async function buildMihomo() {
     if (!subMode) {
       // Sub Mode OFF: содержимое подписки необходимо для YAML — blocking
       // inspection (разворачивание + фильтр по фактическим именам). Этот
-      // fetch обязателен независимо от toggle «Получить список серверов»:
+      // fetch обязателен независимо от toggle «Показать серверы подписки»:
       // toggle управляет preview/списком, а не mandatory-развёртыванием.
       const previewSummary = emptySubscriptionPreviewSummary();
       const mainInspected = await inspectSubscriptionInput(api, raw, { expand: true, filterRegex: combinedExcludeRegex });
