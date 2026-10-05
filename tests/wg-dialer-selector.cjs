@@ -309,6 +309,116 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   assert.ok(!/PrivateKey/i.test(storages), 'никаких следов PrivateKey в storage');
   ok('privacy: приватный ключ загруженного WG не сохраняется в storage/URL');
 
+  // 15. owner field-test regression v2 (5 реальных AWG/WARP-профилей): ТОЧНЫЙ
+  // sequential path — каждый следующий файл ОТДЕЛЬНЫМ setInputFiles, после каждой
+  // загрузки проверяем dialerWgNamesCache/dialerTargetsCache/options ВСЕХ карточек.
+  // Матрица B (без обычных proxy): пустой ввод + Sub OFF → основной путь префлайта.
+  await page.evaluate(() => {
+    const sub = document.getElementById('cfgSubMode');
+    if (sub.checked) { sub.checked = false; sub.dispatchEvent(new Event('change', { bubbles: true })); }
+    wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList();
+    const inp = document.getElementById('mihomoInput');
+    inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const seq5 = ['wg-ee-like.conf', 'wg-de-like.conf', 'wg-fi-like.conf', 'wg-warp-like.conf', 'wg-awg-i-like.conf'];
+  const uploadOne = async (f, n) => {
+    await page.locator('#wgFile').setInputFiles(fx(f)); // один файл за выбор — точный owner path
+    await page.waitForFunction(k => wgUploadPending === false && wgProfiles.length === k, n, { timeout: 15000 });
+    await page.waitForFunction(k => dialerWgNamesCache.length === k, n, { timeout: 10000 });
+  };
+  const checkAllDropdowns = async (label) => {
+    const res = await page.evaluate(() => {
+      const names = dialerWgNamesCache;
+      const targets = dialerTargetsCache.map(t => t.value);
+      const cards = wgProfiles.map((p, i) => {
+        const sel = document.getElementById('wgTarget' + p.id);
+        const vals = Array.from(sel.options).map(o => o.value);
+        return {
+          self: names[i],
+          othersPresent: names.filter((_, j) => j !== i).every(o => vals.includes(o)),
+          selfAbsent: !vals.includes(names[i])
+        };
+      });
+      return { names, targets, cards, degraded: dialerRegistryDegraded };
+    });
+    assert.ok(res.cards.every(c => c.othersPresent && c.selfAbsent),
+      label + ': каждый dropdown содержит N-1 других WG без self — ' + JSON.stringify(res.cards));
+    return res;
+  };
+  await uploadOne(seq5[0], 1);
+  await checkAllDropdowns('после 1-й загрузки');
+  await uploadOne(seq5[1], 2);
+  await checkAllDropdowns('после 2-й загрузки');
+  await uploadOne(seq5[2], 3);
+  const three = await checkAllDropdowns('после 3-й загрузки');
+  assert.equal(three.names.length, 3);
+  assert.equal(three.degraded, false, 'matrix B: основной путь префлайта, без деградации');
+  ok('sequential 3 (EXACT owner path): после КАЖДОЙ загрузки N-1 целей в каждом dropdown, self исключён');
+
+  // 16. 5 профилей последовательно + цикл + 4-хоп цепочка (matrix B, WG-only Build)
+  await uploadOne(seq5[3], 4);
+  await checkAllDropdowns('после 4-й загрузки');
+  await uploadOne(seq5[4], 5);
+  const five = await checkAllDropdowns('после 5-й загрузки');
+  assert.equal(five.names.length, 5);
+  assert.deepEqual(five.names, ['wg-ee-like', 'wg-de-like', 'wg-fi-like', 'wg-warp-like', 'wg-awg-i-like']);
+  ok('sequential 5: все 5 real-like профилей (AWG 3.1 / WARP dual-stack / AWG I-entries), каждый dropdown = 4 других без self');
+
+  const ids5 = await page.evaluate(() => wgProfiles.map(p => p.id));
+  await page.locator('.wg-mode').nth(0).selectOption('proxy');
+  await page.locator('.wg-mode').nth(1).selectOption('proxy');
+  await page.waitForTimeout(300);
+  await page.locator('#wgTarget' + ids5[0]).selectOption('wg-de-like');
+  await page.locator('#wgTarget' + ids5[1]).selectOption('wg-ee-like');
+  await page.locator('button[onclick="buildMihomo()"]').click();
+  await page.waitForFunction(() => (window.__lastToast || '').includes('circular dialer-proxy'), null, { timeout: 8000 });
+  ok('цикл wg-ee-like → wg-de-like → wg-ee-like отклонён существующей cycle-защитой');
+
+  await page.locator('#wgTarget' + ids5[1]).selectOption('wg-fi-like');
+  await page.locator('.wg-mode').nth(2).selectOption('proxy');
+  await page.waitForTimeout(200);
+  await page.locator('#wgTarget' + ids5[2]).selectOption('wg-warp-like');
+  await page.locator('.wg-mode').nth(3).selectOption('proxy');
+  await page.waitForTimeout(200);
+  await page.locator('#wgTarget' + ids5[3]).selectOption('wg-awg-i-like');
+  r = await build();
+  assert.equal(r.state, 'VALID', '4-хоп цепочка WG-only (пустой ввод): Build VALID');
+  const chain = await page.evaluate(y => {
+    const d = jsyaml.load(y);
+    return (d.proxies || []).filter(p => p.type === 'wireguard').map(p => ({ name: p.name, dialer: p['dialer-proxy'] || '' }));
+  }, r.yaml);
+  assert.deepEqual(chain, [
+    { name: 'wg-ee-like', dialer: 'wg-de-like' },
+    { name: 'wg-de-like', dialer: 'wg-fi-like' },
+    { name: 'wg-fi-like', dialer: 'wg-warp-like' },
+    { name: 'wg-warp-like', dialer: 'wg-awg-i-like' },
+    { name: 'wg-awg-i-like', dialer: '' }
+  ], 'dialer-proxy цепочка в YAML: ' + JSON.stringify(chain));
+  assert.ok(chain.every(c => c.dialer !== c.name), 'self-reference запрещён');
+  ok('цепочка EE→DE→FI→WARP→AWG-I: Build VALID, dialer-proxy по хопам, self-reference нет');
+
+  // 17. matrix A: обычный VLESS-ввод + sequential uploads + Sub Mode ON (дефолт) —
+  // комбинированный префлайт авторитетно падает (нужен URL подписки), но dropdown
+  // обязан показывать WG-цели через WG-only проекцию после КАЖДОЙ загрузки.
+  await page.evaluate(() => {
+    wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList();
+    const inp = document.getElementById('mihomoInput');
+    inp.value = 'vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#VPS-SE';
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    const sub = document.getElementById('cfgSubMode');
+    if (!sub.checked) { sub.checked = true; sub.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+  await page.waitForFunction(() => dialerTargetsCache !== null, null, { timeout: 2000 }).catch(() => {}); // refresh после input/sub change без профилей — early return
+  await uploadOne(seq5[0], 1);
+  await page.waitForFunction(() => dialerRegistryDegraded === true, null, { timeout: 10000 });
+  await page.waitForFunction(() => dialerTargetsCache.length >= 1, null, { timeout: 10000 });
+  await uploadOne(seq5[1], 2);
+  await uploadOne(seq5[2], 3);
+  const mA = await checkAllDropdowns('matrix A (VLESS+Sub-ON) после 3-й загрузки');
+  assert.equal(mA.names.length, 3);
+  assert.equal(await page.evaluate(() => dialerRegistryDegraded), true, 'matrix A: деградация честно помечена');
+  ok('matrix A (VLESS + Sub-ON, sequential 3): WG-цели в dropdown после каждой загрузки');
+
   assert.deepEqual(errors, [], 'нет pageerror');
   console.log(`WG-dialer-selector: ${passed} проверок — PASS`);
   await browser.close();
