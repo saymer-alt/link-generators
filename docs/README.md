@@ -29,6 +29,7 @@ README.md в корне репозитория — пользовательск�
 | Протоколы: форматы ссылок и поддержка | [PROTOCOLS.md](PROTOCOLS.md) |
 | Валидатор: что проверяется | [VALIDATION.md](VALIDATION.md) |
 | Тесты: как запускать и что покрыто | [TESTING.md](TESTING.md) |
+| Owner field-test перед promotion (v1.8+) | [RELEASE-FIELD-TEST.md](RELEASE-FIELD-TEST.md) |
 | Автообновление рантайма из fork | [UPDATES.md](UPDATES.md), [WEB4CORE-FORK.md](WEB4CORE-FORK.md) |
 | Auto-Whitelist (резерв БС) | [AUTO-WHITELIST.md](AUTO-WHITELIST.md) |
 | Профили развёртывания: обязательный тест-контракт | [DEPLOYMENT-PROFILES-TEST-CONTRACT.md](DEPLOYMENT-PROFILES-TEST-CONTRACT.md) |
