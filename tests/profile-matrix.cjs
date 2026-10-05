@@ -31,6 +31,8 @@ const root = path.resolve(__dirname, '..');
     master: document.getElementById('cfgPerProxyMaster').checked,
     masterDisabled: document.getElementById('cfgPerProxyMaster').disabled,
     perHint: document.getElementById('perProxyRouterHint').style.display !== 'none',
+    lan: document.getElementById('cfgLan').checked,
+    lanDisabled: document.getElementById('cfgLan').disabled,
     effective: effectiveProfile,
   }));
   const build = async () => {
@@ -47,7 +49,9 @@ const root = path.resolve(__dirname, '..');
   assert.equal(m.profile, 'router');
   assert.equal(m.awlDisabled, false, 'router: БС доступен');
   assert.equal(m.masterDisabled, false, 'router: Per-Proxy доступен');
-  ok('ROUTER: БС и Per-Proxy доступны');
+  assert.equal(m.lan, true, 'router: Allow LAN доступен пользователю (default ON)');
+  assert.equal(m.lanDisabled, false, 'router: Allow LAN не disabled');
+  ok('ROUTER: БС и Per-Proxy доступны, Allow LAN доступен');
 
   // Sub Mode default ON проверяется на чистой странице ниже (transitions-блок).
 
@@ -59,14 +63,18 @@ const root = path.resolve(__dirname, '..');
   assert.equal(m.master, false, 'vps-local: Per-Proxy выключен');
   assert.equal(m.masterDisabled, true, 'vps-local: Per-Proxy недоступен');
   assert.equal(m.perHint, true, 'vps-local: подсказка Per-Proxy router-only');
+  assert.equal(m.lan, false, 'vps-local: Allow LAN выключен');
+  assert.equal(m.lanDisabled, true, 'vps-local: Allow LAN недоступен');
   assert.equal(m.profile, 'vps-local', 'профиль не подменён');
-  ok('VPS-LOCAL: БС/Per-Proxy выключены и недоступны, профиль сохранён');
+  ok('VPS-LOCAL: БС/Per-Proxy/Allow LAN выключены и недоступны, профиль сохранён');
 
   await page.selectOption('#cfgProfile', 'vps-gateway');
   m = await state();
   assert.equal(m.awlDisabled, true, 'vps-gateway: БС недоступен');
   assert.equal(m.masterDisabled, true, 'vps-gateway: Per-Proxy недоступен');
-  ok('VPS-GATEWAY: БС/Per-Proxy выключены и недоступны');
+  assert.equal(m.lan, false, 'vps-gateway: Allow LAN выключен');
+  assert.equal(m.lanDisabled, true, 'vps-gateway: Allow LAN недоступен');
+  ok('VPS-GATEWAY: БС/Per-Proxy выключены и недоступны, Allow LAN OFF+disabled');
 
   // === Sub Mode default ON для всех профилей (на чистой странице) ===
   const page2 = await browser.newPage();
@@ -143,8 +151,25 @@ const root = path.resolve(__dirname, '..');
   assert.equal(m.subMode, true, 'vps-gateway: своё per-profile Sub Mode (default ON), не ручной OFF из router');
   ok('profile-local Sub Mode: состояния независимы per-profile (router OFF ≠ VPS default ON)');
 
+  // === §24b Allow LAN round-trip: router LAN=true → vps-gateway → router ===
+  await page.selectOption('#cfgProfile', 'router');
+  await page.evaluate(() => { document.getElementById('cfgLan').checked = true; });
+  m = await state();
+  assert.equal(m.lan, true, 'router: ручное Allow LAN ON');
+  assert.equal(m.lanDisabled, false, 'router: Allow LAN доступен');
+  await page.selectOption('#cfgProfile', 'vps-gateway');
+  m = await state();
+  assert.equal(m.lan, false, 'vps-gateway: Allow LAN принудительно OFF');
+  assert.equal(m.lanDisabled, true, 'vps-gateway: Allow LAN disabled');
+  await page.selectOption('#cfgProfile', 'router');
+  m = await state();
+  assert.equal(m.lan, true, 'возврат в router: прежнее Allow LAN ON восстановлено');
+  assert.equal(m.lanDisabled, false, 'возврат в router: Allow LAN снова доступен');
+  ok('Allow LAN round-trip: router(ON) → vps-gateway(OFF+disabled) → router(ON restored)');
+
   // === §25 DOM tamper: Build не нарушает deployment contract ===
   // 1) БС tamper в vps-gateway → явная ошибка, профиль не подменён
+  await page.selectOption('#cfgProfile', 'vps-gateway');
   await page.evaluate(() => {
     const el = document.getElementById('cfgAutoWhitelist');
     el.disabled = false; el.checked = true;
@@ -171,6 +196,93 @@ const root = path.resolve(__dirname, '..');
   const perProxyGroups = (r.yaml.match(/name: [^\n]*-(TUN|SOCKS)\b/g) || []).length;
   assert.equal(perProxyGroups, 0, 'нет per-proxy групп');
   ok('tamper: Per-Proxy в vps-gateway → Per-Proxy конфигурация не генерируется');
+
+  // 3) Allow LAN tamper в vps-gateway: disabled+checked через консоль — Build не
+  //    доверяет DOM, allow-lan:true/bind-address:"*" не появляются (UI disabled —
+  //    не единственный слой защиты)
+  await page.evaluate(() => {
+    document.getElementById('cfgLan').disabled = false;
+    document.getElementById('cfgLan').checked = true;
+  });
+  const rLanGw = await build();
+  assert.equal(rLanGw.state, 'VALID', 'тампер LAN в vps-gateway: сборка проходит');
+  assert.doesNotMatch(rLanGw.yaml, /^allow-lan:\s*true$/m, 'vps-gateway tamper: в YAML нет allow-lan: true');
+  assert.doesNotMatch(rLanGw.yaml, /^bind-address:\s*"\*"$/m, 'vps-gateway tamper: в YAML нет bind-address: "*"');
+  assert.match(rLanGw.yaml, /^allow-lan:\s*false$/m, 'vps-gateway tamper: allow-lan остался false');
+  assert.equal(await page.evaluate(() => document.getElementById('cfgProfile').value), 'vps-gateway', 'профиль не подменён тампером LAN');
+  ok('tamper: Allow LAN в vps-gateway → YAML не открывает LAN listener');
+
+  // 4) Allow LAN tamper в vps-local — тот же fail-safe
+  await page.selectOption('#cfgProfile', 'vps-local');
+  await page.evaluate(() => {
+    document.getElementById('cfgSubMode').checked = false; // вход в профиль применил per-profile default ON
+    document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('cfgLan').disabled = false;
+    document.getElementById('cfgLan').checked = true;
+  });
+  const rLanLocal = await build();
+  assert.equal(rLanLocal.state, 'VALID', 'тампер LAN в vps-local: сборка проходит');
+  assert.doesNotMatch(rLanLocal.yaml, /^allow-lan:\s*true$/m, 'vps-local tamper: в YAML нет allow-lan: true');
+  assert.doesNotMatch(rLanLocal.yaml, /^bind-address:\s*"\*"$/m, 'vps-local tamper: в YAML нет bind-address: "*"');
+  assert.match(rLanLocal.yaml, /^allow-lan:\s*false$/m, 'vps-local tamper: allow-lan остался false');
+  ok('tamper: Allow LAN в vps-local → YAML не открывает LAN listener');
+
+  // === §26 Controller bind: VPS = 127.0.0.1 (security default), router = 0.0.0.0 ===
+  await page.selectOption('#cfgProfile', 'vps-local');
+  await page.evaluate(() => { document.getElementById('cfgSubMode').checked = false; document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true })); });
+  const rCtlLocal = await build();
+  assert.equal(rCtlLocal.state, 'VALID', 'vps-local: сборка проходит');
+  assert.match(rCtlLocal.yaml, /^external-controller: 127\.0\.0\.1:9090$/m, 'vps-local: controller на loopback');
+  assert.doesNotMatch(rCtlLocal.yaml, /^external-controller: 0\.0\.0\.0:9090$/m, 'vps-local: controller НЕ на всех интерфейсах');
+  ok('controller bind: vps-local → 127.0.0.1:9090');
+
+  await page.selectOption('#cfgProfile', 'vps-gateway');
+  await page.evaluate(() => { document.getElementById('cfgSubMode').checked = false; document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true })); });
+  const rCtlGw = await build();
+  assert.match(rCtlGw.yaml, /^external-controller: 127\.0\.0\.1:9090$/m, 'vps-gateway: controller на loopback');
+  assert.doesNotMatch(rCtlGw.yaml, /^external-controller: 0\.0\.0\.0:9090$/m, 'vps-gateway: controller НЕ на всех интерфейсах');
+  ok('controller bind: vps-gateway → 127.0.0.1:9090');
+
+  // Web UI OFF в VPS: контроллер не генерируется вовсе
+  await page.locator('#cfgWebUI').uncheck();
+  const rCtlOff = await build();
+  assert.doesNotMatch(rCtlOff.yaml, /^external-controller:/m, 'vps-gateway WebUI OFF: controller отсутствует');
+  await page.locator('#cfgWebUI').check();
+  ok('controller bind: Web UI OFF → контроллер не генерируется');
+
+  // Router: прежний контракт сохранён (LAN-сценарий, byte-identical)
+  await page.selectOption('#cfgProfile', 'router');
+  await page.evaluate(() => { document.getElementById('cfgSubMode').checked = false; document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true })); });
+  const rCtlRouter = await build();
+  assert.match(rCtlRouter.yaml, /^external-controller: 0\.0\.0\.0:9090$/m, 'router: controller остался 0.0.0.0:9090 (LAN-сценарий)');
+  ok('controller bind: router → 0.0.0.0:9090 без изменений');
+
+  // === §27 Privacy: preview/build/reload не оставляют в localStorage ничего, кроме stable HWID ===
+  const page3 = await browser.newPage();
+  page3.setDefaultTimeout(15000);
+  if (process.env.JS_YAML_PATH) await page3.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ path: process.env.JS_YAML_PATH, contentType: 'text/javascript' }));
+  await page3.goto(pathToFileURL(path.join(root, 'index.html')).href);
+  await page3.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+  await page3.evaluate(() => {
+    document.getElementById('deviceModelInput').value = 'PRIVACY-PROBE-DEVICE';
+    document.getElementById('mihomoInput').value = 'https://privacy-probe.example.invalid/sub';
+    document.getElementById('excludeFilterInput').value = 'NEVER-STORED-NODE';
+  });
+  await page3.locator('button[onclick="buildMihomo()"]').click();
+  await page3.waitForFunction(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state), null, { timeout: 20000 });
+  await page3.reload();
+  await page3.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+  const storageDump = await page3.evaluate(() => {
+    const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k); }
+    return { keys: Object.keys(localStorage), dump: JSON.stringify(ls), cookies: document.cookie };
+  });
+  // HWID создаётся лениво — только реальным preview-запросом; build/storage-free build
+  // может оставить localStorage пустым, но никогда не пишет ничего кроме HWID-ключа.
+  assert.ok(storageDump.keys.every(k => k === 'link-generators.subscription-preview-hwid.v1'), 'localStorage: не более чем stable preview HWID');
+  assert.doesNotMatch(storageDump.dump, /PRIVACY-PROBE-DEVICE|privacy-probe\.example|NEVER-STORED-NODE/, 'в storage нет device model/URL/имён узлов');
+  assert.equal(storageDump.cookies, '', 'cookies пусты');
+  await page3.close();
+  ok('privacy: после build+reload сохраняется только стабильный HWID (без Device Model/URL/имён)');
 
   assert.deepEqual(errors, [], 'нет pageerror');
   console.log(`Profile-matrix: ${passed} проверок — PASS`);
