@@ -257,6 +257,65 @@ const root = path.resolve(__dirname, '..');
   assert.match(rCtlRouter.yaml, /^external-controller: 0\.0\.0\.0:9090$/m, 'router: controller остался 0.0.0.0:9090 (LAN-сценарий)');
   ok('controller bind: router → 0.0.0.0:9090 без изменений');
 
+  // === §27b Controller Port: настраиваемый порт в VPS, bind всегда 127.0.0.1 ===
+  // Поле общее для обоих VPS-профилей (не per-profile snapshot).
+  await page.selectOption('#cfgProfile', 'vps-local');
+  await page.evaluate(() => { document.getElementById('cfgSubMode').checked = false; document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true })); });
+  const rPortDefault = await build();
+  assert.match(rPortDefault.yaml, /^external-controller: 127\.0\.0\.1:9090$/m, 'vps-local default: 127.0.0.1:9090');
+  await page.evaluate(() => { document.getElementById('vpsControllerPort').value = '9091'; });
+  const rPort9091 = await build();
+  assert.match(rPort9091.yaml, /^external-controller: 127\.0\.0\.1:9091$/m, 'vps-local 9091: порт применился');
+  assert.doesNotMatch(rPort9091.yaml, /^external-controller: 0\.0\.0\.0:/m, 'тампер/ввод не даёт публичный bind');
+  ok('controller port: vps-local default 9090, custom 9091, bind всегда 127.0.0.1');
+
+  await page.selectOption('#cfgProfile', 'vps-gateway');
+  await page.evaluate(() => { document.getElementById('cfgSubMode').checked = false; document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true })); });
+  // общий порт пережил переход: поле показывает 9091
+  assert.equal(await page.evaluate(() => document.getElementById('vpsControllerPort').value), '9091', 'Controller Port общий между VPS-профилями');
+  const rPort9091gw = await build();
+  assert.match(rPort9091gw.yaml, /^external-controller: 127\.0\.0\.1:9091$/m, 'vps-gateway: общий 9091 применился');
+  await page.evaluate(() => { document.getElementById('vpsControllerPort').value = '9092'; });
+  const rPort9092 = await build();
+  assert.match(rPort9092.yaml, /^external-controller: 127\.0\.0\.1:9092$/m, 'vps-gateway custom 9092');
+  ok('controller port: vps-gateway видит общий порт, custom 9092 применился');
+
+  // коллизии и мусор: Build блокируется; изменение поля инвалидирует прежний
+  // VALID (глобальный capture-обработчик input/change) => Copy заблокирован
+  const softBuildCtl = async (value) => {
+    await page.evaluate(v => {
+      const el = document.getElementById('vpsControllerPort');
+      el.value = v;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    await page.waitForTimeout(1500);
+    return page.evaluate(() => ({ state: MIHOMO_VALIDATION_STATE.state, copyDisabled: document.getElementById('copyYamlBtn').disabled, toast: window.__lastToast || '' }));
+  };
+  for (const bad of ['0', '70000', 'abc']) {
+    const rb = await softBuildCtl(bad);
+    assert.match(rb.toast, /Controller Port должен быть целым числом/, 'invalid port ' + bad + ' => понятная ошибка');
+    assert.equal(rb.state, 'NOT_BUILT', 'invalid port ' + bad + ': прежний VALID инвалидирован, Copy заблокирован');
+    assert.equal(rb.copyDisabled, true, 'invalid port ' + bad + ': copy disabled');
+  }
+  const rColl = await softBuildCtl('7890');
+  assert.match(rColl.toast, /конфликтует с Mixed Port 7890/, 'коллизия с Mixed Port => ошибка');
+  assert.equal(rColl.state, 'NOT_BUILT', 'коллизия 7890: сборка не выполнялась');
+  const rCollDns = await softBuildCtl('53');
+  assert.match(rCollDns.toast, /конфликтует с DNS listen порт 53/, 'коллизия с DNS 53 в gateway => ошибка');
+  ok('controller port: invalid/70000/abc и коллизии 7890/53 блокируют Build до записи YAML');
+
+  // возврат в vps-local: общий порт переживает валидационные пробы
+  await page.evaluate(v => { document.getElementById('vpsControllerPort').value = v; }, '9092');
+  await page.selectOption('#cfgProfile', 'vps-local');
+  await page.evaluate(() => { document.getElementById('cfgSubMode').checked = false; document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true })); });
+  assert.equal(await page.evaluate(() => document.getElementById('vpsControllerPort').value), '9092', 'round-trip: общий порт 9092 живёт между профилями');
+  const rRoundtrip = await build();
+  assert.match(rRoundtrip.yaml, /^external-controller: 127\.0\.0\.1:9092$/m, 'vps-local после round-trip: 9092');
+  await page.evaluate(() => { document.getElementById('vpsControllerPort').value = '9090'; });
+  ok('controller port round-trip: vps-local(9091) → vps-gateway(9092) → vps-local(9092), bind 127.0.0.1 везде');
+
   // === §27 Privacy: preview/build/reload не оставляют в localStorage ничего, кроме stable HWID ===
   const page3 = await browser.newPage();
   page3.setDefaultTimeout(15000);
