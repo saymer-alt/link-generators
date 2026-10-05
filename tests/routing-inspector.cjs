@@ -237,4 +237,39 @@ const doc = (rules, providers) => ({ rules, 'rule-providers': providers || {} })
   assert.equal(dup.crossPolicy.length, 0, 'один provider — это не cross-policy'); ok();
 }
 
+// --- FINAL PASS A: IPv4 input, IPv6 CIDR first (family mismatch -> no-match, not UNKNOWN) ---
+{
+  const d = doc(['IP-CIDR6,2001:db8::/32,PROXY', 'IP-CIDR,192.0.2.0/24,DIRECT', 'MATCH,GLOBAL']);
+  const r = api.routingInspect(d, '192.0.2.55');
+  assert.equal(r.verdict, 'MATCHED', 'A: family mismatch детерминированно пропущен');
+  assert.equal(r.winner, 1, 'A: победило IPv4 правило');
+  assert.equal(r.matched.find(m => m.index === r.winner).rule.target, 'DIRECT', 'A: target DIRECT'); ok();
+}
+// --- FINAL PASS B: IPv6 input, IPv4 CIDR first ---
+{
+  const d = doc(['IP-CIDR,192.0.2.0/24,DIRECT', 'IP-CIDR6,2001:db8::/32,PROXY', 'MATCH,GLOBAL']);
+  const r = api.routingInspect(d, '2001:db8::1');
+  assert.equal(r.verdict, 'MATCHED', 'B: IPv6 вход, IPv4 CIDR пропущен');
+  assert.equal(r.winner, 1, 'B: победило IPv6 правило');
+  assert.equal(r.matched.find(m => m.index === r.winner).rule.target, 'PROXY', 'B: target PROXY'); ok();
+}
+// --- FINAL PASS C: malformed same-family CIDR -> UNKNOWN (не no-match) ---
+{
+  const d = doc(['IP-CIDR,192.0.2.0/not-a-prefix,PROXY', 'MATCH,GLOBAL']);
+  const r = api.routingInspect(d, '192.0.2.55');
+  assert.equal(r.verdict, 'UNKNOWN', 'C: нечитаемый CIDR той же семьи — UNKNOWN');
+  assert.match(r.firstUnknown.reason, /could not be parsed/); ok();
+}
+// --- FINAL PASS small: cross-policy count = distinct providers ---
+{
+  const d = doc(['RULE-SET,policy-a,FRA', 'RULE-SET,policy-b,DIRECT', 'MATCH,GLOBAL'], {
+    'policy-a': { type: 'inline', behavior: 'classical', format: 'yaml', payload: ['DOMAIN,openai.com', 'DOMAIN,openai.com'] },
+    'policy-b': { type: 'inline', behavior: 'classical', format: 'yaml', payload: ['DOMAIN,openai.com'] },
+  });
+  const dup = api.routingFindDuplicates(d);
+  assert.equal(dup.payloadDups.length, 1, 'payload duplicate: yes (provider A)'); ok();
+  assert.equal(dup.crossPolicy.length, 1, 'cross-policy: yes (A + B)'); ok();
+  assert.equal(dup.crossPolicy[0].providers.length, 2, 'policy count = 2 distinct providers, не 3 raw-записи'); ok();
+}
+
 console.log('Routing-inspector: ' + cases + ' cases passed');

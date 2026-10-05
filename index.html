@@ -3341,6 +3341,8 @@ function rdRuleVerdict(rule, providers, input) {
     return { verdict: 'unknown', reason: 'unsupported rule type ' + type };
   }
   if (type === 'IP-CIDR' || type === 'IP-CIDR6') {
+    const sameFamily = input.version === 4 ? !rule.value.includes(':') : rule.value.includes(':');
+    if (!sameFamily) return { verdict: 'no-match' }; // IPv4-литерал не может попасть в IPv6 CIDR и наоборот
     const res = rdIpInCidr(input.value, rule.value);
     if (res === null) return { verdict: 'unknown', reason: 'CIDR could not be parsed deterministically' };
     return { verdict: res ? 'match' : 'no-match' };
@@ -3434,9 +3436,9 @@ function routingFindDuplicates(doc) {
   }
   const crossPolicy = [];
   for (const [key, places] of domainMap) {
-    const provs = new Set(places.map(p => p.provider));
-    if (provs.size < 2) continue; // «в нескольких политиках» = минимум 2 разных провайдера
-    crossPolicy.push({ entry: key, places });
+    const providers = [...new Set(places.map(p => p.provider))];
+    if (providers.length < 2) continue; // «в нескольких политиках» = минимум 2 разных провайдера
+    crossPolicy.push({ entry: key, providers, places });
   }
   return { ruleDups, payloadDups, crossPolicy };
 }
@@ -3536,7 +3538,7 @@ function updateRoutingDiagnostics(yaml) {
     const lines = ['✓ Правил маршрутизации: ' + doc.rules.length];
     dups.ruleDups.forEach(d => lines.push('⚠ Дубликат: правило #' + (d.index + 1) + ' повторяет #' + (d.firstIndex + 1) + ': ' + d.raw));
     dups.payloadDups.forEach(d => lines.push('⚠ ' + d.provider + ' содержит дубликат записи: ' + d.entry));
-    dups.crossPolicy.forEach(c => lines.push('ℹ ' + c.entry + ' встречается в ' + c.places.length + ' политиках — порядок правил решает, какая сработает'));
+    dups.crossPolicy.forEach(c => lines.push('ℹ ' + c.entry + ' встречается в ' + c.providers.length + ' политиках — порядок правил решает, какая сработает'));
     shadowed.forEach(s => {
       if (s.kind === 'unreachable-after-match') lines.push('⚠ Правила после #' + (s.shadowedBy + 1) + ' (MATCH) недостижимы: #' + (s.index + 1) + '–#' + (s.until + 1));
       else lines.push('⚠ Правило #' + (s.index + 1) + ' перекрыто #' + (s.shadowedBy + 1) + ' (' + s.via + ') — ' + s.detail);
