@@ -244,6 +244,71 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   assert.ok(awlNames.some(n => n.startsWith('PRIMARY')), 'AWL-переименования в dropdown: ' + JSON.stringify(awlNames));
   ok('AWL rename: dropdown использует resulting names (PRIMARY-…: …)');
 
+  // 12. owner field-test regression (v1.8.0 final-polish): последовательные
+  // загрузки (каждый файл отдельным setInputFiles) + ПУСТОЙ основной ввод —
+  // WG-only сборка валидна, поэтому WG-цели доступны обесторонне.
+  await page.evaluate(() => {
+    const awl = document.getElementById('cfgAutoWhitelist');
+    if (awl.checked) { awl.checked = false; awl.dispatchEvent(new Event('change', { bubbles: true })); }
+    wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList();
+    const inp = document.getElementById('mihomoInput');
+    inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    const wl = document.getElementById('whitelistInput');
+    wl.value = ''; wl.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.locator('#cfgSubMode').uncheck();
+  await page.locator('#wgFile').setInputFiles(fx('wg-simple-a.conf'));
+  await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 1);
+  await page.locator('#wgFile').setInputFiles(fx('wg-simple-b.conf')); // вторая ОТДЕЛЬНАЯ загрузка
+  await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 2);
+  await page.waitForFunction(() => dialerTargetsCache.length >= 2, null, { timeout: 10000 });
+  optsA = await optionsOf(0);
+  optsB = await optionsOf(1);
+  assert.ok(optsA.some(o => o.value === 'wg-simple-b'), 'A: другой WG присутствует в списке (пустой ввод)');
+  assert.ok(!optsA.some(o => o.value === 'wg-simple-a'), 'A: self исключён');
+  assert.ok(optsB.some(o => o.value === 'wg-simple-a'), 'B: первый WG присутствует в списке');
+  assert.ok(!optsB.some(o => o.value === 'wg-simple-b'), 'B: self исключён');
+  ok('owner-сценарий: последовательные загрузки + пустой ввод — WG-цели обесторонне, self исключён');
+
+  // 12b. WG-only Build: A → B, без обычных proxy во вводе — VALID + dialer-proxy: B
+  await page.locator('.wg-mode').first().selectOption('proxy');
+  await page.waitForTimeout(300);
+  await page.locator('#wgTarget' + (await page.evaluate(() => wgProfiles[0].id))).selectOption('wg-simple-b');
+  r = await build();
+  assert.equal(r.state, 'VALID', 'WG-only сборка VALID');
+  assert.match(proxyBlockOf(r.yaml, 'wg-simple-a'), /dialer-proxy: wg-simple-b/, 'dialer-proxy: B в итоговом YAML');
+  ok('WG-only (без обычных proxy): A → B собирается VALID с dialer-proxy: B');
+
+  // 13. Sub Mode ON + пустой ввод: движок авторитетно отвергает такой Build
+  // (Sub Mode требует URL подписок), но dropdown НЕ деградирует в «только Manual» —
+  // реестр строится по WG-only проекции тех же бинов + честная плашка.
+  await page.locator('.wg-mode').first().selectOption('direct');
+  await page.locator('#cfgSubMode').check();
+  await page.waitForFunction(() => dialerRegistryDegraded === true, null, { timeout: 10000 });
+  optsA = await optionsOf(0);
+  assert.ok(optsA.some(o => o.value === 'wg-simple-b'), 'Sub-ON empty: WG-цель осталась в dropdown');
+  assert.ok(optsA.some(o => o.value === '__manual__'), 'Sub-ON empty: manual путь на месте');
+  const degText = await page.evaluate(() => (document.querySelector('.wg-target-degraded') || {}).textContent || '');
+  assert.match(degText, /предварительный/, 'плашка предварительного реестра показана: ' + JSON.stringify(degText));
+  await page.locator('.wg-mode').first().selectOption('proxy');
+  await page.waitForTimeout(300);
+  await page.locator('#wgTarget' + (await page.evaluate(() => wgProfiles[0].id))).selectOption('wg-simple-b');
+  await page.locator('button[onclick="buildMihomo()"]').click();
+  await page.waitForFunction(() => (window.__lastToast || '').includes('URL-подписки'), null, { timeout: 8000 });
+  assert.match(await page.evaluate(() => window.__lastToast), /выключите «Использовать URL-подписки»/, 'Build в Sub-ON-empty отвергнут авторитетной валидацией движка');
+  ok('Sub-ON + пустой ввод: dropdown с WG-целями (degraded) + Build честно отвергнут движком');
+
+  // 14. privacy: приватный ключ загруженного профиля не попадает в storage/URL
+  const privKey = (fs.readFileSync(fx('wg-simple-a.conf'), 'utf8').match(/PrivateKey\s*=\s*(\S+)/) || [])[1];
+  assert.ok(privKey, 'fixture содержит PrivateKey');
+  const storages = await page.evaluate(() => {
+    const dump = o => { const r = {}; for (let i = 0; i < o.length; i++) { const k = o.key(i); r[k] = o.getItem(k); } return JSON.stringify(r); };
+    return JSON.stringify({ ls: dump(localStorage), ss: dump(sessionStorage), url: location.search + location.hash });
+  });
+  assert.ok(!storages.includes(privKey), 'private key отсутствует в localStorage/sessionStorage/URL');
+  assert.ok(!/PrivateKey/i.test(storages), 'никаких следов PrivateKey в storage');
+  ok('privacy: приватный ключ загруженного WG не сохраняется в storage/URL');
+
   assert.deepEqual(errors, [], 'нет pageerror');
   console.log(`WG-dialer-selector: ${passed} проверок — PASS`);
   await browser.close();

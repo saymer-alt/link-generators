@@ -93,6 +93,7 @@
   .wg-mode,.wg-target{width:100%}
   .wg-target-manual{width:100%;padding:4px 8px;font-size:.85rem;margin-top:4px}
   .wg-target-warn{color:var(--warn);font-size:.8rem;margin-top:4px}
+  .wg-target-degraded{color:var(--muted);font-size:.78rem;margin-top:2px}
     .wg-list-del{justify-self:end}
     .btn-group{max-width:560px}
   }
@@ -311,6 +312,7 @@
         </div>
         <span class="wg-status" id="wgStatus"></span>
         <div class="hint" style="margin-top:4px">Можно выбрать сразу несколько WG/AWG-конфигов — каждый файл станет отдельным профилем в списке ниже. Добавлять можно и по очереди, несколькими загрузками.</div>
+        <div class="hint" style="margin-top:4px">WG/AWG-конфиги хранятся только в памяти текущей страницы. После обновления или закрытия страницы их нужно загрузить заново. Приватные ключи в browser storage не сохраняются.</div>
       </div>
       <ul class="wg-list" id="wgList" role="list" hidden></ul>
       <div id="wgRejected" class="wg-rejected" role="alert" hidden></div>
@@ -908,6 +910,7 @@ function wgProfileBuildBean(p, opts) {
 // чьи статические члены ссылаются на них: для них цикл гарантирован.
 let dialerTargetsCache = []; // [{value, label, kind}]
 let dialerWgNamesCache = []; // имена WG-outbound в порядке wgBeans (для self-exclusion)
+let dialerRegistryDegraded = false; // реестр построен по WG-only проекции: обычный ввод ещё не собирается
 const DIALER_PROVIDER_PREFIX = '__provider__:';
 
 function isDialerProviderTarget(value) { return String(value || '').startsWith(DIALER_PROVIDER_PREFIX); }
@@ -935,9 +938,36 @@ function preflightInputForRegistry(raw) {
   return splitSubscriptionInputForPreview(raw).filter(e => !e.subscription).map(e => e.line).join('\n');
 }
 
+function collectDialerRegistryFromDoc(doc) {
+  const badMembers = new Set(['GLOBAL', '⚡ Fastest']);
+  const out = [];
+  for (const p of (doc.proxies || [])) {
+    if (!p || typeof p !== 'object' || typeof p.name !== 'string' || !p.name) continue;
+    out.push({ value: p.name, label: p.name + ' — ' + dialerKindLabel({ kind: 'proxy', type: p.type }), kind: 'proxy', type: p.type });
+  }
+  for (const g of (doc['proxy-groups'] || [])) {
+    if (!g || typeof g !== 'object' || typeof g.name !== 'string' || !g.name) continue;
+    if (badMembers.has(g.name)) continue;
+    if (Array.isArray(g.proxies) && g.proxies.some(m => badMembers.has(m))) continue; // цикл через GLOBAL/Fastest
+    out.push({ value: g.name, label: g.name + ' — ' + dialerKindLabel({ kind: 'group' }), kind: 'group', type: 'group' });
+  }
+  // URL-подписки — виртуальные UI-targets. dialer-proxy не может ссылаться
+  // прямо на proxy-provider, поэтому при Build для выбранной подписки ниже
+  // создаётся отдельная select-группа с use:[provider]. Browser preview может
+  // прочитать имена узлов, но provider в итоговом YAML остаётся динамическим.
+  const providerMap = doc['proxy-providers'];
+  if (providerMap && typeof providerMap === 'object' && !Array.isArray(providerMap)) {
+    for (const providerName of Object.keys(providerMap)) {
+      if (!providerName) continue;
+      out.push({ value: dialerProviderTarget(providerName), label: providerName + ' — ПОДПИСКА', kind: 'provider', type: 'provider', provider: providerName });
+    }
+  }
+  return out;
+}
+
 function computeDialerTargetsSync() {
   const api = globalThis.web4core;
-  if (!api || !wgProfilesEnabled()) return [];
+  if (!api || !wgProfilesEnabled()) { dialerRegistryDegraded = false; return []; }
   try {
     const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
     const masterEl = document.getElementById('cfgPerProxyMaster');
@@ -974,37 +1004,45 @@ function computeDialerTargetsSync() {
     });
     const doc = jsyaml.load(typeof result.data === 'string' ? result.data : JSON.stringify(result.data));
     if (!doc || typeof doc !== 'object') return [];
-    const badMembers = new Set(['GLOBAL', '⚡ Fastest']);
-    const out = [];
-    for (const p of (doc.proxies || [])) {
-      if (!p || typeof p !== 'object' || typeof p.name !== 'string' || !p.name) continue;
-      out.push({ value: p.name, label: p.name + ' — ' + dialerKindLabel({ kind: 'proxy', type: p.type }), kind: 'proxy', type: p.type });
-    }
-    for (const g of (doc['proxy-groups'] || [])) {
-      if (!g || typeof g !== 'object' || typeof g.name !== 'string' || !g.name) continue;
-      if (badMembers.has(g.name)) continue;
-      if (Array.isArray(g.proxies) && g.proxies.some(m => badMembers.has(m))) continue; // цикл через GLOBAL/Fastest
-      out.push({ value: g.name, label: g.name + ' — ' + dialerKindLabel({ kind: 'group' }), kind: 'group', type: 'group' });
-    }
-    // URL-подписки — виртуальные UI-targets. dialer-proxy не может ссылаться
-    // прямо на proxy-provider, поэтому при Build для выбранной подписки ниже
-    // создаётся отдельная select-группа с use:[provider]. Browser preview может
-    // прочитать имена узлов, но provider в итоговом YAML остаётся динамическим.
-    const providerMap = doc['proxy-providers'];
-    if (providerMap && typeof providerMap === 'object' && !Array.isArray(providerMap)) {
-      for (const providerName of Object.keys(providerMap)) {
-        if (!providerName) continue;
-        out.push({ value: dialerProviderTarget(providerName), label: providerName + ' — ПОДПИСКА', kind: 'provider', type: 'provider', provider: providerName });
-      }
-    }
     // Имена WG-outbound в порядке wgBeans: движок сохраняет порядок бинов,
     // поэтому i-й wireguard-proxy — это итоговое имя i-го загруженного профиля
     // (включая суффиксы дедупликации — точный self-exclusion при коллизиях).
+    dialerRegistryDegraded = false;
     dialerWgNamesCache = (doc.proxies || []).filter(p => p && p.type === 'wireguard').map(p => p.name);
-    return out;
+    return collectDialerRegistryFromDoc(doc);
   } catch (e) {
-    dialerWgNamesCache = [];
-    return []; // состояние ещё не собирается (например, пустой ввод) — список пуст
+    // Комбинированный префлайт не собирается (например, Sub Mode при пустом вводе
+    // требует хотя бы один URL подписки). Авторитетная валидация не отключается:
+    // настоящий Build отвергнет то же состояние с тем же сообщением. Но WG/AWG-цели
+    // допустимы и без обычных прокси (WG-only сборка валидна), поэтому реестр
+    // честно строится по WG-only проекции ТЕХ ЖЕ бинов: точные resulting-имена,
+    // суффиксы дедупликации, self-exclusion и исключение GLOBAL/⚡ Fastest — те же;
+    // целей из ввода/подписок в этом состоянии нет и не притворяемся, что есть.
+    try {
+      const proj = api.buildFromRequest({
+        core: 'mihomo',
+        input: '',
+        wgBeans: normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, { noDialer: true }))),
+        options: {
+          addSocks: true,
+          addTun: true,
+          urlTest: document.getElementById('pingSelect').value || 'https://www.gstatic.com/generate_204',
+          mihomoSubscriptionMode: false,
+          mihomoPerProxyTun: false,
+          mihomoTunStack: 'gvisor',
+          perProxyPort: false
+        }
+      });
+      const doc = jsyaml.load(typeof proj.data === 'string' ? proj.data : JSON.stringify(proj.data));
+      if (!doc || typeof doc !== 'object') throw new Error('WG-only projection: no doc');
+      dialerRegistryDegraded = true;
+      dialerWgNamesCache = (doc.proxies || []).filter(p => p && p.type === 'wireguard').map(p => p.name);
+      return collectDialerRegistryFromDoc(doc);
+    } catch (_) {
+      dialerRegistryDegraded = false;
+      dialerWgNamesCache = [];
+      return []; // состояние ещё не собирается (например, пустой ввод) — список пуст
+    }
   }
 }
 
@@ -1063,6 +1101,8 @@ function fillWgTargetSelect(sel, p, idx) {
     }
     const warn = row.querySelector('.wg-target-warn');
     if (warn) warn.textContent = p.vanishedTarget ? '⚠ Цель «' + p.vanishedTarget + '» недоступна для этого профиля — выберите заново.' : '';
+    const deg = row.querySelector('.wg-target-degraded');
+    if (deg) deg.textContent = dialerRegistryDegraded ? 'ℹ Обычный ввод ещё не собирается — список предварительный (только WG/AWG); финальная проверка цели — при Build.' : '';
   }
 }
 
@@ -1496,7 +1536,9 @@ function renderWgList() {
     const targetWarn = document.createElement('div');
     targetWarn.className = 'wg-target-warn';
     if (p.vanishedTarget) targetWarn.textContent = '⚠ Цель «' + p.vanishedTarget + '» недоступна для этого профиля — выберите заново.';
-    targetRow.append(targetLabel, targetSel, targetManual, targetWarn);
+    const targetDegraded = document.createElement('div');
+    targetDegraded.className = 'wg-target-degraded';
+    targetRow.append(targetLabel, targetSel, targetManual, targetWarn, targetDegraded);
     fillWgTargetSelect(targetSel, p, i);
 
     li.append(head, info, modeRow, targetRow);
