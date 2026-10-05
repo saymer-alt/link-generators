@@ -166,7 +166,7 @@ engine fallback. Обоснование по исходникам — [ауди�
 
 ## Health-check endpoints (`web4core.URLTEST_CHOICES`)
 
-Google (`google.com/generate_204`, 204), Cloudflare (`cp.cloudflare.com`, 204), Apple
+Google (`www.gstatic.com/generate_204`, 204 — Mihomo recommended), Cloudflare (`cp.cloudflare.com`, 204 — Mihomo recommended), Apple
 (`captive.apple.com`, 200), Microsoft (`msftconnecttest.com`, 200), Ubuntu, Fedora.
 Выбор пользователя попадает в `url` url-test группы и health-check провайдеров.
 
