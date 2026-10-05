@@ -1056,8 +1056,11 @@ const expectedAwg = {
     ]) assert.equal(await page.locator(id).inputValue(), want, 'независимое поле пережило round trip: ' + id);
     assert.equal(await checked2('#cfgTunMips'), false, 'router: ручное состояние MIPS восстановлено');
 
-    // dialer-proxy поля теперь находятся в закрытом ADVANCED-блоке;
-    // явно раскрываем его перед legacy/state-preservation проверкой.
+    // dialer-proxy поля теперь находятся в закрытом ADVANCED-блоке; блок виден
+    // только когда загружен хотя бы один WG/AWG (v1.7.1: скрыт при нуле профилей),
+    // поэтому сначала загружаем профиль, затем раскрываем блок.
+    await page.locator('#wgFile').setInputFiles(path.join(__dirname, 'fixtures/wg-simple-a.conf'));
+    await page.waitForTimeout(600);
     await page.locator('#wgDialerAdvanced').evaluate(el => { el.open = true; });
     await page.locator('#wgDialerInput').fill(INDEP.dialer);
     await page.locator('#wgDialerMembers').fill(INDEP.members);

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WARP & Mihomo Unified Generator</title>
-<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js" integrity="sha384-+pxiN6T7yvpryuJmE1gM9PX7yQit15auDb+ZwwvJOd/4be2Cie5/IuVXgQb/S9du" crossorigin="anonymous"></script>
 <style>
   /* === Windows XP Professional / Luna Blue theme ===
      Цветовая модель централизована: --face (control face), --field (белые поля),
@@ -285,7 +285,7 @@
     <div class="card">
       <div class="card-title">📋 Входные данные</div>
       <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
-      <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки из вкладки WARP"></textarea>
+      <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки, созданные во вкладке «⚡ WARP MASQUE Links»"></textarea>
       <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Для HTTP(S) подписки режим ниже определяет результат: включён — динамический <code>proxy-provider</code>; выключен — подписка один раз читается браузером и её текущие узлы встраиваются как обычные <code>proxies:</code>.</div>
       <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> Автоматический режим белых списков <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Автоматический режим белых списков">?</button><span class="ctx-help-pop" role="note">Плоский резервный набор (PRIMARY → FALLBACK): GLOBAL сначала использует основной набор выходов, при их недоступности переключается на резервный. Health-check каждые 300 секунд, ускоренный при неудачах. Доступен только в профиле «Роутер / обычный TUN»: на VPS не используется.</span></span></label></div>
       <div class="hint" id="awlRouterHint" style="display:none">Автоматический режим белых списков доступен только для профиля «Роутер / обычный TUN».</div>
@@ -317,13 +317,13 @@
         <div id="wgDnsWarning" class="hint" style="color:var(--red); display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
       </div>
       <details id="wgDialerAdvanced" class="advanced-panel" style="margin-top:15px">
-        <summary><span>▶</span> <span class="advanced-badge">ADVANCED</span> <span>Своя общая dialer-группа</span></summary>
-        <div class="hint">Обычно этот блок не нужен: в карточке каждого WG/AWG выберите «Через промежуточный proxy», затем нужный proxy, другой WG/AWG или URL-подписку. Генератор сам создаёт безопасную provider-backed группу для подписки. Здесь оставлена ручная сборка одной общей группы для сложных схем.</div>
+        <summary><span>▶</span> <span class="advanced-badge">ADVANCED</span> <span>Ручная общая dialer-группа (Legacy)</span></summary>
+        <div class="hint">Обычно этот раздел не нужен. Для каждого WG/AWG используйте настройку «Через промежуточный proxy» в его карточке — генератор сам создаст безопасную группу (для подписки — provider-backed). Этот блок — ручной/Legacy путь: общая dialer-группа, которую несколько WG/AWG используют совместно, для особых схем.</div>
         <label class="label" for="wgDialerInput" style="display:block;margin-bottom:5px;">Переопределить имя группы (необязательно):</label>
         <input type="text" id="wgDialerInput" style="width:100%;padding:8px;box-sizing:border-box;" placeholder="Пусто = WARP-DIALER">
         <div class="hint" style="margin-top:5px;">Если имя не задано, используется <code>WARP-DIALER</code>. Это внутреннее имя Mihomo proxy-group, а не имя сервера.</div>
         <label class="label" for="wgDialerMembers" style="display:block;margin-bottom:5px;margin-top:10px;">Статические участники группы (ADVANCED, точные имена proxy):</label>
-        <textarea id="wgDialerMembers" rows="3" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;" placeholder="VPS-DK&#10;VPS-EE&#10;VPS-SE"></textarea>
+        <textarea id="wgDialerMembers" rows="3" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;" placeholder="Proxy-A&#10;Proxy-B&#10;WG-Backup"></textarea>
         <div class="hint" style="margin-top:5px;">По одному уже существующему proxy в строке. Для обычного сценария ничего здесь не печатайте — выбирайте готовую цель прямо в карточке WG/AWG.</div>
         <label class="label" for="wgDialerProviders" style="display:block;margin-bottom:5px;margin-top:10px;">URL-подписки общей группы (ADVANCED):</label>
         <textarea id="wgDialerProviders" rows="2" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;" placeholder="https://subscription.example/..."></textarea>
@@ -337,7 +337,7 @@
       <div class="checkbox-grid">
         <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Доступно только в профиле «Роутер / обычный TUN»; в обоих VPS-профилях отключено.</span></span></label>
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
-        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090.</span></span></label>
+        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090. На VPS controller доступен только локально (127.0.0.1:9090); для удалённого управления используйте SSH-туннель (локальный forwarded-порт — свой на каждый VPS).</span></span></label>
         <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется отдельный стабильный HWID генератора, а не HWID Mihomo/Keenetic.</span></span></label>
       </div>
       <div id="subModeHint" class="hint"></div>
@@ -386,9 +386,9 @@
         <div class="hint" id="subSelectionNote" style="display:none;color:var(--warn)">Выбранные для исключения серверы продолжают действовать (объединяются с ручным фильтром через ИЛИ). Очистить — кнопкой «Снять все» в списке серверов.</div>
       </div>
       <div id="deviceModelRow" style="margin-top:10px">
-        <label for="deviceModelInput">📱 Device Model (необязательно)</label>
+        <label for="deviceModelInput">📱 Device Model — имя устройства для панели подписки (необязательно)</label>
         <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
-        <div class="hint">Передаётся серверу подписки как HTTP-заголовок <code>x-device-model</code> для каждого provider. Может использоваться панелью подписки для идентификации устройства. Пусто — заголовок не добавляется.</div>
+        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах «Получить список серверов» — например: <code>Keenetic Giga KN-1012</code>, <code>VPS-SE</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
       </div>
       <div id="realityModernRow" style="margin-top:10px">
         <label for="realityModernInput">🌐 Modern REALITY / Post-Quantum (X25519MLKEM768) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Modern REALITY">?</button><span class="ctx-help-pop" role="note">Опционально только для VLESS + REALITY узлов с подтверждённой поддержкой X25519MLKEM768. Поддержка появилась в Xray-core 25.5.16, но одна только версия Xray не гарантирует совместимость конкретного сервера/клиента. Укажите host или host:port нужных REALITY-серверов — генератор применит modern override только к ним; обычные VLESS/TLS и остальные узлы не изменяются.</span></span></label>
@@ -432,6 +432,10 @@
               <option value="media">📺 YouTube / Media</option>
               <option value="telegram">✈️ Telegram</option>
               <option value="google">🔎 Google</option>
+              <option value="github">🐙 GitHub / Development</option>
+              <option value="microsoft">🪟 Microsoft</option>
+              <option value="apple">🍎 Apple</option>
+              <option value="social">💬 Social Networks</option>
               <option value="direct">⬇️ Direct (свои домены мимо прокси)</option>
             </select>
           </span>
@@ -1327,11 +1331,19 @@ function wgProfileEndpoint(bean) {
   return '';
 }
 
+// Ручная общая dialer-группа (Legacy) видна только когда есть хотя бы один
+// WG/AWG профиль: обычный сценарий настраивается в карточке профиля.
+function updateWgDialerAdvancedVisibility() {
+  const adv = document.getElementById('wgDialerAdvanced');
+  if (adv) adv.style.display = wgProfiles.length ? '' : 'none';
+}
+
 function renderWgList() {
   const list = document.getElementById('wgList');
   const clearBtn = document.getElementById('wgClear');
   if (!list) return;
   list.textContent = '';
+  updateWgDialerAdvancedVisibility();
   wgProfiles.forEach((p, i) => {
     const bean = p.bean;
     const li = document.createElement('li');
@@ -2772,6 +2784,10 @@ const POLICY_PRESETS = {
   media: { name: 'MEDIA', domains: 'youtube.com\nyoutu.be\ngooglevideo.com\nytimg.com' },
   telegram: { name: 'TELEGRAM', domains: 'telegram.org\nt.me\ntelegram.me\ntelegram.dog\ntelesco.pe' },
   google: { name: 'GOOGLE', domains: 'google.com\ngstatic.com\ngoogleapis.com\ngoogleusercontent.com' },
+  github: { name: 'GITHUB', domains: 'github.com\ngithubusercontent.com\ngithubassets.com\nghcr.io' },
+  microsoft: { name: 'MICROSOFT', domains: 'microsoft.com\nmicrosoftonline.com\noffice.com\noffice365.com\nwindowsupdate.com\nlive.com\nxbox.com' },
+  apple: { name: 'APPLE', domains: 'apple.com\nicloud.com\nmzstatic.com\nme.com' },
+  social: { name: 'SOCIAL', domains: 'facebook.com\ninstagram.com\nx.com\ntwitter.com\nreddit.com\ntiktok.com' },
   direct: { name: 'DIRECT-LIST', domains: '# домены, которые пойдут мимо прокси (DIRECT)\nexample.com', target: 'DIRECT' }
 };
 
@@ -3367,6 +3383,16 @@ async function buildMihomo() {
       }
     }
 
+    // PATCH: VPS controller bind — security default: в VPS-профилях контроллер
+    // доступен только с самого VPS (127.0.0.1:9090), удалённое управление —
+    // через SSH-туннель (локальный forwarded-порт выбирает пользователь, это
+    // отдельное понятие от порта на VPS). Build-level кламп: tamper не влияет;
+    // router не затрагивается — вывод байт-в-байт прежний. Конфликт нескольких
+    // VPS решается локальными SSH-forward портами, а не портами на VPS.
+    if (deploymentProfile !== 'router') {
+      yaml = yaml.replace(/^external-controller:\s*0\.0\.0\.0:9090\s*$/m, 'external-controller: 127.0.0.1:9090');
+    }
+
     document.getElementById('mihomoOutput').value = yaml;
     renderCompatSummary(yaml);
     showToast('✅ Mihomo config built!');
@@ -3469,6 +3495,7 @@ updateSubModeHint();
 updateWebUiVisibility();
 updateMihomoOptionStates();
 applyProfileUiState(selectedProfile); // заполнить hint и применить состояние профиля при загрузке
+updateWgDialerAdvancedVisibility(); // Legacy dialer-группа скрыта, пока не загружен ни один WG/AWG
 // Селекторы dialer-целей и подписки на изменения, влияющие на состав целей:
 // (§28 dynamic refresh) ввод прокси/подписок, WG-файлы, dialer-группа,
 // Sub Mode, БС, DPR-политики, профиль.

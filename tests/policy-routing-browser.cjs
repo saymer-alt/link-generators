@@ -92,6 +92,31 @@ const root = path.resolve(__dirname, '..');
     assert.equal(await checkbox.isChecked(), false);
     cases += 2;
 
+    // 9. Новые v1.7.1 пресеты: карточка создаётся с ожидаемым именем и доменами
+    await page.evaluate(() => { // секция 6 гасит DPR через Per-Proxy master — снимаем его
+      const m = document.getElementById('cfgPerProxyMaster');
+      if (m.checked) { m.checked = false; m.dispatchEvent(new Event('change', { bubbles: true })); }
+    });
+    if (!(await checkbox.isChecked())) await checkbox.check();
+    await page.evaluate(() => { document.getElementById('policyCards').textContent = ''; }); // чистим DOM напрямую
+    const newPresets = [
+      ['github', 'GITHUB', 'githubusercontent.com'],
+      ['microsoft', 'MICROSOFT', 'windowsupdate.com'],
+      ['apple', 'APPLE', 'icloud.com'],
+      ['social', 'SOCIAL', 'instagram.com'],
+    ];
+    for (const [value] of newPresets) {
+      await page.locator('#policyPresetSelect').selectOption(value);
+      await page.locator('#btnPolicyAdd').click();
+    }
+    assert.equal(await page.locator('#policyCards .policy-card').count(), newPresets.length);
+    for (const [i, [, name, domain]] of newPresets.entries()) {
+      const card = page.locator('#policyCards .policy-card').nth(i);
+      assert.equal(await card.locator('.policy-name').inputValue(), name, name + ': имя из пресета');
+      assert.ok((await card.locator('.policy-domains').inputValue()).includes(domain), name + ': домены из пресета');
+    }
+    cases += 1 + newPresets.length * 2;
+
     assert.deepEqual(errors, [], 'no page errors');
     cases += 1;
 

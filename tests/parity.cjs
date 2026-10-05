@@ -49,11 +49,18 @@ async function runScenario(browser, root, candRoot, name, actions) {
     },
     'vps-local': async p => {
       await p.selectOption('#cfgProfile', 'vps-local');
+      // Осознанное изменение контракта (v1.7.1): external-controller в VPS-профилях
+      // стал 127.0.0.1:9090 (было 0.0.0.0:9090). Сценарий явно выключает Web UI,
+      // чтобы сравнивать неизменившуюся часть вывода; дефолтная дельта закреплена
+      // в tests/profile-matrix.cjs (§26 controller bind).
+      await p.locator('#cfgWebUI').uncheck();
       await p.fill('#mihomoInput', 'ss://YWVzLTI1Ni1nY206dGVzdHBhc3M=@192.0.2.1:443#s1');
       await p.locator('#cfgSubMode').uncheck();
     },
     'vps-gateway': async p => {
       await p.selectOption('#cfgProfile', 'vps-gateway');
+      // см. vps-local: контроллер-bind стал профильным (127.0.0.1), Web UI выключен явно
+      await p.locator('#cfgWebUI').uncheck();
       // Осознанное изменение контракта (fix/vps-allow-lan-router-only): Allow LAN
       // стал router-only, в VPS-профилях выключается принудительно. Пользователь
       // в сценарии явно выключает чекбокс: на старом коде он протекал из router
@@ -66,6 +73,7 @@ async function runScenario(browser, root, candRoot, name, actions) {
     },
     'vps-gateway-dns-off': async p => {
       await p.selectOption('#cfgProfile', 'vps-gateway');
+      await p.locator('#cfgWebUI').uncheck();
       if (await p.locator('#cfgLan').isEnabled()) await p.locator('#cfgLan').uncheck();
       await p.locator('#vpsDnsEnabled').uncheck();
       await p.fill('#mihomoInput', 'ss://YWVzLTI1Ni1nY206dGVzdHBhc3M=@192.0.2.1:443#s1');
