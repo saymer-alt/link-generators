@@ -227,6 +227,63 @@ const root = path.resolve(__dirname, '..');
   assert.match(rLanLocal.yaml, /^allow-lan:\s*false$/m, 'vps-local tamper: allow-lan остался false');
   ok('tamper: Allow LAN в vps-local → YAML не открывает LAN listener');
 
+  // === §26 Controller bind: VPS = 127.0.0.1 (security default), router = 0.0.0.0 ===
+  await page.selectOption('#cfgProfile', 'vps-local');
+  await page.evaluate(() => { document.getElementById('cfgSubMode').checked = false; document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true })); });
+  const rCtlLocal = await build();
+  assert.equal(rCtlLocal.state, 'VALID', 'vps-local: сборка проходит');
+  assert.match(rCtlLocal.yaml, /^external-controller: 127\.0\.0\.1:9090$/m, 'vps-local: controller на loopback');
+  assert.doesNotMatch(rCtlLocal.yaml, /^external-controller: 0\.0\.0\.0:9090$/m, 'vps-local: controller НЕ на всех интерфейсах');
+  ok('controller bind: vps-local → 127.0.0.1:9090');
+
+  await page.selectOption('#cfgProfile', 'vps-gateway');
+  await page.evaluate(() => { document.getElementById('cfgSubMode').checked = false; document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true })); });
+  const rCtlGw = await build();
+  assert.match(rCtlGw.yaml, /^external-controller: 127\.0\.0\.1:9090$/m, 'vps-gateway: controller на loopback');
+  assert.doesNotMatch(rCtlGw.yaml, /^external-controller: 0\.0\.0\.0:9090$/m, 'vps-gateway: controller НЕ на всех интерфейсах');
+  ok('controller bind: vps-gateway → 127.0.0.1:9090');
+
+  // Web UI OFF в VPS: контроллер не генерируется вовсе
+  await page.locator('#cfgWebUI').uncheck();
+  const rCtlOff = await build();
+  assert.doesNotMatch(rCtlOff.yaml, /^external-controller:/m, 'vps-gateway WebUI OFF: controller отсутствует');
+  await page.locator('#cfgWebUI').check();
+  ok('controller bind: Web UI OFF → контроллер не генерируется');
+
+  // Router: прежний контракт сохранён (LAN-сценарий, byte-identical)
+  await page.selectOption('#cfgProfile', 'router');
+  await page.evaluate(() => { document.getElementById('cfgSubMode').checked = false; document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true })); });
+  const rCtlRouter = await build();
+  assert.match(rCtlRouter.yaml, /^external-controller: 0\.0\.0\.0:9090$/m, 'router: controller остался 0.0.0.0:9090 (LAN-сценарий)');
+  ok('controller bind: router → 0.0.0.0:9090 без изменений');
+
+  // === §27 Privacy: preview/build/reload не оставляют в localStorage ничего, кроме stable HWID ===
+  const page3 = await browser.newPage();
+  page3.setDefaultTimeout(15000);
+  if (process.env.JS_YAML_PATH) await page3.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ path: process.env.JS_YAML_PATH, contentType: 'text/javascript' }));
+  await page3.goto(pathToFileURL(path.join(root, 'index.html')).href);
+  await page3.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+  await page3.evaluate(() => {
+    document.getElementById('deviceModelInput').value = 'PRIVACY-PROBE-DEVICE';
+    document.getElementById('mihomoInput').value = 'https://privacy-probe.example.invalid/sub';
+    document.getElementById('excludeFilterInput').value = 'NEVER-STORED-NODE';
+  });
+  await page3.locator('button[onclick="buildMihomo()"]').click();
+  await page3.waitForFunction(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state), null, { timeout: 20000 });
+  await page3.reload();
+  await page3.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+  const storageDump = await page3.evaluate(() => {
+    const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k); }
+    return { keys: Object.keys(localStorage), dump: JSON.stringify(ls), cookies: document.cookie };
+  });
+  // HWID создаётся лениво — только реальным preview-запросом; build/storage-free build
+  // может оставить localStorage пустым, но никогда не пишет ничего кроме HWID-ключа.
+  assert.ok(storageDump.keys.every(k => k === 'link-generators.subscription-preview-hwid.v1'), 'localStorage: не более чем stable preview HWID');
+  assert.doesNotMatch(storageDump.dump, /PRIVACY-PROBE-DEVICE|privacy-probe\.example|NEVER-STORED-NODE/, 'в storage нет device model/URL/имён узлов');
+  assert.equal(storageDump.cookies, '', 'cookies пусты');
+  await page3.close();
+  ok('privacy: после build+reload сохраняется только стабильный HWID (без Device Model/URL/имён)');
+
   assert.deepEqual(errors, [], 'нет pageerror');
   console.log(`Profile-matrix: ${passed} проверок — PASS`);
   await browser.close();
