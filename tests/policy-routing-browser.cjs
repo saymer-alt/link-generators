@@ -166,6 +166,25 @@ const root = path.resolve(__dirname, '..');
     assert.doesNotMatch(ls, /gemini\.google\.com/, 'запрос не персистится');
     cases += 1;
 
+    // 11. FALLBACK path (review fix B2): заведомо нематчующий домен доходит до MATCH,GLOBAL.
+    // Статический билд без подписок (с подпиской честный вердикт — UNKNOWN из-за
+    // внешнего provider). конфиг без MATCH-в-конце построить нельзя, поэтому
+    // берём обычный статический DPR-конфиг и домен, не совпадающий ни с чем.
+    await page.evaluate(() => {
+      document.getElementById('cfgSubMode').checked = false;
+      document.getElementById('cfgSubMode').dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.fill('#mihomoInput', 'vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#A\nvless://00000000-0000-4000-8000-000000000002@192.0.2.2:443#B');
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    await page.waitForFunction(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state), null, { timeout: 20000 });
+    await page.fill('#rdTestInput', 'definitely-unmatched.example');
+    await page.locator('#rdTestBtn').click();
+    const fbText = await page.locator('#rdResult').textContent();
+    assert.match(fbText, /Fallback/, 'Fallback block shown');
+    assert.match(fbText, /MATCH → GLOBAL/, 'Fallback target GLOBAL');
+    assert.equal(errors.filter(Boolean).length, 0, 'FALLBACK path: 0 page errors');
+    cases += 3;
+
     assert.deepEqual(errors, [], 'no page errors');
     cases += 1;
 

@@ -183,4 +183,58 @@ const doc = (rules, providers) => ({ rules, 'rule-providers': providers || {} })
   assert.equal(api.rdIsIPv6('2001:db8:::1'), null); ok();
 }
 
+// --- REVIEW FIX B1: UNKNOWN before known match => UNKNOWN (winner is a number, .index was undefined) ---
+{
+  const d = doc(['GEOSITE,youtube,PROXY', 'DOMAIN,example.com,DIRECT', 'MATCH,GLOBAL']);
+  const r = api.routingInspect(d, 'example.com');
+  assert.equal(r.verdict, 'UNKNOWN', 'B1: недоказуемое правило раньше — победитель не может быть доказан');
+  assert.equal(r.firstUnknown.index, 0); ok();
+}
+// --- REVIEW FIX B1b: known match before UNKNOWN stays MATCHED ---
+{
+  const d = doc(['DOMAIN,example.com,DIRECT', 'GEOSITE,youtube,PROXY', 'MATCH,GLOBAL']);
+  const r = api.routingInspect(d, 'example.com');
+  assert.equal(r.verdict, 'MATCHED', 'B1b: доказанный first-match не отменяется поздним unknown');
+  assert.equal(r.winner, 0);
+  assert.ok(r.unknownAfter && r.unknownAfter.length === 1, 'поздний unknown отмечен отдельно'); ok();
+}
+// --- REVIEW FIX B3: no-resolve is a flag, target parsed correctly ---
+{
+  const parsed = api.rdParseRule('IP-CIDR,192.0.2.0/24,PROXY,no-resolve');
+  assert.equal(parsed.value, '192.0.2.0/24');
+  assert.equal(parsed.target, 'PROXY', 'target больше не no-resolve');
+  assert.equal(parsed.noResolve, true); ok();
+  const parsed6 = api.rdParseRule('IP-CIDR6,2001:db8::/32,PROXY,no-resolve');
+  assert.equal(parsed6.value, '2001:db8::/32');
+  assert.equal(parsed6.target, 'PROXY');
+  assert.equal(parsed6.noResolve, true); ok();
+  // маршрут с no-resolve показывает правильный target
+  const d = doc(['IP-CIDR,192.0.2.0/24,PROXY,no-resolve', 'MATCH,GLOBAL']);
+  const r = api.routingInspect(d, '192.0.2.55');
+  assert.equal(r.verdict, 'MATCHED');
+  assert.equal(r.matched[0].rule.target, 'PROXY', 'маршрут показывает PROXY, а не no-resolve'); ok();
+}
+// --- REVIEW FIX B4: classical inline IP-CIDR operand already carries prefix ---
+{
+  const d = doc(['RULE-SET,test,PROXY', 'MATCH,GLOBAL'], {
+    test: { type: 'inline', behavior: 'classical', format: 'yaml', payload: ['IP-CIDR,192.0.2.0/24', 'IP-CIDR6,2001:db8::/32'] },
+  });
+  const r4 = api.routingInspect(d, '192.0.2.55');
+  assert.equal(r4.verdict, 'MATCHED', 'IPv4 inside classical CIDR');
+  assert.equal(r4.matched[0].rule.target, 'PROXY'); ok();
+  assert.equal(api.routingInspect(d, '192.0.3.55').verdict, 'FALLBACK', 'IPv4 outside'); ok();
+  const r6 = api.routingInspect(d, '2001:db8::1');
+  assert.equal(r6.verdict, 'MATCHED', 'IPv6 inside classical CIDR');
+  assert.equal(r6.matched[0].rule.target, 'PROXY'); ok();
+}
+// --- Small fix: cross-policy requires 2 distinct providers ---
+{
+  const d = doc(['RULE-SET,policy-ai,FRA', 'MATCH,GLOBAL'], {
+    'policy-ai': { type: 'inline', behavior: 'classical', format: 'yaml', payload: ['DOMAIN-SUFFIX,openai.com', 'DOMAIN,openai.com', 'DOMAIN,openai.com'] },
+  });
+  const dup = api.routingFindDuplicates(d);
+  assert.ok(dup.payloadDups.length >= 1, 'exact payload duplicate detected');
+  assert.equal(dup.crossPolicy.length, 0, 'один provider — это не cross-policy'); ok();
+}
+
 console.log('Routing-inspector: ' + cases + ' cases passed');

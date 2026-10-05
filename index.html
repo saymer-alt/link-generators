@@ -3267,7 +3267,7 @@ function rdParseRule(raw) {
   let value = '', target = '';
   if (type === 'MATCH') target = parts[1] || '';
   else if (type === 'RULE-SET') { value = parts[1] || ''; target = parts[2] || ''; }
-  else { value = parts[1] || ''; target = parts[parts.length - 1] || ''; }
+  else { value = parts[1] || ''; target = parts[2] || ''; } // target — всегда третий элемент; флаги (no-resolve) идут после
   return { raw: String(raw || ''), type, value, target, noResolve };
 }
 function rdInlinePayloadEntries(provider) {
@@ -3293,7 +3293,7 @@ function rdInlinePayloadEntries(provider) {
       if (type === 'DOMAIN') entries.push({ op: 'exact', value: val });
       else if (type === 'DOMAIN-SUFFIX') entries.push({ op: 'suffix', value: val });
       else if (type === 'DOMAIN-KEYWORD') entries.push({ op: 'keyword', value: val });
-      else if (type === 'IP-CIDR' || type === 'IP-CIDR6') entries.push({ op: 'ip', value: (parts[1] || '') + '/' + (parts[2] || '') });
+      else if (type === 'IP-CIDR' || type === 'IP-CIDR6') entries.push({ op: 'ip', value: parts[1] || '' }); // CIDR operand уже содержит /prefix
       else if (type === 'DOMAIN-REGEX') unsupported.push('DOMAIN-REGEX inside provider payload (Go RE2 semantics not safely emulated)');
       else if (type === 'DOMAIN-WILDCARD') unsupported.push('DOMAIN-WILDCARD inside provider payload (wildcard semantics not safely emulated)');
       else unsupported.push(type + ' inside provider payload (external dataset or unsupported semantics)');
@@ -3359,6 +3359,8 @@ function rdRuleVerdict(rule, providers, input) {
     if (parsed.unsupported.length) return { verdict: 'unknown', reason: parsed.unsupported[0] };
     for (const e of parsed.entries) {
       if (e.op === 'ip') {
+        const sameFamily = input.version === 4 ? !e.value.includes(':') : e.value.includes(':');
+        if (!sameFamily) continue; // IPv6-CIDR против IPv4-литерала — детерминированный no-match
         const res = rdIpInCidr(input.value, e.value);
         if (res === null) return { verdict: 'unknown', reason: 'provider CIDR could not be parsed deterministically' };
         if (res) return { verdict: 'match', provider: rule.value };
@@ -3389,7 +3391,7 @@ function routingInspect(doc, input) {
       firstUnknown = { index: i, rule, reason: res.reason };
     }
   }
-  const unknownBefore = firstUnknown !== null && (winner === null || firstUnknown.index < winner.index);
+  const unknownBefore = firstUnknown !== null && (winner === null || firstUnknown.index < winner);
   if (winner !== null && !unknownBefore) {
     return { verdict: 'MATCHED', kind, winner, matched, unknownAfter: firstUnknown ? [firstUnknown] : [] };
   }
@@ -3432,7 +3434,8 @@ function routingFindDuplicates(doc) {
   }
   const crossPolicy = [];
   for (const [key, places] of domainMap) {
-    if (places.length < 2) continue;
+    const provs = new Set(places.map(p => p.provider));
+    if (provs.size < 2) continue; // «в нескольких политиках» = минимум 2 разных провайдера
     crossPolicy.push({ entry: key, places });
   }
   return { ruleDups, payloadDups, crossPolicy };
@@ -3575,6 +3578,12 @@ function runRoutingInspector() {
     return;
   }
   if (res.verdict === 'NO MATCH') { out.textContent = '✗ ' + res.message; return; }
+  if (res.verdict === 'FALLBACK') {
+    // FALLBACK до обращения к matched: MATCH намеренно не попадает в matched[]
+    const rule = rdParseRule(lastRoutingDoc.rules[res.winner]);
+    out.textContent = 'Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + (rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Домен не совпал ни с одним известным правилом до MATCH.)';
+    return;
+  }
   const w = res.winner;
   const rule = res.matched.find(m => m.index === w).rule;
   let text = '✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + rule.raw + RD_NL + RD_NL + 'Маршрут: ' + labelOf(w) + ' → ' + (rule.target || '—');
@@ -3583,7 +3592,6 @@ function runRoutingInspector() {
     text += RD_NL + RD_NL + 'Также совпало:' + RD_NL + others.map(m => '#' + (m.index + 1) + ' ' + m.rule.raw).join(RD_NL);
     text += RD_NL + RD_NL + 'Почему победило: Mihomo применяет первое подходящее правило; #' + (w + 1) + ' находится выше ' + (others.length > 1 ? 'остальных' : '#' + (others[0].index + 1)) + '.';
   }
-  if (res.verdict === 'FALLBACK') text = 'Fallback:' + RD_NL + '#' + (w + 1) + ' MATCH → ' + (rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Домен не совпал ни с одним известным правилом до MATCH.)';
   if (res.unknownAfter && res.unknownAfter.length) text += RD_NL + RD_NL + '⚠ Позже встречается недоказуемое правило: ' + res.unknownAfter[0].reason;
   out.textContent = text;
 }
