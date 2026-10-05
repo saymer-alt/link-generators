@@ -27,6 +27,11 @@
      background:linear-gradient(180deg,#0a6cf1 0%,var(--luna-hi) 9%,var(--luna) 22%,var(--luna) 70%,var(--luna-deep) 96%);
      text-shadow:1px 1px 1px rgba(0,0,60,.7)}
   h1::before{content:"\2699 ";opacity:.9}
+  /* Бейдж версии генератора (GENERATOR_META): build-channel metadata, не кликабелен,
+     не зависит от сети и storage; на узком экране переносится внутри заголовка. */
+  .gen-version-badge{display:inline-block;padding:1px 10px;border:1px solid rgba(0,0,0,.28);border-radius:10px;
+     background:rgba(255,255,255,.92);color:#123a8c;font-size:.72rem;font-weight:bold;letter-spacing:.4px;
+     white-space:nowrap;user-select:none;text-shadow:none}
   .tabs{display:flex;gap:3px;padding:6px 10px 0;border-bottom:1px solid var(--border);background:var(--face)}
   .tab{flex:0 0 auto;padding:7px 16px 6px;cursor:pointer;border:1px solid var(--border);border-bottom:none;border-radius:4px 4px 0 0;
        background:linear-gradient(180deg,#f6f4ea,var(--face-dark));color:#333;font-size:.92rem;font-weight:bold;font-family:inherit}
@@ -172,7 +177,7 @@
 </head>
 <body>
 <div class="container">
-  <h1>🔗 WARP & Mihomo Unified</h1>
+  <h1 style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>🔗 WARP & Mihomo Unified</span><span id="genVersionBadge" class="gen-version-badge" role="note"></span></h1>
 
   <div class="tabs">
     <button class="tab" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
@@ -526,6 +531,18 @@
 <script src="./web4core.runtime.js"></script>
 
 <script>
+// === GENERATOR META (единственный production source-of-truth версии/канала) ===
+// channel — metadata конкретной сборки, НЕ определение git-ветки в рантайме:
+// development build = 1.8.0-dev / main; release promotion (main → stable) отдельно
+// переводит её на 1.8.0 / stable. UI (бейдж) читает только эти значения.
+const GENERATOR_META = Object.freeze({ version: '1.8.0-dev', channel: 'main' });
+(function renderGeneratorMeta() {
+  const el = document.getElementById('genVersionBadge');
+  if (!el) return;
+  el.textContent = 'v' + GENERATOR_META.version + ' · ' + GENERATOR_META.channel.toUpperCase();
+  el.title = 'Generator version ' + GENERATOR_META.version + ', channel ' + GENERATOR_META.channel;
+})();
+
 // === TABS ===
 function switchTab(e, name) {
   if (e) e.preventDefault();
@@ -941,7 +958,7 @@ function computeDialerTargetsSync() {
       options: {
         addSocks: addSocks,
         addTun: addTun,
-        urlTest: document.getElementById('pingSelect').value || 'https://google.com/generate_204',
+        urlTest: document.getElementById('pingSelect').value || 'https://www.gstatic.com/generate_204',
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
         excludeFilter: document.getElementById('excludeFilterInput').value,
         deviceModel: document.getElementById('deviceModelInput').value,
