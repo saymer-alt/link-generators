@@ -197,6 +197,7 @@
         <button class="btn btn-gray" onclick="document.getElementById('yamlInput').value=''">Очистить</button>
       </div>
       <div class="hint">Поддерживается совместимый WARP YAML; источник не важен.</div>
+      <div id="warpscoutInfo" style="display:none;margin-top:10px"></div>
     </div>
 
     <div class="card">
@@ -247,6 +248,32 @@
         <button class="btn" onclick="generateWarp()">⚡ Сгенерировать ссылки</button>
         <button class="btn btn-gray" onclick="sendToMihomo()">🚀 В Mihomo Builder</button>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⚙️ Advanced MASQUE — точные endpoint'ы (необязательно)</div>
+      <div class="row">
+        <div><label>H3 / QUIC endpoint</label><input type="text" id="h3Endpoint" placeholder="пусто = встроенная стратегия"></div>
+        <div><label>H3 / QUIC SNI</label><input type="text" id="h3Sni" placeholder="пусто = общий SNI выше"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><label>H2 / TCP endpoint</label><input type="text" id="h2Endpoint" placeholder="пусто = встроенная стратегия"></div>
+        <div><label>H2 / TCP SNI</label><input type="text" id="h2Sni" placeholder="пусто = общий SNI выше"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><label>H3 ports (свой список, через запятую)</label><input type="text" id="h3Ports" placeholder="например 443, 8443"></div>
+        <div><label>H2 ports (свой список, через запятую)</label><input type="text" id="h2Ports" placeholder="например 443, 8443, 4443"></div>
+      </div>
+      <div id="warpImportAmbiguity" style="display:none;margin-top:12px">
+        <div class="row">
+          <div><label>H3 / QUIC кандидат импорта</label><select id="h3CandidateSelect"></select></div>
+          <div><label>H2 / TCP кандидат импорта</label><select id="h2CandidateSelect"></select></div>
+        </div>
+        <div class="btn-group" style="margin-top:8px">
+          <button class="btn btn-purple" onclick="applyWarpscoutSelection()">📥 Импортировать выбранных</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:12px">Приоритет на транспорт: <b>точный endpoint</b> (импорт WARPSCOUT/Mihomo MASQUE <code>type: masque</code> или вручную) → <b>свой список портов</b> → <b>встроенная стратегия</b>. Точный endpoint авторитетен и не переписывается анти-корреляцией (она применяется только к сгенерированным endpoint'ам). Свой список портов полностью заменяет встроенный выбор портов — без скрытого смешивания. Порты — целые 1..65535 (trim + дедупликация; «443abc» — ошибка, а не 443). Endpoint — IPv4:port или hostname:port; IPv6 endpoint отвергается явно (контракт MASQUE не доказан). Поля живут только в памяти страницы — ни localStorage, ни sessionStorage, ни URL.</div>
     </div>
 
     <div class="card">
@@ -596,6 +623,19 @@ function parseYaml() {
   
   try {
     const docs = jsyaml.loadAll(raw);
+
+    // v1.9 (#125): WARPSCOUT/Mihomo MASQUE detection — сканируем ВСЕ proxies,
+    // а не proxies[0]. Кандидат — только type: masque; произвольный не-MASQUE
+    // proxy транспортом не интерпретируется. Нет кандидатов → legacy-путь ниже.
+    const masqueCandidates = scanMasqueCandidates(docs);
+    if (masqueCandidates.length > 0) {
+      lastMasqueCandidates = masqueCandidates;
+      importWarpscoutCandidates(masqueCandidates);
+      return;
+    }
+    lastMasqueCandidates = [];
+    hideWarpscoutInfo();
+
     let proxyData = null;
     
     for (const doc of docs) {
@@ -646,12 +686,229 @@ function parseYaml() {
         setTimeout(() => el.classList.remove('field-filled'), 2000);
       }
     });
-    
+
+    // Точные endpoint/SNI — факты конкретного конфига: новый импорт их сбрасывает
+    // (стейл endpoint чужого конфига не переживает «Распарсить»); списки портов —
+    // пользовательские предпочтения и сознательно сохраняются.
+    ['h3Endpoint', 'h3Sni', 'h2Endpoint', 'h2Sni'].forEach(k => setWarpField(k, ''));
+
     document.getElementById('parsedBadge').style.display = 'inline-block';
     showToast('✅ YAML распарсен');
   } catch (e) {
     showToast('❌ Ошибка парсинга YAML: ' + e.message, true);
   }
+}
+
+// === WARPSCOUT-AWARE MASQUE IMPORT (v1.9, issue #125) ===
+// Кандидат импорта — только proxy с type: masque. Legacy WARP YAML (бот) без
+// явной MASQUE-структуры идёт прежним путём: identity/tunnel импорт, а
+// endpoint/transport выбирает встроенная стратегия generateWarp().
+// Приоритет транспорта: exact imported/manual endpoint → custom port list → builtin.
+// Значения кандидатов недоверенные — в DOM только через textContent/DOM API.
+let lastMasqueCandidates = [];
+
+function classifyMasqueProxy(p) {
+  const net = typeof p.network === 'string' ? p.network.trim().toLowerCase() : '';
+  return net === 'h2' ? 'h2' : 'h3';
+}
+
+function scanMasqueCandidates(docs) {
+  const found = [];
+  for (const doc of docs) {
+    if (!doc || !Array.isArray(doc.proxies)) continue;
+    doc.proxies.forEach(p => {
+      if (p && typeof p === 'object' && p.type === 'masque') found.push({ proxy: p, transport: classifyMasqueProxy(p) });
+    });
+  }
+  found.forEach((c, i) => {
+    const p = c.proxy;
+    const name = typeof p.name === 'string' && p.name.trim() ? p.name.trim() : 'proxy-' + (i + 1);
+    const ep = (typeof p.server === 'string' && p.server.trim() && p.port !== undefined && p.port !== '')
+      ? p.server.trim() + ':' + p.port : 'endpoint не указан';
+    c.label = name + ' — ' + ep;
+  });
+  return found;
+}
+
+function setWarpField(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = value || '';
+  if (value) {
+    el.classList.add('field-filled');
+    setTimeout(() => el.classList.remove('field-filled'), 2000);
+  }
+}
+
+function readWarpIdentity(p) {
+  return {
+    privateKey: p['private-key'] || p.privateKey || '',
+    publicKey: p['public-key'] || p.publicKey || '',
+    ip: p.ip || '',
+    ipv6: p.ipv6 || '',
+    dns: Array.isArray(p.dns) ? p.dns.join(',') : (p.dns || '')
+  };
+}
+
+function applyWarpscoutCandidate(cand) {
+  if (!cand) return;
+  const p = cand.proxy;
+  const server = typeof p.server === 'string' ? p.server.trim() : '';
+  const sni = typeof p.sni === 'string' ? p.sni.trim() : '';
+  const endpoint = (server && p.port !== undefined && p.port !== '') ? server + ':' + p.port : '';
+  if (cand.transport === 'h2') {
+    setWarpField('h2Endpoint', endpoint);
+    setWarpField('h2Sni', sni);
+  } else {
+    setWarpField('h3Endpoint', endpoint);
+    setWarpField('h3Sni', sni);
+  }
+}
+
+function showWarpscoutBanner(lines) {
+  const box = document.getElementById('warpscoutInfo');
+  if (!box) return;
+  box.textContent = '';
+  box.className = 'hint';
+  const title = document.createElement('b');
+  title.textContent = '🛰 WARPSCOUT / Mihomo MASQUE detected';
+  box.appendChild(title);
+  lines.forEach(t => {
+    const row = document.createElement('div');
+    row.textContent = '· ' + t;
+    box.appendChild(row);
+  });
+  box.style.display = 'block';
+}
+
+function hideWarpscoutInfo() {
+  const box = document.getElementById('warpscoutInfo');
+  if (box) box.style.display = 'none';
+}
+
+function importWarpscoutCandidates(candidates) {
+  const identitySrc = candidates.map(c => c.proxy).find(p => p['private-key'] || p.privateKey);
+  if (!identitySrc) return showToast('В MASQUE-кандидатах не найден private-key', true);
+  const id = readWarpIdentity(identitySrc);
+  if (!id.privateKey) return showToast('Не найден private-key в YAML', true);
+  ['privateKey', 'publicKey', 'ip', 'ipv6', 'dns'].forEach(k => setWarpField(k, id[k]));
+  // Новый YAML — новое транспортное состояние: стейл exact endpoint/SNI от
+  // предыдущего импорта не переживают повторный «Распарсить» (fail-closed).
+  ['h3Endpoint', 'h3Sni', 'h2Endpoint', 'h2Sni'].forEach(k => setWarpField(k, ''));
+  document.getElementById('parsedBadge').style.display = 'inline-block';
+
+  const h3 = candidates.filter(c => c.transport === 'h3');
+  const h2 = candidates.filter(c => c.transport === 'h2');
+  const lines = ['identity/tunnel: private-key/public-key/ip/ipv6/dns перенесены'];
+
+  if (h3.length > 1 || h2.length > 1) showWarpscoutAmbiguity(h3, h2);
+  else hideWarpscoutAmbiguity();
+
+  [['H3 / QUIC', h3], ['H2 / TCP', h2]].forEach(([name, list]) => {
+    if (!list.length) { lines.push(name + ': кандидатов нет — останется встроенная стратегия'); return; }
+    if (list.length > 1) { lines.push(name + ': кандидатов ' + list.length + ' — выберите в «Advanced MASQUE»'); return; }
+    applyWarpscoutCandidate(list[0]);
+    const p = list[0].proxy;
+    const ep = (p.server || '?') + ':' + (p.port !== undefined ? p.port : '?');
+    lines.push(name + ': endpoint ' + ep + (typeof p.sni === 'string' && p.sni.trim() ? ', SNI ' + p.sni.trim() : '') + ' → импортирован как точный');
+  });
+  showWarpscoutBanner(lines);
+  showToast('✅ WARPSCOUT / Mihomo MASQUE распознан');
+}
+
+function showWarpscoutAmbiguity(h3, h2) {
+  const box = document.getElementById('warpImportAmbiguity');
+  if (!box) return;
+  const fill = (selId, list) => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    sel.textContent = '';
+    const ambiguous = list.length > 1;
+    sel.dataset.active = ambiguous ? '1' : '';
+    if (ambiguous) {
+      list.forEach((c, i) => {
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = c.label;
+        sel.appendChild(opt);
+      });
+    }
+    if (sel.closest('div')) sel.closest('div').style.display = ambiguous ? '' : 'none';
+  };
+  fill('h3CandidateSelect', h3);
+  fill('h2CandidateSelect', h2);
+  box.style.display = 'block';
+}
+
+function hideWarpscoutAmbiguity() {
+  const box = document.getElementById('warpImportAmbiguity');
+  if (box) box.style.display = 'none';
+}
+
+function applyWarpscoutSelection() {
+  const readSel = selId => {
+    const sel = document.getElementById(selId);
+    if (!sel || sel.dataset.active !== '1') return undefined; // 0/1 кандидатов уже применены
+    const i = Number(sel.value);
+    return Number.isInteger(i) && i >= 0 ? i : null;
+  };
+  const h3i = readSel('h3CandidateSelect');
+  const h2i = readSel('h2CandidateSelect');
+  if (h3i === null || h2i === null) return showToast('Выберите кандидата для каждого транспорта', true);
+  const h3 = lastMasqueCandidates.filter(c => c.transport === 'h3');
+  const h2 = lastMasqueCandidates.filter(c => c.transport === 'h2');
+  if (h3i !== undefined && h3[h3i]) applyWarpscoutCandidate(h3[h3i]);
+  if (h2i !== undefined && h2[h2i]) applyWarpscoutCandidate(h2[h2i]);
+  hideWarpscoutAmbiguity();
+  showWarpscoutBanner([
+    'identity/tunnel: private-key/public-key/ip/ipv6/dns перенесены',
+    'H3 / QUIC: ' + (h3i !== undefined && h3[h3i] ? 'импортирован ' + h3[h3i].label : 'остаётся встроенная стратегия'),
+    'H2 / TCP: ' + (h2i !== undefined && h2[h2i] ? 'импортирован ' + h2[h2i].label : 'остаётся встроенная стратегия')
+  ]);
+  showToast('✅ Кандидаты импортированы');
+}
+
+// Endpoint/ports-валидация для exact/custom MASQUE-полей: integer 1..65535,
+// trim, дедупликация; «443abc» — explicit error, никакой parseInt-угадайки.
+// Endpoint: IPv4:port или hostname:port; IPv6 — честный reject (контракт
+// MASQUE/IPv6 не доказан, не угадываем; WG IPv4-only policy сюда не переносится).
+function parseMasqueEndpoint(raw) {
+  const v = raw.trim();
+  if (!v) return { ok: true, value: null };
+  if (v.includes('[') || v.includes(']') || (v.match(/:/g) || []).length !== 1) {
+    return { ok: false, error: 'IPv6 endpoint не поддерживается (MASQUE-контракт не доказан); ожидался IPv4:port или hostname:port' };
+  }
+  const idx = v.lastIndexOf(':');
+  const host = v.slice(0, idx);
+  const portStr = v.slice(idx + 1);
+  if (!/^[1-9]\d{0,4}$/.test(portStr)) return { ok: false, error: 'порт должен быть целым 1..65535 без ведущих нулей — «' + v + '»' };
+  const port = Number(portStr);
+  if (port < 1 || port > 65535) return { ok: false, error: 'порт вне диапазона 1..65535 — «' + v + '»' };
+  if (!host) return { ok: false, error: 'пустой host — «' + v + '»' };
+  if (/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(host)) {
+    if (host.split('.').some(o => Number(o) > 255)) return { ok: false, error: 'некорректный IPv4 — «' + v + '»' };
+  } else {
+    if (/^[0-9.]+$/.test(host)) return { ok: false, error: 'похоже на IPv4, но им не является — «' + v + '»' };
+    if (!/^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/.test(host)) {
+      return { ok: false, error: 'ожидался IPv4 или hostname — «' + v + '»' };
+    }
+  }
+  return { ok: true, value: { host, port } };
+}
+
+function parseMasquePortList(raw) {
+  const v = raw.trim();
+  if (!v) return { ok: true, value: null };
+  const seen = new Set();
+  const ports = [];
+  for (const token of v.split(/[,\s]+/).filter(Boolean)) {
+    if (!/^[1-9]\d{0,4}$/.test(token)) return { ok: false, error: 'порты — целые 1..65535 через запятую; невалидный токен «' + token + '» (без parseInt-угадайки)' };
+    const p = Number(token);
+    if (p < 1 || p > 65535) return { ok: false, error: 'порт вне диапазона 1..65535 — «' + token + '»' };
+    if (!seen.has(p)) { seen.add(p); ports.push(p); }
+  }
+  if (!ports.length) return { ok: false, error: 'список портов пуст' };
+  return { ok: true, value: ports };
 }
 
 // === WARP LINK GENERATOR (ENGINEERED STRATEGY) ===
@@ -727,6 +984,38 @@ function generateWarp() {
 
   if (!pk || !pub) return showToast('Нужны ключи!', true);
 
+  // v1.9 (#125): приоритет на транспорт — exact imported/manual endpoint →
+  // custom port list → builtin стратегия. Невалидный ввод — explicit error до
+  // любой генерации (fail-closed; выход не затрагивается). Exact endpoint
+  // авторитетен: анти-корреляция его не переписывает (она управляет только
+  // генерируемым H2 IP); custom port list полностью заменяет встроенный выбор.
+  const h3ExactRaw = document.getElementById('h3Endpoint').value.trim();
+  const h3SniOverride = document.getElementById('h3Sni').value.trim();
+  const h3PortsRaw = document.getElementById('h3Ports').value.trim();
+  const h2ExactRaw = document.getElementById('h2Endpoint').value.trim();
+  const h2SniOverride = document.getElementById('h2Sni').value.trim();
+  const h2PortsRaw = document.getElementById('h2Ports').value.trim();
+
+  let h3Exact = null, h3Ports = null, h2Exact = null, h2Ports = null;
+  if (h3ExactRaw) {
+    const r = parseMasqueEndpoint(h3ExactRaw);
+    if (!r.ok) return showToast('❌ H3 endpoint: ' + r.error, true);
+    h3Exact = r.value;
+  } else if (h3PortsRaw) {
+    const r = parseMasquePortList(h3PortsRaw);
+    if (!r.ok) return showToast('❌ H3 ports: ' + r.error, true);
+    h3Ports = r.value;
+  }
+  if (h2ExactRaw) {
+    const r = parseMasqueEndpoint(h2ExactRaw);
+    if (!r.ok) return showToast('❌ H2 endpoint: ' + r.error, true);
+    h2Exact = r.value;
+  } else if (h2PortsRaw) {
+    const r = parseMasquePortList(h2PortsRaw);
+    if (!r.ok) return showToast('❌ H2 ports: ' + r.error, true);
+    h2Ports = r.value;
+  }
+
   const out = document.getElementById('warpOutput');
   out.innerHTML = '';
   lastGeneratedLinks = [];
@@ -734,40 +1023,48 @@ function generateWarp() {
   const portWeights = safePortsOnly ? SAFE_PORTS_WEIGHTED : ALL_PORTS_WEIGHTED;
 
   for (let i = 0; i < count; i++) {
-    // П.2: QUIC — случайный из фиксированного пула, всегда порт 443
-    const quicEndpoint = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
-    
-    // П.1: H2 порт — взвешенный рандом
-    const h2Port = weightedRandom(portWeights);
-    
-    // П.3: Анти-корреляция — если порты совпали, H2 IP ОБЯЗАТЕЛЬНО отличается
-    let h2Ip;
-    if (h2Port === quicEndpoint.port) {
-      h2Ip = getRandomH2Ip(quicEndpoint.ip);
+    // H3 / QUIC: exact endpoint → пул (+custom ports) → пул (всегда порт 443)
+    let quicEndpoint;
+    if (h3Exact) {
+      quicEndpoint = { ip: h3Exact.host, port: h3Exact.port };
     } else {
-      h2Ip = getRandomH2Ip(null);
+      const poolEp = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
+      quicEndpoint = { ip: poolEp.ip, port: h3Ports ? h3Ports[i % h3Ports.length] : poolEp.port };
+    }
+
+    // П.1: H2 порт — custom список → взвешенный рандом; точный H2 endpoint
+    // не переписывается (анти-корреляция применяется только к генерируемым)
+    let h2Port, h2Ip;
+    if (h2Exact) {
+      h2Port = h2Exact.port;
+      h2Ip = h2Exact.host;
+    } else {
+      h2Port = h2Ports ? h2Ports[i % h2Ports.length] : weightedRandom(portWeights);
+      // П.3: Анти-корреляция — если порты совпали, H2 IP ОБЯЗАТЕЛЬНО отличается
+      h2Ip = getRandomH2Ip(h2Port === quicEndpoint.port ? quicEndpoint.ip : null);
     }
     
     const suffix = count > 1 ? `-${i + 1}` : '';
     
-    const buildLink = (serverAddr, port, isH2) => {
+    const buildLink = (serverAddr, port, isH2, sniValue) => {
       const pkEnc = urlEncodeKey(pk);
       const pubEnc = urlEncodeKey(pub);
       // Имя профиля: H3/QUIC без порта, H2/TCP с портом (терминология транспорта)
       const name = isH2
         ? `${baseProfile}-H2-TCP-${port}${suffix}`
         : `${baseProfile}-H3-QUIC${suffix}`;
-      
-      let url = `masque://${serverAddr}:${port}?sni=${sni}&private-key=${pkEnc}&public-key=${pubEnc}&ip=${ip}&udp=true&remote-dns-resolve=true`;
+
+      let url = `masque://${serverAddr}:${port}?sni=${sniValue}&private-key=${pkEnc}&public-key=${pubEnc}&ip=${ip}&udp=true&remote-dns-resolve=true`;
       if (ipv6 && ipv6.trim()) url += `&ipv6=${ipv6}`;
       if (dns && dns.trim()) url += `&dns=${dns}`;
       if (isH2) url += '&network=h2';
       url += `#${name}`;
       return url;
     };
-    
-    const quic = buildLink(quicEndpoint.ip, quicEndpoint.port, false);
-    const h2 = buildLink(h2Ip, h2Port, true);
+
+    // SNI на транспорт: точный/ручной per-transport SNI → общий SNI из формы
+    const quic = buildLink(quicEndpoint.ip, quicEndpoint.port, false, h3SniOverride || sni);
+    const h2 = buildLink(h2Ip, h2Port, true, h2SniOverride || sni);
     
     lastGeneratedLinks.push(quic, h2);
 

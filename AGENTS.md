@@ -81,10 +81,28 @@ do not copy an unverified runtime, and do not force-push.
 ### Tab 1 "WARP MASQUE Links" — all logic is inline in `index.html`
 
 - `parseYaml()` — imports a compatible WARP YAML config (Telegram bot, WARPSCOUT, or any
-  compatible source; the UI label is source-agnostic): `jsyaml.loadAll` over all documents,
-  finds `proxies[0]` or an object with a `private-key`/`privateKey` key; rejects input without
-  `private-key`. It deliberately imports only the WARP identity/tunnel parameters used by the form:
-  `private-key`, `public-key`, `ip`, `ipv6`, `sni`, and `dns`.
+  compatible source; the UI label is source-agnostic): `jsyaml.loadAll` over all documents;
+  rejects input without `private-key`. It deliberately imports only the WARP identity/tunnel
+  parameters used by the form: `private-key`, `public-key`, `ip`, `ipv6`, `sni`, and `dns`.
+- **WARPSCOUT/Mihomo MASQUE import path (v1.9, #125):** when the YAML contains proxies with
+  `type: masque`, ALL proxies are scanned — never blind `proxies[0]`, and a non-MASQUE proxy
+  is never interpreted as a transport. `network: h2` → H2/TCP; its absence → H3/QUIC.
+  Identity/tunnel fields come from the first candidate holding a `private-key`; each found
+  transport contributes an exact endpoint (`server:port`) and per-transport SNI into the
+  «Advanced MASQUE» fields, with an explainability banner («WARPSCOUT / Mihomo MASQUE
+  detected») naming what was imported as exact and what stays builtin. Several candidates of
+  one transport → an explicit selector by proxy name; silent first-proxy selection is
+  forbidden. A transport without a candidate stays fully builtin. Exact endpoint/SNI fields
+  are per-config facts: any successful import resets them; custom port lists are user
+  preferences and survive re-import.
+- **Per-transport generation precedence (v1.9):** exact imported/manual endpoint → custom
+  port list → builtin strategy. Exact endpoints are authoritative and are never rewritten by
+  anti-correlation (it only steers generator-selected H2 IPs); a custom port list fully
+  replaces the builtin weighted choice for that transport (no hidden mixing); ports are
+  integers 1..65535 with trim and dedup, and invalid tokens are explicit errors
+  (`443abc` is never coerced to 443). Endpoints accept `IPv4:port` and `hostname:port`;
+  IPv6 endpoints are rejected with a clear message (the MASQUE IPv6 contract is unproven —
+  do not guess; the WireGuard IPv4-only policy is a WG contract and is not applied to MASQUE).
 - **Legacy WARP-bot YAML import contract (load-bearing):** the imported YAML is a source of WARP
   identity/tunnel parameters, **not** a source of transport endpoint selection. Source
   `server`, `port`, and `network` values must not start overriding `generateWarp()`.
@@ -92,8 +110,8 @@ do not copy an unverified runtime, and do not force-push.
   endpoint/transport selection and applies the project's tested H3/QUIC + H2/TCP strategy below.
   Do not "fix" this by wiring source endpoints into the existing import path.
   If another source (for example a scanner that has already discovered a specific working
-  endpoint) must preserve `server`/`port`/`network`, add a separate explicit
-  import/conversion path (planned for v1.9, #125); it may reuse helpers, but it must not silently change the semantics
+  endpoint) must preserve `server`/`port`/`network`, use the explicit WARPSCOUT/MASQUE
+  import path above; it must not silently change the semantics
   of `parseYaml()` or `generateWarp()`.
 - `generateWarp()` — generates pairs of QUIC + H2 links. These are NOT random numbers, but a tuned
   anti-DPI strategy (marked in code with comments "P.1/P.2/P.3") — see "DPI strategy".
