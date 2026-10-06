@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Открыт development cycle **v1.10.0** (canonical scope — issue #150 «Routing Intelligence + Simulation»; #145 — master backlog): `GENERATOR_META` = `1.10.0-dev` / `main` (бейдж `v1.10.0-dev · MAIN`). История v1.9.0 — в release notes v1.9.0.
+
+## [1.9.0] - 2026-10-06
+
 ### Added
 
 - **WARPSCOUT-aware MASQUE import (#125, #134)**: вкладка WARP распознаёт YAML с прокси `type: masque` (WARPSCOUT или готовый Mihomo-конфиг) — сканируются все прокси, а не только первый; `network: h2` → H2/TCP, без него → H3/QUIC, иное значение — UNSUPPORTED кандидат (показывается, не импортируется). Найденные endpoint (`server:port`) и SNI каждого транспорта попадают в секцию «⚙️ Advanced MASQUE — точные endpoint'ы» и используются дословно; плашка объясняет, что импортировано как точное, а что осталось на встроенной стратегии. Несколько кандидатов одного транспорта — явный селектор по имени; без кандидата — встроенная стратегия. Identity-поля переносятся как раньше; выбранные H3 и H2 обязаны иметь общую WARP identity (private-key/public-key/ip/ipv6) — несовместимая пара отвергается явно, без значений секретов. Приоритет на транспорт: точный endpoint → свой список портов → встроенная стратегия; точный endpoint не переписывается анти-корреляцией; порты — целые 1..65535 («443abc» — ошибка); endpoint — IPv4:port или hostname:port, IPv6 — честный reject. Пустой SNI кандидата — сознательный fallback на общий SNI (назван в плашке). Ключи и точные endpoint живут только в памяти страницы. Regression: `tests/warpscout-import.cjs` (23 группы).
