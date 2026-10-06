@@ -353,6 +353,16 @@
         <div class="hint" style="margin-top: 5px;">Общий DNS для ВСЕХ загруженных WG/AWG-профилей (добавляет <code>dns</code>/<code>remote-dns-resolve</code> в каждый wireguard-outbound). Пусто — DNS удаляется из профилей.</div>
         <div id="wgDnsWarning" class="hint" style="color:var(--red); display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
       </div>
+      <div style="margin-top: 15px;">
+        <div class="toggle-row">
+          <label><input type="checkbox" id="cfgAwgKeepalive" checked> 🛡 Поддерживать AWG-соединение через NAT (keepalive 25 с) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: NAT keepalive">?</button><span class="ctx-help-pop" role="note">Явная user-visible policy для AWG-профилей (#137): если в .conf нет совместимого целого PersistentKeepalive, при сборке будет emitted persistent-keepalive: 25; диапазон вроде 25-35 сводится к 25 с явной диагностикой (fixed 25 не эквивалентен random-range); существующее целое значение (включая 0 = disabled) не меняется. Только AWG-профили; plain WireGuard не затрагивается. Выключение возвращает строгий контракт: диапазон не эмитится, WARN остаётся.</span></span></label>
+        </div>
+        <div class="hint" style="margin-top:4px">Для NAT/LTE/домашних роутеров периодический keepalive помогает не терять UDP-состояние. Если профиль не задаёт совместимое значение, Mihomo получит 25 секунд. Существующее целое значение не меняется.</div>
+        <div class="toggle-row" style="margin-top:8px">
+          <label><input type="checkbox" id="cfgAwgRtDiag"> 🧪 Тест обрывов: отключить RandomTrailers <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: RandomTrailers diagnostic">?</button><span class="ctx-help-pop" role="note">Диагностический override (#137): у AWG-профилей с RandomTrailers=on при сборке он будет отключён. Это controlled diagnostic experiment для локализации обрывов, а НЕ доказанный universal fix; MTU, ключи и остальные поля не меняются. Каждое применение фиксируется в diagnostic report.</span></span></label>
+        </div>
+        <div id="awgRtDiagWarn" class="hint" style="display:none;color:var(--red);margin-top:4px">⚠️ Диагностическая модификация AWG-профилей: RandomTrailers будет отключён в сборке (random-trailers: on → off). Это controlled experiment для теста обрывов, а НЕ доказанный universal fix; MTU/ключи и остальные поля не меняются.</div>
+      </div>
       <details id="wgDialerAdvanced" class="advanced-panel" style="margin-top:15px">
         <summary><span>▶</span> <span class="advanced-badge">ADVANCED</span> <span>Ручная общая dialer-группа (Legacy)</span></summary>
         <div class="hint">Обычно этот раздел не нужен. Для каждого WG/AWG используйте настройку «Через промежуточный proxy» в его карточке — генератор сам создаст безопасную группу (для подписки — provider-backed). Этот блок — ручной/Legacy путь: общая dialer-группа, которую несколько WG/AWG используют совместно, для особых схем.</div>
@@ -1423,7 +1433,7 @@ function computeDialerTargetsSync() {
       core: 'mihomo',
       input: preflightInputForRegistry(document.getElementById('mihomoInput').value),
       ...(autoWhitelist ? { fallbackInput: lastInspectedFallbackInput !== null ? lastInspectedFallbackInput : document.getElementById('whitelistInput').value.trim() } : {}),
-      wgBeans: normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, { noDialer: true }))),
+      wgBeans: wgEngineBeans({ noDialer: true }),
       options: {
         addSocks: addSocks,
         addTun: addTun,
@@ -1461,7 +1471,7 @@ function computeDialerTargetsSync() {
       const proj = api.buildFromRequest({
         core: 'mihomo',
         input: '',
-        wgBeans: normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, { noDialer: true }))),
+        wgBeans: wgEngineBeans({ noDialer: true }),
         options: {
           addSocks: true,
           addTun: true,
@@ -1628,6 +1638,81 @@ function normalizeWgBeans(beans) {
   }
   return beans;
 }
+
+// === AWG STABILITY POLICY (#137, explicit user-visible policy) ===
+// Применяется к КОПИЯМ бинов на пути сборки (wgProfileBuildBean клонирует):
+// оригинальные профили не мутируются — выключение тоггла полностью возвращает
+// строгий контракт. Scope — только AWG-профили (amnezia-wg-option): plain
+// WireGuard сознательно не затрагивается, т.к. для расширения его semantics
+// нет существующего контракта (решение #137 задокументировано в AGENTS.md).
+function awgStabilityState() {
+  const keepaliveEl = document.getElementById('cfgAwgKeepalive');
+  const rtEl = document.getElementById('cfgAwgRtDiag');
+  return {
+    keepalive: keepaliveEl ? keepaliveEl.checked : true, // DEFAULT ON
+    rtDiag: rtEl ? rtEl.checked : false                  // DEFAULT OFF
+  };
+}
+
+function applyAwgStabilityPolicy(beans) {
+  const st = awgStabilityState();
+  for (const bean of (Array.isArray(beans) ? beans : [])) {
+    const wg = bean && bean.wireguard;
+    const awg = wg && wg['amnezia-wg-option'];
+    if (!awg) continue;
+    const report = Array.isArray(bean.awgFieldReport) ? bean.awgFieldReport : (bean.awgFieldReport = []);
+    // 🛡 NAT keepalive: отсутствующий/несовместимый PK → 25. Валидный integer
+    // (включая 0 = disabled) никогда не заменяется.
+    if (st.keepalive && !Number.isFinite(wg.persistentKeepalive)) {
+      wg.persistentKeepalive = 25;
+      const prev = report.find(r => r && r.key === 'persistent-keepalive');
+      if (prev) {
+        // диапазон из источника: patch существующей UNSUPPORTED-записи в trace
+        prev.status = 'SUPPORTED_NORMALIZED';
+        prev.rawValue = String(prev.rawValue) + ' → 25';
+        prev.note = 'explicit user-enabled Mihomo compatibility fallback (🛡 NAT keepalive): fixed 25 НЕ эквивалентен исходной random-range semantics';
+      } else {
+        report.push({
+          key: 'persistent-keepalive',
+          rawValue: (wg.persistentKeepaliveRaw !== undefined ? String(wg.persistentKeepaliveRaw) + ' → 25' : 'отсутствовал → 25'),
+          status: 'SUPPORTED_NORMALIZED',
+          note: 'explicit user-enabled NAT keepalive policy (настройка «🛡 Поддерживать AWG-соединение через NAT»)'
+        });
+      }
+    }
+    // 🧪 RandomTrailers diagnostic override: только явный user action, только
+    // у профилей, где он реально включён; MTU/ключи/остальные поля не трогаем.
+    if (st.rtDiag && awg['random-trailers'] === true) {
+      awg['random-trailers'] = false;
+      report.push({
+        key: 'random-trailers',
+        rawValue: 'on → off',
+        status: 'IGNORED_BY_POLICY',
+        note: 'diagnostic override requested by user (🧪 тест обрывов) — controlled experiment, а не доказанный universal fix'
+      });
+    }
+  }
+  return beans;
+}
+
+// Единая точка подготовки WG-бинов для движка (Build + префлайт-реестры).
+function wgEngineBeans(opts) {
+  return applyAwgStabilityPolicy(normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, opts))));
+}
+
+// Тогглы #137: WARN-видимость для 🧪 и перерисовка карточек (план сборки меняется).
+(function bindAwgStabilityToggles() {
+  const rtEl = document.getElementById('cfgAwgRtDiag');
+  if (rtEl) rtEl.addEventListener('change', () => {
+    const warn = document.getElementById('awgRtDiagWarn');
+    if (warn) warn.style.display = rtEl.checked ? 'block' : 'none';
+    if (typeof renderWgList === 'function') renderWgList();
+  });
+  const keepEl = document.getElementById('cfgAwgKeepalive');
+  if (keepEl) keepEl.addEventListener('change', () => {
+    if (typeof renderWgList === 'function') renderWgList();
+  });
+})();
 
 // AWG-патч 3/3: web4core не эмитит dns/remote-dns-resolve для wireguard-outbound.
 // После buildFromRequest возвращаем YAML в объект и инжектируем DNS из поля
@@ -1969,6 +2054,29 @@ function renderWgList() {
         noteEl.className = 'wg-mtu-note' + (note.level === 'warn' ? ' wg-mtu-note-warn' : '');
         noteEl.textContent = (note.level === 'warn' ? '⚠ ' : 'ℹ ') + note.text;
         info.appendChild(noteEl);
+      }
+    }
+
+    // 🛡/🧪 AWG stability policy (#137): что сборка сделает с ЭТИМ профилем при
+    // текущих настройках. Оригинальный бин не мутируется — политика применяется
+    // к копии на пути сборки (wgEngineBeans), поэтому карточка показывает план,
+    // а выключенный тоггл полностью возвращает строгий контракт.
+    const cardAwg = bean.wireguard && bean.wireguard['amnezia-wg-option'];
+    if (cardAwg) {
+      const st = awgStabilityState();
+      const policyNote = (level, text) => {
+        const noteEl = document.createElement('div');
+        noteEl.className = 'wg-mtu-note' + (level === 'warn' ? ' wg-mtu-note-warn' : '');
+        noteEl.textContent = (level === 'warn' ? '⚠ ' : 'ℹ ') + text;
+        info.appendChild(noteEl);
+      };
+      if (st.keepalive && !Number.isFinite(bean.wireguard.persistentKeepalive)) {
+        const raw = bean.wireguard.persistentKeepaliveRaw;
+        policyNote(raw ? 'warn' : 'info', '🛡 NAT keepalive: при сборке Mihomo получит persistent-keepalive: 25' +
+          (raw ? ' (source ' + raw + ' → 25 — explicit compatibility fallback; fixed 25 не эквивалентен random-range)' : ' (источник не задавал совместимое значение)'));
+      }
+      if (st.rtDiag && cardAwg['random-trailers'] === true) {
+        policyNote('warn', '🧪 RandomTrailers: on → off при сборке — diagnostic override requested by user (controlled experiment, не доказанный fix)');
       }
     }
 
@@ -4637,12 +4745,13 @@ async function buildMihomo() {
     // Список серверов — только по явной кнопке «Получить список» (fetchServerList);
     // Build сетевых запросов за списком не делает никогда.
     const realityModern = parseRealityModernLines();
-    const buildBeans = wgProfiles.map(wgProfileBuildBean);
+    // Бины для движка И для injectWgDns — один и тот же policy-applied набор.
+    const engineBeans = wgEngineBeans({});
     const result = api.buildFromRequest({
       core: 'mihomo',
       input: mainInput,
       ...(autoWhitelist ? { fallbackInput: fallbackPrepared } : {}),
-      wgBeans: normalizeWgBeans(buildBeans),
+      wgBeans: engineBeans,
       options: {
         addSocks: addSocks,
         addTun: addTun,
@@ -4665,7 +4774,7 @@ async function buildMihomo() {
       }
     });
 
-    injectWgDns(result, buildBeans);
+    injectWgDns(result, engineBeans);
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
     yaml = applyProviderDialerTargets(yaml);

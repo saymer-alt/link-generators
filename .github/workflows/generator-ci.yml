@@ -214,6 +214,9 @@ jobs:
       - name: WG/AWG profile manager browser regression
         run: node tests/wg-profiles-browser.cjs
 
+      - name: AWG stability policy regression
+        run: node tests/awg-stability.cjs
+
       - name: MagiTrickle import regression
         run: node tests/magitrickle-import.cjs
 
