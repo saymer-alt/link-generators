@@ -1,0 +1,173 @@
+--- BASE
+mixed-port: 7890
+allow-lan: true
+bind-address: "*"
+tcp-concurrent: true
+mode: rule
+log-level: warning
+ipv6: false
+external-controller: 0.0.0.0:9090
+external-ui: ui
+external-ui-url: https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz
+secret: null
+unified-delay: true
+profile:
+  store-selected: true
+  store-fake-ip: true
+tun:
+  enable: true
+  stack: mips
+  auto-route: false
+  auto-detect-interface: true
+  device: mitun0
+proxy-groups:
+  - name: ⚡ Fastest
+    type: url-test
+    proxies:
+      - A
+      - awg31
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    expected-status: 204
+  - name: GLOBAL
+    type: select
+    proxies:
+      - ⚡ Fastest
+      - A
+      - awg31
+      - REJECT
+rules:
+  - MATCH,GLOBAL
+proxies:
+  - name: A
+    type: vless
+    server: 192.0.2.1
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000001
+    encryption: none
+    network: tcp
+    xudp: true
+  - name: awg31
+    type: wireguard
+    server: 192.0.2.3
+    port: 51820
+    private-key: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+    udp: true
+    ip: 10.66.0.2
+    public-key: AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=
+    allowed-ips:
+      - 0.0.0.0/0
+    persistent-keepalive: 25
+    amnezia-wg-option:
+      jc: 3
+      jmin: 40
+      jmax: 70
+      s1: 15
+      s2: 20
+      s3: 0
+      s4: 0
+      h1: 100001-100010
+      h2: 200001-200010
+      h3: 300001-300010
+      h4: 400001-400010
+      header-protection-key: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=
+      content-padding-addition: 3-7
+      rekey-after-time: 100-120
+      rekey-timeout: 5-15
+      reject-after-time: 150-180
+      keepalive-timeout: 15-20
+      max-handshake-attempts: 10-100
+      random-trailers: true
+      disable-cookies: false
+      version: 3
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    remote-dns-resolve: true
+
+
+--- CAND
+mixed-port: 7890
+allow-lan: true
+bind-address: "*"
+tcp-concurrent: true
+mode: rule
+log-level: warning
+ipv6: false
+external-controller: 0.0.0.0:9090
+external-ui: ui
+external-ui-url: https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz
+secret: null
+unified-delay: true
+profile:
+  store-selected: true
+  store-fake-ip: true
+tun:
+  enable: true
+  stack: mips
+  auto-route: false
+  auto-detect-interface: true
+  device: mitun0
+proxy-groups:
+  - name: ⚡ Fastest
+    type: url-test
+    proxies:
+      - A
+      - awg31
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    expected-status: 204
+  - name: GLOBAL
+    type: select
+    proxies:
+      - ⚡ Fastest
+      - A
+      - awg31
+      - REJECT
+rules:
+  - MATCH,GLOBAL
+proxies:
+  - name: A
+    type: vless
+    server: 192.0.2.1
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000001
+    encryption: none
+    network: tcp
+    xudp: true
+  - name: awg31
+    type: wireguard
+    server: 192.0.2.3
+    port: 51820
+    private-key: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+    udp: true
+    ip: 10.66.0.2
+    public-key: AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=
+    allowed-ips:
+      - 0.0.0.0/0
+    amnezia-wg-option:
+      jc: 3
+      jmin: 40
+      jmax: 70
+      s1: 15
+      s2: 20
+      s3: 0
+      s4: 0
+      h1: 100001-100010
+      h2: 200001-200010
+      h3: 300001-300010
+      h4: 400001-400010
+      header-protection-key: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=
+      content-padding-addition: 3-7
+      rekey-after-time: 100-120
+      rekey-timeout: 5-15
+      reject-after-time: 150-180
+      keepalive-timeout: 15-20
+      max-handshake-attempts: 10-100
+      random-trailers: true
+      disable-cookies: false
+      version: 3
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    remote-dns-resolve: true

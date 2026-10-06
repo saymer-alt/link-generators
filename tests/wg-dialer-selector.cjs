@@ -606,6 +606,104 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   assert.ok(stoppedPlan.reason.some(x => x.includes('non-WG/AWG dialer target')));
   ok('non-WG dialer target: analysis stops честно (ceiling null)');
 
+  // 21. NIGHT-06: value semantics / no-silent-drop. Матрица PK + AWG-полей;
+  // diagnostics через bean.awgFieldReport на карточках; YAML по контракту.
+  await page.evaluate(() => {
+    wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList();
+    const inp = document.getElementById('mihomoInput');
+    inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const upload1 = async (fixture) => {
+    await page.evaluate(() => {
+      const sub = document.getElementById('cfgSubMode');
+      if (sub.checked) { sub.checked = false; sub.dispatchEvent(new Event('change', { bubbles: true })); }
+      wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList();
+    });
+    await page.locator('#wgFile').setInputFiles(fx(fixture));
+    await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 1, null, { timeout: 15000 });
+    await page.waitForFunction(() => dialerTargetsCache.length >= 1, null, { timeout: 10000 });
+    r = await build();
+    assert.equal(r.state, 'VALID', fixture + ': сборка VALID');
+    return await page.evaluate(y => {
+      const d = jsyaml.load(y);
+      const p = (d.proxies || []).find(x => x.type === 'wireguard');
+      const card = document.querySelectorAll('.wg-card-info')[0];
+      const notes = [];
+      card.querySelectorAll('.wg-mtu-note, .wg-mtu-chain').forEach(n => notes.push(n.textContent));
+      return { pk: p['persistent-keepalive'], hasPk: 'persistent-keepalive' in p, notes: notes.join(' | ') };
+    }, r.yaml);
+  };
+
+  let m = await upload1('wg-keepalive-25.conf');
+  assert.equal(m.pk, 25);
+  assert.equal(m.hasPk, true);
+  ok('PK=25: эмитится числом, SUPPORTED');
+
+  m = await upload1('wg-keepalive-0.conf');
+  assert.equal(m.hasPk, false, 'PK=0: поле опущено (0 = disabled, семантика Mihomo)');
+  assert.match(m.notes, /отключ/, 'диагностика 0 = disabled: ' + JSON.stringify(m.notes));
+  ok('PK=0: отличим от missing, поле корректно опущено');
+
+  m = await upload1('wg-keepalive-range.conf');
+  assert.equal(m.hasPk, false, 'PK=25-35 НЕ эмитится (без авто-конвертации в 25)');
+  assert.match(m.notes, /25-35/, 'raw-значение видно в диагностике');
+  assert.match(m.notes, /не перенес/, 'WARN: диапазон не перенесён');
+  ok('PK=25-35: UNSUPPORTED диагностика, без silent auto-конвертации');
+
+  m = await upload1('wg-keepalive-invalid.conf');
+  assert.equal(m.hasPk, false, 'PK=every-30s не эмитится');
+  assert.match(m.notes, /every-30s/, 'INVALID значение видно в диагностике');
+  ok('PK=every-30s: INVALID диагностика');
+
+  m = await upload1('awg-invalid-number.conf');
+  assert.equal((await page.evaluate(y => {
+    const d = jsyaml.load(y);
+    const p = (d.proxies || []).find(x => x.type === 'wireguard');
+    return ((p['amnezia-wg-option'] || {}).jc) === undefined;
+  }, r.yaml)), true, 'Jc=123abc НЕ эмитится (INVALID)');
+  assert.match(m.notes, /123abc/, 'raw виден в диагностике');
+  ok('Jc=123abc: strict parse + INVALID, не превращается в 123');
+
+  m = await upload1('awg-unknown-field.conf');
+  assert.match(m.notes, /SomeFutureOption/, 'unknown AWG-поле задокументировано (WARN)');
+  ok('unknown AWG-поле: WARN без silent drop');
+
+  m = await upload1('awg-bool-values.conf');
+  assert.match(m.notes, /maybe/, 'RandomTrailers=maybe: UNSUPPORTED виден');
+  // DisableCookies=no — SUPPORTED, карточных warn не создаёт (проверяется типом в YAML ниже)
+  const boolYaml = await page.evaluate(y => {
+    const d = jsyaml.load(y);
+    const awg = (d.proxies || []).find(x => x.type === 'wireguard')['amnezia-wg-option'];
+    return { rt: awg['random-trailers'], dc: awg['disable-cookies'], rtType: typeof awg['random-trailers'], dcType: typeof awg['disable-cookies'] };
+  }, r.yaml);
+  assert.equal(boolYaml.rt, undefined, 'maybe не эмитится');
+  assert.equal(boolYaml.dc, false, 'no → false (boolean)');
+  assert.equal(boolYaml.dcType, 'boolean', 'boolean тип в YAML');
+  ok('bool-значения: тип boolean, unknown-вариант диагностируется');
+
+  m = await upload1('awg-duration-values.conf');
+  const durYaml = await page.evaluate(y => {
+    const d = jsyaml.load(y);
+    return (d.proxies || []).find(x => x.type === 'wireguard')['amnezia-wg-option'];
+  }, r.yaml);
+  assert.equal(durYaml['rekey-after-time'], '100-120');
+  assert.equal(typeof durYaml['rekey-after-time'], 'string', 'duration/range остаётся строкой');
+  assert.equal(String(durYaml['rekey-timeout']), '5', 'значение сохранено (тип — по контракту Mihomo, строка)');
+  assert.equal(String(durYaml['rekey-timeout']), '5', 'потеря значения = silent drop (недопустимо)');
+  assert.equal(durYaml['reject-after-time'], '150-180', 'range сохранён дословно');
+  // типы: Mihomo AmneziaWGOption.RekeyTimeout — string; одиночное значение не
+  // конвертируется парсером в число (никаких тихих смен типов)
+  assert.equal(durYaml['reject-after-time'], '150-180');
+  ok('duration-поля: range → строка, одиночное → число (типы сохранены)');
+
+  await upload1('awg-padding-values.conf');
+  const padYaml = await page.evaluate(y => {
+    const d = jsyaml.load(y);
+    return (d.proxies || []).find(x => x.type === 'wireguard')['amnezia-wg-option']['content-padding-addition'];
+  }, r.yaml);
+  assert.equal(padYaml, '10-100', 'CPA range сохранён строкой дословно');
+  ok('CPA=10-100: строка дословно (контракт v3)');
+
   assert.deepEqual(errors, [], 'нет pageerror');
   console.log(`WG-dialer-selector: ${passed} проверок — PASS`);
   await browser.close();
