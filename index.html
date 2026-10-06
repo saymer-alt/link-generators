@@ -791,6 +791,17 @@ function masquePairIdentityError(pair) {
     bad.join(', ') + '. Пара не импортируется (гибрид identity A + endpoint B не создаётся) — выберите только одного кандидата или совместимую пару.';
 }
 
+// private-key provenance (owner review #134, round 2): identity берётся
+// ТОЛЬКО из фактически выбранной supported пары. Отсутствие ключа у выбранного
+// кандидата НЕ компенсируется ключом из UNSUPPORTED/невыбранного кандидата.
+function masquePairKeyError(pair) {
+  if (!pair.length) return null;
+  if (!readWarpIdentity(pair[0].proxy).privateKey) {
+    return 'У выбранного кандидата «' + pair[0].label + '» нет private-key — импорт отклонён (ключ из UNSUPPORTED/невыбранного кандидата не подставляется).';
+  }
+  return null;
+}
+
 // DNS классифицируется отдельно от material identity: различие значений между
 // выбранными кандидатами не отвергает импорт, но и не выбирается молча.
 function masquePairDnsLine(pair) {
@@ -854,13 +865,19 @@ function importWarpscoutCandidates(candidates) {
   const unsup = candidates.filter(c => c.transport === 'unsupported');
 
   // Новый YAML — полное состояние импорта с нуля: identity И exact transport
-  // не переживают повторный «Распарсить» (fail-closed, без стейл-гибридов).
+  // не переживают повторный «Распарсить» (fail-closed, без стейл-гибридов);
+  // бейдж «Заполнено» тоже гасится — его вернёт только успешный импорт/ожидание
+  // выбора, а не стейл от предыдущего YAML.
   ['privateKey', 'publicKey', 'ip', 'ipv6', 'dns', 'h3Endpoint', 'h3Sni', 'h2Endpoint', 'h2Sni'].forEach(k => setWarpField(k, ''));
-  document.getElementById('parsedBadge').style.display = 'inline-block';
+  document.getElementById('parsedBadge').style.display = 'none';
 
-  if (!candidates.some(c => c.proxy['private-key'] || c.proxy.privateKey)) {
-    showWarpscoutBanner(['❌ В MASQUE-кандидатах не найден private-key — импорт отклонён']);
-    return showToast('В MASQUE-кандидатах не найден private-key', true);
+  // All-UNSUPPORTED: MASQUE-структура есть, но поддерживаемых транспортов нет —
+  // fail-closed без success-семантики (никаких «✅ распознан» и бейджа «Заполнено»).
+  if (!h3.length && !h2.length) {
+    const lines = ['❌ MASQUE YAML найден, но поддерживаемых H3/H2 кандидатов нет.'];
+    unsup.forEach(c => lines.push('UNSUPPORTED network «' + c.networkRaw + '» (' + c.label + ')'));
+    showWarpscoutBanner(lines);
+    return showToast('❌ MASQUE YAML найден, но поддерживаемых H3/H2 кандидатов нет', true);
   }
 
   const lines = [];
@@ -886,6 +903,18 @@ function importWarpscoutCandidates(candidates) {
     return;
   }
 
+  // private-key provenance: ключ обязан быть у ФАКТИЧЕСКИ выбранного supported
+  // кандидата (у пары — у обоих, иначе раньше сработал identity-mismatch).
+  const keyError = masquePairKeyError(autoPair);
+  if (keyError) {
+    showWarpscoutBanner(lines.concat(['❌ ' + keyError]));
+    showToast('❌ ' + keyError, true);
+    return;
+  }
+
+  // Бейдж «Заполнено» — только когда импорт применён или корректно ждёт выбора
+  // пользователя; fail-closed отказы его не ставят.
+  document.getElementById('parsedBadge').style.display = 'inline-block';
   if (autoPair.length) applyWarpscoutPair(autoPair);
 
   lines.push(autoPair.length
@@ -956,6 +985,13 @@ function applyWarpscoutSelection() {
   if (pairError) {
     showWarpscoutBanner(['❌ ' + pairError, 'Исправьте выбор и нажмите «Импортировать выбранных» ещё раз.']);
     showToast('❌ ' + pairError, true);
+    return;
+  }
+  // private-key provenance: у выбранного кандидата должен быть свой ключ.
+  const keyError = masquePairKeyError(pair);
+  if (keyError) {
+    showWarpscoutBanner(['❌ ' + keyError, 'Исправьте выбор и нажмите «Импортировать выбранных» ещё раз.']);
+    showToast('❌ ' + keyError, true);
     return;
   }
 

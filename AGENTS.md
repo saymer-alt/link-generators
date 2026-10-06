@@ -109,6 +109,14 @@ do not copy an unverified runtime, and do not force-push.
   import but are never chosen silently — an explicit diagnostic names both values and the
   first is imported consciously. Empty candidate SNI is a deliberate fallback: the banner
   states «SNI не задан в candidate → используется общий SNI»; no SNI is ever invented.
+  **Private-key provenance (owner review round 2):** the importable pair must carry its OWN
+  key — the private-key guard applies to the actually selected supported pair, never to the
+  candidate pool; a key sitting in an UNSUPPORTED or unselected candidate never validates a
+  supported candidate without its own key, and no identity is taken from outside the
+  selected pair. **All-UNSUPPORTED YAML** (no supported H3/H2 candidates at all) fails
+  closed with «MASQUE YAML найден, но поддерживаемых H3/H2 кандидатов нет» — unsupported
+  names and raw tokens listed, no success toast and no «Заполнено» badge (a fail-closed
+  parse also clears a stale badge from a previous import).
 - **Per-transport generation precedence (v1.9):** exact imported/manual endpoint → custom
   port list → builtin strategy. Exact endpoints are authoritative and are never rewritten by
   anti-correlation (it only steers generator-selected H2 IPs); a custom port list fully

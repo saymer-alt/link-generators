@@ -268,6 +268,48 @@ const sniFallbackYaml = [
   ''
 ].join('\n');
 
+// Round-2 review: private-key provenance fixtures.
+const h3NoKeyUnsupportedWithKeyYaml = [
+  'proxies:',
+  '  - name: H3-nokey',
+  '    type: masque',
+  '    server: 162.159.192.71',
+  '    port: 443',
+  '    sni: nokey.example.net',
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  '  - name: net-foo-withkey',
+  '    type: masque',
+  '    server: 162.159.192.72',
+  '    port: 443',
+  '    network: foo',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  ''
+].join('\n');
+
+const onlyUnsupportedYaml = [
+  'proxies:',
+  '  - name: net-foo',
+  '    type: masque',
+  '    server: 162.159.192.61',
+  '    port: 443',
+  '    network: foo',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  '  - name: net-tcp',
+  '    type: masque',
+  '    server: 162.159.192.62',
+  '    port: 443',
+  '    network: tcp',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  ''
+].join('\n');
+
 async function parse(page, yaml) {
   await page.fill('#yamlInput', yaml);
   await page.locator('button[onclick="parseYaml()"]').click();
@@ -377,6 +419,7 @@ function parseLink(link) {
   assert.equal(await fieldVal('h2Endpoint'), '162.159.192.20:8443');
   assert.equal(await fieldVal('h3Sni'), 'h3.example.net');
   assert.equal(await fieldVal('h2Sni'), 'h2.example.net');
+  assert.equal(await page.evaluate(() => document.getElementById('parsedBadge').style.display), 'inline-block', 'совместимая пара с ключами: бейдж «Заполнено»');
   links = await generate(page);
   assert.equal(parseLink(links[0]).q.sni, 'h3.example.net');
   assert.equal(parseLink(links[1]).q.sni, 'h2.example.net');
@@ -456,6 +499,8 @@ function parseLink(link) {
   // 6d. Unknown network → UNSUPPORTED: не H3 по умолчанию, diagnostic, без импорта
   await parse(page, mixedUnknownNetworkYaml);
   assert.equal(await fieldVal('h3Endpoint'), '162.159.192.10:443', 'обычный H3 кандидат импортируется как раньше');
+  assert.equal(await page.evaluate(() => document.getElementById('parsedBadge').style.display), 'inline-block', 'supported кандидат с ключом импортируется нормально при UNSUPPORTED соседях');
+  assert.match(await page.evaluate(() => window.__lastToast || ''), /✅.*UNSUPPORTED/, 'success toast честно помечает наличие UNSUPPORTED');
   const bNet = await bannerText();
   assert.match(bNet, /UNSUPPORTED network «foo» \(net-foo/);
   assert.match(bNet, /UNSUPPORTED network «tcp» \(net-tcp/);
@@ -476,6 +521,36 @@ function parseLink(link) {
   links = await generate(page);
   assert.equal(parseLink(links[0]).q.sni, '4pda.to', 'генерация использует общий SNI (осознанный fallback)');
   ok('SNI fallback: явный diagnostic + общий SNI в ссылке; никаких выдуманных SNI');
+
+  // 6f. private-key provenance: ключ из UNSUPPORTED кандидата не валидирует
+  // supported candidate без собственного ключа
+  await parse(page, h3NoKeyUnsupportedWithKeyYaml);
+  assert.equal(await fieldVal('h3Endpoint'), '', 'H3 без своего ключа: endpoint не применён');
+  assert.equal(await fieldVal('privateKey'), '', 'ключ из UNSUPPORTED кандидата не подставлен');
+  const bKey = await bannerText();
+  assert.match(bKey, /нет private-key — импорт отклонён/, 'fail-closed diagnostic');
+  assert.match(bKey, /H3-nokey — 162\.159\.192\.71:443/, 'проблемный профиль назван');
+  assert.match(bKey, /UNSUPPORTED network «foo» \(net-foo-withkey/, 'unsupported сосед — только diagnostic');
+  assert.ok(!bKey.includes(PK), 'ключ из UNSUPPORTED кандидата не в diagnostics');
+  assert.equal(await page.evaluate(() => document.getElementById('parsedBadge').style.display), 'none', 'fail-closed отказ не ставит бейдж «Заполнено»');
+  assert.match(await page.evaluate(() => window.__lastToast || ''), /^❌/, 'toast без success-семантики');
+  ok('provenance: supported H3 без ключа + UNSUPPORTED с ключом → reject, ключ не кочует');
+
+  // 6g. Только UNSUPPORTED candidates → явный fail-closed без success-семантики
+  await parse(page, onlyUnsupportedYaml);
+  assert.equal(await fieldVal('h3Endpoint'), '', 'all-UNSUPPORTED: ничего не применено');
+  assert.equal(await fieldVal('h2Endpoint'), '');
+  assert.equal(await fieldVal('privateKey'), '');
+  const bOnly = await bannerText();
+  assert.match(bOnly, /❌ MASQUE YAML найден, но поддерживаемых H3\/H2 кандидатов нет/);
+  assert.match(bOnly, /net-foo/);
+  assert.match(bOnly, /net-tcp/);
+  assert.match(bOnly, /«foo»/);
+  assert.match(bOnly, /«tcp»/);
+  assert.ok(!bOnly.includes(PK), 'ключи unsupported-кандидатов не в diagnostics');
+  assert.equal(await page.evaluate(() => document.getElementById('parsedBadge').style.display), 'none', 'бейдж «Заполнено» не создаёт впечатления успешного импорта');
+  assert.match(await page.evaluate(() => window.__lastToast || ''), /^❌ MASQUE YAML найден/, 'никакого «✅ распознан»');
+  ok('all-UNSUPPORTED: явный fail-closed, без success-семантики, состояние очищено');
 
   // 7. Custom ports: H3 и H2 списки, dedup, приоритет exact над ports
   await parse(page, legacyYaml);
