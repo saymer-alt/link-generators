@@ -1,0 +1,28 @@
+name: Upstream compatibility watch
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  architect-mihomo:
+    name: Any-Tech-ARCHITECT → Mihomo compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Compare relevant upstream blob SHAs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/check-architect-upstream.mjs
