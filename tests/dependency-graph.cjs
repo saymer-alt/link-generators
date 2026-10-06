@@ -29,7 +29,8 @@ const docOf = (rules, providers, extra) => Object.assign({ rules, 'rule-provider
   const g = api.cdgBuildGraph(d);
   const kinds = Object.fromEntries(g.nodes.map(n => [n.id, n.kind]));
   assert.equal(kinds['rule:0'], 'rule');
-  assert.equal(kinds['builtin:DIRECT'], undefined, 'builtin-таргеты — только в рёбрах, узлы не дублируются');
+  // #140 review: builtin-таргеты — typed nodes (referential integrity)
+  assert.equal(kinds['builtin:DIRECT'], 'builtin', 'builtin-таргет — typed node');
   const rt = g.edges.find(x => x.from === 'rule:0' && x.kind === 'routes-to');
   assert.equal(rt.to, 'builtin:DIRECT');
   const rt2 = g.edges.find(x => x.from === 'rule:1' && x.kind === 'routes-to');
@@ -171,6 +172,91 @@ const docOf = (rules, providers, extra) => Object.assign({ rules, 'rule-provider
 {
   const g = api.cdgBuildGraph(docOf(['MATCH,GLOBAL']));
   assert.ok(!g.edges.some(x => x.kind === 'derived-from'), 'doc-only снапшот не выдумывает provenance');
+  ok();
+}
+
+// --- structural invariants (owner review #140) ---
+{
+  // 1) два RULE-SET rules на один provider → provider node ровно один
+  const d = docOf(
+    ['RULE-SET,policy-ai,AI', 'RULE-SET,policy-ai,OTHER', 'MATCH,GLOBAL'],
+    { 'policy-ai': { type: 'inline', behavior: 'domain', payload: ['openai.com'] } },
+    { 'proxy-groups': [{ name: 'AI', type: 'select', proxies: ['GLOBAL'] }, { name: 'OTHER', type: 'select', proxies: ['DIRECT'] }] }
+  );
+  const g = api.cdgBuildGraph(d);
+  assert.equal(g.nodes.filter(n => n.id === 'rule-provider:policy-ai').length, 1, 'provider node единственный при повторном RULE-SET');
+  assert.equal(g.nodes.filter(n => n.kind === 'rule').length, 3);
+  // 5) все node IDs unique
+  const ids = g.nodes.map(n => n.id);
+  assert.equal(new Set(ids).size, ids.length, 'node IDs unique');
+  // 6) referential integrity: from/to существуют
+  const idset = new Set(ids);
+  for (const e of g.edges) {
+    assert.ok(idset.has(e.from), 'edge.from существует: ' + e.from);
+    assert.ok(idset.has(e.to), 'edge.to существует: ' + e.to);
+  }
+  ok();
+}
+{
+  // 2) group.use → proxy-provider node существует (+ только доказуемая metadata)
+  const d = docOf(['MATCH,GLOBAL'], {}, {
+    'proxy-groups': [{ name: 'G', type: 'select', use: ['sub1'] }],
+    'proxy-providers': { sub1: { type: 'http', url: 'https://example.com/sub' } }
+  });
+  const g = api.cdgBuildGraph(d);
+  const pp = g.nodes.find(n => n.id === 'proxy-provider:sub1');
+  assert.ok(pp, 'proxy-provider node создан');
+  assert.equal(pp.kind, 'proxy-provider');
+  assert.equal(pp.ptype, 'http');
+  assert.equal(pp.url, 'https://example.com/sub');
+  assert.ok(g.edges.some(x => x.from === 'group:G' && x.to === 'proxy-provider:sub1' && x.kind === 'uses'));
+  assert.ok(!g.nodes.some(n => n.kind === 'proxy' && n.name && n.name.startsWith('sub1')), 'membership провайдера не выдумывается (runtime/external unknown)');
+  // dangling use (нет в proxy-providers) — узел всё равно есть, metadata честно null
+  const d2 = docOf(['MATCH,GLOBAL'], {}, { 'proxy-groups': [{ name: 'G2', type: 'select', use: ['ghost'] }] });
+  const pp2 = api.cdgBuildGraph(d2).nodes.find(n => n.id === 'proxy-provider:ghost');
+  assert.ok(pp2 && pp2.ptype === null && pp2.url === null, 'dangling provider: node есть, metadata честно пустая');
+  ok();
+}
+{
+  // 3) builtin DIRECT/GLOBAL/REJECT references → builtin nodes существуют
+  const d = docOf(['DOMAIN,a.test,DIRECT', 'DOMAIN,b.test,REJECT', 'MATCH,GLOBAL']);
+  const g = api.cdgBuildGraph(d);
+  for (const t of ['DIRECT', 'REJECT', 'GLOBAL']) {
+    const n = g.nodes.find(x => x.id === 'builtin:' + t);
+    assert.ok(n && n.kind === 'builtin', 'builtin node ' + t);
+  }
+  ok();
+}
+{
+  // 4) unknown target → explicit unresolved node
+  const d = docOf(['MATCH,MYSTERY-TARGET']);
+  const g = api.cdgBuildGraph(d);
+  const n = g.nodes.find(x => x.id === 'unresolved:MYSTERY-TARGET');
+  assert.ok(n && n.kind === 'unresolved', 'unresolved node для неизвестного таргета');
+  const idset = new Set(g.nodes.map(x => x.id));
+  assert.ok(g.edges.every(e => idset.has(e.from) && idset.has(e.to)), 'инвариант целостности держится и здесь');
+  ok();
+}
+// realistic mixed config: дубликаты провайдеров + use + builtin + dialer —
+// полный инвариант на одном графе
+{
+  const d = docOf(
+    ['RULE-SET,policy-ai,AI', 'RULE-SET,policy-ai,AI', 'DOMAIN,x.test,DIRECT', 'MATCH,GLOBAL'],
+    { 'policy-ai': { type: 'inline', behavior: 'domain', payload: ['openai.com'] } },
+    {
+      'proxy-groups': [{ name: 'AI', type: 'select', proxies: ['GLOBAL', 'WARP'], use: ['sub1'] }],
+      'proxy-providers': { sub1: { type: 'http', url: 'https://example.com/sub' } },
+      proxies: [{ name: 'WARP', type: 'wireguard', 'dialer-proxy': 'VPS' }, { name: 'VPS', type: 'vless' }]
+    }
+  );
+  const g = api.cdgBuildGraph(d);
+  const ids = g.nodes.map(n => n.id);
+  assert.equal(new Set(ids).size, ids.length);
+  const idset = new Set(ids);
+  assert.ok(g.edges.every(e => idset.has(e.from) && idset.has(e.to)));
+  assert.equal(g.nodes.filter(n => n.id === 'rule-provider:policy-ai').length, 1);
+  assert.ok(g.nodes.some(n => n.id === 'proxy:WARP' && n.isWireguard === true));
+  assert.ok(g.edges.some(x => x.from === 'proxy:WARP' && x.to === 'proxy:VPS' && x.kind === 'dialed-through'));
   ok();
 }
 
