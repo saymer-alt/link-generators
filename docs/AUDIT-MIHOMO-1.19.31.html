@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ревизия Mihomo v1.19.31 (2026-09-15) — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/AUDIT-MIHOMO-1.19.31.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="ревизия-mihomo-v11931-2026-09-15">Ревизия Mihomo v1.19.31 (2026-09-15)</h1>
+<blockquote>
+<p><strong>Historical / snapshot.</strong> Документ фиксирует состояние на 2026-09-15 (ядро v1.19.31)
+и не переписывается задним числом. Текущий версионный контракт проекта — minimum
+1.19.31 / recommended-current 1.19.32 — см. AGENTS.md и docs/README.md.</p>
+</blockquote>
+<p>База генератора: <code>fb285850bae09ba2f2336993e6b34fc2318a23af</code>, ветка <code>main</code>,
+чистое рабочее дерево до изменений. Ядро: тег <code>v1.19.31</code>, commit
+<code>ab405bad5beeeac8b003bb01f60f134f6df54471</code> (релиз 2026-09-14).
+Проверка по исходникам, а не только release notes.</p>
+<h2 id="tun-ground-truth-и-реализация">TUN: ground truth и реализация</h2>
+<ul>
+<li><a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/constant/tun.go">constant/tun.go</a>:
+<code>StackTypeMapping</code>, <code>TunMips</code>, <code>UnmarshalText</code> принимают <code>mips</code>.</li>
+<li><a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/config/config.go">config/config.go</a>:
+основная секция TUN использует <code>Stack C.TUNStack</code>.</li>
+<li><a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/listener/inbound/tun.go">listener/inbound/tun.go</a>:
+<code>TunOption.Stack C.TUNStack</code> передаётся в <code>listener/config.Tun</code>.</li>
+<li><a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/listener/sing_tun/server.go">listener/sing_tun/server.go</a>:
+<code>tun.NewStack(strings.ToLower(options.Stack.String()), stackOptions)</code>.</li>
+<li><a href="https://github.com/metacubex/sing-tun/blob/v0.4.24/stack.go">sing-tun v0.4.24 stack.go</a>
+выбирает <code>NewMipstack</code>; <code>stack_mipstack.go</code> использует библиотеку
+<code>github.com/metacubex/mipstack</code>. Это <strong>TUN/IP stack, не архитектура CPU MIPS</strong>.</li>
+</ul>
+<p>В исходном генераторе: UI <code>cfgTun</code>, <code>cfgPerProxyTun</code>; <code>buildMihomo()</code> передаёт
+<code>addTun</code>/<code>mihomoPerProxyTun</code>; runtime <code>buildFromRequest()</code> создаёт <code>mihomoTunOpts</code>;
+<code>buildMihomoYaml()</code> содержал два <code>stack: &quot;gvisor&quot;</code> — обычный TUN и TUN listeners.
+Третье <code>stack: &quot;gvisor&quot;</code> в runtime относится к sing-box и не меняется.
+Отдельный hardcode был в <code>applyDeploymentProfile()</code> страницы.</p>
+<p>На момент первоначального аудита checkbox <code>cfgTunMips</code> был opt-in и выключен.
+С v1.4.0 продуктовый UI-default изменён: <code>cfgTunMips</code> включён, поэтому обычный
+пользовательский TUN получает MIPS по умолчанию. Ниже сохраняется engine-контракт
+этого аудита. Цепочка:
+<code>buildMihomo → options.mihomoTunStack → mihomoTunOpts.stack → buildMihomoYaml → tun/listeners</code>.
+Только точное значение <code>mips</code> включает новый стек; всё остальное, включая отсутствие
+опции, даёт <code>gvisor</code>. Такая нормализация соответствует существующим безопасным
+дефолтам runtime и не допускает произвольных строк в YAML. Прямой вызов
+<code>buildMihomoYaml(..., {tun: {stack}})</code> защищён тем же ограничением.
+При выключенном TUN выбор стека сам по себе TUN не создаёт.</p>
+<p>VPS получает выбранный стек отдельным аргументом (включая сочетание VPS + per-proxy TUN,
+когда VPS создаёт дополнительный основной TUN). Остальные gateway-поля, DNS toggle,
+<code>auto-route: false</code>, порядок постобработки и generic guard сохранены.
+Нужен <strong>Mihomo &gt;= 1.19.31</strong>. В исходном аудите MIPS был opt-in; в текущем
+продукте v1.4.0+ checkbox включён по умолчанию для обычного и per-proxy TUN,
+а gVisor остаётся compatibility fallback.</p>
+<h2 id="awg-31-проверка-pipeline">AWG 3.1: проверка pipeline</h2>
+<p>Источник схемы, выбора движка и передачи в UAPI:
+<a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/adapter/outbound/wireguard.go">adapter/outbound/wireguard.go</a>.
+Точная зависимость из <code>go.mod</code>: <code>amneziawg-go@0c1c6f40ecd7a0c83b8dcd3e54b938eda8cccc8d</code>:
+<a href="https://github.com/metacubex/amneziawg-go/blob/0c1c6f40ecd7a0c83b8dcd3e54b938eda8cccc8d/device/uapi.go">uapi.go</a>,
+<a href="https://github.com/metacubex/amneziawg-go/blob/0c1c6f40ecd7a0c83b8dcd3e54b938eda8cccc8d/device/noise-types.go">noise-types.go</a>.</p>
+<table>
+<thead>
+<tr>
+<th><code>.conf/.awg</code></th>
+<th><code>amnezia-wg-option</code></th>
+<th>Тип Mihomo / обработка</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>HeaderProtectionKey</td>
+<td>header-protection-key</td>
+<td>string: base64 → hex; ключ движка 32 байта</td>
+</tr>
+<tr>
+<td>ContentPaddingAddition</td>
+<td>content-padding-addition</td>
+<td>string, UintRange</td>
+</tr>
+<tr>
+<td>RekeyAfterTime</td>
+<td>rekey-after-time</td>
+<td>string, UintRange</td>
+</tr>
+<tr>
+<td>RekeyTimeout</td>
+<td>rekey-timeout</td>
+<td>string, UintRange</td>
+</tr>
+<tr>
+<td>RejectAfterTime</td>
+<td>reject-after-time</td>
+<td>string, UintRange</td>
+</tr>
+<tr>
+<td>KeepaliveTimeout</td>
+<td>keepalive-timeout</td>
+<td>string, UintRange</td>
+</tr>
+<tr>
+<td>MaxHandshakeAttempts</td>
+<td>max-handshake-attempts</td>
+<td>string, UintRange</td>
+</tr>
+<tr>
+<td>RandomTrailers</td>
+<td>random-trailers</td>
+<td>bool, <code>on</code> → <code>1</code> → <code>true</code></td>
+</tr>
+<tr>
+<td>DisableCookies</td>
+<td>disable-cookies</td>
+<td>bool, <code>off</code> → <code>0</code> → <code>false</code></td>
+</tr>
+</tbody></table>
+<p><code>UintRange.FromString</code> принимает десятичный uint32 либо <code>lo-hi</code>, обе границы
+0..4294967295, <code>hi &gt;= lo</code>; отрицательные, дробные, перевёрнутые диапазоны и
+переполнение отвергаются движком. Это синтаксические границы, не рекомендация
+для безопасных эксплуатационных таймингов. Генератор сохраняет диапазоны строками;
+структурный валидатор не проверяет их семантику.</p>
+<p><code>normalizeWgText</code> снимает BOM, сворачивает PersistentKeepalive и переводит on/off.
+<code>parseWireGuardConf</code> сохраняет семь строковых и два булевых поля в bean.
+<code>normalizeWgBeans</code> добавляет <code>version: 3</code>, если версия отсутствует и есть любое
+3.x-поле (в том числе <code>false</code>); явно заданную версию не переопределяет.
+<code>buildMihomoProxy</code> передаёт весь <code>amnezia-wg-option</code>; YAML, DNS injection и VPS dump
+с <code>lineWidth: -1</code> сохраняют значения. В Mihomo только <code>Version == 3</code> выбирает
+<code>amneziav3</code>; true-флаги превращаются в UAPI <code>=1</code>, false остаются дефолтными false.</p>
+<p>Нового gap в <strong>UI pipeline</strong> этих девяти полей не обнаружено. AWG runtime не менялся.
+Известное ограничение прямого <code>parseWireGuardConf</code> остаётся: on/off требуют wrapper;
+прямой API также сам не добавляет version 3. Поддержка страницы и сырого API различны.
+Не смешивать поля v1.5 <code>j1-j3/itime</code> с v3: это ограничение движка.
+Синтетическая fixture <code>tests/fixtures/awg31.conf</code> содержит реальный синтаксис 3.1,
+все девять полей, диапазоны и открытые тестовые ключи; это не рабочий VPN-профиль.</p>
+<h2 id="полная-outbound-матрица">Полная outbound-матрица</h2>
+<p>Источник полного списка: <a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/adapter/parser.go">adapter/parser.go v1.19.31</a>.
+28 <code>case</code>-типов: 24 сетевых + 4 служебных. AWG — вариант <code>wireguard</code>, не отдельный type.
+«Да» в колонке ядра означает наличие реализации; некоторые сборки исключают возможности
+build tags (например <code>no_easytier</code>). Это не подтверждение каждого транспорта handshake-тестом.
+Parser/builder/UI относятся к прямому импорту генератора; внешний proxy-provider может
+содержать другие типы, но это не реализация их импорта страницей.</p>
+<table>
+<thead>
+<tr>
+<th>Outbound</th>
+<th>Mihomo</th>
+<th>Share-link / степень стандартизации</th>
+<th>Parser</th>
+<th>Builder</th>
+<th>UI</th>
+<th>Разумный путь</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>VMess <code>vmess</code></td>
+<td>да</td>
+<td>распространённый vmess:// base64 JSON</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>VLESS <code>vless</code></td>
+<td>да</td>
+<td>распространённый vless://</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>Trojan <code>trojan</code></td>
+<td>да</td>
+<td>распространённый trojan://</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>Shadowsocks <code>ss</code></td>
+<td>да</td>
+<td>ss://, SIP002</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>ShadowsocksR <code>ssr</code></td>
+<td>да</td>
+<td>распространённый ssr://, converter ядра</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>A</strong>, следующий этап №1</td>
+</tr>
+<tr>
+<td>SOCKS5 <code>socks5</code></td>
+<td>да</td>
+<td>socks/socks5/socks5h URI conventions</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>HTTP <code>http</code></td>
+<td>да</td>
+<td>http/https URL, неоднозначность с подпиской</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>Snell <code>snell</code></td>
+<td>да</td>
+<td>единый полный share URI не подтверждён</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>B</strong>, форма/config import</td>
+</tr>
+<tr>
+<td>Hysteria v1 <code>hysteria</code></td>
+<td>да</td>
+<td>hysteria://, converter ядра</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>A</strong>, следующий этап №2</td>
+</tr>
+<tr>
+<td>Hysteria2 <code>hysteria2</code></td>
+<td>да</td>
+<td>hy2/hysteria2://</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>TUIC <code>tuic</code></td>
+<td>да</td>
+<td>распространённый tuic://; варианты token/UUID</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>AnyTLS <code>anytls</code></td>
+<td>да</td>
+<td>anytls://, URI schema проекта</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>WireGuard <code>wireguard</code></td>
+<td>да</td>
+<td>единого полного URI нет</td>
+<td>.conf</td>
+<td>да</td>
+<td>файлы</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>AmneziaWG (<code>wireguard</code>)</td>
+<td>да</td>
+<td>.conf/.awg с расширениями</td>
+<td>wrapper + .conf</td>
+<td>да</td>
+<td>файлы</td>
+<td>уже есть, аудит выше</td>
+</tr>
+<tr>
+<td>Mieru <code>mieru</code></td>
+<td>да</td>
+<td>mierus://; runtime также mieru://</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>MASQUE <code>masque</code></td>
+<td>да</td>
+<td>локальный masque:// контракт, не общий стандарт MASQUE</td>
+<td>да</td>
+<td>да</td>
+<td>ввод + генератор</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>TrustTunnel <code>trusttunnel</code></td>
+<td>да</td>
+<td>tt:// payload формата проекта</td>
+<td>да</td>
+<td>да</td>
+<td>ввод</td>
+<td>уже есть</td>
+</tr>
+<tr>
+<td>SSH <code>ssh</code></td>
+<td>да</td>
+<td>ssh:// недостаточен для ключей/host-key/options</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>B</strong>, форма + ключ, этап №4</td>
+</tr>
+<tr>
+<td>OpenVPN <code>openvpn</code></td>
+<td>да</td>
+<td>профиль .ovpn; полного общего share URI нет</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>B</strong>, file import, этап №3</td>
+</tr>
+<tr>
+<td>ShadowQUIC <code>shadowquic</code></td>
+<td>да</td>
+<td>общий стабильный полный URI не подтверждён</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>B</strong>, форма; URI требует отдельной проверки</td>
+</tr>
+<tr>
+<td>Sudoku <code>sudoku</code></td>
+<td>да</td>
+<td>общий стабильный полный URI не подтверждён</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>B</strong>, форма; URI требует отдельной проверки</td>
+</tr>
+<tr>
+<td>Tailscale <code>tailscale</code></td>
+<td>да</td>
+<td>enrolment/auth/exit-node profile, не proxy link</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>C</strong>, отдельный сетевой профиль</td>
+</tr>
+<tr>
+<td>ZeroTier <code>zerotier</code></td>
+<td>да</td>
+<td>network-id/identity profile, не proxy link</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>C</strong>, отдельный сетевой профиль</td>
+</tr>
+<tr>
+<td>EasyTier <code>easytier</code></td>
+<td>да*</td>
+<td>network/peers/identity profile</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>C</strong>, отдельный профиль, зависит от сборки</td>
+</tr>
+<tr>
+<td>GOST Relay <code>gost-relay</code></td>
+<td>да</td>
+<td>relay:// conventions экосистемы GOST, переносимость не подтверждена</td>
+<td>нет</td>
+<td>нет</td>
+<td>нет</td>
+<td><strong>B</strong> сейчас; <strong>A</strong> после фиксации URI-контракта</td>
+</tr>
+<tr>
+<td><code>direct</code>, <code>reject</code>, <code>dns</code>, <code>rematch</code></td>
+<td>да</td>
+<td>служебные конфигурационные типы</td>
+<td>не proxy links</td>
+<td>не импорт</td>
+<td>нет</td>
+<td>исключены из кандидатов</td>
+</tr>
+</tbody></table>
+<p>Подтверждение существующих URI: <a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/common/convert/converter.go">common/convert/converter.go</a>
+содержит hysteria, SSR (с полным описанием base64/параметров), VMess, SS, SOCKS/HTTP,
+AnyTLS и Mierus. Дополнительные форматы текущего генератора подтверждены его parser code.
+«Не подтверждён» не означает, что URI нигде не существует: без устойчивого контракта
+не следует объявлять его стандартом или автоматически добавлять импорт.
+Например, <a href="https://manual.nssurge.com/policies/snell.html">официальная документация Snell</a>
+описывает конфигурационную декларацию; <a href="https://manual.nssurge.com/tools/url-scheme.html">Surge URL schemes</a>
+описывают установку полного config URL, что не равно универсальному Snell proxy URI.</p>
+<h2 id="proposal-следующей-волны-здесь-не-реализовано">Proposal следующей волны (здесь не реализовано)</h2>
+<ol>
+<li><strong>SSR</strong>: ssr:// → bean → Mihomo ssr; URL-safe base64, IPv6, remarks,
+protocol/obfs и их параметры, ошибки декодирования, безопасный вывод секретов.</li>
+<li><strong>Hysteria v1</strong>: отдельно от hy2; auth/auth-str, up/down, protocol, peer/SNI,
+obfs, ALPN, TLS; не переносить дефолты Hysteria2 на v1.</li>
+<li><strong>OpenVPN .ovpn</strong>: whitelist поддерживаемых директив и inline cert/key/CA,
+TLS-auth/crypt, auth-user-pass через отдельную форму. Не исполнять hooks/scripts,
+не читать произвольные пути из файла. Проверять против <code>OpenVPNOption</code> ядра.</li>
+<li><strong>SSH</strong>: форма сервера/user/password или private key/passphrase плюс host-key;
+<code>ssh://</code> можно использовать только для частичного заполнения.</li>
+<li>C-профили: отдельное решение о UX, state directory/identity, exit node,
+платформе и build tags. Не маскировать их обычными proxy links.</li>
+</ol>
+<p>Отдельный gap валидатора: <code>MIHOMO_PROXY_TYPES</code> содержит 27 типов до EasyTier;
+ядро уже имеет 28. EasyTier в текущем генераторе не создаётся. Изменение enum
+отложено вместе с соответствующей поддержкой; аудит не расширяет генератор.</p>
+<h2 id="граница-проверок">Граница проверок</h2>
+<p>Команды и воспроизводимые регрессии — <a href="TESTING">TESTING.md</a>.
+Структурный/browser тест, <code>mihomo -t</code> и реальный сетевой туннель — разные уровни.
+Даже успешный <code>-t</code> не доказывает создание TUN на целевом роутере или AWG handshake.
+Сеть и credentials пользователя для ревизии не использовались.</p>
+
+</div>
+</body>
+</html>

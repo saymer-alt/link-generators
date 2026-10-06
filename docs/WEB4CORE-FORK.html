@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEB4CORE-FORK — архитектура двух репозиториев — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/WEB4CORE-FORK.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="web4core-fork-архитектура-двух-репозиториев">WEB4CORE-FORK — архитектура двух репозиториев</h1>
+<h2 id="автоматический-режим-белых-списков-2026-09-15-5">Автоматический режим белых списков (2026-09-15)</h2>
+<p>Контракт и точная структура YAML: <a href="AUTO-WHITELIST">AUTO-WHITELIST.md</a>.
+UI передаёт опциональный <code>fallbackInput</code>; engine строит один плоский GLOBAL fallback
+с конечными узлами primary → fallback, без DIRECT и вложенных групп (#2588). Выключенный режим сохраняет прежний путь.
+Опции «на каждый прокси» и VPS исключаются независимо от скрытия UI; существующий validator
+проверяет итоговый YAML. Runtime требуется с поддержкой нового generic API.</p>
+<p>Карта для разработчиков и AI-агентов. Это источник истины о границе engine/UI;
+правила конкретного репозитория находятся в его <code>AGENTS.md</code>.</p>
+<pre><code class="language-text">spatiumstas/web4core
+        ↓ sync
+saymer-alt/web4core:main
+        ↓ merge
+saymer-alt/web4core:link-generators
+        ↓ build
+web4core.runtime.js
+        ↓
+saymer-alt/link-generators
+</code></pre>
+<p><code>saymer-alt/web4core</code> — настоящий fork. <code>main</code> остаётся максимально близким к upstream;
+custom branch <code>link-generators</code> содержит наши source-level расширения. Remotes fork:
+<code>origin</code> → saymer-alt/web4core, <code>upstream</code> → spatiumstas/web4core.
+Source sync — controlled merge с review и тестами; разрешено также вливать upstream/main
+непосредственно в candidate branch после проверки того же SHA.</p>
+<p>Статический consumer — UI/browser layer: формы, UX, WARP UI, UI-specific normalization,
+post-processing, pre-copy validation. Protocol engine — в fork. Приложение не получает
+package.json/npm dependencies/build step; классический script и <code>file://</code> сохраняются.</p>
+<h2 id="историческое-происхождение-runtime">Историческое происхождение runtime</h2>
+<p>Текущая схема выше — это <strong>современный воспроизводимый контракт</strong>, а не описание того,
+как runtime впервые появился в <code>link-generators</code>.</p>
+<p>Изначально проект не создавался как fork исходников <code>web4core</code>. Владелец сохранил локально
+опубликованную страницу генератора <code>https://spatiumstas.github.io/web4core/</code> и обнаружил,
+что сохранённая страница может работать автономно. Вместе со страницей браузер сохранил
+уже собранный <code>web4core.runtime-*.js</code>; на том этапе этот browser bundle использовался как
+готовый engine, а пользовательский UI создавался отдельно в собственном HTML.</p>
+<p>Контекст этого bootstrap был практическим, а не архитектурным: это был первый опыт владельца
+с GitHub как с площадкой разработки, а не просто местом, откуда скачивают файлы. На тот момент
+работа велась вручную через веб-интерфейс GitHub, без AI-агентов и без знания обычного
+fork/branch/PR workflow; для подсказок использовался бесплатный Kimi, а решения собирались
+итеративно вокруг конкретных инженерных задач. Поэтому ранний путь «сохранить рабочую страницу,
+взять уже собранный runtime и написать свой HTML» отражает доступный тогда способ быстро получить
+рабочий результат, а не целевой образец устройства проекта.</p>
+<p>По нынешним меркам эта схема выглядела необычно, но её ключевая особенность была простой:
+она заработала сразу. Для владельца это был первый по-настоящему живой самостоятельный проект,
+а момент, когда собственная страница поверх сохранённого upstream runtime дала нужный рабочий
+результат, по его воспоминанию воспринимался почти как чудо. Именно этот ранний успех превратил
+одноразовый эксперимент в проект, который захотелось развивать дальше. Понимание fork,
+source-level изменений, тестов и воспроизводимой сборки пришло позже и постепенно привело
+к современной схеме, описанной выше.</p>
+<p>Это историческое происхождение подтверждается ранней историей consumer-репозитория:
+до современной source-level схемы в нём уже существовал файл вида
+<code>web4core.runtime-bcaf347.js</code>. Позднее provenance был разобран отдельно: создан настоящий
+fork <code>saymer-alt/web4core</code>, необходимые проекту изменения перенесены на уровень исходников,
+а tracked <code>web4core.runtime.js</code> переведён на воспроизводимую сборку из
+<code>saymer-alt/web4core:link-generators</code>.</p>
+<p>Поэтому важно различать два этапа:</p>
+<ol>
+<li><strong>исторический bootstrap</strong> — runtime был получен как уже собранный browser bundle
+опубликованной страницы upstream;</li>
+<li><strong>текущий контракт</strong> — runtime не берётся вручную со страницы и не редактируется в
+consumer: он воспроизводимо собирается из source-level fork, проверяется тестами и
+provenance-gate.</li>
+</ol>
+<p>Vendored <code>parseuri.min.js</code>, обнаруженный внутри современного bundle, не был отдельно
+добавлен владельцем <code>link-generators</code>: он пришёл по цепочке <code>web4core</code> как часть runtime
+и также присутствует в исходниках upstream/fork. Его отдельную upstream-атрибуцию и лицензию
+всё равно следует считать самостоятельным provenance-вопросом, если проводится лицензионный
+аудит.</p>
+<h2 id="куда-вносить-изменение">Куда вносить изменение</h2>
+<table>
+<thead>
+<tr>
+<th>Изменение</th>
+<th>Репозиторий и слой</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Новый протокол / parser / builder</td>
+<td>web4core:link-generators, исходники engine</td>
+</tr>
+<tr>
+<td>UI checkbox / форма / UX</td>
+<td>link-generators, index.html</td>
+</tr>
+<tr>
+<td>Новый outbound validation</td>
+<td>Обычно оба: engine bean/core validation и browser validator</td>
+</tr>
+<tr>
+<td>Обновление upstream</td>
+<td>Сначала web4core sync/tests/build, затем consumer runtime</td>
+</tr>
+<tr>
+<td>Generated runtime вручную</td>
+<td>Запрещено; только воспроизводимая сборка fork</td>
+</tr>
+</tbody></table>
+<p>Не дублировать parser/builder в <code>index.html</code>. Нормализация/post-processing остаются
+здесь только при UI responsibility: например, выбранный deployment profile или DNS
+переопределение формы. Общая семантика протокола принадлежит engine.
+Существующие AWG wrappers не переносить попутно без отдельной задачи и baseline review.</p>
+<p>Для протокола обязательна цепочка <code>share/input parser → bean → validation/core support → Mihomo builder → tests → build</code>. Наличие YAML-типа в validator или распознавание URI
+не означает поддержку end-to-end. README/docs должны описывать только доказанную
+цепочку и ограничения конкретной версии ядра. SSR/Hysteria/OpenVPN и другие новые
+протоколы требуют отдельной задачи; архитектурная миграция их не добавляет.</p>
+<h2 id="текущий-mips-контракт">Текущий MIPS-контракт</h2>
+<p><code>cfgTunMips → tunStack → options.mihomoTunStack → buildFromRequest → opts.tun.stack → normal TUN / Per-Proxy listeners</code>. В fork затронуты <code>src/build.js</code> и <code>src/core/yaml.js</code>.
+Только точное <code>mips</code> включает MIPS (Mihomo &gt;= 1.19.31); отсутствие значения
+на уровне engine/API даёт безопасный <code>gvisor</code>. В продукте v1.4.0+ UI сам явно
+передаёт <code>mips</code> по умолчанию (<code>cfgTunMips: checked</code>), поэтому engine fallback
+нельзя путать с пользовательским UI-default. UI/VPS/AWG pipeline сохранён. Maintained textual patch удалён после доказанной
+побайтовой эквивалентности source build и прежнего runtime.</p>
+<h2 id="безопасный-workflow-будущего-агента">Безопасный workflow будущего агента</h2>
+<ol>
+<li>Прочитать <a href="../AGENTS.md">AGENTS.md</a> consumer и
+<a href="https://github.com/saymer-alt/web4core/blob/link-generators/AGENTS.md">AGENTS.md fork</a>.</li>
+<li>Проверить branch/remotes/status/log обоих checkout; не перезаписывать чужие изменения.</li>
+<li>Определить слой изменения по таблице, изучить реальные функции и existing tests.</li>
+<li>Внести минимальный diff в соответствующие исходники; соблюдать согласованный scope.</li>
+<li>Выполнить tests/build (команды в AGENTS fork и <a href="DEVELOPMENT">DEVELOPMENT.md</a>).</li>
+<li>Сравнить runtime с baseline: байты/SHA-256, объяснить весь diff до копирования.
+Backward compatibility проверять consumer runtime/browser suite и baseline.</li>
+<li>Для новых Mihomo output contracts выполнить реальный <code>mihomo -t</code> целевой версии
+на синтетических fixtures. Не заявлять handshake по результату syntax validation.</li>
+<li>Синхронизировать validator/README/docs с фактической end-to-end поддержкой.</li>
+<li>Показать review до commit/push: файлы, diff-stat, tests/build/core validation,
+runtime comparison, security/scope и порядок публикации.</li>
+</ol>
+<h2 id="sync-публикация-и-security-boundaries">Sync, публикация и security boundaries</h2>
+<p>Единая подробная процедура, варианты sync, граница read/write jobs и порядок
+публикации — <a href="UPDATES">UPDATES.md</a>; тестовая матрица — <a href="TESTING">TESTING.md</a>.
+Upstream сначала проходит review и проверки в candidate branch. При merge conflict
+или test failure — ничего не публиковать. Force-push, подавление конфликтов и
+отключение тестов запрещены. Scheduled auto-merge сейчас не включён.</p>
+<p>Consumer workflow воспроизводимо собирает custom branch; ошибка checkout/build/test
+блокирует публикацию. Внешний build-код выполняется только в read-only job без secrets;
+отдельный write-job копирует единственный artifact, не выполняя его.
+Это защищает write-token, но не заменяет review исходников/зависимостей.
+Реальные ключи и приватные конфиги запрещены в fixtures, логах и review.</p>
+<p>Сначала публикуются проверенные source-изменения fork, затем миграция consumer.
+Пока в удалённой custom branch нет MIPS source test, новый workflow должен падать,
+а не пропускать проверку. Generated runtime руками не чинить.</p>
+
+</div>
+</body>
+</html>

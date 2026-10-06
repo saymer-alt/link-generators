@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOCOLS — протоколы: вход → bean → Mihomo — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/PROTOCOLS.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="protocols-протоколы-вход-bean-mihomo">PROTOCOLS — протоколы: вход → bean → Mihomo</h1>
+<h2 id="ревизия-v11931">Ревизия v1.19.31</h2>
+<p>Полная <a href="AUDIT-MIHOMO-1.19.31">матрица 28 outbound types, AWG-аудит и proposal</a>
+сверены с тегом Mihomo v1.19.31 (2026-09-14). Таблица ниже описывает именно
+поддерживаемые входы генератора, а не весь набор протоколов ядра.
+SSR/Hysteria v1/OpenVPN/SSH и специализированные сетевые профили пока не добавлены.
+AWG 3.1 проверен по всему UI pipeline: семь строковых полей (включая диапазоны),
+два boolean, официальный <code>on/off</code>, автоматический <code>version: 3</code>. Новых изменений AWG runtime нет.
+Прямой <code>parseWireGuardConf</code> без нормализаторов страницы не эквивалентен этому pipeline.</p>
+<p>Актуальная таблица по фактическому коду <code>main</code> (существенно пересмотрена 2026-09-09: форматы AWG 1.5/2.0/3.1, матрица версий mihomo). Источники: <code>SUPPORTED_SCHEMES</code>
+и <code>CORE_PROTOCOL_SUPPORT.mihomo.base</code> в <code>web4core.runtime.js</code>, парсеры/строители там же,
+проверки живым прогоном (<code>buildFromRequest</code>, core mihomo). Различать два уровня
+поддержки:</p>
+<ul>
+<li><strong>парсится рантаймом</strong> (<code>SUPPORTED_SCHEMES</code>, 20 схем): ссылка превращается в bean;</li>
+<li><strong>принимается ядром mihomo</strong> (<code>CORE_PROTOCOL_SUPPORT.mihomo.base</code>, 13 proto): bean может
+попасть в mihomo-YAML. Между списками есть зазор — см. «Зазор SUPPORTED ↔ CORE».</li>
+</ul>
+<h2 id="таблица-схема-входа-beanproto-mihomo-type">Таблица: схема входа → bean.proto → mihomo <code>type</code></h2>
+<table>
+<thead>
+<tr>
+<th>Схема входа</th>
+<th>bean.proto</th>
+<th>mihomo <code>type</code></th>
+<th>Ключевые поля вывода / особенности</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>vless://</code></td>
+<td><code>vless</code></td>
+<td><code>vless</code></td>
+<td>uuid, <code>encryption: none</code>, flow; flow=vision → <code>udp: true</code>; TLS/Reality (<code>reality-opts</code>), transport (<code>network</code>)</td>
+</tr>
+<tr>
+<td><code>vmess://</code></td>
+<td><code>vmess</code></td>
+<td><code>vmess</code></td>
+<td>uuid, <code>cipher</code> (дефолт auto), <code>alterId: 0</code>; <code>packet-addr</code> при packet-encoding</td>
+</tr>
+<tr>
+<td><code>trojan://</code></td>
+<td><code>trojan</code></td>
+<td><code>trojan</code></td>
+<td>password, TLS (обязателен по природе), <code>sni</code>+<code>servername</code></td>
+</tr>
+<tr>
+<td><code>ss://</code></td>
+<td><code>ss</code></td>
+<td><code>ss</code></td>
+<td>cipher+password, plugin/plugin-opts, smux</td>
+</tr>
+<tr>
+<td><code>anytls://</code></td>
+<td><code>anytls</code></td>
+<td><code>anytls</code></td>
+<td>password, <code>idle-session-*</code>, <code>disable-reuse</code>; в UI-хинте не упомянут, но поддерживается</td>
+</tr>
+<tr>
+<td><code>hy2://</code>, <code>hysteria2://</code></td>
+<td><code>hy2</code></td>
+<td><code>hysteria2</code></td>
+<td>password, obfs(+password), hop-порты (<code>ports</code>, <code>hop-interval</code>), <code>bbr-profile</code>, <code>udp-mtu</code></td>
+</tr>
+<tr>
+<td><code>tuic://</code></td>
+<td><code>tuic</code></td>
+<td><code>tuic</code></td>
+<td>uuid+password или token; <code>congestion-controller</code>, <code>udp-relay-mode</code>, <code>reduce-rtt</code></td>
+</tr>
+<tr>
+<td><code>socks://</code>, <code>socks5://</code>, <code>socks5h://</code></td>
+<td><code>socks</code></td>
+<td><code>socks5</code></td>
+<td>username/password. <strong><code>socks4://</code> и <code>socks4a://</code> → ошибка «Mihomo does not support: socks4»</strong></td>
+</tr>
+<tr>
+<td><code>http://</code>, <code>https://</code></td>
+<td><code>http</code></td>
+<td><code>http</code></td>
+<td>username/password; <code>https</code> → TLS-поля. ⚠️ тот же синтаксис, что у подписок — см. ниже</td>
+</tr>
+<tr>
+<td><code>mieru://</code>, <code>mierus://</code></td>
+<td><code>mieru</code></td>
+<td><code>mieru</code></td>
+<td><strong>обязателен userinfo</strong> (<code>user:pass@</code>, иначе «mieru: missing username/password»); <code>transport</code> (дефолт TCP, только TCP/UDP — кейс <code>TPC</code>), <code>port-range</code> из <code>server_ports</code>, multiplexing/handshake-mode/traffic-pattern</td>
+</tr>
+<tr>
+<td><code>masque://</code></td>
+<td><code>masque</code></td>
+<td><code>masque</code></td>
+<td>private-key/public-key, <code>ip</code>, sni, <code>udp</code>, <code>remote-dns-resolve</code>+<code>dns</code>, <code>network: h2</code>; формат — контракт этого же генератора (вкладка 1)</td>
+</tr>
+<tr>
+<td><code>tt://</code> (TrustTunnel)</td>
+<td><code>trusttunnel</code></td>
+<td><code>trusttunnel</code></td>
+<td>ссылка = <code>tt://?&lt;base64-payload&gt;[&amp;query]</code>; username/password, ECH (<code>ech-opts</code>), <code>quic</code>, <code>congestion-controller</code>, bbr</td>
+</tr>
+<tr>
+<td><code>sdns://</code></td>
+<td><code>sdns</code></td>
+<td>—</td>
+<td>парсится, но <strong>mihomo: «Mihomo does not support: sdns»</strong> (sing-box extended-only); в mihomo-YAML не попадает никогда</td>
+</tr>
+<tr>
+<td><code>socks4://</code>, <code>socks4a://</code></td>
+<td><code>socks</code></td>
+<td>—</td>
+<td>парсятся как <code>socks.type: socks4</code>, отклоняются на этапе сборки (см. выше)</td>
+</tr>
+<tr>
+<td><code>hysteria://</code> (v1)</td>
+<td>—</td>
+<td>—</td>
+<td><strong>не поддерживается нигде</strong>: схемы нет в <code>SUPPORTED_SCHEMES</code> → «Unknown link: hysteria» (проверено)</td>
+</tr>
+<tr>
+<td><code>.conf</code> / <code>.wg</code> / <code>.awg</code> (файлы)</td>
+<td><code>wireguard</code></td>
+<td><code>wireguard</code></td>
+<td>см. отдельный раздел ниже</td>
+</tr>
+</tbody></table>
+<h2 id="https-url-ссылка-против-подписки">HTTP(S) URL: ссылка против подписки</h2>
+<p>Один и тот же синтаксис означает разное в зависимости от режима:</p>
+<ul>
+<li><strong>Sub Mode</strong> (по умолчанию включён): URL <strong>без</strong> user:password → подписка →
+<code>proxy-providers</code> (скачивает Mihomo, не браузер); URL <strong>с</strong> кредами и все не-URL строки →
+обычные ссылки. Без хотя бы одного URL — ошибка «Provide one or more HTTP(S) URLs…».</li>
+<li><strong>обычный режим</strong>: http(s)-URL парсится как ссылка на http-прокси (проверено:
+<code>https://sub.example.com/list</code> → <code>type: http, name: proxy</code>) — т.е. мусор. Подписки
+имеет смысл вставлять только в Sub Mode.</li>
+</ul>
+<h2 id="wireguard-amneziawg">WireGuard / AmneziaWG</h2>
+<p>Файлы <code>.conf</code>/<code>.wg</code>/<code>.awg</code> → <code>parseWireGuardConf()</code> → bean <code>wireguard</code> → <code>type: wireguard</code>:</p>
+<ul>
+<li><code>[Interface]</code>: PrivateKey, Address (IPv4/IPv6 разделяются; без IPv6-адреса IPv6-AllowedIPs
+отбрасываются, прокси получает <code>ip-version: ipv4</code> — поведение рантайма, намеренное: без
+IPv6-адреса в туннеле маршрут <code>::/0</code> всё равно нерабочий), DNS, MTU; структурные ключи
+wg-quick (<code>ListenPort</code>, <code>Table</code>, <code>PreUp/PostUp</code>, <code>SaveConfig</code>, …) игнорируются сознательно;</li>
+<li><code>[Peer]</code> (берётся первый): PublicKey, PresharedKey, AllowedIPs, Endpoint → server:port,
+PersistentKeepalive (диапазоны сворачивает локальный <code>normalizeWgText</code>), Reserved
+(csv-числа 0–255 или строка);</li>
+<li>AmneziaWG-параметры → <code>amnezia-wg-option</code> (passthrough в YAML): <code>jc, jmin, jmax, s1–s4, h1–h4, i1–i5, j1–j3, itime, version, header-protection-key, content-padding-addition, rekey-after-time, rekey-timeout, reject-after-time, keepalive-timeout, max-handshake-attempts, random-trailers, disable-cookies</code>;</li>
+<li><code>dns</code>/<code>remote-dns-resolve</code> в wireguard-прокси добавляет локальный <code>injectWgDns</code> из поля
+«WireGuard DNS» (детали — <a href="DATAFLOW">DATAFLOW.md</a>).</li>
+<li><strong><code>dialer-proxy</code></strong> (opt-in через UI-поле «Промежуточный proxy / dialer-proxy», опции рантайма
+<code>wgDialerProxy</code>/<code>wgDialerGroupMembers</code>): WireGuard-outbound устанавливает своё UDP-соединение
+с сервером через другой proxy/группу («туннель в туннеле», WARP-over-VPS). Подробный контракт,
+правила защиты от циклов и MTU — секция dialer-proxy в <a href="MIHOMO">MIHOMO.md</a>. AWG 3.1 осознанно
+не входит в первую реализацию — поле применимо к <code>type: wireguard</code> одинаково, но полевой сценарий
+первой версии — обычный WARP. Валидация цепочек — модель ориентированного графа
+(единый код рантайма и валидатора, dynamic/unknown для провайдеров без override):
+секция «Конфигурация Mihomo как ориентированный граф» в <a href="MIHOMO">MIHOMO.md</a>.</li>
+</ul>
+<h3 id="форматы-значений-awg-15-20-31">Форматы значений AWG (1.5 / 2.0 / 3.1)</h3>
+<p>Актуальная версия протокола — 3.1 (docs.amnezia.org, «AmneziaWG 3.1»); поле <code>Version</code> в
+<code>.conf</code> не пишется. Реальные self-hosted-конфиги двух семейств: <strong>Amnezia Premium</strong> —
+<code>H1–H4</code> диапазонами + <code>I1–I5</code> (CPS-теги <code>&lt;b 0x…&gt;&lt;rc n&gt;&lt;t&gt;&lt;r n&gt;</code>), без 3.1-полей;
+<strong>Amnezia self-hosted 3.1</strong> — одиночные <code>H1–H4</code> + <code>HeaderProtectionKey</code> + диапазонные
+таймеры + <code>RandomTrailers</code>/<code>DisableCookies</code>.</p>
+<ul>
+<li>Диапазоны <code>lo-hi</code> легальны для <code>H1–H4</code> и шести параметров 3.x: <code>content-padding-addition</code>,
+<code>rekey-after-time</code>, <code>rekey-timeout</code>, <code>reject-after-time</code>, <code>keepalive-timeout</code>,
+<code>max-handshake-attempts</code>. Mihomo держит эти ключи строками, v3-движок парсит их как
+UintRange — passthrough без преобразований;</li>
+<li><code>random-trailers</code>/<code>disable-cookies</code> — булевы. Официальный формат литералов — <code>on</code>/<code>off</code>,
+парсер рантайма принимает только <code>1/true/yes/0/false/no</code>: локальный <code>normalizeWgText</code>
+сводит <code>on</code>/<code>off</code> к <code>1</code>/<code>0</code> до парсинга (до 2026-09-09 поля молча терялись; gap остаётся
+в апстриме — чистый фикс там);</li>
+<li><code>PersistentKeepalive = 25-35</code> и range-значения int-полей mihomo (<code>jc/jmin/jmax/s1–s4/ itime</code>, список <code>AWG_INT_KEYS</code>) сворачиваются к нижней границе: keepalive — односторонний
+тайминг, любая точка диапазона валидна; range-строка в int-поле уронила бы декодирование
+всего конфига mihomo (weakly-typed парсер читает только числа);</li>
+<li><code>HeaderProtectionKey</code> (base64-ключ, mihomo сам переводит в hex) и <code>RandomTrailers</code> —
+«двусторонние» параметры: сервер с включённым HP/trailers отклоняет клиентов без них,
+поэтому потеря этих полей = нерабочий туннель.</li>
+</ul>
+<h3 id="требования-к-версии-mihomo">Требования к версии mihomo</h3>
+<table>
+<thead>
+<tr>
+<th>Набор в amnezia-wg-option</th>
+<th>mihomo ≤ 1.19.29</th>
+<th>mihomo ≥ 1.19.30 (первая с AWG 3.1)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>jc…h4</code>, <code>i1–i5</code> (1.5/2.0 — Premium)</td>
+<td>работает (legacy-движок)</td>
+<td>работает: без 3.1-полей <code>version</code> не проставляется → legacy-движок</td>
+</tr>
+<tr>
+<td><code>version: 3</code> + HP/таймеры/булевы (3.1 self-hosted)</td>
+<td><strong>все 3.1-ключи молча игнорируются</strong> — туннель с HP/trailers не поднимется</td>
+<td>работает (v3-движок <code>amneziav3</code>)</td>
+</tr>
+</tbody></table>
+<p>Уровень уверенности этой таблицы — <strong>совместимость по исходникам</strong> (wireguard.go
+v1.19.27/v1.19.30/Alpha + uapi.go/amneziawg-go: состав полей, типы, выбор движка), не
+runtime-факт: фактический AWG-хендшейк против реального 3.1-сервера отдельно не
+подтверждён (см. «Что не тестируется» в <a href="TESTING">TESTING.md</a>).</p>
+<p><code>version: 3</code> в <code>.conf</code> не бывает: локальный <code>normalizeWgBeans</code> проставляет его при наличии
+любого 3.x-поля (на mihomo ≤1.19.29 поле игнорируется безвредно). Импорт 3.1-конфига на
+ядро старше 1.19.30 генератором не чинится — это свойство конкретной инсталляции.
+Поддержка AWG 3.1 начинается с Mihomo 1.19.30; версионный контракт проекта —
+minimum 1.19.31, recommended/current 1.19.32 (combined-пробы зелёные на обеих).
+Не смешивать три уровня версии: пакетная версия opkg (в entware-go
+закоммичен <code>PKG_VERSION</code> последнего апстрим-синка, 1.19.27; CI при сборке подставляет
+актуальную релизную версию эфемерно — релизные <code>.ipk</code> уже 1.19.30-1), источник
+<code>keenetic-auto-setup</code> (install.sh берёт <code>.ipk</code> из релиза entware-go, update-mihomo.sh —
+официальный бинарник MetaCubeX напрямую, мимо opkg) и фактический бинарник на устройстве
+(<code>mihomo -v</code>) — после обновления через update-mihomo.sh opkg может показывать старую
+версию пакета.</p>
+<h2 id="зазор-supported-core-и-ui-хинт">Зазор SUPPORTED ↔ CORE (и UI-хинт)</h2>
+<ul>
+<li><code>SUPPORTED_SCHEMES</code> (парсится, 20): <code>vmess, vless, trojan, anytls, ss, socks, socks4, socks4a, socks5, socks5h, http, https, hy2, hysteria2, tuic, tt, mieru, mierus, sdns, masque</code>.</li>
+<li><code>CORE_PROTOCOL_SUPPORT.mihomo.base</code> (попадает в mihomo-YAML, 13): <code>vmess, vless, trojan, anytls, ss, socks, http, hy2, tuic, wireguard, masque, mieru, trusttunnel</code>.</li>
+<li>Хинт в UI («Поддерживает: vless, vmess, trojan, ss, hy2, tuic, masque, mieru, tt, WG,
+HTTP(S) подписки») — сокращённый; фактический набор шире (anytls, socks-варианты, sdns
+с отказом и т.д.). При расхождении хинта с рантаймом источник истины — рантайм.</li>
+<li>Ядра sing-box/xray рантаймом поддерживаются (<code>buildSingBox*</code>, <code>buildXray*</code>), но UI
+собирает только <code>core: &#39;mihomo&#39;</code> — это не «поддержка страницы».</li>
+</ul>
+<h2 id="через-ui-недоступно-возможности-рантайма-не-используемые-страницей">Через UI недоступно (возможности рантайма, не используемые страницей)</h2>
+<p><code>fetchSubscription</code> (клиентское скачивание подписок с CORS-фолбэком), <code>validateBean</code>,
+<code>computeTag</code>, <code>getAllowedCoreProtocols</code>, <code>buildBeansFromInput</code>, <code>buildMihomoProxy</code>,
+<code>buildMihomoConfig</code>, <code>buildMihomoSubscriptionConfig</code>, <code>buildMihomoYaml</code>,
+<code>buildSingBoxOutbound/Config</code>, <code>buildXrayOutbound/Config</code>, <code>URLTEST</code>. Не считать их
+«фичами генератора», пока они не подключены в <code>index.html</code>.</p>
+<h2 id="связанные-документы-4">Связанные документы</h2>
+<p>Путь данных каждого входа — <a href="DATAFLOW">DATAFLOW.md</a>; параметры сборки — <a href="MIHOMO">MIHOMO.md</a>;
+валидация типов/полей — <a href="VALIDATION">VALIDATION.md</a>.</p>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Документация — WARP & Mihomo Unified</title>
+<style>
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+h2 { border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+li { margin: 4px 0; }
+a { color: #1450a3; }
+a.gh { font-size: .8rem; color: #6a6a6a; margin-left: 6px; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/README.md">GitHub</a>
+</nav>
+<h1>📚 Документация</h1>
+<p>HTML-версии генерируются из Markdown (source of truth) автоматически; исходники — в репозитории.</p>
+<h2>Генератор и пользовательские сценарии</h2>
+<ul>
+  <li><a href="GENERATOR-GUIDE.html">Короткая инструкция по генератору</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/GENERATOR-GUIDE.md">source</a></li>
+  <li><a href="EXCLUDE-FILTER.html">Mihomo `exclude-filter`: практическая проверка</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/EXCLUDE-FILTER.md">source</a></li>
+  <li><a href="GIST-SUBSCRIPTION.html">Своя подписка через GitHub Gist</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/GIST-SUBSCRIPTION.md">source</a></li>
+  <li><a href="VPS-GATEWAY.html">VPS-GATEWAY — опциональный профиль генерации для amnezia-mihomo-gateway</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/VPS-GATEWAY.md">source</a></li>
+</ul>
+<h2>Маршрутизация и политики</h2>
+<ul>
+  <li><a href="POLICY-ROUTING.html">Политики по доменам (Domain Policy Routing, Variant B)</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/POLICY-ROUTING.md">source</a></li>
+  <li><a href="MIHOMO.html">MIHOMO — Builder, генерируемый YAML, валидация</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/MIHOMO.md">source</a></li>
+</ul>
+<h2>WARPSCOUT</h2>
+<ul>
+  <li><a href="WARPSCOUT-WINDOWS.html">WARPSCOUT на Windows — практическая инструкция для link-generators</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/WARPSCOUT-WINDOWS.md">source</a></li>
+  <li><a href="WARPSCOUT-KEENETIC.html">WARPSCOUT на Keenetic / Entware — практическая инструкция</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/WARPSCOUT-KEENETIC.md">source</a></li>
+  <li><a href="WARPSCOUT-VPS.html">WARPSCOUT на VPS — Ubuntu 24.04 / Debian 12</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/WARPSCOUT-VPS.md">source</a></li>
+</ul>
+<h2>Справочник для разработчика</h2>
+<ul>
+  <li><a href="README.html">docs — навигатор технической базы знаний</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/README.md">source</a></li>
+  <li><a href="ARCHITECTURE.html">ARCHITECTURE — link-generators</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/ARCHITECTURE.md">source</a></li>
+  <li><a href="DATAFLOW.html">DATAFLOW — прохождение данных</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/DATAFLOW.md">source</a></li>
+  <li><a href="PROTOCOLS.html">PROTOCOLS — протоколы: вход → bean → Mihomo</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/PROTOCOLS.md">source</a></li>
+  <li><a href="VALIDATION.html">VALIDATION — pre-copy валидатор Mihomo YAML</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/VALIDATION.md">source</a></li>
+  <li><a href="TESTING.html">TESTING — реальная тестовая стратегия</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/TESTING.md">source</a></li>
+  <li><a href="CI.html">CI — автоматические regression gates</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/CI.md">source</a></li>
+  <li><a href="DEVELOPMENT.html">DEVELOPMENT — как разрабатывать и проверять</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/DEVELOPMENT.md">source</a></li>
+  <li><a href="UPDATES.html">UPDATES — жизненный цикл `web4core.runtime.js`</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/UPDATES.md">source</a></li>
+  <li><a href="WEB4CORE-FORK.html">WEB4CORE-FORK — архитектура двух репозиториев</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/WEB4CORE-FORK.md">source</a></li>
+  <li><a href="DEPLOYMENT-PROFILES-TEST-CONTRACT.html">Deployment profiles: обязательный regression/test contract</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md">source</a></li>
+</ul>
+<h2>Историческое / аудиты</h2>
+<ul>
+  <li><a href="FALLBACK-REVIEW.html">Review #2588: плоский автоматический fallback</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/FALLBACK-REVIEW.md">source</a></li>
+  <li><a href="AUDIT-MIHOMO-1.19.31.html">Ревизия Mihomo v1.19.31 (2026-09-15)</a> <a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/AUDIT-MIHOMO-1.19.31.md">source</a></li>
+</ul>
+
+</div>
+</body>
+</html>

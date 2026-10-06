@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Автоматический режим белых списков — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/AUTO-WHITELIST.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="автоматический-режим-белых-списков">Автоматический режим белых списков</h1>
+<p>Opt-in checkbox <code>Автоматический режим белых списков</code> во вкладке Mihomo. Верхний ввод
+и загруженные WG/AWG-файлы образуют основной набор; отдельное поле — резерв БС.
+Оба набора обязательны. Каждый допускает несколько ссылок, подписок или их смесь.
+При включённом режиме <strong>Использовать URL-подписки</strong> (технически Sub Mode) URL без userinfo становится HTTP provider; сами подписки
+загружает Mihomo. В БС-режиме ссылки без подписок тоже разрешены. При выключенном режиме URL-подписок наличие
+подписки даёт ошибку; URL с userinfo сохраняет значение HTTP(S) proxy.</p>
+<h2 id="архитектура">Архитектура</h2>
+<ul>
+<li><code>link-generators/index.html</code>: checkbox, второй ввод, снимок состояний только в
+памяти, скрытие и отключение опций «TUN на каждый прокси» / «SOCKS-порт на каждый
+прокси» и панели VPS Gateway.
+При сборке независимо от DOM принудительно <code>mihomoPerProxyTun: false</code>,
+<code>perProxyPort: false</code>; профиль развёртывания временно переводится на
+router-совместимый effective-контракт (<code>selectedProfile</code> сохраняется,
+<code>effectiveProfile</code> = <code>router</code> на время БС, выбранный профиль и его
+UI-state восстанавливаются при выключении).</li>
+<li><code>web4core/src/build.js</code>: универсальное необязательное поле <code>fallbackInput</code>.
+Его отсутствие сохраняет прежний путь без новой нормализации/сериализации.
+Его наличие включает раздельный parsing/validation двух сторон; <code>wgBeans</code> — primary.
+Engine отклоняет сочетание primary/fallback с Per-Proxy listeners.</li>
+<li><code>web4core/src/core/mihomo.js</code>: <code>buildMihomoPriorityConfig</code> переиспользует готовые
+builders прокси и providers, создаёт один плоский GLOBAL fallback. Parser и YAML
+emitter не дублируются. Терминов БС/whitelist в engine нет.</li>
+<li>Runtime собирается из fork; экспорт <code>buildMihomoPriorityConfig</code> служит также
+проверкой совместимости в UI. Старый runtime вызывает ошибку, а не потерю резерва.</li>
+</ul>
+<p>Две независимые обычные сборки в UI потребовали бы разбирать готовый YAML,
+согласовывать имена/providers и воспроизводить разделение input. Поэтому общая
+композиция групп живёт рядом с существующими engine builders; пользовательская
+политика белых списков остаётся в consumer.</p>
+<p>Имена статических прокси получают <code>PRIMARY-&lt;N&gt;: </code> / <code>FALLBACK-&lt;N&gt;: </code>.
+Имена providers получают <code>primary-</code> / <code>fallback-</code>; <code>override.additional-prefix</code>
+разделяет имена узлов подписок. Совпадения имён и одинаковые ссылки между наборами
+не объединяют стороны. Дедупликация внутри обычного набора использует прежний builder.</p>
+<h2 id="точная-структура-групп">Точная структура групп</h2>
+<p>Для обычной ссылки <code>A</code>, резервной <code>B</code> и подписки с каждой стороны (Google health-check):</p>
+<pre><code class="language-yaml">proxy-groups:
+  - name: GLOBAL
+    type: fallback
+    proxies:
+      - &quot;PRIMARY-1: A&quot;
+      - &quot;FALLBACK-1: B&quot;
+    use:
+      - primary-example.invalid
+      - fallback-example.invalid
+    filter: &quot;^(PRIMARY-|primary-)`^(FALLBACK-|fallback-)&quot;
+    url: &quot;https://google.com/generate_204&quot;
+    interval: 300
+    lazy: false
+    empty-fallback: REJECT
+    timeout: 60000
+    max-failed-times: 2
+rules:
+  - &quot;MATCH,GLOBAL&quot;
+</code></pre>
+<p><code>filter</code> содержит две regex, разделённые обратной кавычкой. Mihomo 1.19.31
+сортирует объединённый список конечных узлов по этим фильтрам: <strong>все primary,
+затем все fallback</strong>, включая статические узлы и узлы любых providers.
+Без этого поля <code>proxies</code> предшествуют <code>use</code>, и статический БС-узел мог бы обойти
+живой primary provider. Префиксы — часть контракта, их нельзя менять отдельно от фильтра.
+Внутри каждого набора выбирается первый живой узел; выбор минимальной задержки
+не выполняется. Вложенных групп нет. При чистых подписках <code>proxies</code> отсутствует,
+без подписок отсутствует <code>use</code>. URL следует выбранному Ping server.
+Сам <code>GLOBAL</code> намеренно <strong>не задаёт <code>expected-status</code></strong>: для приоритетного failover
+достаточно успешно установить маршрут через proxy и получить HTTP-ответ; точный код
+ответа не должен превращать рабочий маршрут в <code>dead</code>. Это также приближает плановую
+проверку к ручному Ping MetaCubeXD (<code>/delay</code>), который не передаёт expected-status.
+Строгая проверка <code>expected-status</code> у HTTP providers сохраняется отдельно.
+<code>DIRECT</code> отсутствует среди целей GLOBAL.
+Поле <code>proxy: DIRECT</code> у HTTP provider сохранено: оно относится только к скачиванию
+подписки, не является fallback пользовательского трафика.</p>
+<h2 id="поведение-и-ограничения">Поведение и ограничения</h2>
+<ul>
+<li>GLOBAL выбирает первый живой конечный выход в порядке primary → fallback.
+После восстановления primary возвращается к нему по результатам проверок.
+Надёжность и строгий приоритет обеспечиваются без выбора самого быстрого узла.</li>
+<li>Это проверка доступности заданного HTTP endpoint, а не детектор белых списков.
+Успешная проба не гарантирует доступность каждого сайта или UDP.</li>
+<li><code>lazy: false</code> поддерживает проверки обоих наборов, включая неиспользуемый резерв.</li>
+<li>Совместимость WG/AWG: полевой кейс 23.09.2026 показал, что ручной Ping мог
+временно оживлять AWG, после чего следующая строгая автоматическая проверка снова
+помечала его недоступным. На <code>main</code> проверяется более мягкая group-level семантика
+без <code>expected-status</code>; до полевого подтверждения это кандидат на исправление, а не
+доказанная причина конкретного туннеля.</li>
+<li>Обнаружение смерти маршрута по пользовательским dial-неудачам: 2 неудачных
+соединения в течение 60 секунд (<code>timeout: 60000</code> + <code>max-failed-times: 2</code>)
+запускают внеплановую проверку группы, после которой трафик уходит на резерв;
+отказ вида «connection refused» триггерит проверку сразу. Без этих полей
+mihomo 1.19.31 сбрасывает счётчик неудач между редкими запросами и может
+держать мёртвый primary до плановой проверки (до 300 с) — воспроизведено
+детерминированным MRE на v1.19.31.</li>
+<li>Гарантий «ровно один неудачный запрос» нет: переключение происходит после
+того, как mihomo засчитает неудачи dial и завершит внеплановую проверку.
+Возврат на primary — по очередной плановой проверке (интервал 300 с).
+Интервал — 300 секунд; переключение зависит от свежести проб и timeout,
+это не мгновенный SLA. Отдельного внешнего watchdog нет.</li>
+<li>Production-like лаборатория на Mihomo 1.19.31 с generated-параметрами
+<code>interval: 300</code>, <code>lazy: false</code>, <code>timeout: 60000</code>, <code>max-failed-times: 2</code>
+показала асимметричную задержку обнаружения TCP blackhole: при полном отсутствии
+пользовательского трафика PRIMARY → FALLBACK занял <strong>304896 мс</strong> (~5м04.9с),
+то есть примерно один health-интервал плюс provider check; при повторяющихся
+пользовательских подключениях тот же blackhole переключился примерно за <strong>15 с</strong>
+после двух ~5-секундных dial failures и внеплановой проверки. Это измерения
+конкретной лаборатории, а не гарантированный SLA.</li>
+<li>Перезапуск Mihomo не является требованием для failover: он запускает свежую
+health-проверку и поэтому может визуально «починить» пассивный blackhole за секунды.
+Ручной выбор — отдельное состояние: вручную выбранный FALLBACK может пережить
+restart через <code>store-selected</code>; fixed-выбор снимается, когда выбранная цель
+становится dead для test URL.</li>
+<li>Пустой provider использует REJECT вместо неявного DIRECT. Если оба набора
+недоступны, Mihomo может продолжать попытки через первый; выхода DIRECT нет.</li>
+<li>Медленный, но «живой» primary имеет предел: <code>timeout: 60000</code> ограничивает только
+health-check, пользовательские dial Mihomo ограничивает своим пределом ~5 с
+(«context deadline exceeded», воспроизведено на v1.19.31). Primary, отвечающий
+на CONNECT медленнее ~5 с, проходит проверки, но рвёт пользовательские запросы.
+Отказ самого health-endpoint (один URL на группу) помечает мёртвыми все узлы
+сразу: трафик продолжает обслуживаться через первого кандидата, пока жива сама
+прокси-инфраструктура, — отказ пробы нельзя читать как «интернет недоступен».
+Оба поведения покрыты тестами <code>tests/mihomo-awl-priority.cjs</code> (быстрые интервалы)
+и <code>tests/mihomo-awl-soak.manual.cjs</code> (production-интервалы, вручную).</li>
+<li>Существующие соединения не мигрируют автоматически. Ручной выбор GLOBAL через
+controller может влиять на стандартное поведение fallback Mihomo.</li>
+<li>Обычный TUN и gVisor/MIPS, Mixed Port, Web UI, Allow LAN и режим URL-подписок остаются.
+Ordinary TUN сохраняет прежний <code>device: mitun0</code>, <code>auto-route: false</code>.
+MIPS требует Mihomo &gt;= 1.19.31.</li>
+<li>Выключение checkbox восстанавливает опции «на каждый прокси» и выбранный профиль
+развёртывания из снимка в памяти; обновление
+страницы снимок не сохраняет. Содержимое второго поля при выключенном режиме
+игнорируется. Генерация выключенного режима не меняет байты; случайный <code>x-hwid</code>
+сравнивается с фиксированным RNG исключительно в тестах.</li>
+<li>Новые протоколы не добавлены. Загрузка подписок из браузера не добавлена.</li>
+</ul>
+<h2 id="проверки">Проверки</h2>
+<p>Команды и результат — <a href="TESTING">TESTING.md</a>. Помимо <code>mihomo -t</code>, локальные
+сетевые тесты подтверждают PRIMARY → FALLBACK → PRIMARY для static/providers/mixed.
+Проверки проходят на mock HTTP CONNECT endpoints, без реальных подписок и TUN;
+они не доказывают handshake каждого поддерживаемого протокола или доступность сайтов.</p>
+<h2 id="2588-и-providers">#2588 и providers</h2>
+<p>В v1.19.31 issue <a href="https://github.com/MetaCubeX/mihomo/issues/2588">#2588</a>
+фактически воспроизводится. <code>Fallback.findAliveProxy</code> проверяет <code>AliveForTestUrl</code>
+вложенной группы, не детей. Локальный repro показывает <code>PRIMARY.alive=false</code>,
+<code>child.alive=true</code>, <code>GLOBAL.now=FALLBACK</code> и реальный HTTP-трафик через резерв.
+Поэтому схема fallback → url-test заменена плоской; <code>lazy: false</code> сама по себе
+не исправляет это расхождение состояний. Подробный анализ — <a href="FALLBACK-REVIEW">FALLBACK-REVIEW.md</a>.</p>
+<p>Каждый HTTP provider независимо генерирует полный блок:</p>
+<pre><code class="language-yaml">health-check:
+  enable: true
+  url: &quot;https://google.com/generate_204&quot;
+  interval: 300
+  lazy: false
+  expected-status: 204
+</code></pre>
+<p>Это не полагается на group-level <code>url</code>. В 1.19.31 есть регистрация дополнительных
+URL групп у providers, но основной provider URL остаётся отдельным механизмом.
+<code>HealthCheck.process</code> при <code>lazy: false</code> запускает проверки по таймеру независимо
+от последнего использования. Локальный тест проверяет новые попытки к мёртвому
+primary, пока запросы обслуживает БС, и автоматический возврат после восстановления.</p>
+<p>Семантика сверена с <a href="https://wiki.metacubex.one/en/config/proxy-groups/fallback/">fallback</a>,
+<a href="https://wiki.metacubex.one/en/config/proxy-providers/">providers</a> и исходниками
+<a href="https://github.com/MetaCubeX/mihomo/tree/v1.19.31/adapter/outboundgroup">Mihomo v1.19.31</a>.</p>
+
+</div>
+</body>
+</html>

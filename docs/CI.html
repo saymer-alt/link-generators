@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CI — автоматические regression gates — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/CI.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="ci-автоматические-regression-gates">CI — автоматические regression gates</h1>
+<p>Этот документ разделяет детерминированные проверки, которые обязан выполнять GitHub Actions, и полевые проверки, которые намеренно остаются ручными.</p>
+<p>Цель — не повторять одну и ту же тестовую батарею агентом/локально после каждого изменения. Успешный CI относится только к <strong>точному commit SHA</strong>, на котором он был запущен.</p>
+<h2 id="generator-ci">Generator CI</h2>
+<p>Workflow: <code>.github/workflows/generator-ci.yml</code>.</p>
+<p>Запускается на Pull Request в <code>main</code>/<code>stable</code>, push в <code>main</code>/<code>stable</code> и через <code>workflow_dispatch</code>.</p>
+<h3 id="deterministic-static-node"><code>deterministic / static + node</code></h3>
+<p>Проверяет:</p>
+<ul>
+<li><code>.nojekyll</code> и отсутствие package/build-system в корне;</li>
+<li>отсутствие merge markers;</li>
+<li>синтаксис всех <code>tests/*.cjs</code> (manual-файлы — только syntax check);</li>
+<li>coverage guard: каждый новый <code>tests/*.cjs</code>, кроме <code>*.manual.cjs</code>, обязан быть явно подключён к Generator CI, иначе job падает;</li>
+<li>HTML duplicate IDs и контракт публичных ссылок (<code>index.html</code>, <code>quick-start.html</code>);</li>
+<li>consumer runtime regression (<code>tests/runtime.cjs</code>);</li>
+<li>Domain Policy Routing regression (<code>tests/policy-routing.cjs</code>);</li>
+<li>offline unit tests <code>tools/warp-dialer-fieldtest</code>;</li>
+<li>secret scan fieldtest harness;</li>
+<li>запрет запуска live/mutating fieldtest modes из GitHub Actions.</li>
+</ul>
+<h3 id="deterministic-browser"><code>deterministic / browser</code></h3>
+<p>Playwright и <code>js-yaml</code> ставятся только во временную директорию GitHub runner. Репозиторий остаётся статическим и не получает <code>package.json</code>.</p>
+<p>Запускаются все текущие детерминированные browser/UI suites:</p>
+<ul>
+<li><code>tests/browser.cjs</code>;</li>
+<li><code>tests/help-ux-browser.cjs</code>;</li>
+<li><code>tests/masque-dpi-regression.cjs</code>;</li>
+<li><code>tests/policy-routing-browser.cjs</code>;</li>
+<li><code>tests/vps-detection-browser.cjs</code>;</li>
+<li><code>tests/wg-profiles-browser.cjs</code>;</li>
+<li><code>tests/magitrickle-import.cjs</code>;</li>
+<li><code>tests/profile-matrix.cjs</code>;</li>
+<li><code>tests/wg-dialer-selector.cjs</code>;</li>
+<li><code>tests/whitelist.cjs</code>.</li>
+</ul>
+<h3 id="mihomo-compat-11931-и-mihomo-compat-11932"><code>mihomo compat / 1.19.31</code> и <code>mihomo compat / 1.19.32</code></h3>
+<p>GitHub Actions скачивает exact pinned official Mihomo binary, проверяет SHA-256 и запускает:</p>
+<ul>
+<li><code>tests/whitelist.cjs</code> с реальным Mihomo core;</li>
+<li><code>tests/mihomo-failover.cjs</code>;</li>
+<li><code>tests/mihomo-awl-priority.cjs</code>.</li>
+</ul>
+<p>Compatibility versions соответствуют продуктовому контракту проекта:</p>
+<ul>
+<li>minimum supported: <code>1.19.31</code>;</li>
+<li>recommended/current tested: <code>1.19.32</code>.</li>
+</ul>
+<h2 id="runtime-provenance">Runtime provenance</h2>
+<p>Отдельный существующий workflow <code>.github/workflows/update-web4core-runtime.yml</code> остаётся authoritative provenance gate:</p>
+<ul>
+<li>checkout <code>saymer-alt/web4core:link-generators</code>;</li>
+<li>source tests web4core;</li>
+<li>reproducible runtime build;</li>
+<li>consumer <code>tests/runtime.cjs</code>;</li>
+<li>tracked-runtime match для PR/stable.</li>
+</ul>
+<p>Generator CI не заменяет provenance workflow, а дополняет его.</p>
+<h2 id="что-не-запускается-в-ci">Что НЕ запускается в CI</h2>
+<p>Намеренно остаются manual/live:</p>
+<ul>
+<li><code>tests/mihomo-reality-handshake.manual.cjs</code> — реальный Xray/REALITY/OpenSSL E2E;</li>
+<li><code>tests/mihomo-awl-soak.manual.cjs</code> — длительный production-interval soak;</li>
+<li>реальные <code>fieldtest.mjs sweep/switchtest/mtusweep</code>;</li>
+<li>реальные WG/AWG keys/configs владельца;</li>
+<li>реальные subscription URL/token/HWID/UUID;</li>
+<li>реальные provider/WARP/network acceptance tests.</li>
+</ul>
+<p>Причины: секреты, внешняя сеть, mutable/live инфраструктура и флаки, не связанные с детерминированной корректностью генератора.</p>
+<h2 id="правило-для-ai-агентов">Правило для AI-агентов</h2>
+<p>Если exact проверяемый commit SHA уже имеет зелёные соответствующие Generator CI checks и зелёный runtime-provenance check, эти детерминированные suites <strong>не нужно повторно гонять вручную</strong>.</p>
+<p>Повторный локальный запуск нужен только когда:</p>
+<ol>
+<li>изменён сам тест или workflow и требуется отладка;</li>
+<li>CI красный/недоступен и нужно найти причину;</li>
+<li>изменён live/network contract, для которого нужен manual acceptance;</li>
+<li>owner явно запросил повторную полевую проверку.</li>
+</ol>
+<p>Green run другого SHA не переносится на текущий SHA. Перед merge/release нужно сверять checks именно текущего audited head / production candidate.</p>
+
+</div>
+</body>
+</html>

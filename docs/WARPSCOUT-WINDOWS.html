@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WARPSCOUT на Windows — практическая инструкция для link-generators — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/WARPSCOUT-WINDOWS.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="warpscout-на-windows-практическая-инструкция-для-link-generators">WARPSCOUT на Windows — практическая инструкция для link-generators</h1>
+<p>Эта страница не заменяет документацию WARPSCOUT. Здесь собран только рабочий сценарий для
+<code>saymer-alt/link-generators</code>: с Windows-машины найти рабочие Cloudflare WARP / MASQUE
+endpoint&#39;ы, понять куда выходит трафик и получить данные, которые можно использовать в нашем
+генераторе.</p>
+<p>Актуальный upstream: <a href="https://github.com/vernette/warpscout">vernette/warpscout</a>.</p>
+<h2 id="что-мы-хотим-получить">Что мы хотим получить</h2>
+<p>Три прикладные задачи:</p>
+<ol>
+<li><strong>WARP (WireGuard)</strong> — найти рабочий endpoint и при необходимости получить <code>.conf</code>,
+который можно загрузить в <strong>Mihomo Config Builder</strong>.</li>
+<li><strong>MASQUE H3 / QUIC</strong> — проверить H3 endpoint&#39;ы и получить Mihomo YAML с актуальной
+MASQUE identity (ключи, SNI, внутренний IP, DNS).</li>
+<li><strong>MASQUE H2 / TCP</strong> — то же для H2, включая реальные endpoint&#39;ы, которые видит именно
+текущая сеть Windows-компьютера.</li>
+</ol>
+<p>Важно: для MASQUE вкладка <strong>WARP MASQUE Links</strong> использует WARPSCOUT YAML как
+<strong>источник identity</strong>, а не как источник transport endpoint&#39;а. Поля <code>server</code>, <code>port</code>,
+<code>network</code> из WARPSCOUT не переопределяют нашу проверенную стратегию генерации.</p>
+<h2 id="1-установка">1. Установка</h2>
+<p>Скачайте Windows-архив <code>warpscout_..._windows_amd64.zip</code> со страницы
+<a href="https://github.com/vernette/warpscout/releases">Releases</a> и распакуйте его, например:</p>
+<pre><code class="language-text">C:\DPI\warpscout
+</code></pre>
+<p>Откройте CMD или PowerShell и перейдите в папку:</p>
+<pre><code class="language-bat">cd /d C:\DPI\warpscout
+</code></pre>
+<p>Проверьте запуск:</p>
+<pre><code class="language-bat">.\warpscout.exe version
+</code></pre>
+<h2 id="2-регистрация-warp-аккаунта">2. Регистрация WARP-аккаунта</h2>
+<p>WARPSCOUT хранит регистрацию в <code>warpscout-account.json</code> в текущей директории.</p>
+<p>Первый запуск:</p>
+<pre><code class="language-bat">.\warpscout.exe register
+</code></pre>
+<p>После успешной регистрации <strong>не публикуйте</strong> <code>warpscout-account.json</code>: в нём есть
+токены и приватные ключи.</p>
+<p>Если последующие команды пишут:</p>
+<pre><code class="language-text">Using cached WARP account from warpscout-account.json
+</code></pre>
+<p>аккаунт найден и используется повторно.</p>
+<hr>
+<h2 id="3-задача-найти-warp-endpoint">3. Задача: найти WARP endpoint</h2>
+<p>Обычный WARP поверх WireGuard:</p>
+<pre><code class="language-bat">.\warpscout.exe scan -p wg -P
+</code></pre>
+<p><code>-P</code> добавляет проверку задержки/потерь <strong>внутри туннеля</strong>, поэтому это полезнее простого
+скана доступности.</p>
+<p>Только лучший endpoint:</p>
+<pre><code class="language-bat">.\warpscout.exe scan -p wg -P -best
+</code></pre>
+<p>Пример результата:</p>
+<pre><code class="language-text">188.114.98.58:2408
+</code></pre>
+<h3 id="сразу-получить-файл-для-mihomo-builder">Сразу получить файл для Mihomo Builder</h3>
+<pre><code class="language-bat">.\warpscout.exe scan -p wg -P -conf warp.conf
+</code></pre>
+<p>Файл <code>warp.conf</code> можно загрузить на второй вкладке нашего проекта кнопкой
+<strong>«Загрузить .conf / .awg»</strong>.</p>
+<h3 id="если-обычный-wireguard-режется-dpi">Если обычный WireGuard режется DPI</h3>
+<p>Для диагностического сравнения используйте AmneziaWG:</p>
+<pre><code class="language-bat">.\warpscout.exe scan -p awg -P -gen-i1 quic
+</code></pre>
+<p>Если нужен готовый файл:</p>
+<pre><code class="language-bat">.\warpscout.exe scan -p awg -P -gen-i1 quic -conf warp.awg
+</code></pre>
+<p>Это уже отдельный AWG-сценарий; не надо подменять им обычный <code>-p wg</code>, если WG и так работает.</p>
+<hr>
+<h2 id="4-задача-masque-h3-quic">4. Задача: MASQUE H3 / QUIC</h2>
+<p>В нашем проекте H3 соответствует WARPSCOUT-протоколу <code>masque</code>.</p>
+<p>Быстрый рабочий скан с нашим обычным SNI:</p>
+<pre><code class="language-bat">.\warpscout.exe scan -p masque -masque-sni 4pda.to
+</code></pre>
+<p>Только лучший endpoint:</p>
+<pre><code class="language-bat">.\warpscout.exe scan -p masque -masque-sni 4pda.to -best
+</code></pre>
+<p>Получить Mihomo YAML с MASQUE identity:</p>
+<pre><code class="language-bat">.\warpscout.exe scan -p masque -masque-sni 4pda.to -conf - -conf-type mihomo
+</code></pre>
+<p>Типичный полезный блок:</p>
+<pre><code class="language-yaml">proxies:
+  - name: &quot;MASQUE H3 WARP&quot;
+    type: masque
+    server: 162.159.198.2
+    port: 8443
+    sni: 4pda.to
+    private-key: ...
+    public-key: ...
+    ip: 172.16.0.2
+    udp: true
+    remote-dns-resolve: true
+    dns: [&#39;1.1.1.1&#39;, &#39;1.0.0.1&#39;]
+</code></pre>
+<p>Для H3 поля <code>network: h2</code> нет — это нормально: для Mihomo MASQUE по умолчанию работает
+через HTTP/3/QUIC.</p>
+<h3 id="использование-в-link-generators">Использование в link-generators</h3>
+<ol>
+<li>Скопируйте <strong>YAML-блок <code>proxies:</code></strong>, а не таблицу скана.</li>
+<li>Вставьте его во вкладку <strong>WARP MASQUE Links</strong>.</li>
+<li>Нажмите <strong>«Распарсить»</strong>.</li>
+<li>Убедитесь, что появились private/public key, SNI, IP и DNS.</li>
+<li>Нажмите <strong>«Сгенерировать ссылки»</strong>.</li>
+<li>При необходимости отправьте результат кнопкой <strong>«В Mihomo Builder»</strong>.</li>
+</ol>
+<p>Текущий parser импортирует identity. Найденный WARPSCOUT endpoint не становится endpoint&#39;ом
+генератора автоматически.</p>
+<hr>
+<h2 id="5-задача-masque-h2-tcp">5. Задача: MASQUE H2 / TCP</h2>
+<p>H2 в WARPSCOUT — отдельный режим:</p>
+<pre><code class="language-bat">.\warpscout.exe scan -p masque-h2 -masque-sni 4pda.to
+</code></pre>
+<p>Только лучший endpoint:</p>
+<pre><code class="language-bat">.\warpscout.exe scan -p masque-h2 -masque-sni 4pda.to -best
+</code></pre>
+<p>Mihomo YAML:</p>
+<pre><code class="language-bat">.\warpscout.exe scan -p masque-h2 -masque-sni 4pda.to -conf - -conf-type mihomo
+</code></pre>
+<p>От H3 он отличается прежде всего:</p>
+<pre><code class="language-yaml">network: h2
+</code></pre>
+<p>Пример:</p>
+<pre><code class="language-yaml">proxies:
+  - name: &quot;MASQUE H2 WARP&quot;
+    type: masque
+    server: 162.159.198.28
+    port: 1701
+    network: h2
+    sni: 4pda.to
+    private-key: ...
+    public-key: ...
+    ip: 172.16.0.2
+    udp: true
+    remote-dns-resolve: true
+    dns: [&#39;1.1.1.1&#39;, &#39;1.0.0.1&#39;]
+</code></pre>
+<h3 id="почему-мы-не-копируем-port-из-warpscout-в-генератор">Почему мы не копируем port из WARPSCOUT в генератор</h3>
+<p>WARPSCOUT проверяет реальные порты Cloudflare и может показать, например, <code>500</code>, <code>1701</code>
+или <code>4500</code>. Это полезный <strong>результат сканирования</strong>, но в нашем генераторе эти VPN-порты
+специально исключены из режима <strong>Safe Ports Only</strong>.</p>
+<p>Наш production-default:</p>
+<pre><code class="language-text">443, 8443, 4443, 8095
+</code></pre>
+<p>Порты:</p>
+<pre><code class="language-text">500, 1701, 4500
+</code></pre>
+<p>доступны только в расширенной стратегии генератора и по умолчанию не используются из-за
+возможного семантического конфликта с DPI.</p>
+<p>Поэтому сценарий «WARPSCOUT нашёл <code>:1701</code> → генератор выпустил H2 на <code>:443</code>» сам по себе
+<strong>не является ошибкой</strong>.</p>
+<hr>
+<h2 id="6-если-sni-не-работает">6. Если SNI не работает</h2>
+<p>SNI нужно проверять <strong>отдельно для H3 и H2</strong>. Рабочий SNI одного транспорта не обязан работать
+у другого.</p>
+<p>Для H3:</p>
+<pre><code class="language-bat">.\warpscout.exe find-sni -p masque
+</code></pre>
+<p>Для H2:</p>
+<pre><code class="language-bat">.\warpscout.exe find-sni -p masque-h2
+</code></pre>
+<p>WARPSCOUT напечатает готовую команду скана с найденным SNI.</p>
+<p>Если <code>4pda.to</code> работает стабильно, ничего подбирать не нужно.</p>
+<hr>
+<h2 id="7-как-читать-таблицу-warpscout">7. Как читать таблицу WARPSCOUT</h2>
+<p>Основные поля:</p>
+<ul>
+<li><strong>ENDPOINT</strong> — адрес и порт, которые реально проверялись;</li>
+<li><strong>ENDPOINT PING</strong> — задержка до endpoint&#39;а;</li>
+<li><strong>SEEN AS</strong> — страна, которой Cloudflare считает WARP-выход;</li>
+<li><strong>NODE</strong> — Cloudflare edge node/PoP, через который прошёл тест.</li>
+</ul>
+<p><code>SEEN AS</code> и <code>NODE</code> — разные вещи. Endpoint может обслуживаться одной нодой, а выход
+географически определяться иначе.</p>
+<p>Для MASQUE есть важное ограничение: в рамках одного запуска все endpoint&#39;ы обычно попадают
+на одну ноду; нода зависит прежде всего от сети, из которой запущен скан, а не от выбора
+конкретного MASQUE IP.</p>
+<hr>
+<h2 id="8-минимальный-набор-команд">8. Минимальный набор команд</h2>
+<p>Если нужно быстро повторить диагностику через месяц:</p>
+<pre><code class="language-bat">REM WARP / WireGuard
+.\warpscout.exe scan -p wg -P -best
+
+REM MASQUE H3 / QUIC
+.\warpscout.exe scan -p masque -masque-sni 4pda.to -best
+.\warpscout.exe scan -p masque -masque-sni 4pda.to -conf - -conf-type mihomo
+
+REM MASQUE H2 / TCP
+.\warpscout.exe scan -p masque-h2 -masque-sni 4pda.to -best
+.\warpscout.exe scan -p masque-h2 -masque-sni 4pda.to -conf - -conf-type mihomo
+</code></pre>
+<h2 id="см-также-2">См. также</h2>
+<ul>
+<li><a href="https://github.com/vernette/warpscout/blob/master/README_RU.md">WARPSCOUT upstream README_RU</a></li>
+<li><a href="https://github.com/vernette/warpscout/blob/master/docs/ru/masque.md">WARPSCOUT: MASQUE</a></li>
+<li><a href="https://github.com/vernette/warpscout/blob/master/docs/ru/configs.md">WARPSCOUT: конфиги и фильтры</a></li>
+<li><a href="WARPSCOUT-VPS">WARPSCOUT на VPS</a></li>
+</ul>
+
+</div>
+</body>
+</html>

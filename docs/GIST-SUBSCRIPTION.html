@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Своя подписка через GitHub Gist — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/GIST-SUBSCRIPTION.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="своя-подписка-через-github-gist">Своя подписка через GitHub Gist</h1>
+<p>Этот вариант подходит, когда VPS и панель <strong>3X-UI уже есть</strong>, серверы/клиенты уже настроены, но не хочется использовать встроенную подписку панели.</p>
+<p>Идея простая: создать <strong>Secret Gist</strong> на GitHub, положить туда обычные клиентские ссылки по одной на строку и использовать <code>Raw</code>-ссылку на файл как URL своей подписки.</p>
+<blockquote>
+<p>[!IMPORTANT]
+<strong>Secret Gist — не настоящий приватный файл.</strong> Он не показывается в поиске и Discover, но любой человек, получивший URL, сможет его открыть. Поэтому ссылку на Gist/Raw нужно считать секретом и не публиковать. Если нужна строгая авторизация и контроль доступа, используйте другой способ хранения подписки.</p>
+</blockquote>
+<h2 id="что-понадобится">Что понадобится</h2>
+<ul>
+<li>аккаунт GitHub;</li>
+<li>уже настроенный VPS/3X-UI или другой источник клиентских ссылок;</li>
+<li>клиент, умеющий загружать подписку по HTTP(S) URL;</li>
+<li>ссылки вида <code>vless://</code>, <code>vmess://</code>, <code>trojan://</code>, <code>hysteria2://</code>, <code>tuic://</code>, <code>ss://</code> и т. п.</li>
+</ul>
+<h2 id="1-соберите-ссылки-на-серверы">1. Соберите ссылки на серверы</h2>
+<p>В 3X-UI откройте нужный inbound/клиента и скопируйте <strong>клиентскую ссылку подключения</strong>.</p>
+<p>В итоговом файле каждая ссылка должна находиться на отдельной строке, например:</p>
+<pre><code class="language-text">vless://UUID@example.com:443?security=reality&amp;type=tcp#SE-VLESS
+trojan://PASSWORD@example.net:443?security=tls&amp;type=grpc#EE-TROJAN
+hysteria2://PASSWORD@example.org:8443/?sni=example.org#DE-HY2
+</code></pre>
+<p>Это только пример формата. Используйте свои реальные ссылки, созданные вашей панелью.</p>
+<p>Не нужно копировать в Gist весь конфиг 3X-UI, SSH-ключи VPS, пароли панели или другие административные данные.</p>
+<h2 id="2-создайте-secret-gist">2. Создайте Secret Gist</h2>
+<ol>
+<li>Откройте <a href="https://gist.github.com/">gist.github.com</a> под своим аккаунтом GitHub.</li>
+<li>В поле <strong>Gist description</strong> можно написать, например, <code>My proxy subscription</code>.</li>
+<li>Задайте имя файла, например:<ul>
+<li><code>subscription.txt</code></li>
+<li><code>servers.txt</code></li>
+<li><code>mihomo-sub.txt</code></li>
+</ul>
+</li>
+<li>Вставьте ссылки на серверы — <strong>по одной ссылке на строку</strong>.</li>
+<li>В меню кнопки создания выберите <strong>Create secret gist</strong>.</li>
+</ol>
+<p>GitHub называет такой Gist <code>secret</code>: он не появляется в публичном поиске, но доступен любому, кто знает ссылку.</p>
+<p>Официальная справка GitHub: <a href="https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists">https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists</a></p>
+<h2 id="3-получите-raw-ссылку">3. Получите Raw-ссылку</h2>
+<p>Откройте созданный Gist и нажмите кнопку <strong>Raw</strong> у файла с подпиской.</p>
+<p>Для подписки удобнее использовать стабильный URL без привязки к конкретной ревизии:</p>
+<pre><code class="language-text">https://gist.githubusercontent.com/USERNAME/GIST_ID/raw/subscription.txt
+</code></pre>
+<p>где:</p>
+<ul>
+<li><code>USERNAME</code> — ваш GitHub username;</li>
+<li><code>GIST_ID</code> — идентификатор Gist;</li>
+<li><code>subscription.txt</code> — имя файла внутри Gist.</li>
+</ul>
+<p>Если после нажатия <strong>Raw</strong> в адресе присутствует длинный SHA между <code>/raw/</code> и именем файла, это ссылка на конкретную ревизию. Для постоянно обновляемой подписки используйте вариант без SHA, как в шаблоне выше.</p>
+<h2 id="4-добавьте-url-в-клиент-или-наш-mihomo-builder">4. Добавьте URL в клиент или наш Mihomo Builder</h2>
+<p>Получившийся Raw URL можно использовать как обычную HTTP(S)-подписку.</p>
+<p>Для нашего генератора:</p>
+<ol>
+<li>Откройте <strong>Mihomo Config Builder</strong>: <a href="https://saymer-alt.github.io/link-generators/">https://saymer-alt.github.io/link-generators/</a>.</li>
+<li>Вставьте Raw URL Gist в поле с серверами/подписками.</li>
+<li>Оставьте включённой опцию <strong>«Использовать URL-подписки»</strong>.</li>
+<li>Соберите <code>config.yaml</code>.</li>
+</ol>
+<p>Mihomo будет получать список серверов по URL, а вам не придётся каждый раз заново собирать конфиг после изменения списка узлов.</p>
+<h2 id="5-как-обновлять-подписку">5. Как обновлять подписку</h2>
+<p>Когда нужно добавить, удалить или заменить сервер:</p>
+<ol>
+<li>откройте свой Gist;</li>
+<li>нажмите <strong>Edit</strong>;</li>
+<li>измените список ссылок;</li>
+<li>нажмите <strong>Update secret gist</strong>;</li>
+<li>обновите подписку в клиенте/Mihomo.</li>
+</ol>
+<p>Стабильный Raw URL менять не нужно — он остаётся тем же, а содержимое файла обновляется.</p>
+<h2 id="пример-структуры">Пример структуры</h2>
+<pre><code class="language-text">vless://...#Sweden
+vless://...#Estonia
+trojan://...#Germany
+hysteria2://...#Finland
+</code></pre>
+<p>Главное правило: <strong>один URI подключения — одна строка</strong>.</p>
+<h2 id="если-серверов-много">Если серверов много</h2>
+<p>Gist может содержать несколько файлов. Например:</p>
+<pre><code class="language-text">main.txt
+backup.txt
+test.txt
+</code></pre>
+<p>У каждого файла будет собственная Raw-ссылка. Это удобно, если нужно разделить основной, резервный и тестовый наборы серверов.</p>
+<h2 id="важные-замечания-по-безопасности">Важные замечания по безопасности</h2>
+<ul>
+<li>Не публикуйте Raw URL в открытых чатах, issue, README или публичных конфигурациях.</li>
+<li>Считайте URL подписки секретом: клиентские URI обычно содержат UUID, пароли или другие данные доступа.</li>
+<li>Secret Gist <strong>не имеет полноценной защиты паролем</strong>. Знание URL достаточно для чтения.</li>
+<li>Если ссылка утекла, безопаснее заменить клиентские ключи/UUID/пароли на серверах и создать новый Gist/новый набор URI.</li>
+<li>Не храните в такой подписке административные учётные данные 3X-UI, root/SSH-ключи и API-токены.</li>
+</ul>
+<h2 id="коротко">Коротко</h2>
+<p>Схема выглядит так:</p>
+<pre><code class="language-text">3X-UI / VPS
+    ↓
+копируем клиентские URI
+    ↓
+Secret GitHub Gist
+    ↓
+Raw URL
+    ↓
+Mihomo / Hiddify / Happ / другой клиент
+</code></pre>
+<p>Это простой способ вести собственную подписку вручную, не включая и не публикуя встроенную подписку 3X-UI.</p>
+
+</div>
+</body>
+</html>

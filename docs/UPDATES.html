@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UPDATES — жизненный цикл `web4core.runtime.js` — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/UPDATES.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="updates-жизненный-цикл-web4coreruntimejs">UPDATES — жизненный цикл <code>web4core.runtime.js</code></h1>
+<h2 id="источник-и-воспроизводимость">Источник и воспроизводимость</h2>
+<p>Карта двух репозиториев и выбор слоя изменения — <a href="WEB4CORE-FORK">WEB4CORE-FORK.md</a>.</p>
+<pre><code class="language-text">spatiumstas/web4core:main
+→ controlled sync с review и тестами
+→ saymer-alt/web4core:link-generators (source-level extensions)
+→ npm ci → npm run build:web:runtime
+→ src/web4core.runtime.js → проверки → link-generators/web4core.runtime.js
+</code></pre>
+<p><code>saymer-alt/web4core</code> — настоящий GitHub fork <code>spatiumstas/web4core</code>.
+Ветка <code>main</code> следует upstream; расширения находятся только в <code>link-generators</code>.
+MIPS реализован в <code>src/build.js</code> (<code>buildFromRequest</code>) и <code>src/core/yaml.js</code>
+(<code>buildMihomoYaml</code>, включая вложенный builder listeners). Только точное <code>mips</code>
+включает MIPS, остальные значения дают <code>gvisor</code>. Sing-box/xray не затронуты.</p>
+<p>Textual bundle patch удалён: <code>web4core.runtime.js</code> никогда не редактируется вручную.
+Разрешён только результат штатной сборки fork после проверок. При первоначальном
+переносе runtime побайтово совпал с runtime из commit <code>6b3368e</code> (см. <a href="TESTING">TESTING.md</a>).
+Исторически первый runtime попал в consumer раньше этой source-level схемы: он был сохранён
+вместе с опубликованной страницей upstream и использовался как готовый browser bundle,
+пока provenance не был разобран и сборка не была перенесена в настоящий fork. Полная
+история и различие между bootstrap и текущим контрактом — в разделе
+<a href="WEB4CORE-FORK#%D0%B8%D1%81%D1%82%D0%BE%D1%80%D0%B8%D1%87%D0%B5%D1%81%D0%BA%D0%BE%D0%B5-%D0%BF%D1%80%D0%BE%D0%B8%D1%81%D1%85%D0%BE%D0%B6%D0%B4%D0%B5%D0%BD%D0%B8%D0%B5-runtime">«Историческое происхождение runtime»</a>.
+Приложение не имеет package.json/npm dependencies/build step и работает с <code>file://</code>;
+Node/npm нужны для сборки отдельного source-репозитория и проверок.</p>
+<p>Экспорт рантайма — один объект <code>globalThis.web4core</code> (18 функций): <code>buildBeansFromInput</code>,
+<code>validateBean</code>, <code>computeTag</code>, <code>getAllowedCoreProtocols</code>, <code>URLTEST</code>, <code>URLTEST_CHOICES</code>,
+<code>buildSingBoxOutbound</code>, <code>buildSingBoxConfig</code>, <code>buildXrayOutbound</code>, <code>buildXrayConfig</code>,
+<code>buildMihomoProxy</code>, <code>buildMihomoConfig</code>, <code>buildMihomoPriorityConfig</code>, <code>buildMihomoSubscriptionConfig</code>, <code>buildMihomoYaml</code>,
+<code>parseWireGuardConf</code>, <code>fetchSubscription</code>, <code>buildFromRequest</code>. Страница использует
+<code>buildFromRequest</code>, <code>parseWireGuardConf</code>, <code>URLTEST_CHOICES</code> (см. <a href="ARCHITECTURE">ARCHITECTURE.md</a>).</p>
+<h2 id="workflow-автообновления">Workflow автообновления</h2>
+<p><code>.github/workflows/update-web4core-runtime.yml</code>: push в <code>main</code>/<code>stable</code>, cron <code>17 4 * * 1</code>,
+ручной dispatch и <code>pull_request</code> в <code>main</code>/<code>stable</code>. PR-trigger запускает только read-only
+build/test job; write-job жёстко gated на <code>refs/heads/main</code>, поэтому PR и <code>stable</code> не могут
+записать runtime commit. Обновления из проверенной custom branch остаются автоматическими.</p>
+<ol>
+<li><code>build-runtime</code>, <code>contents: read</code>, свежий GitHub-hosted runner, <code>timeout-minutes: 15</code>:<ul>
+<li>checkout consumer и <code>saymer-alt/web4core@link-generators</code>, оба без сохранения credentials;</li>
+<li>записать source SHA в лог; Node 22, <code>npm ci</code>;</li>
+<li><code>npm run build:worker</code> — workers/api bundle (gitignored) нужен amnezia-тестам;</li>
+<li><code>node --test tools/tests/*.test.mjs</code> — автообнаружение всех unit-тестов
+(новый test file подхватывается без правки workflow);</li>
+<li>штатный build runtime; <code>node --check</code>, <code>node tests/runtime.cjs</code> на собранном
+файле, SHA-256 в лог;</li>
+<li>provenance-gate: tracked <code>web4core.runtime.js</code> сравнивается с freshly built runtime
+от записанного source SHA после нормализации CRLF→LF; mismatch блокирует PR и <code>stable</code>;
+на прямом <code>main</code> run mismatch допускается только как вход в write-back job;</li>
+<li>upload единственного runtime artifact текущего run (срок хранения 7 дней).</li>
+</ul>
+</li>
+<li><code>update-runtime</code>, отдельный свежий runner, <code>contents: write</code>, <code>timeout-minutes: 10</code>,
+только для <code>main</code>:<ul>
+<li>checkout проверенного consumer SHA, download artifact текущего run;</li>
+<li>если <code>origin/main</code> уже изменился — отказ, нужен повторный запуск;</li>
+<li>проверить наличие обычного непустого файла, <code>cmp</code>, при отличии copy;</li>
+<li>stage только <code>web4core.runtime.js</code>, commit «Update web4core runtime from upstream»;</li>
+<li>обычный <code>git push origin HEAD:main</code>, без force. Конкурентный push отклоняется Git.</li>
+</ul>
+</li>
+</ol>
+<p>В write-job не выполняются npm, source tests или сам artifact. Кэш сборки не переносится
+в него. Ошибка build/test прерывает цепочку; publish зависит от успешного build-job.
+Workflow runs сериализованы. При одинаковом runtime bot commit не создаётся.
+После bot commit проверить страницу, особенно allow-lan и валидатор.</p>
+<p>Разделение jobs ограничивает доступ внешнего build-кода к write-token, но не доказывает
+безопасность его результата: runtime будет выполняться в браузере пользователей.
+Поэтому upstream/package-lock/build scripts требуют review до попадания в custom branch.
+Actions пока используют доверенные major tags <code>@v4</code>; pin полных SHA и branch protection
+с обязательным review — рекомендуемое последующее усиление, здесь настройки не менялись.
+Основание: <a href="https://docs.github.com/en/actions/reference/security/secure-use">GitHub: secure use</a>.</p>
+<h2 id="upstream-sync-выбран-controlled-merge">Upstream sync: выбран controlled merge</h2>
+<table>
+<thead>
+<tr>
+<th>Вариант</th>
+<th>Свойства</th>
+<th>Решение</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Ручной controlled sync</td>
+<td>Review исходников и зависимостей до build; конфликты/тесты блокируют публикацию</td>
+<td>Основной вариант</td>
+</tr>
+<tr>
+<td>Scheduled merge + push</td>
+<td>Может автоматически внести нежелательный код при зелёных тестах; нужны отдельные права и review</td>
+<td>Сейчас не внедрять</td>
+</tr>
+<tr>
+<td>GitHub fork sync main + merge custom</td>
+<td>Удобно обновляет зеркало main, но не переносит изменения в custom branch и не проверяет MIPS</td>
+<td>Дополнение к controlled merge</td>
+</tr>
+</tbody></table>
+<p>Не реже еженедельно сопровождающий проверяет upstream (например, перед понедельничным
+consumer cron). Это ручная обязанность: consumer cron сам upstream не сливает.
+Не синхронизировать custom branch кнопкой с удалением её собственных коммитов.</p>
+<p>Процедура (команды выполняются только в чистом checkout fork после отдельного разрешения
+на публикацию; ниже инструкция, не автоматически выполняемый сценарий):</p>
+<pre><code class="language-bash">git fetch upstream main
+git fetch origin main link-generators
+git switch main
+git merge --ff-only upstream/main
+# обновление зеркала main разрешено только fast-forward; при расхождении остановиться
+git switch -c sync/upstream-YYYY-MM-DD origin/link-generators
+git merge --no-commit --no-ff upstream/main
+# при конфликте STOP; git merge --abort, никаких push
+# review: source, package.json, lockfile, build scripts, workflows, лицензии
+npm ci
+node --test tools/tests/mihomo-exclude-filter.test.mjs tools/tests/mihomo-tun-stack.test.mjs
+npm run build:web:runtime
+npm run test:amnezia
+node --check src/web4core.runtime.js
+node ../link-generators/tests/runtime.cjs src/web4core.runtime.js
+git diff --check
+# затем browser baseline и реальные Mihomo -t, см. TESTING.md
+# только после успеха: commit candidate, push candidate и PR → link-generators
+# review и обычный merge PR; ни reset custom branch, ни force-push
+</code></pre>
+<p>Все команды — шаги с проверкой exit code, не цепочка для слепого запуска.
+При test failure ничего не публиковать. Если upstream уже содержит совместимую MIPS
+реализацию — отдельно проверить контракт и удалить дублирование source-изменений.</p>
+<p>Возможная будущая автоматика: scheduled read-only job fetch/compare → сообщение о новом
+upstream SHA; отдельный candidate build/test job без write-token; создание review PR
+доверенным job без выполнения upstream-кода. Merge в custom branch остаётся ручным.
+Такой workflow стоит вводить отдельной задачей после выбора PR permissions и protections;
+в этой миграции его нет. Автоматический upstream merge/rebase/push не включён.</p>
+<h2 id="постоянный-cross-repo-порядок-публикации">Постоянный cross-repo порядок публикации</h2>
+<p>Для любого изменения, которое меняет source-level поведение/runtime, порядок всегда
+source-first:</p>
+<ol>
+<li>Review/merge source PR в <code>saymer-alt/web4core:link-generators</code>.</li>
+<li>Зафиксировать фактический merged source SHA и убедиться, что сборка/tests этого SHA
+дают ожидаемый runtime.</li>
+<li>До merge consumer PR повторно запустить его read-only workflow against PR context и
+проверить, что checkout source указывает именно на новый merged SHA, build/test зелёные,
+а write-job остаётся skipped.</li>
+<li>Только затем merge consumer PR в <code>link-generators:main</code>.</li>
+<li>Main workflow должен либо сообщить <code>Runtime is already up to date.</code> без bot commit,
+либо создать объяснимый runtime-only commit с точным <code>Source: saymer-alt/web4core@&lt;SHA&gt;</code>.
+Неожиданный byte diff — STOP и разбор причины до дальнейшей публикации.</li>
+</ol>
+<p>Этот порядок закреплён релизом v1.4.0 и нужен не только для первоначальной миграции.
+Нельзя сначала публиковать consumer, если его ожидаемый runtime зависит от ещё не
+merged source branch.</p>
+<h2 id="если-нужна-новая-функция-или-фикс-поведения">Если нужна новая функция или фикс поведения</h2>
+<ul>
+<li>Wrapper в <code>index.html</code> подходит для адаптации входа/выхода: allow-lan,
+<code>normalizeWgText</code>, <code>normalizeWgBeans</code>, <code>injectWgDns</code> (обязательно <code>lineWidth: -1</code>).</li>
+<li>Изменение парсинга/эмиссии — в исходниках fork с тестами и review, в отдельном
+согласованном scope. Общие исправления желательно отправлять upstream PR;
+после upstream merge требуется controlled sync custom branch.</li>
+<li>Bundle руками не править и textual patch заново не вводить.</li>
+<li>Создание fork не разрешает добавлять новые протоколы без отдельной задачи.</li>
+</ul>
+<h2 id="связь-с-indexhtml-и-что-проверять-после-обновления">Связь с index.html и что проверять после обновления</h2>
+<p>Рантайм — единственный generated-файл; <code>index.html</code> (единственная страница приложения)
+зависит от него только через публичный API <code>globalThis.web4core</code>. Контракты, привязанные
+к поведению рантайма, которые надо перепроверять после автообновления:</p>
+<ul>
+<li><strong>allow-lan патч</strong> — регэксп по текстовому формату YAML; смена формата сломает замену
+молча (строка просто не найдётся, <code>allow-lan</code> останется <code>false</code>);</li>
+<li><strong><code>injectWgDns</code></strong> — ищет <code>proxies[]</code> с <code>type: wireguard</code> в собранном YAML;</li>
+<li><strong>enum-списки валидатора</strong> (<code>MIHOMO_PROXY_TYPES</code>, <code>MIHOMO_GROUP_TYPES</code>, server-based
+набор) — сверять с актуальными исходниками mihomo целевой версии; новые типы из
+web4core/mihomo могут потребовать расширения списков (см. <a href="VALIDATION">VALIDATION.md</a>);</li>
+<li>дефолты <code>buildFromRequest</code> для mihomo (<code>webUI=true, addSocks=true, addTun=false</code>) и
+тексты ошибок («Mihomo: enable at least one inbound…») — используются страницей напрямую.</li>
+</ul>
+<p>Проверка после любого обновления — <a href="DEVELOPMENT">DEVELOPMENT.md</a> и <a href="TESTING">TESTING.md</a>.</p>
+
+</div>
+</body>
+</html>

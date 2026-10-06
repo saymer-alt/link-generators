@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>docs — навигатор технической базы знаний — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/README.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="docs-навигатор-технической-базы-знаний">docs — навигатор технической базы знаний</h1>
+<p>README.md в корне репозитория — пользовательская landing page; здесь — внутренняя
+документация. Источник истины — код; при расхождении чинить документацию.</p>
+<p>Для обычного пользователя начинать с <a href="../quick-start.html">quick-start.html</a> — простой
+быстрый старт; <a href="GENERATOR-GUIDE">GENERATOR-GUIDE.md</a> — короткая инструкция по всем
+режимам генератора.</p>
+<h2 id="быстрый-старт-по-задачам">Быстрый старт по задачам</h2>
+<h3 id="для-пользователя">Для пользователя</h3>
+<table>
+<thead>
+<tr>
+<th>Задача</th>
+<th>Документы</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Быстро понять, что нажимать</td>
+<td><a href="../quick-start.html">quick-start.html</a></td>
+</tr>
+<tr>
+<td>Короткая инструкция по генератору</td>
+<td><a href="GENERATOR-GUIDE">GENERATOR-GUIDE.md</a></td>
+</tr>
+<tr>
+<td>Своя URL-подписка через Secret GitHub Gist</td>
+<td><a href="GIST-SUBSCRIPTION">GIST-SUBSCRIPTION.md</a></td>
+</tr>
+<tr>
+<td>Фильтр узлов подписки (в т.ч. кириллица)</td>
+<td><a href="EXCLUDE-FILTER">EXCLUDE-FILTER.md</a></td>
+</tr>
+<tr>
+<td>WARPSCOUT: Windows / Keenetic / VPS</td>
+<td><a href="WARPSCOUT-WINDOWS">WARPSCOUT-WINDOWS.md</a>, <a href="WARPSCOUT-KEENETIC">WARPSCOUT-KEENETIC.md</a>, <a href="WARPSCOUT-VPS">WARPSCOUT-VPS.md</a></td>
+</tr>
+</tbody></table>
+<h3 id="для-разработчика-агента">Для разработчика / агента</h3>
+<table>
+<thead>
+<tr>
+<th>Задача</th>
+<th>Документы</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Понять, как работает страница</td>
+<td><a href="ARCHITECTURE">ARCHITECTURE.md</a>, <a href="DATAFLOW">DATAFLOW.md</a></td>
+</tr>
+<tr>
+<td>Какие опции/поля что генерируют</td>
+<td><a href="MIHOMO">MIHOMO.md</a></td>
+</tr>
+<tr>
+<td>Как добавить опцию/прототип UI</td>
+<td><a href="DEVELOPMENT">DEVELOPMENT.md</a></td>
+</tr>
+<tr>
+<td>Протоколы: форматы ссылок и поддержка</td>
+<td><a href="PROTOCOLS">PROTOCOLS.md</a></td>
+</tr>
+<tr>
+<td>Валидатор: что проверяется</td>
+<td><a href="VALIDATION">VALIDATION.md</a></td>
+</tr>
+<tr>
+<td>Тесты: как запускать и что покрыто</td>
+<td><a href="TESTING">TESTING.md</a></td>
+</tr>
+<tr>
+<td>Автообновление рантайма из fork</td>
+<td><a href="UPDATES">UPDATES.md</a>, <a href="WEB4CORE-FORK">WEB4CORE-FORK.md</a></td>
+</tr>
+<tr>
+<td>Auto-Whitelist (резерв БС)</td>
+<td><a href="AUTO-WHITELIST">AUTO-WHITELIST.md</a></td>
+</tr>
+<tr>
+<td>Профили развёртывания: обязательный тест-контракт</td>
+<td><a href="DEPLOYMENT-PROFILES-TEST-CONTRACT">DEPLOYMENT-PROFILES-TEST-CONTRACT.md</a></td>
+</tr>
+<tr>
+<td>Политики по доменам + домен-детект (VPS Gateway)</td>
+<td><a href="POLICY-ROUTING">POLICY-ROUTING.md</a>, <a href="VPS-GATEWAY">VPS-GATEWAY.md</a></td>
+</tr>
+</tbody></table>
+<h3 id="исторические-аудиты-и-обзоры">Исторические аудиты и обзоры</h3>
+<table>
+<thead>
+<tr>
+<th>Задача</th>
+<th>Документы</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>История решений по fallback</td>
+<td><a href="FALLBACK-REVIEW">FALLBACK-REVIEW.md</a></td>
+</tr>
+<tr>
+<td>Аудит поддержки Mihomo (снимок 1.19.31)</td>
+<td><a href="AUDIT-MIHOMO-1.19.31">AUDIT-MIHOMO-1.19.31.md</a></td>
+</tr>
+</tbody></table>
+<h2 id="ключевые-контракты-не-нарушать-молча">Ключевые контракты (не нарушать молча)</h2>
+<ul>
+<li><code>masque://</code> формат и anti-DPI стратегия — описаны в AGENTS.md (корень).</li>
+<li>Версионный контракт Mihomo: <strong>minimum 1.19.31, recommended/current 1.19.32</strong>;
+MIPS stack требует &gt;= 1.19.31 (warning в валидаторе, не блокер); gVisor — fallback;
+исторические минимумы функций (AWG 3.1 &gt;= 1.19.30, DPR &gt;= 1.19.27) — отдельно.</li>
+<li>Модель профилей развёртывания: <code>router</code> (по умолчанию) / <code>vps-local</code> / <code>vps-gateway</code>;
+устаревшие идентификаторы <code>generic</code>/<code>vps</code> не используются как пользовательская модель.</li>
+<li>Flat GLOBAL fallback в Auto-Whitelist; nested-группы запрещены (#2588).</li>
+<li>DDP (домен-детект) — инвариант профиля vps-gateway: <code>tun.dns-hijack</code> + пассивный
+<code>sniffer</code> + <code>store-fake-ip: true</code> при включённом fake-ip DNS; патчер установщика
+gateway сохраняет значение (PR #33 amnezia-mihomo-gateway, merged).</li>
+<li><code>web4core.runtime.js</code> — generated; меняется только через fork <code>saymer-alt/web4core@link-generators</code> + workflow.</li>
+</ul>
+
+</div>
+</body>
+</html>

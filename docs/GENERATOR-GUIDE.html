@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Короткая инструкция по генератору — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/GENERATOR-GUIDE.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="короткая-инструкция-по-генератору">Короткая инструкция по генератору</h1>
+<p>Короткая человеческая инструкция: как за пару минут получить рабочий конфиг.
+Совсем короткая версия с картинкой-сценариями — <a href="../quick-start.html">quick-start.html</a>.
+Технические подробности — по ссылкам в конце.</p>
+<h2 id="1-сначала-выберите-где-будет-работать-mihomo">1. Сначала выберите, где будет работать Mihomo</h2>
+<p>Первый вопрос наверху вкладки Builder: <strong>«🎯 Где будет работать Mihomo?»</strong></p>
+<h3 id="-роутер-обычный-tun-keenetic-по-умолчанию">🏠 Роутер / обычный TUN (Keenetic) — по умолчанию</h3>
+<p>Mihomo работает на домашнем роутере и поднимает TUN-интерфейс: весь трафик
+устройства идёт через него. Профиль включает TUN, MIPS stack, Mixed Port 7890
+и Allow LAN — все параметры потом можно менять вручную.</p>
+<h3 id="-vps-локальный-mihomo-socks-для-xray-3x-ui">🖥️ VPS — локальный Mihomo / SOCKS для Xray / 3X-UI</h3>
+<p>На VPS уже работает Xray/3X-UI (или другое приложение), которое отправляет
+трафик в Mihomo через <code>127.0.0.1:7890</code>. Профиль выключает TUN, MIPS и Allow LAN
+(внешний доступ к 7890 не нужен) и оставляет только локальный SOCKS-вход.
+Схема: <code>Xray/3X-UI → 127.0.0.1:7890 → Mihomo → proxy</code>.</p>
+<h3 id="-vps-transparent-gateway-amnezia-mihomo-gateway">🌐 VPS Transparent Gateway (amnezia-mihomo-gateway)</h3>
+<p>Специальный сценарий: transparent-gateway с Linux policy routing / iptables /
+Docker / AmneziaWG. Генератор создаёт <strong>только Mihomo-часть</strong> (TUN <code>tun-mihomo</code>,
+DNS-перехват fake-ip, <code>auto-route: false</code>); Linux routing и firewall настраивает
+<a href="https://github.com/saymer-alt/amnezia-mihomo-gateway">amnezia-mihomo-gateway</a>.
+Allow LAN в этом профиле выключен принудительно (router-only опция) — gateway
+принимает трафик через TUN + policy routing, а не через LAN-listener.
+Для обычного VPS с Xray/3X-UI используйте предыдущий профиль.</p>
+<h4 id="-удалённый-доступ-к-web-ui-нескольких-vps-ssh-local-forwarding">🌐 Удалённый доступ к Web UI нескольких VPS (SSH local forwarding)</h4>
+<p>Controller/Web UI Mihomo в обоих VPS-профилях всегда слушает только
+<code>127.0.0.1:9090</code> — это фиксированный safety-контракт, порт на VPS не меняется.
+Конфликт нескольких одновременно открытых VPS решается на компьютере — разными
+локальными SSH/PuTTY forwarded-портами:</p>
+<pre><code class="language-text">VPS-SE: local 9091 → remote 127.0.0.1:9090
+VPS-EE: local 9092 → remote 127.0.0.1:9090
+VPS-RU: local 9093 → remote 127.0.0.1:9090
+</code></pre>
+<p>Два разных понятия, которые не стоит путать:</p>
+<ul>
+<li><strong>remote port на VPS</strong> — порт, на котором Mihomo слушает на самом сервере
+(<code>127.0.0.1:9090</code> на всех VPS, одинаково);</li>
+<li><strong>локальный forwarded-порт</strong> — порт на вашем компьютере, через который туннель
+(<code>ssh -L 9091:127.0.0.1:9090</code>, PuTTY «Local port») выпускает на Web UI
+(<code>http://127.0.0.1:9091/ui/</code>).</li>
+</ul>
+<h2 id="2-входные-данные">2. Входные данные</h2>
+<p>В поле «Основные прокси-ссылки / URL-подписки» вставьте:</p>
+<ul>
+<li>обычные прокси-ссылки: <code>vless://</code>, <code>trojan://</code>, <code>ss://</code>, <code>masque://</code>… — напрямую;</li>
+<li>ссылки на подписки (HTTP(S) URL) — при включённом режиме «URL-подписки»;</li>
+<li>можно смешивать: подписка + обычные ссылки.</li>
+</ul>
+<p>WARP-конфиги: вкладка <strong>⚡ WARP MASQUE Links</strong> генерирует <code>masque://</code> ссылки —
+кнопка «🚀 В Mihomo Builder» переносит их сюда. WireGuard/AmneziaWG — кнопка
+«📂 Загрузить .conf / .wg / .awg»: каждый файл станет отдельным WireGuard-прокси.
+Повторное нажатие <strong>добавляет</strong> файлы к уже загруженным (не заменяет!);
+загруженное видно списком с удалением по одному и кнопкой «🧹 Очистить все».</p>
+<h2 id="3-основные-переключатели">3. Основные переключатели</h2>
+<table>
+<thead>
+<tr>
+<th>Переключатель</th>
+<th>Что делает</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>🛡️ TUN Interface</td>
+<td>Системный TUN: весь трафик устройства через Mihomo. Нужен на роутере; на VPS с локальным Xray — выключен.</td>
+</tr>
+<tr>
+<td>⚡ MIPS stack</td>
+<td>Стек обработки TUN-трафика (не процессор!). По умолчанию MIPS; требует Mihomo ≥ 1.19.31, иначе gVisor.</td>
+</tr>
+<tr>
+<td>🔌 Mixed Port 7890</td>
+<td>Локальный HTTP+SOCKS вход Mihomo.</td>
+</tr>
+<tr>
+<td>🌐 Allow LAN</td>
+<td>Доступ к Mihomo из локальной сети (добавляет <code>bind-address: &quot;*&quot;</code>). Доступно только в профиле «Роутер / обычный TUN»; в обоих VPS-профилях выключено принудительно.</td>
+</tr>
+<tr>
+<td>🖥️ Web UI</td>
+<td>Веб-дашборд управления (MetaCubeXD) на порту 9090.</td>
+</tr>
+<tr>
+<td>⚙ Расширенный TUN stack</td>
+<td><code>system</code>/<code>mixed</code> — экспериментальные (внутри ADVANCED-секции); обычно достаточно MIPS/gVisor.</td>
+</tr>
+</tbody></table>
+<h2 id="4-подписки">4. Подписки</h2>
+<p>Режим «📡 Использовать URL-подписки» превращает HTTP(S) ссылки в <code>proxy-providers</code>:
+Mihomo сам скачивает и обновляет списки узлов (раз в 12 часов + health-check).</p>
+<ul>
+<li><strong>🚫 Exclude Filter</strong> — regexp по именам узлов подписки: совпавшие узлы
+исключаются. Важно: regexp сравнивается с <strong>фактическим именем</strong> узла.
+Латинский <code>ru|russia</code> не совпадёт с кириллическим «Россия» — для таких
+подписок пишите кириллический вариант (<code>Россия|Москва</code>). Семантика
+provider-level vs group-level: <a href="MIHOMO">MIHOMO.md</a>.</li>
+<li><strong>📱 Device Model</strong> — необязательное понятное имя устройства (например:
+<code>Keenetic Giga KN-1012</code>, <code>Windows-PC</code>), которое панель подписки увидит как
+заголовок <code>x-device-model</code> в запросах списка серверов. Если пусто, в таких
+запросах используется служебное <code>Saymer Link Generators Preview</code>; на
+стабильный HWID значение не влияет.</li>
+<li><strong>📋 Показать серверы подписки</strong> — opt-in toggle в блоке основных переключателей (по умолчанию
+выключен): при выключенном переключателе подписка браузером не запрашивается
+вовсе, provider-YAML собирается без обращения к сети. После включения список
+имён узлов запрашивается только по явной кнопке «Получить список»: поиск,
+«выбрать все»/«снять все», счётчики; отмеченные галочками узлы становятся
+точными исключениями и объединяются (OR) с ручным Exclude Filter. Запросы
+используют стабильный идентификатор генератора (HWID) — новое устройство не
+регистрируется на каждый Build. При CORS-проблемах используется проектный
+fallback-воркер (URL подписки при этом виден его инфраструктуре).</li>
+<li>Некоторые панели (например, Geodema/Remnawave) требуют заголовок <strong><code>x-hwid</code></strong> —
+генератор добавляет его автоматически; без него панель может вернуть
+заглушку «App not supported» вместо списка узлов.</li>
+</ul>
+<h2 id="5-политики-по-доменам-dpr">5. Политики по доменам (DPR)</h2>
+<p>Режим «🚦 Политики по доменам»: вы создаёте категории («AI», «YouTube»…)
+с списком доменов, и трафик на эти домены идёт через отдельную группу выхода.
+Остальной трафик идёт как раньше — завершающее правило <code>MATCH,GLOBAL</code> не меняется.</p>
+<ul>
+<li>«➕ Добавить политику» → выберите шаблон (AI / YouTube / Telegram / Google /
+Direct) или впишите свои домены, по одному в строке. Голый домен = домен
+со всеми поддоменами; поддерживаются также <code>DOMAIN-SUFFIX,…</code>, CIDR, GEOSITE.</li>
+<li>Правила указывают на группы, группы — на подписку: состав подписки меняется,
+правила пересобирать не нужно.</li>
+<li>Нераспознанные строки пропускаются с предупреждением (конфиг всё равно собирается).</li>
+<li>С «на каждый прокси» режим несовместим (выбранное не применяется).</li>
+<li>Требуется Mihomo ≥ 1.19.27. Для pure-IP-клиентов (без доменов в запросе)
+на роутере домен «увидеть» сложнее — в профиле vps-gateway для этого есть
+автоматический пакет домен-детекта.</li>
+</ul>
+<p>Подробно: <a href="POLICY-ROUTING">POLICY-ROUTING.md</a>.</p>
+<h3 id="routing-inspector-diagnostics">Routing Inspector / Diagnostics</h3>
+<p>Внутри панели политик — сворачиваемый блок «DIAGNOSTICS — Routing Inspector / Diagnostics».
+Он работает по <strong>итоговому сгенерированному YAML</strong> (после Build) и только офлайн:</p>
+<ul>
+<li><strong>Routing order</strong> — человекочитаемый порядок правил: <code>1. AI → AI</code>, <code>… Всё остальное → GLOBAL</code>;
+технические имена провайдеров не скрываются;</li>
+<li><strong>Проверка домена/IP</strong> — поле «Проверить домен или IP»: инспектор показывает победившее правило
+(номер + RAW), маршрут, альтернативные совпадения ниже по списку и объяснение
+«Mihomo применяет первое подходящее правило»;</li>
+<li><strong>Предупреждения</strong> — точные дубликаты правил и записей inline-провайдеров,
+перекрытые правила (DOMAIN-SUFFIX раньше уже покрывающего DOMAIN/более узкого SUFFIX),
+недостижимые правила после MATCH, неиспользуемые провайдеры, один домен в разных политиках
+(информация — порядок решает);</li>
+<li><strong>Rule Provider Explorer</strong> — вложенный сворачиваемый подраздел DIAGNOSTICS: read-only
+инвентарь всех <code>rule-providers</code> итогового конфига в порядке YAML. Сводка: провайдеры /
+используются / не используются / inline / внешние (только доказуемые http и file) /
+other-unknown (строка появляется, только если есть типы, отличные от inline/http/file) /
+отсутствующие ссылки. Карточка каждого
+провайдера: <code>type</code>, <code>behavior</code>, <code>format</code>, <code>source</code> и простые метаданные (<code>url</code>, <code>path</code>,
+<code>interval</code>, <code>proxy</code>, …), плюс все ссылки «used by: rule #N → TARGET». Провайдер без ссылок
+помечается «UNUSED», ссылка на несуществующий провайдер — «Referenced but missing» (проблема
+показывается, но не «чинится» автоматически). Для inline-провайдеров — число записей payload,
+локальный размер текста и поиск по подстроке (case-insensitive, только по уже доступному
+payload, без сохранения; показ ограничен первыми 500 записями с явной пометкой, счёт — по
+полному payload). Содержимое внешних (http/file) провайдеров браузером <strong>не загружается</strong>
+(никаких fetch/HEAD), MRS не декодируется — показываются только метаданные и
+«unavailable offline». Explorer ничего не меняет в YAML и ничего не сохраняет.</li>
+</ul>
+<p><strong>Честные ограничения</strong>: точно анализируются DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, MATCH и
+inline-провайдеры политик; DOMAIN-REGEX/DOMAIN-WILDCARD, GEOSITE/GEOIP, внешние (http/file)
+провайдеры и DNS-зависимые IP-правила возвращают <strong>UNKNOWN</strong> с причиной. Инспектор не
+заменяет диагностику самого Mihomo и ничего не меняет в конфиге; запросы никуда не
+отправляются и не сохраняются.</p>
+<h2 id="6-автоматический-режим-белых-списков-бс">6. Автоматический режим белых списков (БС)</h2>
+<p>Включите «Автоматический режим белых списков» → появится второе поле. Верхнее
+поле — основные серверы, второе — резерв (то, что работает при блокировках).
+При недоступности основных выходов Mihomo сам переключится на резерв и вернётся
+обратно по плановой проверке. Переключение не мгновенное; «DIRECT» в цели не
+добавляется (если мертвы оба набора — трафика не будет). Опции «на каждый
+прокси» в этом режиме отключаются, а профиль развёртывания временно работает
+в router-совместимом варианте (ваш выбор профиля сохраняется и возвращается).</p>
+<p>Подробно: <a href="AUTO-WHITELIST">AUTO-WHITELIST.md</a>.</p>
+<h2 id="7-warpwireguard-через-dialer-proxy">7. WARP/WireGuard через dialer-proxy</h2>
+<p>У каждого загруженного WG/AWG-профиля в карточке есть выбор <strong>«Подключение»</strong>:</p>
+<ul>
+<li><strong>Напрямую</strong> (по умолчанию) — обычный WireGuard-выход;</li>
+<li><strong>Через промежуточный proxy</strong> — туннель пойдёт через указанный proxy или
+группу («туннель в туннеле»): WARP подключается к Cloudflare из сети другого
+узла/страны. Имя таргета вводится тут же, у конкретного профиля; у другого
+профиля может быть свой таргет (или «Напрямую»).</li>
+</ul>
+<p>Поля «Имя dialer-группы» / «Транзитные узлы» / «URL-подписки для dialer-группы»
+описывают состав группы; использует её или нет — решает каждая карточка
+отдельно. Новый профиль наследует заполненное глобальное поле как таргет по
+умолчанию (миграция старого сценария).</p>
+<p>Два полевых факта:</p>
+<ol>
+<li><strong>Промежуточный узел должен реально поддерживать UDP relay.</strong> Рабочие
+сайты/TCP через узел сами по себе не означают, что через него поднимется
+WireGuard/WARP. Проверяется только фактическим тестом.</li>
+<li><strong>Переключение узла в dialer-группе — не мгновенная смена пути.</strong> Уже
+установленный WireGuard-хендшейк может держать старый transport path дольше
+150 секунд. Для гарантированной смены пути нужен пересоздание outbound
+(reload конфига/перезапуск Mihomo). Смена colo Cloudflare — наблюдение,
+не гарантия: Cloudflare выбирает ingress сам.</li>
+</ol>
+<h2 id="8-advanced-per-proxy">8. ADVANCED Per-Proxy</h2>
+<p>Секция «ADVANCED — Отдельный вход на каждый прокси» по умолчанию свёрнута.
+Внутри: режим, создающий отдельный TUN/SOCKS-вход <strong>для каждого</strong> прокси.
+Для обычного использования не нужен. Раскрытие секции ничего не включает —
+включается только явный master-переключатель.</p>
+<h2 id="9-кнопки">9. Кнопки</h2>
+<ul>
+<li><strong>⚡ Build Config</strong> — собрать YAML и автоматически проверить структуру;</li>
+<li><strong>📋 Copy YAML</strong> — скопировать результат (после успешной проверки);</li>
+<li><strong>📂 Загрузить .conf / .wg / .awg</strong> — импорт WireGuard/AmneziaWG профилей;</li>
+<li><strong>🚀 В Mihomo Builder</strong> (вкладка WARP) — перенос сгенерированных ссылок в Builder.</li>
+</ul>
+<h2 id="10-подробная-документация">10. Подробная документация</h2>
+<ul>
+<li><a href="../quick-start.html">quick-start.html</a> — быстрый старт с типовыми сценариями;</li>
+<li><a href="MIHOMO">MIHOMO.md</a> — все настройки Builder, dialer-proxy, валидатор;</li>
+<li><a href="VPS-GATEWAY">VPS-GATEWAY.md</a> — transparent-gateway профиль;</li>
+<li><a href="AUTO-WHITELIST">AUTO-WHITELIST.md</a> — автоматический режим белых списков;</li>
+<li><a href="VALIDATION">VALIDATION.md</a> — как работает pre-copy валидатор;</li>
+<li><a href="TESTING">TESTING.md</a> — тестовая стратегия проекта;</li>
+<li>полевой harness для dialer/WARP-схем: <code>tools/warp-dialer-fieldtest/</code>
+(<a href="../tools/warp-dialer-fieldtest/README.md">README</a>).</li>
+</ul>
+
+</div>
+</body>
+</html>
