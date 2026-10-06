@@ -699,13 +699,15 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   }, r.yaml);
   assert.equal(durYaml['rekey-after-time'], '100-120');
   assert.equal(typeof durYaml['rekey-after-time'], 'string', 'duration/range остаётся строкой');
-  assert.equal(String(durYaml['rekey-timeout']), '5', 'значение сохранено (тип — по контракту Mihomo, строка)');
-  assert.equal(String(durYaml['rekey-timeout']), '5', 'потеря значения = silent drop (недопустимо)');
+  // Контракт Mihomo AmneziaWGOption.RekeyTimeout — string; эмиттер цитирует
+  // одиночное целое ("5"), поэтому после parse-back тип — СТРОКА, не число.
+  // String()-коэрция здесь запрещена: она маскировала бы тихую смену типа.
+  assert.equal(durYaml['rekey-timeout'], '5', 'одиночное значение — строкой (string contract)');
+  assert.equal(typeof durYaml['rekey-timeout'], 'string', 'одиночное НЕ конвертируется в число (никаких тихих смен типов)');
+  assert.ok(/rekey-timeout: ["']5["']/.test(r.yaml), 'в YAML-тексте значение закавычено (не number-скаляр)');
   assert.equal(durYaml['reject-after-time'], '150-180', 'range сохранён дословно');
-  // типы: Mihomo AmneziaWGOption.RekeyTimeout — string; одиночное значение не
-  // конвертируется парсером в число (никаких тихих смен типов)
   assert.equal(durYaml['reject-after-time'], '150-180');
-  ok('duration-поля: range → строка, одиночное → число (типы сохранены)');
+  ok('duration-поля: range → строка, одиночное → строка (типы сохранены)');
 
   await upload1('awg-padding-values.conf');
   const padYaml = await page.evaluate(y => {
