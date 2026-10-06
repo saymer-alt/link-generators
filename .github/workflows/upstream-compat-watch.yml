@@ -2,6 +2,15 @@ name: Upstream compatibility watch
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - stable
+    paths:
+      - 'data/upstream/architect-mihomo-compat.json'
+      - 'tools/check-architect-upstream.mjs'
+      - '.github/workflows/upstream-compat-watch.yml'
+      - 'docs/UPSTREAM-COMPATIBILITY.md'
   schedule:
     - cron: '17 6 * * 1'
 
