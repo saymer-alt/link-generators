@@ -59,6 +59,7 @@ jobs:
           node --check tools/warp-dialer-fieldtest/fieldtest.mjs
           node --check tools/warp-dialer-fieldtest/lib.mjs
           node --check tools/warp-dialer-fieldtest/check-secrets.mjs
+          node --check tools/check-architect-upstream.mjs
 
       - name: Every deterministic test is wired into CI
         shell: bash
@@ -124,6 +125,9 @@ jobs:
       - name: Routing Diagnostics core regression
         run: node tests/routing-inspector.cjs
 
+      - name: Config Dependency Graph + Domain Coverage core regression
+        run: node tests/dependency-graph.cjs
+
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 
@@ -173,6 +177,12 @@ jobs:
       - name: Main browser regression
         run: node tests/browser.cjs
 
+      - name: YAML scalar hardening regression
+        run: node tests/yaml-scalar-hardening.cjs
+
+      - name: WARPSCOUT MASQUE import regression
+        run: node tests/warpscout-import.cjs
+
       - name: YAML parity vs merge-base
         shell: bash
         env:
@@ -192,6 +202,15 @@ jobs:
 
       - name: Domain Policy Routing browser regression
         run: node tests/policy-routing-browser.cjs
+
+      - name: Explainability UX regression (SELECT semantics + stale build)
+        run: node tests/explainability-ux.cjs
+
+      - name: Mobile tabs regression (#142)
+        run: node tests/mobile-tabs.cjs
+
+      - name: Domain Coverage Checker browser regression
+        run: node tests/domain-coverage.cjs
       - name: Health-check URL browser regression
         run: node tests/health-check-url.cjs
 
@@ -206,6 +225,9 @@ jobs:
 
       - name: WG/AWG profile manager browser regression
         run: node tests/wg-profiles-browser.cjs
+
+      - name: AWG stability policy regression
+        run: node tests/awg-stability.cjs
 
       - name: MagiTrickle import regression
         run: node tests/magitrickle-import.cjs

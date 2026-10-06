@@ -62,7 +62,7 @@ rules:
 
 | Таргет | Правило | Группа категории |
 |---|---|---|
-| `🎛 Отдельная группа выбора` (по умолчанию) | `RULE-SET,policy-<slug>,NAME` | создаётся (см. таблицу режимов ниже) |
+| `🎛 Своя SELECT-группа (переключается в Mihomo)` (по умолчанию) | `RULE-SET,policy-<slug>,NAME` | создаётся (см. таблицу режимов ниже) |
 | `🌐 GLOBAL` | `RULE-SET,policy-<slug>,GLOBAL` | не создаётся |
 | `⬇ DIRECT` | `RULE-SET,policy-<slug>,DIRECT` | не создаётся |
 | `🚫 REJECT` | `RULE-SET,policy-<slug>,REJECT` | не создаётся |

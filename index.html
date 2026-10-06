@@ -175,7 +175,12 @@
   @media (max-width:640px){.ctx-help-pop{right:auto;left:50%;transform:translateX(-50%)}}
   /* Responsive */
   @media (max-width:768px){body{padding:8px}.container{border-radius:0}.tab{padding:7px 10px 6px}.card{padding:14px 10px 10px}}
-  @media (max-width:390px){body{padding:4px}.tabs{flex-wrap:wrap}.tab{flex:1 1 100%;border-radius:0;border-bottom:none}.tab.active{top:0;margin-bottom:0}.row{flex-direction:column}.row>*{min-width:0}.btn{flex:1 1 auto}.wg-target-row,.wg-card-mode{flex-direction:column;align-items:stretch}}
+  /* #142: обе вкладки в строку помещаются только с ~447px; 391–446px — dead zone
+     (flex-строка без wrap выталкивала «⚙️ Mihomo Config Builder» за контейнер).
+     Стек вкладок поднимаем с ≤390 на ≤480 (wrap/stack предпочтительнее
+     микрошрифта; min-width:0 не спасает при flex:0 0 auto + nowrap-тексте). */
+  @media (max-width:480px){.tabs{flex-wrap:wrap}.tab{flex:1 1 100%;border-radius:0;border-bottom:none}.tab.active{top:0;margin-bottom:0}}
+  @media (max-width:390px){body{padding:4px}.row{flex-direction:column}.row>*{min-width:0}.btn{flex:1 1 auto}.wg-target-row,.wg-card-mode{flex-direction:column;align-items:stretch}}
 </style>
 </head>
 <body>
@@ -197,6 +202,7 @@
         <button class="btn btn-gray" onclick="document.getElementById('yamlInput').value=''">Очистить</button>
       </div>
       <div class="hint">Поддерживается совместимый WARP YAML; источник не важен.</div>
+      <div id="warpscoutInfo" style="display:none;margin-top:10px"></div>
     </div>
 
     <div class="card">
@@ -247,6 +253,32 @@
         <button class="btn" onclick="generateWarp()">⚡ Сгенерировать ссылки</button>
         <button class="btn btn-gray" onclick="sendToMihomo()">🚀 В Mihomo Builder</button>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⚙️ Advanced MASQUE — точные endpoint'ы (необязательно)</div>
+      <div class="row">
+        <div><label>H3 / QUIC endpoint</label><input type="text" id="h3Endpoint" aria-label="H3 QUIC endpoint" placeholder="пусто = встроенная стратегия"></div>
+        <div><label>H3 / QUIC SNI</label><input type="text" id="h3Sni" aria-label="H3 QUIC SNI" placeholder="пусто = общий SNI выше"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><label>H2 / TCP endpoint</label><input type="text" id="h2Endpoint" aria-label="H2 TCP endpoint" placeholder="пусто = встроенная стратегия"></div>
+        <div><label>H2 / TCP SNI</label><input type="text" id="h2Sni" aria-label="H2 TCP SNI" placeholder="пусто = общий SNI выше"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><label>H3 ports (свой список, через запятую)</label><input type="text" id="h3Ports" aria-label="H3 ports list" placeholder="например 443, 8443"></div>
+        <div><label>H2 ports (свой список, через запятую)</label><input type="text" id="h2Ports" aria-label="H2 ports list" placeholder="например 443, 8443, 4443"></div>
+      </div>
+      <div id="warpImportAmbiguity" style="display:none;margin-top:12px">
+        <div class="row">
+          <div><label>H3 / QUIC кандидат импорта</label><select id="h3CandidateSelect" aria-label="H3 candidate to import"></select></div>
+          <div><label>H2 / TCP кандидат импорта</label><select id="h2CandidateSelect" aria-label="H2 candidate to import"></select></div>
+        </div>
+        <div class="btn-group" style="margin-top:8px">
+          <button class="btn btn-purple" onclick="applyWarpscoutSelection()">📥 Импортировать выбранных</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:12px">Приоритет на транспорт: <b>точный endpoint</b> (импорт WARPSCOUT/Mihomo MASQUE <code>type: masque</code> или вручную) → <b>свой список портов</b> → <b>встроенная стратегия</b>. Точный endpoint авторитетен и не переписывается анти-корреляцией (она применяется только к сгенерированным endpoint'ам). Свой список портов полностью заменяет встроенный выбор портов — без скрытого смешивания. Порты — целые 1..65535 (trim + дедупликация; «443abc» — ошибка, а не 443). Endpoint — IPv4:port или hostname:port; IPv6 endpoint отвергается явно (контракт MASQUE не доказан). Поля живут только в памяти страницы — ни localStorage, ни sessionStorage, ни URL.</div>
     </div>
 
     <div class="card">
@@ -325,6 +357,16 @@
         <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
         <div class="hint" style="margin-top: 5px;">Общий DNS для ВСЕХ загруженных WG/AWG-профилей (добавляет <code>dns</code>/<code>remote-dns-resolve</code> в каждый wireguard-outbound). Пусто — DNS удаляется из профилей.</div>
         <div id="wgDnsWarning" class="hint" style="color:var(--red); display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
+      </div>
+      <div style="margin-top: 15px;">
+        <div class="toggle-row">
+          <label><input type="checkbox" id="cfgAwgKeepalive" checked> 🛡 Поддерживать AWG-соединение через NAT (keepalive 25 с) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: NAT keepalive">?</button><span class="ctx-help-pop" role="note">Явная user-visible policy для AWG-профилей (#137): если в .conf нет совместимого целого PersistentKeepalive, при сборке будет emitted persistent-keepalive: 25; диапазон вроде 25-35 сводится к 25 с явной диагностикой (fixed 25 не эквивалентен random-range); существующее целое значение (включая 0 = disabled) не меняется. Только AWG-профили; plain WireGuard не затрагивается. Выключение возвращает строгий контракт: диапазон не эмитится, WARN остаётся.</span></span></label>
+        </div>
+        <div class="hint" style="margin-top:4px">Для NAT/LTE/домашних роутеров периодический keepalive помогает не терять UDP-состояние. Если профиль не задаёт совместимое значение, Mihomo получит 25 секунд. Существующее целое значение не меняется.</div>
+        <div class="toggle-row" style="margin-top:8px">
+          <label><input type="checkbox" id="cfgAwgRtDiag"> 🧪 Тест обрывов: отключить RandomTrailers <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: RandomTrailers diagnostic">?</button><span class="ctx-help-pop" role="note">Диагностический override (#137): у AWG-профилей с RandomTrailers=on при сборке он будет отключён. Это controlled diagnostic experiment для локализации обрывов, а НЕ доказанный universal fix; MTU, ключи и остальные поля не меняются. Каждое применение фиксируется в diagnostic report.</span></span></label>
+        </div>
+        <div id="awgRtDiagWarn" class="hint" style="display:none;color:var(--red);margin-top:4px">⚠️ Диагностическая модификация AWG-профилей: RandomTrailers будет отключён в сборке (random-trailers: on → off). Это controlled experiment для теста обрывов, а НЕ доказанный universal fix; MTU/ключи и остальные поля не меняются.</div>
       </div>
       <details id="wgDialerAdvanced" class="advanced-panel" style="margin-top:15px">
         <summary><span>▶</span> <span class="advanced-badge">ADVANCED</span> <span>Ручная общая dialer-группа (Legacy)</span></summary>
@@ -445,6 +487,7 @@
               <option value="apple">🍎 Apple</option>
               <option value="social">💬 Social Networks</option>
               <option value="direct">⬇️ Direct (свои домены мимо прокси)</option>
+              <option value="proxy">🚀 Proxy (свои домены через прокси)</option>
             </select>
           </span>
         </div>
@@ -452,6 +495,7 @@
         <details id="routingDiagnostics" class="advanced-panel" style="margin-top:12px">
           <summary><span>▶</span> <span class="advanced-badge">DIAGNOSTICS</span> <span>Routing Inspector / Diagnostics</span></summary>
           <div class="hint">Офлайн-анализатор итогового конфига (результат последнего Build). Точно анализируются DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD и inline-провайдеры политик; GEOSITE/GEOIP/external-провайдеры/DNS-зависимые правила честно возвращают UNKNOWN. Инспектор не заменяет диагностику самого Mihomo и ничего не меняет в конфиге.</div>
+          <div id="staleBuildWarn" class="hint" style="display:none;margin:8px 0;color:var(--red);border:1px solid var(--red);padding:6px;background:rgba(255,0,0,.07)">⚠ Настройки изменены после последнего Build. Диагностика ниже относится к предыдущей сборке — пересоберите конфиг, чтобы анализировать актуальную.</div>
           <div id="rdSummary" class="hint" style="margin-top:8px;white-space:pre-line"></div>
           <div id="rdPreviewBox" style="margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)">
             <div class="label" style="font-weight:bold;margin-bottom:4px">Routing order</div>
@@ -469,6 +513,15 @@
             <div id="rpeSummary" class="hint" style="margin-top:8px;white-space:pre-line"></div>
             <div id="rpeMissing" class="hint" style="margin-top:6px;white-space:pre-line;display:none;border:1px solid var(--border);padding:6px;background:rgba(255,170,0,.08)"></div>
             <div id="rpeProviders" style="margin-top:8px"></div>
+          </details>
+          <details id="domainCoveragePanel" style="margin-top:8px">
+            <summary style="cursor:pointer"><span>▶</span> <span>Domain Coverage Checker</span></summary>
+            <div class="hint">Покрытие доменов итоговым конфигом (результат последнего Build): какое правило выигрывает первым, через inline-правило или провайдера, и статический путь до цели насколько это доказуемо. «Совпадает с правилом» ≠ «гарантированно идёт через конкретный прокси»: для <code>select</code>/<code>url-test</code>/<code>fallback</code> участник определяется Mihomo во время работы (помечается <code>runtime-selected</code>). GEOSITE/GEOIP/внешние провайдеры/DNS-зависимые правила честно возвращают UNKNOWN. По одному домену в строке; только чтение — конфиг не меняется.</div>
+            <textarea id="dcInput" rows="4" aria-label="Domains to check, one per line" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="gemini.google.com&#10;youtube.com&#10;unknown-service.example"></textarea>
+            <div class="btn-group" style="margin-top:6px">
+              <button type="button" class="btn btn-gray" id="dcRunBtn">Проверить покрытие</button>
+            </div>
+            <div id="dcResults" class="hint" style="margin-top:6px;white-space:pre-line"></div>
           </details>
         </details>
       </div>
@@ -538,9 +591,9 @@
 <script>
 // === GENERATOR META (единственный production source-of-truth версии/канала) ===
 // channel — metadata конкретной сборки, НЕ определение git-ветки в рантайме:
-// development build = 1.8.0-dev / main; release promotion (main → stable) отдельно
-// переводит её на 1.8.0 / stable. UI (бейдж) читает только эти значения.
-const GENERATOR_META = Object.freeze({ version: '1.8.0', channel: 'stable' });
+// development build = 1.9.0-dev / main; release promotion (main → stable) отдельно
+// переводит её на 1.9.0 / stable. UI (бейдж) читает только эти значения.
+const GENERATOR_META = Object.freeze({ version: '1.9.0', channel: 'stable' });
 (function renderGeneratorMeta() {
   const el = document.getElementById('genVersionBadge');
   if (!el) return;
@@ -595,6 +648,19 @@ function parseYaml() {
   
   try {
     const docs = jsyaml.loadAll(raw);
+
+    // v1.9 (#125): WARPSCOUT/Mihomo MASQUE detection — сканируем ВСЕ proxies,
+    // а не proxies[0]. Кандидат — только type: masque; произвольный не-MASQUE
+    // proxy транспортом не интерпретируется. Нет кандидатов → legacy-путь ниже.
+    const masqueCandidates = scanMasqueCandidates(docs);
+    if (masqueCandidates.length > 0) {
+      lastMasqueCandidates = masqueCandidates;
+      importWarpscoutCandidates(masqueCandidates);
+      return;
+    }
+    lastMasqueCandidates = [];
+    hideWarpscoutInfo();
+
     let proxyData = null;
     
     for (const doc of docs) {
@@ -645,12 +711,367 @@ function parseYaml() {
         setTimeout(() => el.classList.remove('field-filled'), 2000);
       }
     });
-    
+
+    // Точные endpoint/SNI — факты конкретного конфига: новый импорт их сбрасывает
+    // (стейл endpoint чужого конфига не переживает «Распарсить»); списки портов —
+    // пользовательские предпочтения и сознательно сохраняются.
+    ['h3Endpoint', 'h3Sni', 'h2Endpoint', 'h2Sni'].forEach(k => setWarpField(k, ''));
+
     document.getElementById('parsedBadge').style.display = 'inline-block';
     showToast('✅ YAML распарсен');
   } catch (e) {
     showToast('❌ Ошибка парсинга YAML: ' + e.message, true);
   }
+}
+
+// === WARPSCOUT-AWARE MASQUE IMPORT (v1.9, issue #125) ===
+// Кандидат импорта — только proxy с type: masque. Legacy WARP YAML (бот) без
+// явной MASQUE-структуры идёт прежним путём: identity/tunnel импорт, а
+// endpoint/transport выбирает встроенная стратегия generateWarp().
+// Приоритет транспорта: exact imported/manual endpoint → custom port list → builtin.
+// Значения кандидатов недоверенные — в DOM только через textContent/DOM API.
+let lastMasqueCandidates = [];
+
+function classifyMasqueProxy(p) {
+  // Контракт (owner review #134): absent/null/пустая строка → H3/QUIC;
+  // 'h2' (case-insensitive) → H2/TCP; любое иное непустое значение —
+  // UNSUPPORTED transport: не считаем H3 без source-proof, что Mihomo
+  // действительно принимает такой token ('tcp'/'h3'/'foo' не угадываем).
+  let raw = '';
+  if (typeof p.network === 'string') raw = p.network.trim();
+  else if (p.network !== undefined && p.network !== null) raw = String(p.network).trim();
+  if (!raw) return { kind: 'h3', raw: '' };
+  if (raw.toLowerCase() === 'h2') return { kind: 'h2', raw };
+  return { kind: 'unsupported', raw };
+}
+
+function scanMasqueCandidates(docs) {
+  const found = [];
+  for (const doc of docs) {
+    if (!doc || !Array.isArray(doc.proxies)) continue;
+    doc.proxies.forEach(p => {
+      if (p && typeof p === 'object' && p.type === 'masque') {
+        const cls = classifyMasqueProxy(p);
+        found.push({ proxy: p, transport: cls.kind, networkRaw: cls.raw });
+      }
+    });
+  }
+  found.forEach((c, i) => {
+    const p = c.proxy;
+    const name = typeof p.name === 'string' && p.name.trim() ? p.name.trim() : 'proxy-' + (i + 1);
+    const ep = (typeof p.server === 'string' && p.server.trim() && p.port !== undefined && p.port !== '')
+      ? p.server.trim() + ':' + p.port : 'endpoint не указан';
+    c.label = name + ' — ' + ep;
+  });
+  return found;
+}
+
+function setWarpField(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = value || '';
+  if (value) {
+    el.classList.add('field-filled');
+    setTimeout(() => el.classList.remove('field-filled'), 2000);
+  }
+}
+
+function readWarpIdentity(p) {
+  return {
+    privateKey: p['private-key'] || p.privateKey || '',
+    publicKey: p['public-key'] || p.publicKey || '',
+    ip: p.ip || '',
+    ipv6: p.ipv6 || '',
+    dns: Array.isArray(p.dns) ? p.dns.join(',') : (p.dns || '')
+  };
+}
+
+// Материальные identity-поля кандидата (owner review #134): private-key,
+// public-key, ip, ipv6 (если присутствует). Пока у генератора одна общая WARP
+// identity, selected H3 и H2 обязаны быть совместимы по ней — гибрид
+// «identity A + endpoint B» молча не создаётся. Значения НИКОГДА не попадают
+// в диагностику — только имена профилей и имена конфликтующих полей.
+function masqueIdentityFingerprint(p) {
+  const s = v => (v === undefined || v === null) ? '' : String(v).trim();
+  return {
+    privateKey: s(p['private-key'] !== undefined ? p['private-key'] : p.privateKey),
+    publicKey: s(p['public-key'] !== undefined ? p['public-key'] : p.publicKey),
+    ip: s(p.ip),
+    ipv6: s(p.ipv6)
+  };
+}
+
+function masqueIdentityMismatchFields(a, b) {
+  const names = { privateKey: 'private-key', publicKey: 'public-key', ip: 'ip', ipv6: 'ipv6' };
+  return Object.keys(names).filter(k => a[k] !== b[k]).map(k => names[k]);
+}
+
+// null = пара совместима; иначе текст fail-closed diagnostic (имена профилей +
+// конфликтующие поля, без секретов).
+function masquePairIdentityError(pair) {
+  if (pair.length < 2) return null;
+  const bad = masqueIdentityMismatchFields(masqueIdentityFingerprint(pair[0].proxy), masqueIdentityFingerprint(pair[1].proxy));
+  if (!bad.length) return null;
+  return 'Несовместимая WARP identity: «' + pair[0].label + '» и «' + pair[1].label + '» различаются по ' +
+    bad.join(', ') + '. Пара не импортируется (гибрид identity A + endpoint B не создаётся) — выберите только одного кандидата или совместимую пару.';
+}
+
+// private-key provenance (owner review #134, round 2): identity берётся
+// ТОЛЬКО из фактически выбранной supported пары. Отсутствие ключа у выбранного
+// кандидата НЕ компенсируется ключом из UNSUPPORTED/невыбранного кандидата.
+function masquePairKeyError(pair) {
+  if (!pair.length) return null;
+  if (!readWarpIdentity(pair[0].proxy).privateKey) {
+    return 'У выбранного кандидата «' + pair[0].label + '» нет private-key — импорт отклонён (ключ из UNSUPPORTED/невыбранного кандидата не подставляется).';
+  }
+  return null;
+}
+
+// DNS классифицируется отдельно от material identity: различие значений между
+// выбранными кандидатами не отвергает импорт, но и не выбирается молча.
+function masquePairDnsLine(pair) {
+  if (pair.length < 2) return '';
+  const a = readWarpIdentity(pair[0].proxy).dns;
+  const b = readWarpIdentity(pair[1].proxy).dns;
+  return (a && b && a !== b) ? 'DNS: различается между кандидатами («' + a + '» vs «' + b + '») — перенесён из первого; проверьте осознанно' : '';
+}
+
+function sniLinePart(cand) {
+  const p = cand.proxy;
+  return (typeof p.sni === 'string' && p.sni.trim()) ? ', SNI ' + p.sni.trim() : ', SNI не задан в candidate → используется общий SNI';
+}
+
+// Единая точка применения согласованной пары: identity + exact endpoint/SNI.
+function applyWarpscoutPair(pair) {
+  const id = readWarpIdentity(pair[0].proxy);
+  ['privateKey', 'publicKey', 'ip', 'ipv6', 'dns'].forEach(k => setWarpField(k, id[k]));
+  pair.forEach(c => applyWarpscoutCandidate(c));
+}
+
+function applyWarpscoutCandidate(cand) {
+  if (!cand) return;
+  const p = cand.proxy;
+  const server = typeof p.server === 'string' ? p.server.trim() : '';
+  const sni = typeof p.sni === 'string' ? p.sni.trim() : '';
+  const endpoint = (server && p.port !== undefined && p.port !== '') ? server + ':' + p.port : '';
+  if (cand.transport === 'h2') {
+    setWarpField('h2Endpoint', endpoint);
+    setWarpField('h2Sni', sni);
+  } else {
+    setWarpField('h3Endpoint', endpoint);
+    setWarpField('h3Sni', sni);
+  }
+}
+
+function showWarpscoutBanner(lines) {
+  const box = document.getElementById('warpscoutInfo');
+  if (!box) return;
+  box.textContent = '';
+  box.className = 'hint';
+  const title = document.createElement('b');
+  title.textContent = '🛰 WARPSCOUT / Mihomo MASQUE detected';
+  box.appendChild(title);
+  lines.forEach(t => {
+    const row = document.createElement('div');
+    row.textContent = '· ' + t;
+    box.appendChild(row);
+  });
+  box.style.display = 'block';
+}
+
+function hideWarpscoutInfo() {
+  const box = document.getElementById('warpscoutInfo');
+  if (box) box.style.display = 'none';
+}
+
+function importWarpscoutCandidates(candidates) {
+  const h3 = candidates.filter(c => c.transport === 'h3');
+  const h2 = candidates.filter(c => c.transport === 'h2');
+  const unsup = candidates.filter(c => c.transport === 'unsupported');
+
+  // Новый YAML — полное состояние импорта с нуля: identity И exact transport
+  // не переживают повторный «Распарсить» (fail-closed, без стейл-гибридов);
+  // бейдж «Заполнено» тоже гасится — его вернёт только успешный импорт/ожидание
+  // выбора, а не стейл от предыдущего YAML.
+  ['privateKey', 'publicKey', 'ip', 'ipv6', 'dns', 'h3Endpoint', 'h3Sni', 'h2Endpoint', 'h2Sni'].forEach(k => setWarpField(k, ''));
+  document.getElementById('parsedBadge').style.display = 'none';
+
+  // All-UNSUPPORTED: MASQUE-структура есть, но поддерживаемых транспортов нет —
+  // fail-closed без success-семантики (никаких «✅ распознан» и бейджа «Заполнено»).
+  if (!h3.length && !h2.length) {
+    const lines = ['❌ MASQUE YAML найден, но поддерживаемых H3/H2 кандидатов нет.'];
+    unsup.forEach(c => lines.push('UNSUPPORTED network «' + c.networkRaw + '» (' + c.label + ')'));
+    showWarpscoutBanner(lines);
+    return showToast('❌ MASQUE YAML найден, но поддерживаемых H3/H2 кандидатов нет', true);
+  }
+
+  const lines = [];
+  unsup.forEach(c => lines.push('UNSUPPORTED network «' + c.networkRaw + '» (' + c.label + ') — кандидат пропущен: значение не распознано, H3 без source-proof не предполагаем'));
+
+  const ambiguous = h3.length > 1 || h2.length > 1;
+  if (ambiguous) showWarpscoutAmbiguity(h3, h2);
+  else hideWarpscoutAmbiguity();
+
+  // Автопара — только однозначные синглтоны БЕЗ неоднозначности. При любом
+  // неоднозначном транспорте ничего не применяется до фактического выбора
+  // пользователя (applyWarpscoutSelection) — пара применяется атомарно.
+  const autoPair = [];
+  if (!ambiguous && h3.length === 1) autoPair.push(h3[0]);
+  if (!ambiguous && h2.length === 1) autoPair.push(h2[0]);
+
+  // Identity consistency проверяется на ФАКТИЧЕСКИ выбранной паре, не по
+  // первому элементу списка. Несовместимость → ничего не импортируется.
+  const pairError = masquePairIdentityError(autoPair);
+  if (pairError) {
+    showWarpscoutBanner(lines.concat(['❌ ' + pairError]));
+    showToast('❌ ' + pairError, true);
+    return;
+  }
+
+  // private-key provenance: ключ обязан быть у ФАКТИЧЕСКИ выбранного supported
+  // кандидата (у пары — у обоих, иначе раньше сработал identity-mismatch).
+  const keyError = masquePairKeyError(autoPair);
+  if (keyError) {
+    showWarpscoutBanner(lines.concat(['❌ ' + keyError]));
+    showToast('❌ ' + keyError, true);
+    return;
+  }
+
+  // Бейдж «Заполнено» — только когда импорт применён или корректно ждёт выбора
+  // пользователя; fail-closed отказы его не ставят.
+  document.getElementById('parsedBadge').style.display = 'inline-block';
+  if (autoPair.length) applyWarpscoutPair(autoPair);
+
+  lines.push(autoPair.length
+    ? 'identity/tunnel: private-key/public-key/ip/ipv6/dns перенесены (общая identity пары проверена)'
+    : 'identity/tunnel: будет взята из выбранной вами пары (кнопка «Импортировать выбранных»)');
+  [['H3 / QUIC', h3], ['H2 / TCP', h2]].forEach(([name, list]) => {
+    if (!list.length) { lines.push(name + ': кандидатов нет — останется встроенная стратегия'); return; }
+    if (list.length > 1) { lines.push(name + ': кандидатов ' + list.length + ' — выберите в «Advanced MASQUE»'); return; }
+    const p = list[0].proxy;
+    const ep = (p.server || '?') + ':' + (p.port !== undefined ? p.port : '?');
+    lines.push(name + ': endpoint ' + ep + sniLinePart(list[0]) + ' → импортирован как точный');
+  });
+  const dnsLine = masquePairDnsLine(autoPair);
+  if (dnsLine) lines.push(dnsLine);
+  showWarpscoutBanner(lines);
+  showToast(unsup.length ? '✅ WARPSCOUT / Mihomo MASQUE распознан (есть UNSUPPORTED кандидаты)' : '✅ WARPSCOUT / Mihomo MASQUE распознан');
+}
+
+function showWarpscoutAmbiguity(h3, h2) {
+  const box = document.getElementById('warpImportAmbiguity');
+  if (!box) return;
+  const fill = (selId, list) => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    sel.textContent = '';
+    const ambiguous = list.length > 1;
+    sel.dataset.active = ambiguous ? '1' : '';
+    if (ambiguous) {
+      list.forEach((c, i) => {
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = c.label;
+        sel.appendChild(opt);
+      });
+    }
+    if (sel.closest('div')) sel.closest('div').style.display = ambiguous ? '' : 'none';
+  };
+  fill('h3CandidateSelect', h3);
+  fill('h2CandidateSelect', h2);
+  box.style.display = 'block';
+}
+
+function hideWarpscoutAmbiguity() {
+  const box = document.getElementById('warpImportAmbiguity');
+  if (box) box.style.display = 'none';
+}
+
+function applyWarpscoutSelection() {
+  const readSel = selId => {
+    const sel = document.getElementById(selId);
+    if (!sel || sel.dataset.active !== '1') return undefined; // 0/1 кандидатов — применяются здесь же
+    const i = Number(sel.value);
+    return Number.isInteger(i) && i >= 0 ? i : null;
+  };
+  const h3i = readSel('h3CandidateSelect');
+  const h2i = readSel('h2CandidateSelect');
+  if (h3i === null || h2i === null) return showToast('Выберите кандидата для каждого транспорта', true);
+  const h3 = lastMasqueCandidates.filter(c => c.transport === 'h3');
+  const h2 = lastMasqueCandidates.filter(c => c.transport === 'h2');
+  const pickH3 = h3i !== undefined ? h3[h3i] : (h3.length === 1 ? h3[0] : null);
+  const pickH2 = h2i !== undefined ? h2[h2i] : (h2.length === 1 ? h2[0] : null);
+  const pair = [pickH3, pickH2].filter(Boolean);
+  if (!pair.length) return showToast('Кандидаты не найдены', true);
+
+  // Consistency проверяется ПОСЛЕ фактического выбора пользователя. Несовместимо
+  // → fail-closed: ничего не применяется, селектор остаётся открытым.
+  const pairError = masquePairIdentityError(pair);
+  if (pairError) {
+    showWarpscoutBanner(['❌ ' + pairError, 'Исправьте выбор и нажмите «Импортировать выбранных» ещё раз.']);
+    showToast('❌ ' + pairError, true);
+    return;
+  }
+  // private-key provenance: у выбранного кандидата должен быть свой ключ.
+  const keyError = masquePairKeyError(pair);
+  if (keyError) {
+    showWarpscoutBanner(['❌ ' + keyError, 'Исправьте выбор и нажмите «Импортировать выбранных» ещё раз.']);
+    showToast('❌ ' + keyError, true);
+    return;
+  }
+
+  applyWarpscoutPair(pair);
+  hideWarpscoutAmbiguity();
+  const lines = ['identity/tunnel: private-key/public-key/ip/ipv6/dns перенесены (общая identity пары проверена)'];
+  lines.push(pickH3 ? 'H3 / QUIC: импортирован ' + pickH3.label + sniLinePart(pickH3) : 'H3 / QUIC: остаётся встроенная стратегия');
+  lines.push(pickH2 ? 'H2 / TCP: импортирован ' + pickH2.label + sniLinePart(pickH2) : 'H2 / TCP: остаётся встроенная стратегия');
+  const dnsLine = masquePairDnsLine(pair);
+  if (dnsLine) lines.push(dnsLine);
+  showWarpscoutBanner(lines);
+  showToast('✅ Кандидаты импортированы');
+}
+
+// Endpoint/ports-валидация для exact/custom MASQUE-полей: integer 1..65535,
+// trim, дедупликация; «443abc» — explicit error, никакой parseInt-угадайки.
+// Endpoint: IPv4:port или hostname:port; IPv6 — честный reject (контракт
+// MASQUE/IPv6 не доказан, не угадываем; WG IPv4-only policy сюда не переносится).
+function parseMasqueEndpoint(raw) {
+  const v = raw.trim();
+  if (!v) return { ok: true, value: null };
+  if (v.includes('[') || v.includes(']') || (v.match(/:/g) || []).length !== 1) {
+    return { ok: false, error: 'IPv6 endpoint не поддерживается (MASQUE-контракт не доказан); ожидался IPv4:port или hostname:port' };
+  }
+  const idx = v.lastIndexOf(':');
+  const host = v.slice(0, idx);
+  const portStr = v.slice(idx + 1);
+  if (!/^[1-9]\d{0,4}$/.test(portStr)) return { ok: false, error: 'порт должен быть целым 1..65535 без ведущих нулей — «' + v + '»' };
+  const port = Number(portStr);
+  if (port < 1 || port > 65535) return { ok: false, error: 'порт вне диапазона 1..65535 — «' + v + '»' };
+  if (!host) return { ok: false, error: 'пустой host — «' + v + '»' };
+  if (/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(host)) {
+    if (host.split('.').some(o => Number(o) > 255)) return { ok: false, error: 'некорректный IPv4 — «' + v + '»' };
+  } else {
+    if (/^[0-9.]+$/.test(host)) return { ok: false, error: 'похоже на IPv4, но им не является — «' + v + '»' };
+    if (!/^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/.test(host)) {
+      return { ok: false, error: 'ожидался IPv4 или hostname — «' + v + '»' };
+    }
+  }
+  return { ok: true, value: { host, port } };
+}
+
+function parseMasquePortList(raw) {
+  const v = raw.trim();
+  if (!v) return { ok: true, value: null };
+  const seen = new Set();
+  const ports = [];
+  for (const token of v.split(/[,\s]+/).filter(Boolean)) {
+    if (!/^[1-9]\d{0,4}$/.test(token)) return { ok: false, error: 'порты — целые 1..65535 через запятую; невалидный токен «' + token + '» (без parseInt-угадайки)' };
+    const p = Number(token);
+    if (p < 1 || p > 65535) return { ok: false, error: 'порт вне диапазона 1..65535 — «' + token + '»' };
+    if (!seen.has(p)) { seen.add(p); ports.push(p); }
+  }
+  if (!ports.length) return { ok: false, error: 'список портов пуст' };
+  return { ok: true, value: ports };
 }
 
 // === WARP LINK GENERATOR (ENGINEERED STRATEGY) ===
@@ -726,6 +1147,38 @@ function generateWarp() {
 
   if (!pk || !pub) return showToast('Нужны ключи!', true);
 
+  // v1.9 (#125): приоритет на транспорт — exact imported/manual endpoint →
+  // custom port list → builtin стратегия. Невалидный ввод — explicit error до
+  // любой генерации (fail-closed; выход не затрагивается). Exact endpoint
+  // авторитетен: анти-корреляция его не переписывает (она управляет только
+  // генерируемым H2 IP); custom port list полностью заменяет встроенный выбор.
+  const h3ExactRaw = document.getElementById('h3Endpoint').value.trim();
+  const h3SniOverride = document.getElementById('h3Sni').value.trim();
+  const h3PortsRaw = document.getElementById('h3Ports').value.trim();
+  const h2ExactRaw = document.getElementById('h2Endpoint').value.trim();
+  const h2SniOverride = document.getElementById('h2Sni').value.trim();
+  const h2PortsRaw = document.getElementById('h2Ports').value.trim();
+
+  let h3Exact = null, h3Ports = null, h2Exact = null, h2Ports = null;
+  if (h3ExactRaw) {
+    const r = parseMasqueEndpoint(h3ExactRaw);
+    if (!r.ok) return showToast('❌ H3 endpoint: ' + r.error, true);
+    h3Exact = r.value;
+  } else if (h3PortsRaw) {
+    const r = parseMasquePortList(h3PortsRaw);
+    if (!r.ok) return showToast('❌ H3 ports: ' + r.error, true);
+    h3Ports = r.value;
+  }
+  if (h2ExactRaw) {
+    const r = parseMasqueEndpoint(h2ExactRaw);
+    if (!r.ok) return showToast('❌ H2 endpoint: ' + r.error, true);
+    h2Exact = r.value;
+  } else if (h2PortsRaw) {
+    const r = parseMasquePortList(h2PortsRaw);
+    if (!r.ok) return showToast('❌ H2 ports: ' + r.error, true);
+    h2Ports = r.value;
+  }
+
   const out = document.getElementById('warpOutput');
   out.innerHTML = '';
   lastGeneratedLinks = [];
@@ -733,40 +1186,48 @@ function generateWarp() {
   const portWeights = safePortsOnly ? SAFE_PORTS_WEIGHTED : ALL_PORTS_WEIGHTED;
 
   for (let i = 0; i < count; i++) {
-    // П.2: QUIC — случайный из фиксированного пула, всегда порт 443
-    const quicEndpoint = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
-    
-    // П.1: H2 порт — взвешенный рандом
-    const h2Port = weightedRandom(portWeights);
-    
-    // П.3: Анти-корреляция — если порты совпали, H2 IP ОБЯЗАТЕЛЬНО отличается
-    let h2Ip;
-    if (h2Port === quicEndpoint.port) {
-      h2Ip = getRandomH2Ip(quicEndpoint.ip);
+    // H3 / QUIC: exact endpoint → пул (+custom ports) → пул (всегда порт 443)
+    let quicEndpoint;
+    if (h3Exact) {
+      quicEndpoint = { ip: h3Exact.host, port: h3Exact.port };
     } else {
-      h2Ip = getRandomH2Ip(null);
+      const poolEp = QUIC_ENDPOINTS[i % QUIC_ENDPOINTS.length];
+      quicEndpoint = { ip: poolEp.ip, port: h3Ports ? h3Ports[i % h3Ports.length] : poolEp.port };
+    }
+
+    // П.1: H2 порт — custom список → взвешенный рандом; точный H2 endpoint
+    // не переписывается (анти-корреляция применяется только к генерируемым)
+    let h2Port, h2Ip;
+    if (h2Exact) {
+      h2Port = h2Exact.port;
+      h2Ip = h2Exact.host;
+    } else {
+      h2Port = h2Ports ? h2Ports[i % h2Ports.length] : weightedRandom(portWeights);
+      // П.3: Анти-корреляция — если порты совпали, H2 IP ОБЯЗАТЕЛЬНО отличается
+      h2Ip = getRandomH2Ip(h2Port === quicEndpoint.port ? quicEndpoint.ip : null);
     }
     
     const suffix = count > 1 ? `-${i + 1}` : '';
     
-    const buildLink = (serverAddr, port, isH2) => {
+    const buildLink = (serverAddr, port, isH2, sniValue) => {
       const pkEnc = urlEncodeKey(pk);
       const pubEnc = urlEncodeKey(pub);
       // Имя профиля: H3/QUIC без порта, H2/TCP с портом (терминология транспорта)
       const name = isH2
         ? `${baseProfile}-H2-TCP-${port}${suffix}`
         : `${baseProfile}-H3-QUIC${suffix}`;
-      
-      let url = `masque://${serverAddr}:${port}?sni=${sni}&private-key=${pkEnc}&public-key=${pubEnc}&ip=${ip}&udp=true&remote-dns-resolve=true`;
+
+      let url = `masque://${serverAddr}:${port}?sni=${sniValue}&private-key=${pkEnc}&public-key=${pubEnc}&ip=${ip}&udp=true&remote-dns-resolve=true`;
       if (ipv6 && ipv6.trim()) url += `&ipv6=${ipv6}`;
       if (dns && dns.trim()) url += `&dns=${dns}`;
       if (isH2) url += '&network=h2';
       url += `#${name}`;
       return url;
     };
-    
-    const quic = buildLink(quicEndpoint.ip, quicEndpoint.port, false);
-    const h2 = buildLink(h2Ip, h2Port, true);
+
+    // SNI на транспорт: точный/ручной per-transport SNI → общий SNI из формы
+    const quic = buildLink(quicEndpoint.ip, quicEndpoint.port, false, h3SniOverride || sni);
+    const h2 = buildLink(h2Ip, h2Port, true, h2SniOverride || sni);
     
     lastGeneratedLinks.push(quic, h2);
 
@@ -886,6 +1347,9 @@ let wgUploadPending = false;
 function syncWgCollections() {
   wgBeans = wgProfiles.map(p => p.bean);
   wgFiles = wgProfiles.map(p => p.filename);
+  // WG-профили меняются и вне DOM-событий (async upload/delete) — stale-контракт
+  // должен увидеть это сразу (4B).
+  if (typeof refreshBuildStaleness === 'function') refreshBuildStaleness();
 }
 
 // Клон профиля для Build: dialer-proxy подставляется только в клон
@@ -987,7 +1451,7 @@ function computeDialerTargetsSync() {
       core: 'mihomo',
       input: preflightInputForRegistry(document.getElementById('mihomoInput').value),
       ...(autoWhitelist ? { fallbackInput: lastInspectedFallbackInput !== null ? lastInspectedFallbackInput : document.getElementById('whitelistInput').value.trim() } : {}),
-      wgBeans: normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, { noDialer: true }))),
+      wgBeans: wgEngineBeans({ noDialer: true }),
       options: {
         addSocks: addSocks,
         addTun: addTun,
@@ -1025,7 +1489,7 @@ function computeDialerTargetsSync() {
       const proj = api.buildFromRequest({
         core: 'mihomo',
         input: '',
-        wgBeans: normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, { noDialer: true }))),
+        wgBeans: wgEngineBeans({ noDialer: true }),
         options: {
           addSocks: true,
           addTun: true,
@@ -1192,6 +1656,81 @@ function normalizeWgBeans(beans) {
   }
   return beans;
 }
+
+// === AWG STABILITY POLICY (#137, explicit user-visible policy) ===
+// Применяется к КОПИЯМ бинов на пути сборки (wgProfileBuildBean клонирует):
+// оригинальные профили не мутируются — выключение тоггла полностью возвращает
+// строгий контракт. Scope — только AWG-профили (amnezia-wg-option): plain
+// WireGuard сознательно не затрагивается, т.к. для расширения его semantics
+// нет существующего контракта (решение #137 задокументировано в AGENTS.md).
+function awgStabilityState() {
+  const keepaliveEl = document.getElementById('cfgAwgKeepalive');
+  const rtEl = document.getElementById('cfgAwgRtDiag');
+  return {
+    keepalive: keepaliveEl ? keepaliveEl.checked : true, // DEFAULT ON
+    rtDiag: rtEl ? rtEl.checked : false                  // DEFAULT OFF
+  };
+}
+
+function applyAwgStabilityPolicy(beans) {
+  const st = awgStabilityState();
+  for (const bean of (Array.isArray(beans) ? beans : [])) {
+    const wg = bean && bean.wireguard;
+    const awg = wg && wg['amnezia-wg-option'];
+    if (!awg) continue;
+    const report = Array.isArray(bean.awgFieldReport) ? bean.awgFieldReport : (bean.awgFieldReport = []);
+    // 🛡 NAT keepalive: отсутствующий/несовместимый PK → 25. Валидный integer
+    // (включая 0 = disabled) никогда не заменяется.
+    if (st.keepalive && !Number.isFinite(wg.persistentKeepalive)) {
+      wg.persistentKeepalive = 25;
+      const prev = report.find(r => r && r.key === 'persistent-keepalive');
+      if (prev) {
+        // диапазон из источника: patch существующей UNSUPPORTED-записи в trace
+        prev.status = 'SUPPORTED_NORMALIZED';
+        prev.rawValue = String(prev.rawValue) + ' → 25';
+        prev.note = 'explicit user-enabled Mihomo compatibility fallback (🛡 NAT keepalive): fixed 25 НЕ эквивалентен исходной random-range semantics';
+      } else {
+        report.push({
+          key: 'persistent-keepalive',
+          rawValue: (wg.persistentKeepaliveRaw !== undefined ? String(wg.persistentKeepaliveRaw) + ' → 25' : 'отсутствовал → 25'),
+          status: 'SUPPORTED_NORMALIZED',
+          note: 'explicit user-enabled NAT keepalive policy (настройка «🛡 Поддерживать AWG-соединение через NAT»)'
+        });
+      }
+    }
+    // 🧪 RandomTrailers diagnostic override: только явный user action, только
+    // у профилей, где он реально включён; MTU/ключи/остальные поля не трогаем.
+    if (st.rtDiag && awg['random-trailers'] === true) {
+      awg['random-trailers'] = false;
+      report.push({
+        key: 'random-trailers',
+        rawValue: 'on → off',
+        status: 'IGNORED_BY_POLICY',
+        note: 'diagnostic override requested by user (🧪 тест обрывов) — controlled experiment, а не доказанный universal fix'
+      });
+    }
+  }
+  return beans;
+}
+
+// Единая точка подготовки WG-бинов для движка (Build + префлайт-реестры).
+function wgEngineBeans(opts) {
+  return applyAwgStabilityPolicy(normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, opts))));
+}
+
+// Тогглы #137: WARN-видимость для 🧪 и перерисовка карточек (план сборки меняется).
+(function bindAwgStabilityToggles() {
+  const rtEl = document.getElementById('cfgAwgRtDiag');
+  if (rtEl) rtEl.addEventListener('change', () => {
+    const warn = document.getElementById('awgRtDiagWarn');
+    if (warn) warn.style.display = rtEl.checked ? 'block' : 'none';
+    if (typeof renderWgList === 'function') renderWgList();
+  });
+  const keepEl = document.getElementById('cfgAwgKeepalive');
+  if (keepEl) keepEl.addEventListener('change', () => {
+    if (typeof renderWgList === 'function') renderWgList();
+  });
+})();
 
 // AWG-патч 3/3: web4core не эмитит dns/remote-dns-resolve для wireguard-outbound.
 // После buildFromRequest возвращаем YAML в объект и инжектируем DNS из поля
@@ -1533,6 +2072,29 @@ function renderWgList() {
         noteEl.className = 'wg-mtu-note' + (note.level === 'warn' ? ' wg-mtu-note-warn' : '');
         noteEl.textContent = (note.level === 'warn' ? '⚠ ' : 'ℹ ') + note.text;
         info.appendChild(noteEl);
+      }
+    }
+
+    // 🛡/🧪 AWG stability policy (#137): что сборка сделает с ЭТИМ профилем при
+    // текущих настройках. Оригинальный бин не мутируется — политика применяется
+    // к копии на пути сборки (wgEngineBeans), поэтому карточка показывает план,
+    // а выключенный тоггл полностью возвращает строгий контракт.
+    const cardAwg = bean.wireguard && bean.wireguard['amnezia-wg-option'];
+    if (cardAwg) {
+      const st = awgStabilityState();
+      const policyNote = (level, text) => {
+        const noteEl = document.createElement('div');
+        noteEl.className = 'wg-mtu-note' + (level === 'warn' ? ' wg-mtu-note-warn' : '');
+        noteEl.textContent = (level === 'warn' ? '⚠ ' : 'ℹ ') + text;
+        info.appendChild(noteEl);
+      };
+      if (st.keepalive && !Number.isFinite(bean.wireguard.persistentKeepalive)) {
+        const raw = bean.wireguard.persistentKeepaliveRaw;
+        policyNote(raw ? 'warn' : 'info', '🛡 NAT keepalive: при сборке Mihomo получит persistent-keepalive: 25' +
+          (raw ? ' (source ' + raw + ' → 25 — explicit compatibility fallback; fixed 25 не эквивалентен random-range)' : ' (источник не задавал совместимое значение)'));
+      }
+      if (st.rtDiag && cardAwg['random-trailers'] === true) {
+        policyNote('warn', '🧪 RandomTrailers: on → off при сборке — diagnostic override requested by user (controlled experiment, не доказанный fix)');
       }
     }
 
@@ -2948,7 +3510,12 @@ const POLICY_PRESETS = {
   microsoft: { name: 'MICROSOFT', domains: 'microsoft.com\nmicrosoftonline.com\noffice.com\noffice365.com\nwindowsupdate.com\nlive.com\nxbox.com' },
   apple: { name: 'APPLE', domains: 'apple.com\nicloud.com\nmzstatic.com\nme.com' },
   social: { name: 'SOCIAL', domains: 'facebook.com\ninstagram.com\nx.com\ntwitter.com\nreddit.com\ntiktok.com' },
-  direct: { name: 'DIRECT-LIST', domains: '# домены, которые пойдут мимо прокси (DIRECT)\nexample.com', target: 'DIRECT' }
+  direct: { name: 'DIRECT-LIST', domains: '# домены, которые пойдут мимо прокси (DIRECT)\nexample.com', target: 'DIRECT' },
+  // Симметричный «через прокси» сценарий. Target GLOBAL — ближайший строгий
+  // «через прокси»: во всех режимах GLOBAL не содержит DIRECT (static — листья+REJECT;
+  // subscription — листья+use-подписки+REJECT; AW — PRIMARY/FALLBACK) и вручную
+  // переключить GLOBAL на DIRECT нельзя. Новых engine-таргетов не вводится.
+  proxy: { name: 'PROXY-LIST', domains: '# свои домены, которые пойдут ЧЕРЕЗ прокси (GLOBAL — лучший прокси)\nexample.com', target: 'GLOBAL' }
 };
 
 function policyCardDom(card, index) {
@@ -2976,13 +3543,14 @@ function policyCardDom(card, index) {
   targetLabel.textContent = 'Куда направлять:';
   const targetSel = document.createElement('select');
   targetSel.className = 'policy-target';
-  for (const [value, text] of [['SELECT', '🎛 Отдельная группа выбора'], ['GLOBAL', '🌐 GLOBAL'], ['DIRECT', '⬇ DIRECT'], ['REJECT', '🚫 REJECT']]) {
+  for (const [value, text] of [['SELECT', '🎛 Своя SELECT-группа (переключается в Mihomo)'], ['GLOBAL', '🌐 GLOBAL'], ['DIRECT', '⬇ DIRECT'], ['REJECT', '🚫 REJECT']]) {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = text;
     targetSel.appendChild(opt);
   }
   targetSel.value = card.target === 'GLOBAL' || card.target === 'DIRECT' || card.target === 'REJECT' ? card.target : 'SELECT';
+  targetLabel.appendChild(makeCtxHelp('Создаёт отдельную proxy-group с именем категории. После запуска Mihomo маршрут этой категории можно переключать между доступными выходами без пересборки конфига. GLOBAL/DIRECT/REJECT ведут RULE-SET напрямую на цель; семантика таргетов не менялась.', 'Куда направлять'));
   targetRow.append(targetLabel, targetSel);
   const domainsLabel = document.createElement('label');
   domainsLabel.className = 'label';
@@ -3183,7 +3751,7 @@ function renderMagiTricklePreview() {
   mapTitle.className = 'label';
   mapTitle.style.cssText = 'margin-bottom:4px';
   mapTitle.textContent = 'Куда направлять группы каждого интерфейса:';
-  mapTitle.appendChild(makeCtxHelp('Маршрут MagiTrickle (network interface) — это не правило Mihomo: группы одного интерфейса получают общий таргет политики. Известные интерфейсы подставляются автоматически: mitun0 → GLOBAL, blackhole → REJECT. Для остальных по умолчанию выбрано «Пропустить» — молча маршрут не угадывается, выберите таргет вручную. «Отдельная группа выбора» создаёт категорию-группу, GLOBAL/DIRECT/REJECT ведут RULE-SET напрямую.'));
+  mapTitle.appendChild(makeCtxHelp('Маршрут MagiTrickle (network interface) — это не правило Mihomo: группы одного интерфейса получают общий таргет политики. Известные интерфейсы подставляются автоматически: mitun0 → GLOBAL, blackhole → REJECT. Для остальных по умолчанию выбрано «Пропустить» — молча маршрут не угадывается, выберите таргет вручную. «Своя SELECT-группа» создаёт категорию-группу, GLOBAL/DIRECT/REJECT ведут RULE-SET напрямую.'));
   mapBox.appendChild(mapTitle);
   for (const iface of p.ifaces) {
     const row = document.createElement('div');
@@ -3196,7 +3764,7 @@ function renderMagiTricklePreview() {
     sel.dataset.iface = iface;
     for (const [value, text] of [
       ['GLOBAL', '🌐 GLOBAL'],
-      ['SELECT', '🎛 Отдельная группа выбора'],
+      ['SELECT', '🎛 Своя SELECT-группа (переключается в Mihomo)'],
       ['DIRECT', '⬇ DIRECT'],
       ['REJECT', '🚫 REJECT'],
       ['skip', '⏭ Пропустить'],
@@ -3770,7 +4338,277 @@ function routingProviderInventory(doc) {
   };
   return { items, missing, summary };
 }
+
+// === CONFIG DEPENDENCY GRAPH CORE (pure, v1.9 #125 PHASE 5) — CDG-CORE-START ===
+// Каноническая модель зависимостей, строится ТОЛЬКО из generated config
+// (Build snapshot), без повторной интерпретации live-формы. Без спекуляций:
+// узел/ребро создаётся, только когда связь доказуема из конфига; GEOSITE/GEOIP/
+// внешние провайдеры/DNS-зависимые правила остаются UNKNOWN на уровне verdict'ов.
+// Explainability (4A): если таргет — proxy-group из generated config, показываем
+// семантический путь с типом группы и ФАКТИЧЕСКИМИ участниками из конфига
+// (никакого двусмысленного «AI → AI»); состав не хардкодится. WG/AWG-участники
+// с dialer-proxy помечаются «(через …)» — один уровень, без рекурсии.
+const RD_BUILTIN_TARGETS = new Set(['GLOBAL', 'DIRECT', 'REJECT', 'PASS', 'REJECT-DROP', 'COMPATIBLE']);
+const RD_GROUP_TYPE_LABELS = { select: 'SELECT-группа', 'url-test': 'url-test-группа', fallback: 'fallback-группа', 'load-balance': 'load-balance-группа', relay: 'relay-группа' };
+function rdDialerSuffix(doc, memberName) {
+  const proxies = (doc && Array.isArray(doc.proxies)) ? doc.proxies : [];
+  const p = proxies.find(x => x && x.name === memberName);
+  if (!p) return '';
+  const dp = p['dialer-proxy'] || (p.wireguard && p.wireguard.dialerProxy);
+  return dp ? ' (через ' + String(dp) + ')' : '';
+}
+function rdSemanticTargetText(doc, target, opts) {
+  if (!target) return '—';
+  if (RD_BUILTIN_TARGETS.has(target)) {
+    // GLOBAL в Routing order остаётся компактным (well-known, ноль двусмысленности),
+    // но Domain Coverage с opts.expandGlobal раскрывает фактический состав группы
+    // (включая dialer-маркеры) — это и есть статическая цепочка до прокси.
+    if (!(opts && opts.expandGlobal && target === 'GLOBAL')) return target;
+  }
+  const groups = (doc && Array.isArray(doc['proxy-groups'])) ? doc['proxy-groups'] : [];
+  const g = groups.find(x => x && x.name === target);
+  if (!g) return target + rdDialerSuffix(doc, target); // leaf-прокси: дальше статики не видно
+  const typeLabel = RD_GROUP_TYPE_LABELS[String(g.type || '').toLowerCase()] || ('группа ' + String(g.type || '?'));
+  const members = [];
+  (Array.isArray(g.proxies) ? g.proxies : []).slice(0, 8).forEach(m => members.push(String(m) + rdDialerSuffix(doc, String(m))));
+  (Array.isArray(g.use) ? g.use : []).slice(0, 4).forEach(u => members.push('provider:' + String(u)));
+  const label = (RD_BUILTIN_TARGETS.has(target) && target === 'GLOBAL') ? 'GLOBAL' : typeLabel + ' «' + target + '»';
+  return label + ' → [' + members.join(' / ') + (members.length ? '' : 'пусто') + ']';
+}
+function rdTargetIsRuntimeSelected(doc, target) {
+  const groups = (doc && Array.isArray(doc['proxy-groups'])) ? doc['proxy-groups'] : [];
+  const g = groups.find(x => x && x.name === target);
+  if (!g) return false;
+  return ['select', 'url-test', 'fallback', 'load-balance'].includes(String(g.type || '').toLowerCase());
+}
+
+// Узлы: rule-N, rule-provider:<name>, group:<name>, proxy:<name>, builtin:<T>,
+// dns:config / dns-policy:<entry> (только если doc.dns существует).
+// Рёбра: routes-to, uses, dialed-through, resolves-via (только доказуемые
+// nameserver-policy записи), derived-from (зарезервировано: источник должен
+// быть однозначным; doc-only снапшот спекулятивные derived-from не создаёт).
+function cdgBuildGraph(doc) {
+  // Structural invariants (owner review #140):
+  // 1) один semantic ID → ровно один node (Map; повторное добавление с
+  //    идентичной metadata = no-op, конфликт metadata = явный throw — молчаливого
+  //    overwrite нет);
+  // 2) referential integrity: каждый edge.from и edge.to соответствует
+  //    существующему node — builtin/proxy-provider/unresolved targets создаются
+  //    typed-узлами, чтобы будущий Routing Graph обходил граф без исключений.
+  // Порядок детерминирован: pass 1 — все узлы, pass 2 — все рёбра, sweep —
+  // только builtin/unresolved (эти префиксы больше никто не создаёт).
+  const nodeMap = new Map();
+  const edgeList = [];
+  const add = (id, kind, meta) => {
+    const node = Object.assign({ id, kind }, meta || {});
+    const prev = nodeMap.get(id);
+    if (prev) {
+      const a = JSON.stringify(Object.assign({}, node, { id: '', kind: '' }));
+      const b = JSON.stringify(Object.assign({}, prev, { id: '', kind: '' }));
+      if (a !== b) throw new Error('cdgBuildGraph: conflicting metadata for node ' + id);
+      return id; // deterministic merge: идентичная metadata → no-op
+    }
+    nodeMap.set(id, node);
+    return id;
+  };
+  const link = (from, to, kind) => { edgeList.push({ from, to, kind }); };
+  const rules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const providers = (doc && doc['rule-providers'] && typeof doc['rule-providers'] === 'object') ? doc['rule-providers'] : {};
+  const ppMap = (doc && doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object') ? doc['proxy-providers'] : {};
+  const groups = Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : [];
+  const proxies = Array.isArray(doc && doc.proxies) ? doc.proxies : [];
+  const groupNames = new Set(groups.map(g => g && g.name).filter(Boolean));
+  const proxyNames = new Set(proxies.map(p => p && p.name).filter(Boolean));
+  const targetId = t => {
+    const s = String(t);
+    if (RD_BUILTIN_TARGETS.has(s)) return 'builtin:' + s;
+    if (groupNames.has(s)) return 'group:' + s;
+    if (proxyNames.has(s)) return 'proxy:' + s;
+    if (providers[s]) return 'rule-provider:' + s;
+    return 'unresolved:' + s;
+  };
+
+  // === Pass 1: nodes ===
+  rules.forEach((raw, i) => {
+    const rule = rdParseRule(raw);
+    add('rule:' + i, 'rule', { index: i, raw: String(raw), type: rule.type, value: rule.value, target: rule.target });
+    if (rule.type === 'RULE-SET' && rule.value && providers[rule.value]) {
+      add('rule-provider:' + rule.value, 'rule-provider', { name: rule.value, ptype: providers[rule.value].type || '?', behavior: providers[rule.value].behavior || '?', format: Array.isArray(providers[rule.value].payload) ? 'inline' : (providers[rule.value].format || '?') });
+    }
+  });
+  groups.forEach(g => {
+    add('group:' + g.name, 'proxy-group', { name: g.name, gtype: g.type });
+    (Array.isArray(g.use) ? g.use : []).forEach(u => {
+      // proxy-provider node: только доказуемая metadata из generated config
+      // (name/type/url/path); remote contents не раскрываются, membership
+      // остаётся runtime/external unknown — узлов-членов не выдумываем.
+      const pp = ppMap[u];
+      add('proxy-provider:' + String(u), 'proxy-provider', {
+        name: String(u),
+        ptype: (pp && pp.type) || null,
+        url: (pp && pp.url) || null,
+        path: (pp && pp.path) || null
+      });
+    });
+  });
+  proxies.forEach(p => {
+    add('proxy:' + p.name, 'proxy', { name: p.name, ptype: p.type, isWireguard: p.type === 'wireguard' });
+  });
+  if (doc && doc.dns && typeof doc.dns === 'object') {
+    add('dns:config', 'dns-policy', {
+      enhancedMode: doc.dns['enhanced-mode'] || null,
+      nameservers: Array.isArray(doc.dns.nameservers) ? doc.dns.nameservers.length : null
+    });
+    const np = doc.dns['nameserver-policy'];
+    if (np && typeof np === 'object') {
+      Object.keys(np).forEach(k => {
+        add('dns-policy:' + k, 'dns-entry', { domain: k, servers: Array.isArray(np[k]) ? np[k] : [np[k]] });
+      });
+    }
+  }
+
+  // === Pass 2: edges ===
+  rules.forEach((raw, i) => {
+    const rule = rdParseRule(raw);
+    if (rule.type === 'RULE-SET' && rule.value && providers[rule.value]) {
+      link('rule:' + i, 'rule-provider:' + rule.value, 'uses');
+      link('rule-provider:' + rule.value, targetId(rule.target), 'routes-to');
+    } else {
+      link('rule:' + i, targetId(rule.target), 'routes-to');
+    }
+  });
+  groups.forEach(g => {
+    (Array.isArray(g.proxies) ? g.proxies : []).forEach(m => link('group:' + g.name, targetId(String(m)), 'uses'));
+    (Array.isArray(g.use) ? g.use : []).forEach(u => link('group:' + g.name, 'proxy-provider:' + String(u), 'uses'));
+  });
+  proxies.forEach(p => {
+    const dp = p['dialer-proxy'] || (p.wireguard && p.wireguard.dialerProxy);
+    if (dp) link('proxy:' + p.name, targetId(String(dp)), 'dialed-through');
+  });
+  if (doc && doc.dns && typeof doc.dns === 'object') {
+    const np = doc.dns['nameserver-policy'];
+    if (np && typeof np === 'object') {
+      Object.keys(np).forEach(k => link('dns-policy:' + k, 'dns:config', 'resolves-via'));
+    }
+  }
+
+  // === Referential integrity sweep: builtin/unresolved endpoints ===
+  for (const e of edgeList) {
+    for (const ep of [e.from, e.to]) {
+      if (nodeMap.has(ep)) continue;
+      if (ep.startsWith('builtin:')) add(ep, 'builtin', { name: ep.slice('builtin:'.length) });
+      else if (ep.startsWith('unresolved:')) add(ep, 'unresolved', { name: ep.slice('unresolved:'.length) });
+      else add(ep, 'unresolved', { name: ep });
+    }
+  }
+  return { nodes: Array.from(nodeMap.values()), edges: edgeList };
+}
+
+// Domain Coverage (первый consumer графа): для каждого домена — победившее
+// правило (первое совпадение), inline-провайдер или прямое правило, таргет и
+// статический путь насколько это доказуемо. «Совпадение с правилом» не
+// приравнивается к «гарантированно конкретный прокси»: select/url-test/fallback
+// честно помечаются runtime-selected. stale=true помечает snapshot предыдущей
+// сборки (контракт 4B); скрытый Build не выполняется.
+function cdgDomainCoverage(doc, domainsText, opts) {
+  const stale = !!(opts && opts.stale);
+  const inputs = String(domainsText || '').split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const docRules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const DC_DOMAIN_RE = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+  const results = inputs.map(input => {
+    const kind = rdClassifyInput(input);
+    if (kind.kind === 'empty') return { input, valid: false, verdict: 'INVALID', reason: 'пустая строка', stale };
+    if (kind.kind === 'domain' && !DC_DOMAIN_RE.test(input.toLowerCase())) {
+      return { input, valid: false, verdict: 'INVALID', reason: 'не похож на валидный домен (пробелы/служебные символы); DOMAIN-KEYWORD-совпадения с таким вводом не анализируются', stale };
+    }
+    const res = routingInspect(doc, input);
+    if (res.verdict === 'UNKNOWN') {
+      return { input, valid: true, verdict: 'UNKNOWN', reason: res.message || 'победившее правило недоказуемо офлайн (GEOSITE/GEOIP/внешний провайдер/DNS-зависимое)', stale };
+    }
+    if (res.verdict === 'NO MATCH') {
+      return { input, valid: true, verdict: 'UNCOVERED', reason: res.message || 'ни одно правило не совпало, fallback-правило MATCH отсутствует', stale };
+    }
+    const w = res.winner;
+    const isMatch = res.verdict === 'FALLBACK';
+    let rule, ruleRaw;
+    if (isMatch) {
+      ruleRaw = String(docRules[w]);
+      rule = rdParseRule(docRules[w]);
+    } else {
+      const m = res.matched.find(x => x.index === w);
+      rule = m.rule;
+      ruleRaw = String(rule.raw != null ? rule.raw : docRules[w]);
+    }
+    const runtimeSelected = rdTargetIsRuntimeSelected(doc, rule.target);
+    return {
+      input,
+      valid: true,
+      verdict: isMatch ? 'FALLBACK' : 'MATCHED',
+      ruleIndex: w,
+      ruleRaw,
+      ruleType: rule.type,
+      viaProvider: rule.provider || (rule.type === 'RULE-SET' ? rule.value : null),
+      target: rule.target,
+      chainText: rdSemanticTargetText(doc, rule.target, { expandGlobal: true }),
+      runtimeSelected,
+      stale
+    };
+  });
+  return { results, stale, graph: cdgBuildGraph(doc) };
+}
+/* === CONFIG DEPENDENCY GRAPH CORE — CDG-CORE-END === */
 /* === ROUTING DIAGNOSTICS CORE — RD-CORE-END === */
+
+// === STALE BUILD DIAGNOSTICS CONTRACT (v1.9 4B, Explainability) ===
+// Snapshot-модель Inspector/Provider-диагностики остаётся (скрытый Build не
+// выполняется), но она обязана быть честной: после изменения любого input,
+// влияющего на Build, диагностика помечается STALE заметным баннером, а после
+// нового Build — снова current. Контракт: fingerprint build-релевантного
+// состояния (супермножество контролов Builder-вкладки + WG-профили + DPR-карточки);
+// чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
+// ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
+// но визуально помечен как previous Build.
+const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput']);
+let lastBuildFingerprint = null;
+
+function buildStateFingerprint() {
+  const parts = [];
+  document.querySelectorAll('#tab-mihomo input, #tab-mihomo select, #tab-mihomo textarea').forEach(el => {
+    if (BUILD_STALE_EXCLUDED_IDS.has(el.id)) return;
+    if (el.type === 'file') return; // содержимое файлов отражено в wgProfiles
+    parts.push((el.id || el.name || el.className) + '=' + (el.type === 'checkbox' ? String(el.checked) : el.value));
+  });
+  parts.push('wgProfiles=' + wgProfiles.map(p => [p.filename, p.mode, p.target].join(':')).join('|'));
+  const cards = document.querySelectorAll('#policyCards .policy-card');
+  const cardParts = Array.from(cards).map(card => {
+    const g = sel => { const el = card.querySelector(sel); return el ? el.value : ''; };
+    return [g('.policy-name'), g('.policy-target'), g('.policy-domains')].join(':');
+  });
+  parts.push('policies=' + cardParts.join('|'));
+  return parts.join('\n');
+}
+
+function refreshBuildStaleness() {
+  const warn = document.getElementById('staleBuildWarn');
+  if (!warn) return;
+  if (lastBuildFingerprint === null) { warn.style.display = 'none'; return; }
+  warn.style.display = buildStateFingerprint() !== lastBuildFingerprint ? 'block' : 'none';
+}
+
+function markBuildFresh() {
+  lastBuildFingerprint = buildStateFingerprint();
+  refreshBuildStaleness();
+}
+
+(function bindBuildStalenessWatch() {
+  const tab = document.getElementById('tab-mihomo');
+  if (!tab) return;
+  // input/change покрывают текстовые поля, селекты и чекбоксы; click нужен для
+  // кнопок, мутирующих состояние (добавить/удалить политику, WG-профили, очистить).
+  // Синхронно: bubbling-слушатель на вкладке выполняется ПОСЛЕ элементарных
+  // обработчиков, т.е. после мутации DOM — гонок с ассертами тестов нет.
+  ['input', 'change', 'click'].forEach(ev => tab.addEventListener(ev, refreshBuildStaleness));
+})();
 
 // === ROUTING DIAGNOSTICS UI (read-only; только отображает результаты ядра) ===
 const RD_NL = String.fromCharCode(10);
@@ -3808,7 +4646,8 @@ function updateRoutingDiagnostics(yaml) {
     });
     summary.textContent = lines.join(RD_NL);
     const preview = routingPreview(doc, lastRoutingHumanNames);
-    previewEl.textContent = preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + (p.target || '—')).join(RD_NL);
+    previewEl.textContent = preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + rdSemanticTargetText(doc, p.target)).join(RD_NL)
+      + RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы.';
     if (typeof web4core.planWireGuardMtu === 'function') {
       try { lastMtuPlan = web4core.planWireGuardMtu(doc); } catch (_) { lastMtuPlan = null; }
     } else lastMtuPlan = null;
@@ -3854,7 +4693,7 @@ function runRoutingInspector() {
   }
   const w = res.winner;
   const rule = res.matched.find(m => m.index === w).rule;
-  let text = '✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + rule.raw + RD_NL + RD_NL + 'Маршрут: ' + labelOf(w) + ' → ' + (rule.target || '—');
+  let text = '✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + rule.raw + RD_NL + RD_NL + 'Маршрут: ' + labelOf(w) + ' → ' + rdSemanticTargetText(lastRoutingDoc, rule.target || '—') + RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы.';
   const others = res.matched.filter(m => m.index !== w);
   if (others.length) {
     text += RD_NL + RD_NL + 'Также совпало:' + RD_NL + others.map(m => '#' + (m.index + 1) + ' ' + m.rule.raw).join(RD_NL);
@@ -3865,7 +4704,35 @@ function runRoutingInspector() {
 }
 document.addEventListener('click', (e) => {
   if (e.target && e.target.id === 'rdTestBtn') { e.preventDefault(); runRoutingInspector(); }
+  if (e.target && e.target.id === 'dcRunBtn') { e.preventDefault(); runDomainCoverage(); }
 });
+
+// Domain Coverage UI (v1.9 PHASE 5): первый consumer Config Dependency Graph.
+// Только отображение результатов ядра (cdgDomainCoverage); snapshot последнего
+// Build; STALE помечает каждую строку, скрытый Build не выполняется.
+function runDomainCoverage() {
+  const out = document.getElementById('dcResults');
+  if (!out) return;
+  if (!lastRoutingDoc) {
+    out.textContent = 'Сначала выполните Build — покрытие анализирует итоговый сгенерированный конфиг.';
+    return;
+  }
+  const stale = document.getElementById('staleBuildWarn') && document.getElementById('staleBuildWarn').style.display === 'block';
+  const res = cdgDomainCoverage(lastRoutingDoc, document.getElementById('dcInput').value, { stale });
+  if (!res.results.length) { out.textContent = 'Введите домены (по одному в строке).'; return; }
+  const lines = [];
+  if (res.stale) lines.push('⚠ Snapshot предыдущей сборки (настройки изменены после Build).');
+  for (const r of res.results) {
+    const head = r.input + ':';
+    if (!r.valid) { lines.push(head + ' INVALID — ' + r.reason); continue; }
+    if (r.verdict === 'UNKNOWN' || r.verdict === 'UNCOVERED') { lines.push(head + ' ' + r.verdict + ' — ' + r.reason); continue; }
+    const via = r.verdict === 'FALLBACK'
+      ? 'fallback MATCH'
+      : (r.viaProvider ? 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw + ' (inline-провайдер «' + r.viaProvider + '»)' : 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw);
+    lines.push(head + ' ' + via + RD_NL + '  → ' + r.chainText + (r.runtimeSelected ? ' — runtime-selected' : '') + (r.stale ? RD_NL + '  (⚠ предыдущая сборка)' : ''));
+  }
+  out.textContent = lines.join(RD_NL);
+}
 
 // MTU chain notes (NIGHT-05, diagnostics-only): отображение результатов
 // web4core.planWireGuardMtu на карточках профилей. GENERATED YAML НЕ МЕНЯЕТСЯ:
@@ -4196,12 +5063,13 @@ async function buildMihomo() {
     // Список серверов — только по явной кнопке «Получить список» (fetchServerList);
     // Build сетевых запросов за списком не делает никогда.
     const realityModern = parseRealityModernLines();
-    const buildBeans = wgProfiles.map(wgProfileBuildBean);
+    // Бины для движка И для injectWgDns — один и тот же policy-applied набор.
+    const engineBeans = wgEngineBeans({});
     const result = api.buildFromRequest({
       core: 'mihomo',
       input: mainInput,
       ...(autoWhitelist ? { fallbackInput: fallbackPrepared } : {}),
-      wgBeans: normalizeWgBeans(buildBeans),
+      wgBeans: engineBeans,
       options: {
         addSocks: addSocks,
         addTun: addTun,
@@ -4224,7 +5092,7 @@ async function buildMihomo() {
       }
     });
 
-    injectWgDns(result, buildBeans);
+    injectWgDns(result, engineBeans);
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
     yaml = applyProviderDialerTargets(yaml);
@@ -4257,6 +5125,7 @@ async function buildMihomo() {
 
     document.getElementById('mihomoOutput').value = yaml;
     updateRoutingDiagnostics(yaml);
+    markBuildFresh();
     renderCompatSummary(yaml);
     showToast('✅ Mihomo config built!');
     if (realityModern.invalid > 0) {

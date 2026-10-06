@@ -24,7 +24,14 @@ const { chromium } = require('playwright');
 const RAW_CONTRACTS = {
   'wg-single': raw => {
     assert.ok(raw.includes('ip-version: ipv4'), 'wg-single: сырой вывод потерял ip-version: ipv4 — регрессия IPv4-only контракта');
-    assert.ok(!/\bpersistent-keepalive\b/.test(raw), 'wg-single: сырой вывод содержит persistent-keepalive — PK range снова эмитится/коллапсирует (25-35 не должен переноситься)');
+    // #137 (DEFAULT ON 🛡 NAT keepalive): PK range теперь ЛЕГАЛЬНО сводится к 25
+    // явной user-visible политикой — единственная допустимая форма в сыром
+    // выводе: persistent-keepalive: 25. Сырой range (25-35) или любое другое
+    // значение — регрессия. Строгий контракт (поле не эмитится) закреплён
+    // отдельно в tests/awg-stability.cjs под OFF тоггла.
+    assert.ok(raw.includes('persistent-keepalive: 25'), 'wg-single: сырой вывод потерял persistent-keepalive: 25 — регрессия #137 policy (или движок перестал эмитить)');
+    assert.ok(!/persistent-keepalive: (?!25\b)\d+/.test(raw), 'wg-single: persistent-keepalive с неожиданным значением (валидный source integer не должен перезаписываться)');
+    assert.ok(!/persistent-keepalive: \d+-\d+/.test(raw), 'wg-single: сырой PK range в выводе — silent collapse вернулся');
   },
 };
 
@@ -34,7 +41,7 @@ async function build(page) {
   return page.evaluate(() => document.getElementById('mihomoOutput').value);
 }
 
-async function runScenario(browser, root, candRoot, name, actions) {
+async function runScenario(browser, root, candRoot, name, actions, checkContracts) {
   const page = await browser.newPage();
   page.setDefaultTimeout(20000);
   await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ path: process.env.JS_YAML_PATH, contentType: 'text/javascript' }));
@@ -42,7 +49,9 @@ async function runScenario(browser, root, candRoot, name, actions) {
   await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
   await actions(page, candRoot);
   const yaml = await build(page);
-  if (RAW_CONTRACTS[name]) RAW_CONTRACTS[name](yaml);
+  // Контрактные пины применяются только к CANDIDATE-выводу: base — историческое
+  // reference-дерево, его поведение не обязано удовлетворять текущие контракты.
+  if (checkContracts && RAW_CONTRACTS[name]) RAW_CONTRACTS[name](yaml);
   await page.close();
   // x-hwid — случайный per-subscription идентификатор Mihomo-провайдера;
   // нормализуем, он не является частью сравниваемого контракта.
@@ -55,9 +64,12 @@ async function runScenario(browser, root, candRoot, name, actions) {
   // candidate-выводе; снятие — задокументированное ожидаемое отличие контракта,
   // любые ДРУГИе отличия по-прежнему дают PARITY-DIFF.
   // EXPECTED v1.8.0 contract change (NIGHT-06): PersistentKeepalive range
-  // ('25-35') больше не эмитится (Mihomo принимает только целое); в base
-  // consumer collapse давал 'persistent-keepalive: 25' — строка снимается,
-  // candidate её не содержит.
+  // ('25-35') больше не переносится дословно (Mihomo принимает только целое).
+  // EXPECTED v1.9 contract change (#137, 🛡 DEFAULT ON): range сводится к
+  // 'persistent-keepalive: 25' ЯВНОЙ user-visible политикой — строка есть в
+  // ОБЕИХ сторонах (в base её давал старый consumer collapse) и снимается;
+  // сам контракт 25--only закреплён RAW_CONTRACTS, strict-OFF — в
+  // tests/awg-stability.cjs.
   return yaml
     .replace(/^[ \t]*persistent-keepalive: 25\n/gm, '')
     .replace(/^[ \t]*ip-version: ipv4\n/gm, '')
@@ -129,8 +141,8 @@ async function runScenario(browser, root, candRoot, name, actions) {
   };
   let fail = 0;
   for (const [name, actions] of Object.entries(scenarios)) {
-    const a = await runScenario(browser, baseRoot, candRoot, name, actions);
-    const b = await runScenario(browser, candRoot, candRoot, name, actions);
+    const a = await runScenario(browser, baseRoot, candRoot, name, actions, false);
+    const b = await runScenario(browser, candRoot, candRoot, name, actions, true);
     const same = a === b;
     if (!same) fail++;
     console.log(`${same ? 'PARITY-OK ' : 'PARITY-DIFF'} ${name} (base ${a.length}B / cand ${b.length}B)`);

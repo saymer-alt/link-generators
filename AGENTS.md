@@ -81,10 +81,50 @@ do not copy an unverified runtime, and do not force-push.
 ### Tab 1 "WARP MASQUE Links" — all logic is inline in `index.html`
 
 - `parseYaml()` — imports a compatible WARP YAML config (Telegram bot, WARPSCOUT, or any
-  compatible source; the UI label is source-agnostic): `jsyaml.loadAll` over all documents,
-  finds `proxies[0]` or an object with a `private-key`/`privateKey` key; rejects input without
-  `private-key`. It deliberately imports only the WARP identity/tunnel parameters used by the form:
-  `private-key`, `public-key`, `ip`, `ipv6`, `sni`, and `dns`.
+  compatible source; the UI label is source-agnostic): `jsyaml.loadAll` over all documents;
+  rejects input without `private-key`. It deliberately imports only the WARP identity/tunnel
+  parameters used by the form: `private-key`, `public-key`, `ip`, `ipv6`, `sni`, and `dns`.
+- **WARPSCOUT/Mihomo MASQUE import path (v1.9, #125):** when the YAML contains proxies with
+  `type: masque`, ALL proxies are scanned — never blind `proxies[0]`, and a non-MASQUE proxy
+  is never interpreted as a transport. Network classification fails closed: absent/empty →
+  H3/QUIC; `network: h2` (case-insensitive) → H2/TCP; any other non-empty token (`tcp`,
+  `h3`, `foo`, …) is an UNSUPPORTED candidate — shown in the banner with proxy name and raw
+  token, never imported as an endpoint, never silently treated as H3.
+  Each found transport contributes an exact endpoint (`server:port`) and per-transport SNI
+  into the «Advanced MASQUE» fields, with an explainability banner («WARPSCOUT / Mihomo
+  MASQUE detected») naming what was imported as exact and what stays builtin. Several
+  candidates of one transport → an explicit selector by proxy name; silent first-proxy
+  selection is forbidden. A transport without a candidate stays fully builtin. Exact
+  endpoint/SNI fields are per-config facts: any successful import resets them (together with
+  the identity fields); custom port lists are user preferences and survive re-import.
+- **MASQUE identity consistency (load-bearing, owner review #134):** the generator holds ONE
+  common WARP identity, so the actually selected H3+H2 pair must be compatible in material
+  identity fields — `private-key`, `public-key`, `ip`, `ipv6` (when present). An incompatible
+  pair is rejected fail-closed BEFORE any import (identity and endpoints are not applied):
+  the diagnostic names the conflicting profiles and field names, never secret values; a
+  hybrid «identity A + endpoint B» is never created. Consistency is checked after the
+  user's actual selection (also through the ambiguity selector); while any transport is
+  ambiguous, nothing is applied until the explicit «Импортировать выбранных» click. DNS is
+  classified separately: differing DNS values between selected candidates do not reject the
+  import but are never chosen silently — an explicit diagnostic names both values and the
+  first is imported consciously. Empty candidate SNI is a deliberate fallback: the banner
+  states «SNI не задан в candidate → используется общий SNI»; no SNI is ever invented.
+  **Private-key provenance (owner review round 2):** the importable pair must carry its OWN
+  key — the private-key guard applies to the actually selected supported pair, never to the
+  candidate pool; a key sitting in an UNSUPPORTED or unselected candidate never validates a
+  supported candidate without its own key, and no identity is taken from outside the
+  selected pair. **All-UNSUPPORTED YAML** (no supported H3/H2 candidates at all) fails
+  closed with «MASQUE YAML найден, но поддерживаемых H3/H2 кандидатов нет» — unsupported
+  names and raw tokens listed, no success toast and no «Заполнено» badge (a fail-closed
+  parse also clears a stale badge from a previous import).
+- **Per-transport generation precedence (v1.9):** exact imported/manual endpoint → custom
+  port list → builtin strategy. Exact endpoints are authoritative and are never rewritten by
+  anti-correlation (it only steers generator-selected H2 IPs); a custom port list fully
+  replaces the builtin weighted choice for that transport (no hidden mixing); ports are
+  integers 1..65535 with trim and dedup, and invalid tokens are explicit errors
+  (`443abc` is never coerced to 443). Endpoints accept `IPv4:port` and `hostname:port`;
+  IPv6 endpoints are rejected with a clear message (the MASQUE IPv6 contract is unproven —
+  do not guess; the WireGuard IPv4-only policy is a WG contract and is not applied to MASQUE).
 - **Legacy WARP-bot YAML import contract (load-bearing):** the imported YAML is a source of WARP
   identity/tunnel parameters, **not** a source of transport endpoint selection. Source
   `server`, `port`, and `network` values must not start overriding `generateWarp()`.
@@ -92,8 +132,8 @@ do not copy an unverified runtime, and do not force-push.
   endpoint/transport selection and applies the project's tested H3/QUIC + H2/TCP strategy below.
   Do not "fix" this by wiring source endpoints into the existing import path.
   If another source (for example a scanner that has already discovered a specific working
-  endpoint) must preserve `server`/`port`/`network`, add a separate explicit
-  import/conversion path (planned for v1.9, #125); it may reuse helpers, but it must not silently change the semantics
+  endpoint) must preserve `server`/`port`/`network`, use the explicit WARPSCOUT/MASQUE
+  import path above; it must not silently change the semantics
   of `parseYaml()` or `generateWarp()`.
 - `generateWarp()` — generates pairs of QUIC + H2 links. These are NOT random numbers, but a tuned
   anti-DPI strategy (marked in code with comments "P.1/P.2/P.3") — see "DPI strategy".
@@ -327,6 +367,29 @@ and selection. Device Model: user value (if filled) is sent as
 x-device-model on preview fetches; fallback is
 the user's Device Model value when filled (fallback `Saymer Link Generators Preview`); HWID is unaffected. HWID contract
 unchanged: stable per-browser identity, never random-per-request.
+
+### AWG stability policy (#137)
+
+Two explicit user-visible toggles in the WG/AWG section (Builder tab), applied to build-time
+bean COPIES (`wgEngineBeans`) — original profiles are never mutated; switching a toggle off
+restores the strict contract byte-for-byte. Regression: `tests/awg-stability.cjs`.
+
+- «🛡 Поддерживать AWG-соединение через NAT (keepalive 25 с)» — **DEFAULT ON**, AWG-only
+  scope (plain WireGuard is deliberately outside the policy: no existing contract justifies
+  extending its semantics). A valid source integer `PersistentKeepalive` (including 0 =
+  disabled) is never replaced. Missing/incompatible value (e.g. range `25-35`) → emitted
+  `persistent-keepalive: 25` with an `awgFieldReport` trace (`SUPPORTED_NORMALIZED`,
+  «explicit user-enabled Mihomo compatibility fallback; fixed 25 не эквивалентен исходной
+  random-range semantics»). Toggle OFF → current strict behavior (range not emitted,
+  WARN/UNSUPPORTED stays).
+- «🧪 Тест обрывов: отключить RandomTrailers» — **DEFAULT OFF**. When ON, AWG profiles with
+  `random-trailers: true` get `random-trailers: false` at build time, an explicit red
+  warning (controlled diagnostic experiment, NOT a proven universal fix) and an
+  `IGNORED_BY_POLICY` trace entry. MTU/PrivateKey/PSK/HPK and unrelated fields are never
+  touched by either toggle.
+
+Card notes preview what Build will do with the profile under current toggle state; every
+policy change is visible in the existing WG/AWG diagnostic report. No silent mutation.
 
 ### buildFromRequest contract
 

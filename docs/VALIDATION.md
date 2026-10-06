@@ -1,5 +1,15 @@
 # VALIDATION — pre-copy валидатор Mihomo YAML
 
+## YAML 1.1 scalar safety
+
+Пользовательские строковые значения (имена прокси/политик, SNI, endpoint, AWG string-поля)
+эмитятся типобезопасно: рискованные для YAML-парсеров скаляры (`yes/no/on/off`, `null`/`~`,
+ведущие нули, даты) закавычиваются автоматическим YAML-эмиттером; `yes/no/on/off/nan/12:34:56`
+могут остаться unquoted — целевой парсер Mihomo (go.yaml.in/yaml/v3 v3.0.5) читает их как строки
+(верифицировано round-trip тестом). Числовые/булевы поля движка сохраняют тип. Raw-вставка
+пользовательского YAML сохраняет YAML-семантику пользователя (см. docs/DEVELOPMENT.md).
+Regression: tests/yaml-scalar-hardening.cjs.
+
 ## Автоматический режим белых списков (2026-09-15)
 
 Контракт и точная структура YAML: [AUTO-WHITELIST.md](AUTO-WHITELIST.md).
