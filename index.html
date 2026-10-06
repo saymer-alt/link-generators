@@ -253,21 +253,21 @@
     <div class="card">
       <div class="card-title">⚙️ Advanced MASQUE — точные endpoint'ы (необязательно)</div>
       <div class="row">
-        <div><label>H3 / QUIC endpoint</label><input type="text" id="h3Endpoint" placeholder="пусто = встроенная стратегия"></div>
-        <div><label>H3 / QUIC SNI</label><input type="text" id="h3Sni" placeholder="пусто = общий SNI выше"></div>
+        <div><label>H3 / QUIC endpoint</label><input type="text" id="h3Endpoint" aria-label="H3 QUIC endpoint" placeholder="пусто = встроенная стратегия"></div>
+        <div><label>H3 / QUIC SNI</label><input type="text" id="h3Sni" aria-label="H3 QUIC SNI" placeholder="пусто = общий SNI выше"></div>
       </div>
       <div class="row" style="margin-top:12px">
-        <div><label>H2 / TCP endpoint</label><input type="text" id="h2Endpoint" placeholder="пусто = встроенная стратегия"></div>
-        <div><label>H2 / TCP SNI</label><input type="text" id="h2Sni" placeholder="пусто = общий SNI выше"></div>
+        <div><label>H2 / TCP endpoint</label><input type="text" id="h2Endpoint" aria-label="H2 TCP endpoint" placeholder="пусто = встроенная стратегия"></div>
+        <div><label>H2 / TCP SNI</label><input type="text" id="h2Sni" aria-label="H2 TCP SNI" placeholder="пусто = общий SNI выше"></div>
       </div>
       <div class="row" style="margin-top:12px">
-        <div><label>H3 ports (свой список, через запятую)</label><input type="text" id="h3Ports" placeholder="например 443, 8443"></div>
-        <div><label>H2 ports (свой список, через запятую)</label><input type="text" id="h2Ports" placeholder="например 443, 8443, 4443"></div>
+        <div><label>H3 ports (свой список, через запятую)</label><input type="text" id="h3Ports" aria-label="H3 ports list" placeholder="например 443, 8443"></div>
+        <div><label>H2 ports (свой список, через запятую)</label><input type="text" id="h2Ports" aria-label="H2 ports list" placeholder="например 443, 8443, 4443"></div>
       </div>
       <div id="warpImportAmbiguity" style="display:none;margin-top:12px">
         <div class="row">
-          <div><label>H3 / QUIC кандидат импорта</label><select id="h3CandidateSelect"></select></div>
-          <div><label>H2 / TCP кандидат импорта</label><select id="h2CandidateSelect"></select></div>
+          <div><label>H3 / QUIC кандидат импорта</label><select id="h3CandidateSelect" aria-label="H3 candidate to import"></select></div>
+          <div><label>H2 / TCP кандидат импорта</label><select id="h2CandidateSelect" aria-label="H2 candidate to import"></select></div>
         </div>
         <div class="btn-group" style="margin-top:8px">
           <button class="btn btn-purple" onclick="applyWarpscoutSelection()">📥 Импортировать выбранных</button>
@@ -512,7 +512,7 @@
           <details id="domainCoveragePanel" style="margin-top:8px">
             <summary style="cursor:pointer"><span>▶</span> <span>Domain Coverage Checker</span></summary>
             <div class="hint">Покрытие доменов итоговым конфигом (результат последнего Build): какое правило выигрывает первым, через inline-правило или провайдера, и статический путь до цели насколько это доказуемо. «Совпадает с правилом» ≠ «гарантированно идёт через конкретный прокси»: для <code>select</code>/<code>url-test</code>/<code>fallback</code> участник определяется Mihomo во время работы (помечается <code>runtime-selected</code>). GEOSITE/GEOIP/внешние провайдеры/DNS-зависимые правила честно возвращают UNKNOWN. По одному домену в строке; только чтение — конфиг не меняется.</div>
-            <textarea id="dcInput" rows="4" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="gemini.google.com&#10;youtube.com&#10;unknown-service.example"></textarea>
+            <textarea id="dcInput" rows="4" aria-label="Domains to check, one per line" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="gemini.google.com&#10;youtube.com&#10;unknown-service.example"></textarea>
             <div class="btn-group" style="margin-top:6px">
               <button type="button" class="btn btn-gray" id="dcRunBtn">Проверить покрытие</button>
             </div>
