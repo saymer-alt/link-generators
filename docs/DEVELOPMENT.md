@@ -6,8 +6,8 @@
 **один** production source-of-truth — константа `GENERATOR_META` в `index.html`
 (см. тест `tests/version-badge.cjs`):
 
-- development build: `version = '1.8.0-dev'`, `channel = 'main'` → бейдж `v1.8.0-dev · MAIN`;
-- release build: `version = '1.8.0'`, `channel = 'stable'` → бейдж `v1.8.0 · STABLE`.
+- development build: `version = '<X>-dev'`, `channel = 'main'` → бейдж `v<X>-dev · MAIN` (текущий development cycle — `v1.9.0-dev · MAIN`);
+- release build: `version = '<X>'`, `channel = 'stable'` → бейдж `v<X> · STABLE`.
 
 `channel` — это metadata конкретной сборки, а **не** определение git-ветки в рантайме:
 браузер не знает ветку, и никакой hostname/URL/API-эвристики для этого сознательно нет.
@@ -21,7 +21,8 @@
 - **Preview main**: workflow «Build main preview» (push в main / вручную) выкладывает
   скачиваемый артефакт `link-generators-main-preview` (retention 14 дней). Артефакт
   распаковать и открыть `index.html` локально (file:// поддерживается) — production
-  Pages и stable не затрагиваются. Бейдж версии живой на main (GENERATOR_META из PR #110 chain уже смержен): артефакт показывает `v1.8.0-dev · MAIN`.
+  Pages и stable не затрагиваются. Бейдж версии живой на main (GENERATOR_META): артефакт
+  показывает текущий dev-бейдж (формат `v<X>-dev · MAIN`).
 - **Production Pages smoke**: workflow «Production Pages smoke» (вручную после деплоя
   stable): HTTP-доступность (bounded retry), сверка бейджа с GENERATOR_META ветки
   `stable` (несовпадение → HTTP_OK_BUT_STALE_VERSION/BADGE_MISSING), synthetic Build

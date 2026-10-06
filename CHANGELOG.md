@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Открыт development cycle **v1.9.0** (канонический scope — issue #125 «Configuration Intelligence + WARPSCOUT-aware MASQUE»): `GENERATOR_META` = `1.9.0-dev` / `main` (бейдж `v1.9.0-dev · MAIN`). История v1.8.0 закреплена в секции `[1.8.0]`.
+
+## [1.8.0] - 2026-10-06
+
 ### Added
 
 - **No-silent-drop для полей WG/AWG (NIGHT-06)**: парсер ведёт отчёт `awgFieldReport` по каждому распознанному полю (`SUPPORTED / SUPPORTED_NORMALIZED / UNSUPPORTED / INVALID / UNKNOWN / IGNORED_BY_POLICY`), карточка профиля показывает WARN по неперенсённым значениям. **Behavior change**: `PersistentKeepalive = 25-35` (диапазон) больше **не** конвертируется в 25 и не эмитится — Mihomo принимает только целое (сырой `"25-35"` отвергается конфигом), диапазон сохраняется в отчёте с WARN; профиль остаётся рабочим. `PK = 0` корректно различается (0 = disabled, поле опускается по семантике Mihomo). Числовые поля — строгий парсинг (`Jc = 123abc` больше не превращается в 123); вне диапазона uint32 → INVALID и не эмитится. Булевы вне набора 1/true/yes/0/false/no → UNSUPPORTED (raw сохранён). Duration/range поля v3 (`rekey-*` и др.) проверяются на синтаксис `N`/`N-M`. Неизвестные AWG-поля → UNKNOWN-диагностика; wg-quick окружение (Table/PostUp/ListenPort…) → IGNORED_BY_POLICY. HeaderProtectionKey в отчёте логируется как «(present)» — значение не логируется.
