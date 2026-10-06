@@ -59,6 +59,7 @@ jobs:
           node --check tools/warp-dialer-fieldtest/fieldtest.mjs
           node --check tools/warp-dialer-fieldtest/lib.mjs
           node --check tools/warp-dialer-fieldtest/check-secrets.mjs
+          node --check tools/check-architect-upstream.mjs
 
       - name: Every deterministic test is wired into CI
         shell: bash
