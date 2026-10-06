@@ -206,6 +206,9 @@ jobs:
       - name: Explainability UX regression (SELECT semantics + stale build)
         run: node tests/explainability-ux.cjs
 
+      - name: Mobile tabs regression (#142)
+        run: node tests/mobile-tabs.cjs
+
       - name: Domain Coverage Checker browser regression
         run: node tests/domain-coverage.cjs
       - name: Health-check URL browser regression

@@ -175,7 +175,12 @@
   @media (max-width:640px){.ctx-help-pop{right:auto;left:50%;transform:translateX(-50%)}}
   /* Responsive */
   @media (max-width:768px){body{padding:8px}.container{border-radius:0}.tab{padding:7px 10px 6px}.card{padding:14px 10px 10px}}
-  @media (max-width:390px){body{padding:4px}.tabs{flex-wrap:wrap}.tab{flex:1 1 100%;border-radius:0;border-bottom:none}.tab.active{top:0;margin-bottom:0}.row{flex-direction:column}.row>*{min-width:0}.btn{flex:1 1 auto}.wg-target-row,.wg-card-mode{flex-direction:column;align-items:stretch}}
+  /* #142: обе вкладки в строку помещаются только с ~447px; 391–446px — dead zone
+     (flex-строка без wrap выталкивала «⚙️ Mihomo Config Builder» за контейнер).
+     Стек вкладок поднимаем с ≤390 на ≤480 (wrap/stack предпочтительнее
+     микрошрифта; min-width:0 не спасает при flex:0 0 auto + nowrap-тексте). */
+  @media (max-width:480px){.tabs{flex-wrap:wrap}.tab{flex:1 1 100%;border-radius:0;border-bottom:none}.tab.active{top:0;margin-bottom:0}}
+  @media (max-width:390px){body{padding:4px}.row{flex-direction:column}.row>*{min-width:0}.btn{flex:1 1 auto}.wg-target-row,.wg-card-mode{flex-direction:column;align-items:stretch}}
 </style>
 </head>
 <body>
