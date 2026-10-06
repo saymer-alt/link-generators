@@ -1269,6 +1269,12 @@ function humanizeWgError(raw, confText) {
   if (r.includes('missing Address')) return 'Нет Address в [Interface].';
   if (r.includes('missing PublicKey')) return 'Нет PublicKey в [Peer].';
   if (r.includes('missing AllowedIPs')) return 'Нет AllowedIPs в [Peer].';
+  if (r.includes('only an IPv6 interface address')) {
+    return 'WG/AWG профиль содержит только IPv6-адрес интерфейса. link-generators работает в IPv4-only режиме, поэтому профиль нельзя использовать без IPv4 Address.';
+  }
+  if (r.includes('IPv6 literal endpoint')) {
+    return 'Endpoint профиля — IPv6-литерал. IPv4-only режим генератора требует IPv4-endpoint или hostname.';
+  }
   return '';
 }
 
@@ -1362,6 +1368,17 @@ function initWgUpload() {
         if (requestId !== wgUploadSeq) return;
         rejectedNow.push({ filename: file.name, human: humanizeWgError(e.message, text) || e.message, technical: e.message });
         continue;
+      }
+      // IPv4-only contract (v1.8.0), жёсткая часть: IPv6-only Address и IPv6 literal
+      // endpoint отклоняются на upload (defense-in-depth: emitter на Build reject-ит
+      // тем же контрактом validateWireGuardIpv4Only).
+      if (typeof api.validateWireGuardIpv4Only === 'function') {
+        const v4 = api.validateWireGuardIpv4Only(bean);
+        if (!v4.ok) {
+          if (requestId !== wgUploadSeq) return;
+          rejectedNow.push({ filename: file.name, human: humanizeWgError(v4.reason, text) || v4.reason, technical: v4.reason, code: v4.code });
+          continue;
+        }
       }
       const key = wgBeanKey(bean);
       if (seen.has(key)) { skippedDup++; continue; }
