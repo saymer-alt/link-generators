@@ -80,16 +80,41 @@ Signature size formula (verified against `device_v1/awg/tag_generator.go` and
 
 ## PersistentKeepalive (PHASE 12)
 
-1. AWG config format: accepts `25` and ranges `25-35` (seen in real Amnezia exports).
-2. web4core raw parser: integer only — `25-35` fails `/^\d+$/` → silently undefined.
-3. Consumer `normalizeWgText` (index.html:1156) collapses `25-35` → `25` **before**
-   parsing — a documented, deliberate normalization.
-4–5. Mihomo 1.19.31/1.19.32: `PersistentKeepalive int`; runtime matrix proof: raw
-   `persistent-keepalive: "25-35"` in YAML is **rejected by both versions**
-   (`cannot parse 'persistent-keepalive' as int: strconv.ParseInt: parsing "25-35"`),
-   while the consumer-normalized `25` passes on both.
-6. Without the consumer step the value would be dropped (parser) or rejected (mihomo).
-7. Range → lower bound is deterministic and proven necessary. Keep as-is.
+> **Update v1.9 (#137):** pre-#137 этот раздел описывал consumer collapse `25-35 → 25`
+> как deliberate normalization. После merged #137 collapse больше НЕ является
+> поведением по умолчанию: фиксированный 25 под диапазон применяется только как
+> **explicit user-visible policy** с trace-записью в diagnostic report. Текущий контракт —
+> ниже; исторические пункты (1, 2, 4–5) про source semantics и Mihomo ограничение
+> остаются верными.
+
+Source semantics vs runtime limitation vs v1.9 policy:
+
+1. **Source AWG semantics**: config format accepts `25` and ranges `25-35`
+   (seen in real Amnezia exports).
+2. **Mihomo scalar limitation**: `PersistentKeepalive int` — raw
+   `persistent-keepalive: "25-35"` in YAML is **rejected by both 1.19.31 and
+   1.19.32** (`cannot parse 'persistent-keepalive' as int: strconv.ParseInt:
+   parsing "25-35"`). Этот research fact остаётся верным.
+3. **Strict parser/report behavior (v1.8 NIGHT-06, действует при policy OFF)**:
+   web4core raw parser — integer only; range сохраняется как raw fact в
+   `awgFieldReport` (UNSUPPORTED), поле НЕ эмитится, карточка показывает WARN.
+   Никакого silent collapse; `PK = 0` различается (disabled, поле опускается).
+4. **Current v1.9 policy — stability toggle ON (DEFAULT, #137)**: у AWG-профиля
+   без совместимого целого PK (отсутствует или диапазон) при сборке эмитится
+   `persistent-keepalive: 25`; диапазон → trace
+   `SUPPORTED_NORMALIZED — explicit user-enabled compatibility fallback` с
+   обязательной пометкой, что **fixed 25 НЕ эквивалентен** исходной random-range
+   semantics (random-per-interval детерминированно теряется). Валидный integer
+   из источника (включая 0 = disabled) никогда не заменяется. Scope — только
+   AWG-профили (`amnezia-wg-option`); plain WireGuard вне политики.
+5. **Policy OFF**: строгий контракт п.3 — raw range как fact, поле omitted,
+   WARN/UNSUPPORTED, без silent collapse.
+
+Политика применяется к копиям бинов на пути сборки (`wgEngineBeans`) —
+оригинальные профили не мутируются; выключение тоггла байт-в-байт возвращает
+строгий контракт. Regression: `tests/awg-stability.cjs` (матрица A/B/C).
+Auto-MTU по-прежнему disabled (PARTIALLY PROVEN) — эта policy ничего не меняет
+в overhead-модели ниже: 25 B/keepalive-пакет не входит в data-path overhead.
 
 ## Parser fidelity (PHASE 17)
 
@@ -99,8 +124,9 @@ Type mapping matches Mihomo's expectations: ints (`jc..s4`, `itime`, `version`),
 booleans (`random-trailers`, `disable-cookies`, `1/true/yes` — `on/off` normalized by
 the consumer first), strings (`h1–h4`, `i1–i5`, `header-protection-key`,
 `content-padding-addition`, `rekey-*`, `keepalive-*`, `max-handshake-attempts`).
-Unknown AWG keys are silently dropped (J1–J3/ITime are mapped; a truly unknown key is
-lost) — noted as low debt, no Mihomo-facing impact. No supported field is silently lost.
+Unknown AWG keys: since NIGHT-06 (v1.8) the parser records an UNKNOWN entry in
+`awgFieldReport` instead of dropping them silently (J1–J3/ITime are mapped) —
+no Mihomo-facing impact. No supported field is silently lost.
 
 ## Mihomo compatibility matrix (PHASE 18, `mihomo -t`, synthetic configs)
 
@@ -117,10 +143,16 @@ lost) — noted as low debt, no Mihomo-facing impact. No supported field is sile
 | CPA + S4 (v3) | PASS | PASS | content-padding-addition,s4,version |
 | RandomTrailers (v3) | PASS | PASS | random-trailers,version |
 | PK integer 25 | PASS | PASS | — (proxy-level persistent-keepalive: 25) |
-| PK range (consumer-normalized) | PASS | PASS | — (persistent-keepalive: 25) |
-| PK range RAW `"25-35"` | **FAIL** | **FAIL** | cannot parse as int |
+| PK integer 30 + stability ON | PASS | PASS | — (persisted as 30; #137 никогда не заменяет валидный integer) |
+| PK range raw to Mihomo `"25-35"` | **FAIL** | **FAIL** | cannot parse as int |
+| PK range `25-35` + stability ON | PASS | PASS | — (persistent-keepalive: 25 — explicit user-visible normalization, fixed 25 НЕ эквивалентен random-range) |
+| PK range `25-35` + stability OFF | PASS | PASS | — (field omitted; WARN/UNSUPPORTED в отчёте) |
+| PK missing + stability ON | PASS | PASS | — (persistent-keepalive: 25) |
 
-`mihomo -t` proves acceptance only, not runtime semantics (per source analysis above).
+`mihomo -t` proves acceptance only, **not semantic equivalence** с исходной
+random-range семантикой: PASS строки «range + stability ON» означают лишь, что
+`25` принимается движком, а не что поведение идентично диапазону (см. PHASE 12,
+п.4).
 
 ## Deterministic data-overhead model (PHASE 19)
 
