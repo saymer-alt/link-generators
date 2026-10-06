@@ -682,7 +682,10 @@ const expectedAwg = {
     const proxy = awg.doc.proxies[0];
     for (const [key, value] of Object.entries(expectedAwg)) assert.equal(proxy['amnezia-wg-option'][key], value, key);
     assert.match(await page.locator('#mihomoCompatBox').innerText(), /AmneziaWG 3\.1.*1\.19\.30/s);
-    assert.equal(proxy['persistent-keepalive'], 25);
+    // NIGHT-06: PersistentKeepalive = 25-35 — диапазон не поддерживается Mihomo,
+    // значение НЕ эмитится (без auto-конвертации в 25), карточка предупреждает.
+    assert.equal(proxy['persistent-keepalive'], undefined, 'PK range не эмитится (NIGHT-06 контракт)');
+    assert.match(await page.locator('#wgList').innerText(), /25-35/, 'карточка предупреждает о PK range');
     assert.deepEqual(proxy.dns, ['1.1.1.1', '8.8.8.8']);
     assert.equal(proxy['amnezia-wg-option'].h1, '100001-100010');
     const stages = await page.evaluate(text => {
@@ -715,15 +718,20 @@ const expectedAwg = {
       return {
         awg: normalized.wireguard['amnezia-wg-option'],
         keepalive: normalized.wireguard.persistentKeepalive,
+        keepaliveReport: normalized.awgFieldReport || [],
         text: normalizedText,
       };
     }, { text: fixture });
     assert.equal(inlineComments.awg['random-trailers'], true);
     assert.equal(inlineComments.awg['disable-cookies'], false);
-    assert.equal(inlineComments.keepalive, 25);
+    // NIGHT-06: PK range больше не сворачивается в 25 — UNSUPPORTED/INVALID
+    // диагностика, значение не эмитится, raw сохранён в отчёте (no-silent-drop)
+    assert.equal(inlineComments.keepalive, undefined);
+    const pkReport = inlineComments.keepaliveReport.find(r => r.key === 'persistent-keepalive');
+    assert.ok(pkReport && ['UNSUPPORTED', 'INVALID'].includes(pkReport.status), 'PK range задокументирован: ' + JSON.stringify(pkReport));
     assert.match(inlineComments.text, /RandomTrailers = 1 # keep enabled/);
     assert.match(inlineComments.text, /DisableCookies = 0 ; keep disabled/);
-    assert.match(inlineComments.text, /PersistentKeepalive = 25 # use lower bound/);
+    assert.match(inlineComments.text, /PersistentKeepalive = 25-35 # use lower bound/);
     await page.locator('#cfgTunMips').check();
     await page.locator('#cfgProfile').selectOption('vps-gateway');
     // v1.6.2: Sub Mode — per-profile default (первый вход в VPS = ON); сценарий задаёт его явно

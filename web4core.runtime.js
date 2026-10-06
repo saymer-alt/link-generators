@@ -2662,6 +2662,599 @@
     return config;
   }
 
+  // src/core/wireguard.js
+  function parseWireGuardConf(confText, nameHint) {
+    const text = String(confText || "").replace(/\r\n/g, "\n");
+    const lines = text.split("\n");
+    let section = "";
+    const iface = {};
+    const peers = [];
+    let curPeer = null;
+    const cleanLine = (ln) => {
+      let s = (ln || "").trim();
+      if (!s) return "";
+      const hash = s.indexOf("#");
+      const semi = s.indexOf(";");
+      const cut = hash === -1 ? semi : semi === -1 ? hash : Math.min(hash, semi);
+      if (cut !== -1) s = s.slice(0, cut).trim();
+      return s;
+    };
+    const splitKV = (ln) => {
+      const i = ln.indexOf("=");
+      if (i === -1) return null;
+      const k = ln.slice(0, i).trim();
+      const v = ln.slice(i + 1).trim();
+      if (!k) return null;
+      return { k, v };
+    };
+    const parseCsv = (v) => String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const parseAddrList = (v) => parseCsv(v).map((x) => x.replace(/\s+/g, "")).filter(Boolean);
+    const awgReport = [];
+    const report = (key, rawValue, status, note) => {
+      awgReport.push({ key: String(key || ""), rawValue: String(rawValue ?? ""), status, note: note || "" });
+    };
+    const UINT32_MAX = 4294967295;
+    const setAwgOpt = (target, key, value) => {
+      const k = String(key || "").trim().toLowerCase();
+      const raw = String(value ?? "").trim();
+      const map = {
+        jc: "jc",
+        jmin: "jmin",
+        jmax: "jmax",
+        s1: "s1",
+        s2: "s2",
+        s3: "s3",
+        s4: "s4",
+        h1: "h1",
+        h2: "h2",
+        h3: "h3",
+        h4: "h4",
+        i1: "i1",
+        i2: "i2",
+        i3: "i3",
+        i4: "i4",
+        i5: "i5",
+        j1: "j1",
+        j2: "j2",
+        j3: "j3",
+        itime: "itime",
+        version: "version",
+        headerprotectionkey: "header-protection-key",
+        contentpaddingaddition: "content-padding-addition",
+        rekeyaftertime: "rekey-after-time",
+        rekeytimeout: "rekey-timeout",
+        rejectaftertime: "reject-after-time",
+        keepalivetimeout: "keepalive-timeout",
+        maxhandshakeattempts: "max-handshake-attempts",
+        randomtrailers: "random-trailers",
+        disablecookies: "disable-cookies"
+      };
+      if (!map[k]) return false;
+      if (!target["amnezia-wg-option"]) target["amnezia-wg-option"] = {};
+      const outKey = map[k];
+      const numericKeys = /* @__PURE__ */ new Set(["version", "jc", "jmin", "jmax", "s1", "s2", "s3", "s4", "itime"]);
+      const uintKeys = /* @__PURE__ */ new Set(["jc", "jmin", "jmax", "s1", "s2", "s3", "s4"]);
+      const booleanKeys = /* @__PURE__ */ new Set(["random-trailers", "disable-cookies"]);
+      if (numericKeys.has(outKey)) {
+        if (!/^-?\d+$/.test(raw)) {
+          target["amnezia-wg-option"][outKey] = raw;
+          report(outKey, raw, "INVALID", "\u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C \u0446\u0435\u043B\u043E\u0435 \u0447\u0438\u0441\u043B\u043E, Mihomo \u0442\u0430\u043A\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u043E\u0442\u0432\u0435\u0440\u0433\u043D\u0435\u0442");
+          return true;
+        }
+        const n = parseInt(raw, 10);
+        if (n < 0 || uintKeys.has(outKey) && n > UINT32_MAX) {
+          target["amnezia-wg-option"][outKey] = raw;
+          report(outKey, raw, "INVALID", "\u0432\u043D\u0435 \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D\u0430 uint32");
+          return true;
+        }
+        target["amnezia-wg-option"][outKey] = n;
+        report(outKey, raw, "SUPPORTED");
+        return true;
+      }
+      if (booleanKeys.has(outKey)) {
+        const boolValue = raw.toLowerCase();
+        if (!["1", "true", "yes", "0", "false", "no"].includes(boolValue)) {
+          target["amnezia-wg-option"][outKey] = raw;
+          report(outKey, raw, "UNSUPPORTED", "\u043D\u0435\u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u043D\u043E\u0435 \u0431\u0443\u043B\u0435\u0432\u043E \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 (\u043E\u0436\u0438\u0434\u0430\u0435\u0442\u0441\u044F 1/true/yes/0/false/no)");
+          return true;
+        }
+        target["amnezia-wg-option"][outKey] = ["1", "true", "yes"].includes(boolValue);
+        report(outKey, raw, "SUPPORTED");
+        return true;
+      }
+      if (outKey === "header-protection-key") {
+        target["amnezia-wg-option"][outKey] = raw;
+        report(outKey, "(present)", "SUPPORTED");
+        return true;
+      }
+      if (outKey === "content-padding-addition") {
+        const okSyntax = /^\d+(-\d+)?$/.test(raw);
+        target["amnezia-wg-option"][outKey] = raw;
+        report(outKey, raw, okSyntax ? "SUPPORTED" : "INVALID", okSyntax ? "" : "\u043E\u0436\u0438\u0434\u0430\u0435\u0442\u0441\u044F N \u0438\u043B\u0438 N-M");
+        return true;
+      }
+      if (["rekey-after-time", "rekey-timeout", "reject-after-time", "keepalive-timeout", "max-handshake-attempts"].includes(outKey)) {
+        const okSyntax = /^\d+(-\d+)?$/.test(raw);
+        target["amnezia-wg-option"][outKey] = raw;
+        report(outKey, raw, okSyntax ? "SUPPORTED" : "INVALID", okSyntax ? "" : "\u043E\u0436\u0438\u0434\u0430\u0435\u0442\u0441\u044F N \u0438\u043B\u0438 N-M (\u0441\u0435\u043A\u0443\u043D\u0434\u044B)");
+        return true;
+      }
+      target["amnezia-wg-option"][outKey] = raw;
+      report(outKey, raw, "SUPPORTED");
+      return true;
+    };
+    const parseReserved = (v) => {
+      const s = String(v || "").trim();
+      if (!s) return void 0;
+      if (s.includes(",")) {
+        const parts = parseCsv(s);
+        const nums = parts.map((x) => /^\d+$/.test(x) ? parseInt(x, 10) : NaN).filter((n) => Number.isInteger(n) && n >= 0 && n <= 255);
+        return nums.length ? nums : void 0;
+      }
+      return s;
+    };
+    const unmatched = [];
+    for (const rawLine of lines) {
+      const ln = cleanLine(rawLine);
+      if (!ln) continue;
+      const secMatch = ln.match(/^\[([^\]]+)\]$/);
+      if (secMatch) {
+        section = (secMatch[1] || "").trim().toLowerCase();
+        if (section === "peer") {
+          curPeer = {};
+          peers.push(curPeer);
+        } else {
+          curPeer = null;
+        }
+        continue;
+      }
+      const kv = splitKV(ln);
+      if (!kv) continue;
+      const key = kv.k.trim();
+      const value = kv.v;
+      const keyLower = key.toLowerCase();
+      if (setAwgOpt(iface, key, value)) continue;
+      unmatched.push({ key: key.trim(), value, section });
+      if (section === "interface") {
+        if (keyLower === "privatekey") iface.privateKey = value;
+        else if (keyLower === "address") iface.addresses = parseAddrList(value);
+        else if (keyLower === "dns") iface.dns = parseCsv(value);
+        else if (keyLower === "mtu") iface.mtu = /^\d+$/.test(value) ? parseInt(value, 10) : void 0;
+        else if (keyLower === "name") iface.name = value;
+        else if (keyLower === "ipstack" || keyLower === "ipstackmode") {
+          if (!iface.ipStack) iface.ipStack = {};
+          iface.ipStack.mode = value;
+        } else if (keyLower === "ipstackcongestioncontroller") {
+          if (!iface.ipStack) iface.ipStack = {};
+          iface.ipStack["congestion-controller"] = value;
+        } else if (["listenport", "table", "saveconfig", "preup", "postup", "predown", "postdown", "fwmark"].includes(keyLower)) {
+          report(key, value, "IGNORED_BY_POLICY", "\u043F\u043E\u043B\u0435 WireGuard-\u043E\u043A\u0440\u0443\u0436\u0435\u043D\u0438\u044F, \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u043C\u043E\u0435 \u043A Mihomo proxy");
+        }
+      } else if (section === "peer" && curPeer) {
+        if (keyLower === "publickey") curPeer.publicKey = value;
+        else if (keyLower === "presharedkey") curPeer.preSharedKey = value;
+        else if (keyLower === "allowedips") curPeer.allowedIPs = parseAddrList(value);
+        else if (keyLower === "endpoint") curPeer.endpoint = value;
+        else if (keyLower === "persistentkeepalive") {
+          if (/^\d+$/.test(value)) {
+            curPeer.persistentKeepalive = parseInt(value, 10);
+            report(
+              "persistent-keepalive",
+              value,
+              value === "0" ? "SUPPORTED_NORMALIZED" : "SUPPORTED",
+              value === "0" ? "0 = keepalive \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D (Mihomo \u043E\u043F\u0443\u0441\u0442\u0438\u0442 \u043F\u043E\u043B\u0435)" : ""
+            );
+          } else if (/^\d+-\d+$/.test(value)) {
+            curPeer.pkRaw = value;
+            report("persistent-keepalive", value, "UNSUPPORTED", "Mihomo \u043E\u0436\u0438\u0434\u0430\u0435\u0442 \u0446\u0435\u043B\u043E\u0435 persistent-keepalive \u2014 \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D \u043D\u0435 \u043F\u0435\u0440\u0435\u043D\u0435\u0441\u0451\u043D");
+          } else {
+            curPeer.pkRaw = value;
+            report("persistent-keepalive", value, "INVALID", "\u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C \u0446\u0435\u043B\u043E\u0435 \u0447\u0438\u0441\u043B\u043E (\u0438\u043B\u0438 \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D)");
+          }
+        } else if (keyLower === "reserved") {
+          curPeer.reserved = parseReserved(value);
+        } else if (["listenport", "table", "saveconfig", "preup", "postup", "predown", "postdown", "fwmark"].includes(keyLower)) {
+          report(key, value, "IGNORED_BY_POLICY", "\u043F\u043E\u043B\u0435 WireGuard-\u043E\u043A\u0440\u0443\u0436\u0435\u043D\u0438\u044F, \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u043C\u043E\u0435 \u043A Mihomo proxy");
+        } else {
+          setAwgOpt(iface, key, value);
+        }
+      }
+    }
+    const KNOWN_BASE = /* @__PURE__ */ new Set([
+      "privatekey",
+      "address",
+      "dns",
+      "mtu",
+      "name",
+      "endpoint",
+      "persistentkeepalive",
+      "publickey",
+      "presharedkey",
+      "allowedips",
+      "reserved",
+      "listenport",
+      "table",
+      "saveconfig",
+      "preup",
+      "postup",
+      "predown",
+      "postdown",
+      "fwmark"
+    ]);
+    for (const u of unmatched) {
+      if (!KNOWN_BASE.has(u.key.toLowerCase())) {
+        report(u.key, u.value, "UNKNOWN", "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E\u0435 \u043F\u043E\u043B\u0435 \u2014 \u0432 YAML \u043D\u0435 \u043F\u043E\u043F\u0430\u0434\u0430\u0435\u0442");
+      }
+    }
+    const chosenPeer = peers[0] || {};
+    const { host, port } = parseAddrHostPort(chosenPeer.endpoint || "", 51820);
+    const addrs = Array.isArray(iface.addresses) ? iface.addresses : [];
+    const ipv4Raw = addrs.find((a) => /^(\d{1,3}\.){3}\d{1,3}(\/\d+)?$/.test(a));
+    const ipv6Raw = addrs.find((a) => /:/.test(a));
+    const ipv4 = ipv4Raw ? ipv4Raw.split("/")[0] : "";
+    const ipv6 = ipv6Raw ? ipv6Raw.split("/")[0] : "";
+    const nameBase = (iface.name || nameHint || "WireGuard").toString().trim();
+    const name = nameBase ? nameBase.replace(/\.(conf|wg|awg)$/i, "") : "WireGuard";
+    const wgPeers = peers.map((p) => {
+      const ap = parseAddrHostPort(p.endpoint || "", 51820);
+      return {
+        server: ap.host,
+        port: ap.port,
+        publicKey: p.publicKey || "",
+        preSharedKey: p.preSharedKey || "",
+        allowedIPs: Array.isArray(p.allowedIPs) ? p.allowedIPs : [],
+        reserved: p.reserved
+      };
+    }).filter((p) => p.server && p.port);
+    const keepalive = peers.map((p) => p.persistentKeepalive).find((v) => Number.isFinite(v));
+    const hasIpv6 = !!ipv6;
+    const peer0 = wgPeers[0] || {};
+    const allowed0 = Array.isArray(peer0.allowedIPs) ? peer0.allowedIPs.slice() : [];
+    const allowedFiltered0 = hasIpv6 ? allowed0 : allowed0.filter((x) => !String(x || "").includes(":"));
+    const peersFiltered = wgPeers.map((peer) => {
+      const a = Array.isArray(peer.allowedIPs) ? peer.allowedIPs : [];
+      const allowedFiltered = hasIpv6 ? a : a.filter((x) => !String(x || "").includes(":"));
+      return Object.assign({}, peer, { allowedIPs: allowedFiltered });
+    });
+    const bean = {
+      proto: "wireguard",
+      name,
+      host: peer0.server || host,
+      port: peer0.port || port,
+      ipVersion: hasIpv6 ? "" : "ipv4",
+      wireguard: {
+        ip: ipv4 || "",
+        ipv6: ipv6 || "",
+        addresses: Array.isArray(iface.addresses) ? iface.addresses.slice() : [],
+        privateKey: iface.privateKey || "",
+        publicKey: peer0.publicKey || (chosenPeer.publicKey || ""),
+        preSharedKey: peer0.preSharedKey || (chosenPeer.preSharedKey || ""),
+        allowedIPs: allowedFiltered0.length ? allowedFiltered0 : chosenPeer.allowedIPs || [],
+        reserved: peer0.reserved !== void 0 ? peer0.reserved : chosenPeer.reserved,
+        peers: peersFiltered.length >= 2 ? peersFiltered : void 0,
+        dns: Array.isArray(iface.dns) && iface.dns.length ? iface.dns : [],
+        remoteDnsResolve: Array.isArray(iface.dns) && iface.dns.length ? true : false,
+        ipStack: iface.ipStack && typeof iface.ipStack === "object" ? iface.ipStack : void 0,
+        mtu: iface.mtu,
+        persistentKeepalive: keepalive,
+        persistentKeepaliveRaw: peers.map((p) => p.pkRaw).find((v) => v !== void 0)
+      }
+    };
+    if (iface["amnezia-wg-option"]) {
+      bean.wireguard["amnezia-wg-option"] = iface["amnezia-wg-option"];
+    }
+    bean.awgFieldReport = awgReport;
+    return bean;
+  }
+  function isIpv6AddrEntry(entry) {
+    return String(entry || "").includes(":");
+  }
+  function normalizeWireGuardIpv4Only(wg) {
+    const src = wg && typeof wg === "object" ? wg : {};
+    const allowedIPs = Array.isArray(src.allowedIPs) ? src.allowedIPs.filter((x) => !isIpv6AddrEntry(x)) : src.allowedIPs;
+    const peers = Array.isArray(src.peers) ? src.peers.map((peer) => {
+      if (!peer || typeof peer !== "object") return peer;
+      const filtered = Array.isArray(peer.allowedIPs) ? peer.allowedIPs.filter((x) => !isIpv6AddrEntry(x)) : peer.allowedIPs;
+      return Object.assign({}, peer, { allowedIPs: filtered });
+    }) : src.peers;
+    const dns = Array.isArray(src.dns) ? src.dns.filter((x) => !isIpv6AddrEntry(x)) : src.dns;
+    const removed = {
+      addresses: isIpv6AddrEntry(src.ipv6) ? 1 : 0,
+      allowedIps: (Array.isArray(src.allowedIPs) ? src.allowedIPs.filter((x) => isIpv6AddrEntry(x)).length : 0) + (Array.isArray(src.peers) ? src.peers.reduce((acc, peer) => acc + (Array.isArray(peer && peer.allowedIPs) ? peer.allowedIPs.filter((x) => isIpv6AddrEntry(x)).length : 0), 0) : 0),
+      dns: Array.isArray(src.dns) ? src.dns.filter((x) => isIpv6AddrEntry(x)).length : 0
+    };
+    return {
+      ip: src.ip || "",
+      ipv6: "",
+      // contract: IPv6 interface address never emitted
+      allowedIPs,
+      peers,
+      dns,
+      removed,
+      ipv6Removed: removed.addresses + removed.allowedIps + removed.dns > 0,
+      ipv6RemovedCount: removed.addresses + removed.allowedIps + removed.dns
+    };
+  }
+  function validateWireGuardIpv4Only(bean) {
+    const wg = bean && bean.wireguard && typeof bean.wireguard === "object" ? bean.wireguard : {};
+    const norm = normalizeWireGuardIpv4Only(wg);
+    if (!norm.ip) {
+      return {
+        ok: false,
+        code: "WG_IPV6_ONLY_ADDRESS",
+        reason: "wireguard: profile has only an IPv6 interface address; link-generators emits IPv4-only WireGuard and requires an IPv4 Address"
+      };
+    }
+    const isV6 = (s) => String(s || "").includes(":");
+    if (isV6(bean.host)) {
+      return {
+        ok: false,
+        code: "WG_IPV6_ENDPOINT",
+        reason: 'wireguard: IPv6 literal endpoint "' + bean.host + '" is not allowed in IPv4-only output; use an IPv4 endpoint or a hostname'
+      };
+    }
+    const peers = Array.isArray(norm.peers) ? norm.peers : [];
+    const v6Peer = peers.findIndex((p) => p && isV6(p.server));
+    if (v6Peer !== -1) {
+      return {
+        ok: false,
+        code: "WG_IPV6_ENDPOINT",
+        reason: "wireguard: peer #" + (v6Peer + 1) + " has an IPv6 literal endpoint; IPv4-only output requires IPv4 endpoints or hostnames"
+      };
+    }
+    if (Array.isArray(wg.allowedIPs) && wg.allowedIPs.length > 0 && Array.isArray(norm.allowedIPs) && norm.allowedIPs.length === 0) {
+      return {
+        ok: false,
+        code: "WG_ALLOWEDIPS_IPV6_ONLY",
+        reason: "wireguard: all AllowedIPs are IPv6; after IPv4-only filtering the list is empty. Profile is rejected instead of a half-working route \u2014 add an IPv4 AllowedIPs (e.g. 0.0.0.0/0)"
+      };
+    }
+    const srcPeers = Array.isArray(wg.peers) ? wg.peers : [];
+    for (let i = 0; i < srcPeers.length; i++) {
+      const p = srcPeers[i];
+      if (!p || typeof p !== "object") continue;
+      const had = Array.isArray(p.allowedIPs) && p.allowedIPs.length > 0;
+      const left = peers[i] && Array.isArray(peers[i].allowedIPs) ? peers[i].allowedIPs.length : 0;
+      if (had && left === 0) {
+        return {
+          ok: false,
+          code: "WG_PEER_ALLOWEDIPS_IPV6_ONLY",
+          reason: "wireguard: peer #" + (i + 1) + " has only IPv6 AllowedIPs; after IPv4-only filtering the list is empty. Peer is rejected instead of a half-working route \u2014 add an IPv4 AllowedIPs (e.g. 0.0.0.0/0)"
+        };
+      }
+    }
+    return { ok: true, code: null, reason: null };
+  }
+  function computeAmneziaTagJunkSize(spec) {
+    const input = String(spec || "");
+    const tags = input.match(/<[^<>]*>/g) || [];
+    let size = 0;
+    const unknown = [];
+    for (const raw of tags) {
+      const m = raw.slice(1, -1).match(/^([a-zA-Z]+)(?:\s+(.*?))?$/);
+      if (!m) {
+        unknown.push(raw);
+        continue;
+      }
+      const tag = m[1];
+      const param = (m[2] || "").trim();
+      const n = /^\d+$/.test(param) ? parseInt(param, 10) : null;
+      if (tag === "b") {
+        const hex = param.replace(/^0x/i, "").replace(/\s+/g, "");
+        size += /^[0-9a-fA-F]+$/.test(hex) ? Math.floor(hex.length / 2) : 0;
+        if (!/^[0-9a-fA-F]+$/.test(hex)) unknown.push(raw);
+      } else if ((tag === "r" || tag === "rc" || tag === "rd") && n !== null) {
+        size += n;
+      } else if (tag === "t" || tag === "c") {
+        size += n !== null && n > 0 ? n : 8;
+      } else if (tag === "wt" || tag === "wr" || tag === "d" || tag === "ds") {
+      } else if (tag === "dz" && n !== null) {
+        size += n;
+      } else {
+        unknown.push(raw);
+      }
+    }
+    if (!tags.length) unknown.push(input);
+    return { size, unknown };
+  }
+  function analyzeWireGuardProfile(bean) {
+    const wg = bean && bean.wireguard && typeof bean.wireguard === "object" ? bean.wireguard : {};
+    const norm = normalizeWireGuardIpv4Only(wg);
+    const importedMtu = Number.isFinite(wg.mtu) && wg.mtu > 0 ? wg.mtu : null;
+    const notes = [];
+    const awg = wg["amnezia-wg-option"] && typeof wg["amnezia-wg-option"] === "object" ? wg["amnezia-wg-option"] : {};
+    const reportIssues = (bean.awgFieldReport || []).filter((r) => ["UNSUPPORTED", "INVALID", "UNKNOWN"].includes(r.status));
+    for (const issue of reportIssues.slice(0, 4)) {
+      notes.push({
+        level: "warn",
+        text: "AWG " + issue.key + " = " + issue.rawValue + " \u2014 " + issue.note + " (\u0432 YAML \u043D\u0435 \u043F\u0435\u0440\u0435\u043D\u0435\u0441\u0435\u043D\u043E)"
+      });
+    }
+    if (reportIssues.length > 4) {
+      notes.push({ level: "warn", text: "\u2026 \u0438 \u0435\u0449\u0451 " + (reportIssues.length - 4) + " \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u0430 AWG \u0442\u0440\u0435\u0431\u0443\u044E\u0442 \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u044F" });
+    }
+    (bean.awgFieldReport || []).filter((r) => r.status === "SUPPORTED_NORMALIZED").slice(0, 2).forEach((r) => {
+      notes.push({ level: "info", text: "AWG " + r.key + " = " + r.rawValue + " \u2014 " + r.note });
+    });
+    const num = (v) => Number.isFinite(v) ? v : /^\d+$/.test(String(v || "")) ? parseInt(v, 10) : null;
+    if (norm.ipv6Removed) {
+      notes.push({ level: "info", text: "IPv6 detected in imported WG/AWG profile. Removed by link-generators IPv4-only contract." });
+    }
+    if (importedMtu === null) {
+      notes.push({ level: "info", text: "MTU \u0432 \u043A\u043E\u043D\u0444\u0438\u0433\u0435 \u043D\u0435 \u0437\u0430\u0434\u0430\u043D \u2014 Mihomo \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442 default 1408." });
+    }
+    const s4 = num(awg.s4);
+    if (s4 !== null && s4 > 0) {
+      notes.push({ level: "info", text: "AWG S4 = " + s4 + ": junk \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043A \u043A\u0430\u0436\u0434\u043E\u043C\u0443 transport-\u043F\u0430\u043A\u0435\u0442\u0443 (\u043F\u0435\u0440-\u043F\u0430\u043A\u0435\u0442\u043D\u044B\u0439 overhead)." });
+    }
+    const cpRaw = String(awg["content-padding-addition"] || "").trim();
+    if (cpRaw) {
+      const range = cpRaw.match(/^(\d+)-(\d+)$/);
+      const maxPad = range ? parseInt(range[2], 10) : num(cpRaw);
+      if (maxPad !== null && maxPad > 0) {
+        notes.push({ level: "info", text: "AWG ContentPaddingAddition = " + cpRaw + ": \u043F\u0435\u0440-\u043F\u0430\u043A\u0435\u0442\u043D\u044B\u0439 padding, worst-case +" + maxPad + " \u0431\u0430\u0439\u0442 \u0443\u0447\u0442\u0451\u043D \u0432 \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0435." });
+      } else {
+        notes.push({ level: "warn", text: 'AWG ContentPaddingAddition="' + cpRaw + '": \u0444\u043E\u0440\u043C\u0430\u0442 \u043D\u0435 \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D, \u0442\u043E\u0447\u043D\u044B\u0439 overhead \u043D\u0435 \u0432\u044B\u0447\u0438\u0441\u043B\u0438\u0442\u044C.' });
+      }
+    }
+    if (awg["random-trailers"] === true) {
+      notes.push({ level: "warn", text: "AWG RandomTrailers \u0432\u043A\u043B\u044E\u0447\u0451\u043D: \u0441\u043B\u0443\u0447\u0430\u0439\u043D\u044B\u0435 \u0445\u0432\u043E\u0441\u0442\u044B \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u044B \u0432\u043D\u0443\u0442\u0440\u0435\u043D\u043D\u0438\u043C \u043E\u043A\u043D\u043E\u043C \u0440\u0435\u0430\u043B\u0438\u0437\u0430\u0446\u0438\u0438 (DefaultUdpWindow=500 \u0432 amneziawg-go), \u0441\u0442\u0440\u043E\u0433\u0430\u044F \u0432\u0435\u0440\u0445\u043D\u044F\u044F \u0433\u0440\u0430\u043D\u0438\u0446\u0430 \u0438\u0437 \u043A\u043E\u043D\u0444\u0438\u0433\u0430 \u043D\u0435 \u0432\u044B\u0432\u043E\u0434\u0438\u0442\u0441\u044F." });
+    }
+    const jmax = num(awg.jmax);
+    const jc = num(awg.jc);
+    if (jc !== null && jc > 0 && jmax !== null && jmax > 1408) {
+      notes.push({ level: "warn", text: "AWG Jmax = " + jmax + " \u043F\u0440\u0435\u0432\u044B\u0448\u0430\u0435\u0442 default transport-\u0431\u044E\u0434\u0436\u0435\u0442 1408: junk-\u043F\u0430\u043A\u0435\u0442\u044B \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0435 \u0438 \u043C\u043E\u0433\u0443\u0442 \u0444\u0440\u0430\u0433\u043C\u0435\u043D\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C\u0441\u044F \u043D\u0430 path MTU." });
+    }
+    const iSizes = [];
+    for (const key of ["i1", "i2", "i3", "i4", "i5"]) {
+      const spec = awg[key];
+      if (!spec) continue;
+      const calc = computeAmneziaTagJunkSize(spec);
+      iSizes.push({ key: key.toUpperCase(), size: calc.unknown.length ? null : calc.size, unknown: calc.unknown });
+    }
+    for (const i of iSizes) {
+      if (i.size === null) {
+        notes.push({ level: "warn", text: "AWG " + i.key + ": \u043D\u0435 \u0432\u0441\u0435 \u0442\u0435\u0433\u0438 \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u044B, \u0440\u0430\u0437\u043C\u0435\u0440 signature-\u043F\u0430\u043A\u0435\u0442\u0430 \u043D\u0435 \u0432\u044B\u0447\u0438\u0441\u043B\u0438\u0442\u044C \u0442\u043E\u0447\u043D\u043E." });
+      } else if (i.size > 1408) {
+        notes.push({ level: "warn", text: "AWG " + i.key + " = " + i.size + " B \u043F\u0440\u0435\u0432\u044B\u0448\u0430\u0435\u0442 default transport-\u0431\u044E\u0434\u0436\u0435\u0442 1408: signature-\u043F\u0430\u043A\u0435\u0442 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0439 \u0438 \u043C\u043E\u0436\u0435\u0442 \u0444\u0440\u0430\u0433\u043C\u0435\u043D\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C\u0441\u044F." });
+      } else if (i.size > 0) {
+        notes.push({ level: "info", text: "AWG " + i.key + ": signature-\u043F\u0430\u043A\u0435\u0442 " + i.size + " B (\u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0439, \u043F\u0440\u0438 handshake)." });
+      }
+    }
+    const handshakeOnly = ["s1", "s2", "s3"].filter((k) => num(awg[k]) > 0);
+    if (handshakeOnly.length) {
+      notes.push({ level: "info", text: "AWG " + handshakeOnly.map((k) => k.toUpperCase()).join("/") + ": junk \u0442\u043E\u043B\u044C\u043A\u043E \u0432 handshake-\u043F\u0430\u043A\u0435\u0442\u0430\u0445, \u043D\u0430 transport MTU \u043D\u0435 \u0432\u043B\u0438\u044F\u0435\u0442." });
+    }
+    const headerTags = ["h1", "h2", "h3", "h4"].filter((k) => awg[k] !== void 0 && awg[k] !== "");
+    if (headerTags.length) {
+      notes.push({ level: "info", text: "AWG " + headerTags.map((k) => k.toUpperCase()).join("/") + ": \u0437\u0430\u043C\u0435\u043D\u044F\u044E\u0442 \u0442\u0438\u043F \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u044F (\u0431\u0430\u0439\u0442\u044B), \u0434\u043B\u0438\u043D\u0443 \u043F\u0430\u043A\u0435\u0442\u043E\u0432 \u043D\u0435 \u043C\u0435\u043D\u044F\u044E\u0442." });
+    }
+    return {
+      importedMtu,
+      effectiveMtu: importedMtu,
+      // v1.8.0: auto-correction не выполняется (PoC-гейт не пройден)
+      mtuSource: importedMtu !== null ? "imported" : "engine-default",
+      engineDefaultMtu: 1408,
+      ipv6Removed: norm.ipv6Removed,
+      ipv6RemovedCount: norm.ipv6RemovedCount,
+      removed: norm.removed,
+      ipv6OnlyAddress: !norm.ip,
+      ipv6LiteralEndpoints: [
+        ...isIpv6AddrEntry(bean.host) ? ["primary"] : [],
+        ...(Array.isArray(norm.peers) ? norm.peers : []).map((p, i) => p && isIpv6AddrEntry(p.server) ? "peer #" + (i + 1) : null).filter(Boolean)
+      ],
+      notes,
+      awg: {
+        version: awg.version !== void 0 ? awg.version : null,
+        s4: s4 !== null ? s4 : 0,
+        contentPaddingAddition: cpRaw || null,
+        randomTrailers: awg["random-trailers"] === true,
+        junkPacketCount: jc !== null ? jc : 0,
+        junkPacketMaxSize: jmax !== null ? jmax : 0,
+        iSizes
+      }
+    };
+  }
+  function planWireGuardMtu(doc) {
+    const proxies = doc && Array.isArray(doc.proxies) ? doc.proxies.filter((p) => p && p.type === "wireguard" && p.name) : [];
+    const byName = new Map(proxies.map((p) => [p.name, p]));
+    const profiles = proxies.map((p) => {
+      const awg = p["amnezia-wg-option"] && typeof p["amnezia-wg-option"] === "object" ? p["amnezia-wg-option"] : {};
+      const num = (v) => Number.isFinite(v) ? v : /^\d+$/.test(String(v ?? "")) ? parseInt(v, 10) : null;
+      const cpaRaw = String(awg["content-padding-addition"] || "").trim();
+      const cpaRange = cpaRaw.match(/^(\d+)-(\d+)$/);
+      return {
+        name: p.name,
+        dialer: typeof p["dialer-proxy"] === "string" && p["dialer-proxy"].trim() ? p["dialer-proxy"].trim() : null,
+        importedMtu: Number.isFinite(p.mtu) && p.mtu > 0 ? p.mtu : null,
+        s4: num(awg.s4) || 0,
+        cpaMin: cpaRange ? parseInt(cpaRange[1], 10) : num(cpaRaw) !== null ? num(cpaRaw) : null,
+        cpaMax: cpaRange ? parseInt(cpaRange[2], 10) : num(cpaRaw) !== null ? num(cpaRaw) : null,
+        cpaSet: !!cpaRaw,
+        rt: awg["random-trailers"] === true
+      };
+    });
+    const byProfile = new Map(profiles.map((p) => [p.name, p]));
+    const PRACTICAL_MIN = 576;
+    const memo = /* @__PURE__ */ new Map();
+    const visiting = /* @__PURE__ */ new Set();
+    function plan(name) {
+      if (memo.has(name)) return memo.get(name);
+      if (visiting.has(name)) {
+        const r2 = { name, confidence: "cycle", ceiling: null, effective: null, reason: ["\u0446\u0438\u043A\u043B dialer-proxy \u2014 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044F authoritative cycle detection \u043F\u0440\u0438 \u0441\u0431\u043E\u0440\u043A\u0435"] };
+        memo.set(name, r2);
+        return r2;
+      }
+      visiting.add(name);
+      const pr = byProfile.get(name);
+      const r = { name, chain: [name], confidence: "proven", ceiling: null, effective: null, overhead: null, reason: [] };
+      if (!pr) {
+        r.confidence = "unknown";
+        r.reason.push("\u043F\u0440\u043E\u0444\u0438\u043B\u044C \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D \u0432 \u043A\u043E\u043D\u0444\u0438\u0433\u0435");
+        memo.set(name, r);
+        return r;
+      }
+      r.importedMtu = pr.importedMtu;
+      const cpaMinB = pr.cpaSet ? pr.cpaMin ?? 0 : 0;
+      let ovhMax;
+      let alignMax;
+      if (pr.cpaSet) {
+        ovhMax = pr.s4 + (pr.cpaMax ?? 0);
+        alignMax = 0;
+      } else if (pr.rt) {
+        ovhMax = null;
+        alignMax = null;
+      } else {
+        ovhMax = pr.s4;
+        alignMax = 15;
+      }
+      const padDesc = pr.cpaSet ? "CPA max " + (pr.cpaMax ?? 0) : "align " + alignMax;
+      r.overhead = {
+        min: 32 + pr.s4 + cpaMinB,
+        max: ovhMax !== null ? 32 + ovhMax + alignMax : null,
+        deterministic: pr.cpaSet || !pr.rt
+      };
+      const dialer = pr.dialer;
+      if (!dialer) {
+        r.reason.push("outermost: \u0442\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442 \u2014 \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441");
+        r.effective = pr.importedMtu !== null ? pr.importedMtu : 1408;
+        r.mtuSource = pr.importedMtu !== null ? "imported" : "engine-default";
+      } else if (!byProfile.has(dialer)) {
+        r.confidence = "stopped";
+        r.reason.push("MTU chain analysis stops at non-WG/AWG dialer target \xAB" + dialer + "\xBB");
+        r.effective = pr.importedMtu;
+      } else {
+        const outer = plan(dialer);
+        r.chain = [name].concat(outer.chain || []);
+        if (outer.confidence !== "proven" || outer.effective === null || ovhMax === null) {
+          r.confidence = outer.confidence !== "proven" ? outer.confidence : "unknown";
+          r.effective = pr.importedMtu;
+          if (ovhMax === null) r.reason.push("AWG RandomTrailers: \u0441\u0442\u0440\u043E\u0433\u0430\u044F \u0432\u0435\u0440\u0445\u043D\u044F\u044F \u0433\u0440\u0430\u043D\u0438\u0446\u0430 overhead \u043D\u0435 \u0432\u044B\u0432\u043E\u0434\u0438\u0442\u0441\u044F \u0438\u0437 \u043A\u043E\u043D\u0444\u0438\u0433\u0430 \u2014 \u0440\u0430\u0441\u0447\u0451\u0442 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D, \u0438\u0441\u0445\u043E\u0434\u043D\u044B\u0439 MTU \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D");
+          if (outer.confidence !== "proven") {
+            r.reason.push("\u0432\u043D\u0435\u0448\u043D\u0438\u0439 hop \xAB" + dialer + "\xBB \u043D\u0435 \u0438\u043C\u0435\u0435\u0442 \u0434\u043E\u043A\u0430\u0437\u0430\u043D\u043D\u043E\u0433\u043E \u0431\u044E\u0434\u0436\u0435\u0442\u0430");
+            (outer.reason || []).forEach((rs) => r.reason.push("\u21B3 " + rs));
+          }
+        } else {
+          r.ceiling = outer.effective - (32 + ovhMax + alignMax + 28);
+          if (r.ceiling < PRACTICAL_MIN) {
+            r.confidence = "error";
+            r.effective = pr.importedMtu;
+            r.reason.push("\u0446\u0435\u043F\u043E\u0447\u043A\u0430 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 MTU " + r.ceiling + " \u2014 \u043D\u0438\u0436\u0435 \u043F\u0440\u0430\u043A\u0442\u0438\u0447\u043D\u043E\u0433\u043E \u043C\u0438\u043D\u0438\u043C\u0443\u043C\u0430 " + PRACTICAL_MIN);
+          } else {
+            r.effective = pr.importedMtu !== null ? Math.min(pr.importedMtu, r.ceiling) : r.ceiling;
+            r.mtuSource = "planned-ceiling";
+            r.reason.push("dialer-proxy: " + dialer, "outer effective MTU: " + outer.effective, "IPv4 worst-case per hop: " + (32 + ovhMax + alignMax + 28) + " (32 WG hdr+tag + " + padDesc + (pr.s4 ? " + S4 " + pr.s4 : "") + " + inner IP/UDP 28)");
+          }
+        }
+      }
+      visiting.delete(name);
+      memo.set(name, r);
+      return r;
+    }
+    const out = profiles.map((p) => plan(p.name));
+    return { profiles: out, note: "diagnostics-only: YAML/mtu \u043D\u0435 \u0438\u0437\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F" };
+  }
+
   // src/core/mihomo.js
   var FASTEST_GROUP_NAME = "\u26A1 Fastest";
   var GLOBAL_GROUP_NAME = "GLOBAL";
@@ -3279,7 +3872,10 @@
     }
     if (bean.proto === "wireguard") {
       const wg = bean.wireguard || {};
-      const peers = Array.isArray(wg.peers) ? wg.peers : [];
+      const validation = validateWireGuardIpv4Only(bean);
+      if (!validation.ok) throw new Error(validation.reason);
+      const ipv4 = normalizeWireGuardIpv4Only(wg);
+      const peers = Array.isArray(ipv4.peers) ? ipv4.peers : [];
       const hasPeers = peers.length > 0;
       const mapPeer = (peer) => {
         if (!peer || typeof peer !== "object") return null;
@@ -3298,19 +3894,25 @@
         "private-key": wg.privateKey,
         udp: true
       };
-      if (wg.ip) p.ip = wg.ip;
-      if (wg.ipv6) p.ipv6 = wg.ipv6;
+      if (ipv4.ip) p.ip = ipv4.ip;
       if (wg.publicKey) p["public-key"] = wg.publicKey;
       if (wg.preSharedKey) p["pre-shared-key"] = wg.preSharedKey;
-      if (Array.isArray(wg.allowedIPs) && wg.allowedIPs.length) p["allowed-ips"] = wg.allowedIPs;
+      if (Array.isArray(ipv4.allowedIPs) && ipv4.allowedIPs.length) p["allowed-ips"] = ipv4.allowedIPs;
       if (Number.isFinite(wg.mtu)) p.mtu = wg.mtu;
       if (Number.isFinite(wg.persistentKeepalive) && wg.persistentKeepalive > 0) p["persistent-keepalive"] = wg.persistentKeepalive;
       if (wg.reserved !== void 0) p.reserved = wg.reserved;
+      p["ip-version"] = "ipv4";
       if (typeof wg.dialerProxy === "string" && wg.dialerProxy.trim()) p["dialer-proxy"] = wg.dialerProxy.trim();
       if (hasPeers) p.peers = peers.map(mapPeer).filter(Boolean);
       if (wg.ipStack && typeof wg.ipStack === "object" && Object.keys(wg.ipStack).length) p["ip-stack"] = wg.ipStack;
       if (wg["amnezia-wg-option"] && typeof wg["amnezia-wg-option"] === "object") {
-        p["amnezia-wg-option"] = wg["amnezia-wg-option"];
+        const badKeys = new Set((bean.awgFieldReport || []).filter((r) => r.status === "INVALID" || r.status === "UNSUPPORTED").map((r) => String(r.key).toLowerCase()));
+        const cleanOpt = {};
+        for (const [k, v] of Object.entries(wg["amnezia-wg-option"])) {
+          if (badKeys.has(String(k).toLowerCase())) continue;
+          cleanOpt[k] = v;
+        }
+        if (Object.keys(cleanOpt).length) p["amnezia-wg-option"] = cleanOpt;
       }
       applyCommon(p);
       return p;
@@ -4549,199 +5151,6 @@
     return filtered.join("\n");
   }
 
-  // src/core/wireguard.js
-  function parseWireGuardConf(confText, nameHint) {
-    const text = String(confText || "").replace(/\r\n/g, "\n");
-    const lines = text.split("\n");
-    let section = "";
-    const iface = {};
-    const peers = [];
-    let curPeer = null;
-    const cleanLine = (ln) => {
-      let s = (ln || "").trim();
-      if (!s) return "";
-      const hash = s.indexOf("#");
-      const semi = s.indexOf(";");
-      const cut = hash === -1 ? semi : semi === -1 ? hash : Math.min(hash, semi);
-      if (cut !== -1) s = s.slice(0, cut).trim();
-      return s;
-    };
-    const splitKV = (ln) => {
-      const i = ln.indexOf("=");
-      if (i === -1) return null;
-      const k = ln.slice(0, i).trim();
-      const v = ln.slice(i + 1).trim();
-      if (!k) return null;
-      return { k, v };
-    };
-    const parseCsv = (v) => String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
-    const parseAddrList = (v) => parseCsv(v).map((x) => x.replace(/\s+/g, "")).filter(Boolean);
-    const setAwgOpt = (target, key, value) => {
-      const k = String(key || "").trim().toLowerCase();
-      const map = {
-        jc: "jc",
-        jmin: "jmin",
-        jmax: "jmax",
-        s1: "s1",
-        s2: "s2",
-        s3: "s3",
-        s4: "s4",
-        h1: "h1",
-        h2: "h2",
-        h3: "h3",
-        h4: "h4",
-        i1: "i1",
-        i2: "i2",
-        i3: "i3",
-        i4: "i4",
-        i5: "i5",
-        j1: "j1",
-        j2: "j2",
-        j3: "j3",
-        itime: "itime",
-        version: "version",
-        headerprotectionkey: "header-protection-key",
-        contentpaddingaddition: "content-padding-addition",
-        rekeyaftertime: "rekey-after-time",
-        rekeytimeout: "rekey-timeout",
-        rejectaftertime: "reject-after-time",
-        keepalivetimeout: "keepalive-timeout",
-        maxhandshakeattempts: "max-handshake-attempts",
-        randomtrailers: "random-trailers",
-        disablecookies: "disable-cookies"
-      };
-      if (!map[k]) return false;
-      if (!target["amnezia-wg-option"]) target["amnezia-wg-option"] = {};
-      const outKey = map[k];
-      const raw = String(value || "").trim();
-      const numericKeys = /* @__PURE__ */ new Set(["version", "jc", "jmin", "jmax", "s1", "s2", "s3", "s4", "itime"]);
-      const booleanKeys = /* @__PURE__ */ new Set(["random-trailers", "disable-cookies"]);
-      if (numericKeys.has(outKey) && /^-?\d+$/.test(raw)) {
-        target["amnezia-wg-option"][outKey] = parseInt(raw, 10);
-      } else if (booleanKeys.has(outKey)) {
-        const boolValue = raw.toLowerCase();
-        if (!["1", "true", "yes", "0", "false", "no"].includes(boolValue)) return false;
-        target["amnezia-wg-option"][outKey] = ["1", "true", "yes"].includes(boolValue);
-      } else {
-        target["amnezia-wg-option"][outKey] = raw;
-      }
-      return true;
-    };
-    const parseReserved = (v) => {
-      const s = String(v || "").trim();
-      if (!s) return void 0;
-      if (s.includes(",")) {
-        const parts = parseCsv(s);
-        const nums = parts.map((x) => /^\d+$/.test(x) ? parseInt(x, 10) : NaN).filter((n) => Number.isInteger(n) && n >= 0 && n <= 255);
-        return nums.length ? nums : void 0;
-      }
-      return s;
-    };
-    for (const rawLine of lines) {
-      const ln = cleanLine(rawLine);
-      if (!ln) continue;
-      const secMatch = ln.match(/^\[([^\]]+)\]$/);
-      if (secMatch) {
-        section = (secMatch[1] || "").trim().toLowerCase();
-        if (section === "peer") {
-          curPeer = {};
-          peers.push(curPeer);
-        } else {
-          curPeer = null;
-        }
-        continue;
-      }
-      const kv = splitKV(ln);
-      if (!kv) continue;
-      const key = kv.k.trim();
-      const value = kv.v;
-      const keyLower = key.toLowerCase();
-      if (setAwgOpt(iface, key, value)) continue;
-      if (section === "interface") {
-        if (keyLower === "privatekey") iface.privateKey = value;
-        else if (keyLower === "address") iface.addresses = parseAddrList(value);
-        else if (keyLower === "dns") iface.dns = parseCsv(value);
-        else if (keyLower === "mtu") iface.mtu = /^\d+$/.test(value) ? parseInt(value, 10) : void 0;
-        else if (keyLower === "name") iface.name = value;
-        else if (keyLower === "ipstack" || keyLower === "ipstackmode") {
-          if (!iface.ipStack) iface.ipStack = {};
-          iface.ipStack.mode = value;
-        } else if (keyLower === "ipstackcongestioncontroller") {
-          if (!iface.ipStack) iface.ipStack = {};
-          iface.ipStack["congestion-controller"] = value;
-        }
-      } else if (section === "peer" && curPeer) {
-        if (keyLower === "publickey") curPeer.publicKey = value;
-        else if (keyLower === "presharedkey") curPeer.preSharedKey = value;
-        else if (keyLower === "allowedips") curPeer.allowedIPs = parseAddrList(value);
-        else if (keyLower === "endpoint") curPeer.endpoint = value;
-        else if (keyLower === "persistentkeepalive") curPeer.persistentKeepalive = /^\d+$/.test(value) ? parseInt(value, 10) : void 0;
-        else if (keyLower === "reserved") {
-          curPeer.reserved = parseReserved(value);
-        } else {
-          setAwgOpt(iface, key, value);
-        }
-      }
-    }
-    const chosenPeer = peers[0] || {};
-    const { host, port } = parseAddrHostPort(chosenPeer.endpoint || "", 51820);
-    const addrs = Array.isArray(iface.addresses) ? iface.addresses : [];
-    const ipv4Raw = addrs.find((a) => /^(\d{1,3}\.){3}\d{1,3}(\/\d+)?$/.test(a));
-    const ipv6Raw = addrs.find((a) => /:/.test(a));
-    const ipv4 = ipv4Raw ? ipv4Raw.split("/")[0] : "";
-    const ipv6 = ipv6Raw ? ipv6Raw.split("/")[0] : "";
-    const nameBase = (iface.name || nameHint || "WireGuard").toString().trim();
-    const name = nameBase ? nameBase.replace(/\.(conf|wg|awg)$/i, "") : "WireGuard";
-    const wgPeers = peers.map((p) => {
-      const ap = parseAddrHostPort(p.endpoint || "", 51820);
-      return {
-        server: ap.host,
-        port: ap.port,
-        publicKey: p.publicKey || "",
-        preSharedKey: p.preSharedKey || "",
-        allowedIPs: Array.isArray(p.allowedIPs) ? p.allowedIPs : [],
-        reserved: p.reserved
-      };
-    }).filter((p) => p.server && p.port);
-    const keepalive = peers.map((p) => p.persistentKeepalive).find((v) => Number.isFinite(v));
-    const hasIpv6 = !!ipv6;
-    const peer0 = wgPeers[0] || {};
-    const allowed0 = Array.isArray(peer0.allowedIPs) ? peer0.allowedIPs.slice() : [];
-    const allowedFiltered0 = hasIpv6 ? allowed0 : allowed0.filter((x) => !String(x || "").includes(":"));
-    const peersFiltered = wgPeers.map((peer) => {
-      const a = Array.isArray(peer.allowedIPs) ? peer.allowedIPs : [];
-      const allowedFiltered = hasIpv6 ? a : a.filter((x) => !String(x || "").includes(":"));
-      return Object.assign({}, peer, { allowedIPs: allowedFiltered });
-    });
-    const bean = {
-      proto: "wireguard",
-      name,
-      host: peer0.server || host,
-      port: peer0.port || port,
-      ipVersion: hasIpv6 ? "" : "ipv4",
-      wireguard: {
-        ip: ipv4 || "",
-        ipv6: ipv6 || "",
-        addresses: Array.isArray(iface.addresses) ? iface.addresses.slice() : [],
-        privateKey: iface.privateKey || "",
-        publicKey: peer0.publicKey || (chosenPeer.publicKey || ""),
-        preSharedKey: peer0.preSharedKey || (chosenPeer.preSharedKey || ""),
-        allowedIPs: allowedFiltered0.length ? allowedFiltered0 : chosenPeer.allowedIPs || [],
-        reserved: peer0.reserved !== void 0 ? peer0.reserved : chosenPeer.reserved,
-        peers: peersFiltered.length >= 2 ? peersFiltered : void 0,
-        dns: Array.isArray(iface.dns) && iface.dns.length ? iface.dns : [],
-        remoteDnsResolve: Array.isArray(iface.dns) && iface.dns.length ? true : false,
-        ipStack: iface.ipStack && typeof iface.ipStack === "object" ? iface.ipStack : void 0,
-        mtu: iface.mtu,
-        persistentKeepalive: keepalive
-      }
-    };
-    if (iface["amnezia-wg-option"]) {
-      bean.wireguard["amnezia-wg-option"] = iface["amnezia-wg-option"];
-    }
-    return bean;
-  }
-
   // src/build.js
   function assertCoreSupports(beans, core, label, options) {
     const allowed = new Set(getAllowedCoreProtocols(core, options));
@@ -5069,6 +5478,11 @@
     buildMihomoYaml,
     analyzeDialerGraph,
     parseWireGuardConf,
+    normalizeWireGuardIpv4Only,
+    validateWireGuardIpv4Only,
+    computeAmneziaTagJunkSize,
+    analyzeWireGuardProfile,
+    planWireGuardMtu,
     fetchSubscription,
     buildFromRequest
   });
