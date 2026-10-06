@@ -61,6 +61,8 @@ VPS OS:          ____________ (если используется)
 [ ] Бейдж страницы = v1.8.0-dev · MAIN (ожидаемый RC)
 [ ] Протестированный commit SHA записан в header
 [ ] Runtime provenance верифицирован (stacked job PASS / сборка из заявленного источника)
+[ ] main snapshot artifact (Actions preview) собран и открыт без аномалий
+[ ] production Pages smoke (ручной dispatch) PASS против stable
 [ ] Browser hard refresh выполнен (Ctrl+Shift+R)
 ```
 
@@ -256,8 +258,9 @@ Owner path: EE → DE → FI → WARP → amnezia_for_awg (или безопас
 
 ```text
 [ ] PersistentKeepalive = integer сохранён
-[ ] PersistentKeepalive = range (25-35): предупреждение видено, поле не
-    эмитится молча, профиль рабочий
+[ ] PersistentKeepalive = range (25-35): raw-факт сохранён в отчёте,
+    пользователь видит WARN, поле в YAML НЕ эмитится (никакого
+    свёртывания 25-35 -> 25), профиль рабочий
 [ ] неизвестная AWG-опция: предупреждение (UNKNOWN), не silent drop
 [ ] никакое значение ключей не печатается в диагностике
 ```
