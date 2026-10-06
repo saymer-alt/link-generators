@@ -481,6 +481,17 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   assert.match(String(rejEp.human) + String(rejEp.technical), /IPv6 literal endpoint|IPv6-endpoint/, 'endpoint: понятная причина');
   ok('IPv6 literal endpoint: reject всего профиля без магической конвертации');
 
+  // v1.8 RC (issue #122): IPv4-профиль, но AllowedIPs только ::/0 — после
+  // IPv4-only фильтра список пуст; явный reject вместо молчаливого peer
+  // без allowed-ips.
+  await page.evaluate(() => { wgRejected = []; renderWgList(); });
+  await page.locator('#wgFile').setInputFiles(fx('wg-v6-allowedips-only.conf'));
+  await page.waitForFunction(() => wgUploadPending === false, null, { timeout: 15000 });
+  assert.equal(await page.evaluate(() => wgProfiles.length), 0, 'IPv6-only AllowedIPs профиль не попадает в wgProfiles');
+  const rejAips = await page.evaluate(() => wgRejected[0] || {});
+  assert.match(String(rejAips.human) + String(rejAips.technical), /AllowedIPs.*IPv6|все AllowedIPs/i, 'allowedips: понятная причина (добавьте IPv4 AllowedIPs)');
+  ok('IPv6-only AllowedIPs: явный reject, не полупустой peer');
+
   // dual-stack DNS fixture: normalize + точные YAML факты
   await page.evaluate(() => { wgRejected = []; renderWgList(); });
   await page.locator('#wgFile').setInputFiles(fx('wg-dual-stack-dns.conf'));
@@ -534,10 +545,10 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   // 20. NIGHT-05: MTU chain planner (diagnostics-only). Цепочка из §16:
   // ee(S4=12,CPA 10-100) -> de(S4=12,CPA) -> fi(S4=12,CPA) -> warp(plain, MTU 1200)
   // -> awg-dual-stack(outermost, без MTU, CPA 5-40).
-  // ovhMax(WG base+S4+CPA max) для ee/de/fi = 32+12+100 = 144;
-  // worst-case на уровень = ovhMax + align 15 + inner IP/UDP 28 = 187.
-  // awg-ds eff 1408 -> warp eff min(1200, 1408−90) = 1200 (не повышается!) ->
-  // fi ceil 1200−187 = 1013 -> de ceil 826 -> ee ceil 639.
+  // ee/de/fi — CPA-ветка (взаимоисключающая с align16, v1.8 RC fix):
+  // worst-case на уровень = 32 + S4 12 + CPA max 100 + inner IP/UDP 28 = 172.
+  // awg-ds eff 1408 -> warp eff min(1200, 1408−75) = 1200 (не повышается!) ->
+  // fi ceil 1200−172 = 1028 -> de ceil 856 -> ee ceil 684.
   await page.evaluate(() => {
     wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList();
     const inp = document.getElementById('mihomoInput');
@@ -568,9 +579,9 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   assert.equal(byName['wg-awg-dual-stack-like'].effective, 1408, 'outermost: default 1408');
   assert.equal(byName['wg-warp-like'].importedMtu, 1200);
   assert.equal(byName['wg-warp-like'].effective, 1200, 'WARP MTU 1200 никогда не повышается');
-  assert.equal(byName['wg-fi-like'].ceiling, 1013, 'fi: −(32+S4 12+CPA 100+align 15+28) от 1200');
-  assert.equal(byName['wg-de-like'].effective, 826, 'de: planned ceiling 826');
-  assert.equal(byName['wg-ee-like'].effective, 639, 'ee: planned ceiling 639 (>=576)');
+  assert.equal(byName['wg-fi-like'].ceiling, 1028, 'fi: −(32+S4 12+CPA 100+28) от 1200 — CPA замещает align16');
+  assert.equal(byName['wg-de-like'].effective, 856, 'de: planned ceiling 856');
+  assert.equal(byName['wg-ee-like'].effective, 684, 'ee: planned ceiling 684 (>=576)');
   assert.ok(byName['wg-ee-like'].ceiling < byName['wg-de-like'].ceiling < byName['wg-fi-like'].ceiling, 'monotonic');
   // diagnostics-only: YAML не изменился планировщиком
   const yamlAfter = await page.evaluate(() => document.getElementById('mihomoOutput').value);
