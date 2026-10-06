@@ -1,0 +1,43 @@
+name: Build main preview
+
+# Preview-артефакт ветки main для owner-тестирования (не влияет на production
+# Pages: production — legacy-деплой ветки stable, этот workflow только
+# выкладывает скачиваемый артефакт). Без секретов и записи в репозиторий.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  preview:
+    name: Build main preview artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Pack site preview (без служебных каталогов)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=zip -o /tmp/preview.zip HEAD
+          zip -q -d /tmp/preview.zip ".github/*" "tests/*" "tools/*" || true
+          mkdir -p dist
+          mv /tmp/preview.zip dist/link-generators-main-preview.zip
+
+      - name: Upload main preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-generators-main-preview
+          path: dist/link-generators-main-preview.zip
+          retention-days: 14
+          if-no-files-found: error

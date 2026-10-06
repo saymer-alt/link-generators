@@ -1,5 +1,21 @@
 # DEVELOPMENT — как разрабатывать и проверять
 
+## Development preview и production Pages smoke (NIGHT-11)
+
+- **Preview main**: workflow «Build main preview» (push в main / вручную) выкладывает
+  скачиваемый артефакт `link-generators-main-preview` (retention 14 дней). Артефакт
+  распаковать и открыть `index.html` локально (file:// поддерживается) — production
+  Pages и stable не затрагиваются. Бейдж версии появится после merge version/channel
+  metadata (PR #110 chain).
+- **Production Pages smoke**: workflow «Production Pages smoke» (вручную после деплоя
+  stable): HTTP-доступность (bounded retry), сверка бейджа с GENERATOR_META ветки
+  `stable` (несовпадение → HTTP_OK_BUT_STALE_VERSION/BADGE_MISSING), synthetic Build
+  в браузере, отсутствие внешних запросов помимо страницы и js-yaml CDN.
+- Скрипт: `tools/pages-smoke.cjs` — параметризуется через BASE_URL/EXPECTED_VERSION/
+  EXPECTED_CHANNEL и работает локально (BASE_URL=http://127.0.0.1:PORT) и в CI.
+
+# DEVELOPMENT — как разрабатывать и проверять
+
 ## Primary/fallback
 
 Дополнительно к командам ниже запускать
