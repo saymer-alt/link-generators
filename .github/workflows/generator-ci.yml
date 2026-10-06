@@ -209,6 +209,9 @@ jobs:
       - name: Mobile tabs regression (#142)
         run: node tests/mobile-tabs.cjs
 
+      - name: Tiered Failover regression (#148)
+        run: node tests/tiered-failover.cjs
+
       - name: Domain Coverage Checker browser regression
         run: node tests/domain-coverage.cjs
       - name: Health-check URL browser regression

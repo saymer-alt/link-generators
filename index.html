@@ -526,6 +526,17 @@
         </details>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label><input type="checkbox" id="cfgTieredFailover"> 🪜 Приоритетные эшелоны выходов (Tiered Failover) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Tiered Failover">?</button><span class="ctx-help-pop" role="note">Строгий приоритет эшелонов (#148, runtime-proven на Mihomo 1.19.31/1.19.32): трафик идёт через первый эшелон, где есть живой выход; следующий используется, только когда весь предыдущий недоступен. Внутри эшелона — url-test (быстрейший) или ordered fallback. Финальное правило MATCH уходит в корневую группу эшелонов; GLOBAL получает её первым участником (ручное переключение в дашборде остаётся возможным). Выключено — вывод без изменений.</span></span></label>
+      </div>
+      <div id="tieredPanel" style="display:none">
+        <div class="hint">Эшелоны проверяются по порядку; финальное правило MATCH направляет трафик в корневую группу «🪜 TIERED-AUTO». Участники — из текущей сборки (прокси, WG/AWG-профили, провайдеры). Health-семантика и границы: <a href="https://github.com/saymer-alt/link-generators/blob/main/docs/TIERED-FAILOVER.md">docs/TIERED-FAILOVER.md</a> (HTTP-пробы; UDP не заявлен).</div>
+        <div id="tierCards"></div>
+        <div style="margin-top:8px">
+          <button class="btn btn-gray" id="btnTierAdd" type="button">➕ Добавить уровень</button>
+        </div>
+        <div class="hint" id="tieredTrace" style="margin-top:6px;white-space:pre-line"></div>
+      </div>
+      <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN Interface">?</button><span class="ctx-help-pop" role="note">Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo».</span></span></label>
         <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: MIPS stack">?</button><span class="ctx-help-pop" role="note">TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor.</span></span></label>
       </div>
@@ -1515,6 +1526,7 @@ function computeDialerTargetsSync() {
 
 function refreshWgTargetSelectors() {
   dialerTargetsCache = computeDialerTargetsSync();
+  if (typeof renderTierCards === 'function' && document.getElementById('tieredPanel') && document.getElementById('tieredPanel').style.display !== 'none') renderTierCards();
   const valid = new Set(dialerTargetsCache.map(t => t.value));
   wgProfiles.forEach((p, idx) => {
     // Сброс выбора, если цель исчезла из конфигурации ИЛИ стала итоговым именем
@@ -4559,6 +4571,248 @@ function cdgDomainCoverage(doc, domainsText, opts) {
 /* === CONFIG DEPENDENCY GRAPH CORE — CDG-CORE-END === */
 /* === ROUTING DIAGNOSTICS CORE — RD-CORE-END === */
 
+// === TIERED FAILOVER (#148, v1.10; runtime-proven: docs/research/TIERED-FAILOVER-RUNTIME.md) ===
+// Явная user-visible feature, DEFAULT OFF: выключена — вывод байт-в-байт прежний.
+// Модель: TieredStrategy = упорядоченные эшелоны; ROOT fallback обходит эшелоны
+// по порядку, внутри эшелона — url-test (быстрейший) или fallback (по порядку).
+// Участники эшелона ссылаются на имена текущей сборки (прокси/WG/AWG) или
+// провайдеры (__provider__:NAME → use:). Никаких секретов в модели — только имена.
+let tierSeq = 0;
+
+function tieredEnabled() {
+  const el = document.getElementById('cfgTieredFailover');
+  return !!(el && el.checked);
+}
+
+function readTierCards() {
+  const tiers = [];
+  document.querySelectorAll('#tierCards .tier-card').forEach(card => {
+    const val = sel => { const el = card.querySelector(sel); return el ? el.value.trim() : ''; };
+    const members = Array.from(card.querySelectorAll('.tier-member li')).map(li => li.dataset.value).filter(Boolean);
+    tiers.push({ name: val('.tier-name'), strategy: val('.tier-strategy') || 'url-test', members });
+  });
+  return tiers;
+}
+
+// Канонические имена групп: «🪜 <order> <name>», deterministic при том же вводе;
+// коллизии с существующими именами гасятся детерминированным суффиксом -N.
+function tierGroupName(base, taken) {
+  let name = base, n = 2;
+  while (taken.has(name)) name = base + '-' + (n++);
+  taken.add(name);
+  return name;
+}
+
+// Валидация + генерация групп. Бросает явные ошибки (пустое имя/эшелон,
+// неизвестный участник, дубликаты имён) — buildMihomo показывает их как ❌.
+// Возвращает {groups, rootName, tiers} — groups ДОБАВЛЯЮТСЯ к doc в applyTieredFailover.
+function buildTieredGroups(tiers, existingNames) {
+  if (!tiers.length) throw Error('Tiered Failover: включён, но не создан ни один эшелон — добавьте уровень или выключите настройку');
+  const taken = new Set(existingNames);
+  const seenNames = new Map();
+  const out = [];
+  const health = { url: 'https://www.gstatic.com/generate_204', interval: 300, timeout: 5000, lazy: false, 'expected-status': 204 };
+  const tierRefs = [];
+  tiers.forEach((t, i) => {
+    const name = t.name.trim();
+    if (!name) throw Error('Tiered Failover: у эшелона #' + (i + 1) + ' пустое имя');
+    if (seenNames.has(name.toLowerCase())) throw Error('Tiered Failover: дубликат имени эшелона «' + name + '»');
+    seenNames.set(name.toLowerCase(), true);
+    if (!t.members.length) throw Error('Tiered Failover: эшелон «' + name + '» пуст — добавьте хотя бы один выход');
+    const gname = tierGroupName('🪜 ' + (i + 1) + ' ' + name, taken);
+    const proxies = [], use = [];
+    t.members.forEach(m => {
+      if (m.startsWith('__provider__:')) use.push(m.slice('__provider__:'.length));
+      else {
+        if (!existingNames.has(m)) throw Error('Tiered Failover: выход «' + m + '» не найден в текущей сборке — пересоберите или уберите его из эшелона «' + name + '»');
+        proxies.push(m);
+      }
+    });
+    const g = Object.assign({ name: gname, type: t.strategy === 'fallback' ? 'fallback' : 'url-test' }, health);
+    if (t.strategy === 'url-test') g.tolerance = 50;
+    if (proxies.length) g.proxies = proxies;
+    if (use.length) g.use = use;
+    if (!g.proxies && !g.use) throw Error('Tiered Failover: эшелон «' + name + '» не содержит участников');
+    out.push(g);
+    tierRefs.push(gname);
+  });
+  const rootName = tierGroupName('🪜 TIERED-AUTO', taken);
+  out.push(Object.assign({ name: rootName, type: 'fallback', proxies: tierRefs }, health));
+  return { groups: out, rootName, tiers };
+}
+
+// Post-build патч: doc → +tier groups, GLOBAL получает root первым участником,
+// MATCH,GLOBAL → MATCH,<root>. Только при включённой настройке; выключена —
+// yaml возвращается без изменений (ALL PARITY).
+function applyTieredFailover(yaml, tiersOverride) {
+  if (!tieredEnabled() && !tiersOverride) return yaml;
+  const doc = jsyaml.load(yaml);
+  const tiers = Array.isArray(tiersOverride) ? tiersOverride : readTierCards();
+  const existingNames = new Set([
+    ...(Array.isArray(doc.proxies) ? doc.proxies : []).map(p => p && p.name).filter(Boolean),
+    ...(Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []).map(g => g && g.name).filter(Boolean)
+  ]);
+  const { groups, rootName } = buildTieredGroups(tiers, existingNames);
+  doc['proxy-groups'] = [...(Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []), ...groups];
+  const global = doc['proxy-groups'].find(g => g.name === 'GLOBAL');
+  if (!global || !Array.isArray(global.proxies)) throw Error('Tiered Failover: группа GLOBAL не найдена в сборке');
+  global.proxies.unshift(rootName);
+  doc.rules = (Array.isArray(doc.rules) ? doc.rules : []).map(r => (r === 'MATCH,GLOBAL' ? 'MATCH,' + rootName : r));
+  const summary = 'Tiered Failover: ' + tiers.length + ' эшелон(ов), строгий приоритет → ' +
+    tiers.map((t, i) => (i + 1) + ' ' + t.name.trim() + ' [' + t.strategy + ' × ' + t.members.length + ']').join(' → ');
+  const traceEl = document.getElementById('tieredTrace');
+  if (traceEl) traceEl.textContent = 'ℹ ' + summary;
+  return jsyaml.dump(doc, { lineWidth: -1 });
+}
+
+function tierMemberOptions() {
+  // Реестр целей как у dialer: имена прокси/WG + провайдеры (__provider__:NAME).
+  // MANUAL/прочее исключается самим кэшем (он его не содержит).
+  return dialerTargetsCache
+    .filter(t => t.value && t.value !== '__manual__')
+    .map(t => ({ value: t.value, label: t.label || t.value }));
+}
+
+function renderTierCards() {
+  const wrap = document.getElementById('tierCards');
+  if (!wrap) return;
+  // ВАЖНО: render не пересохраняет DOM-состояние — единственный источник истины
+  // window.__tierCardsState; обработчики мутируют его ДО вызова render.
+  wrap.textContent = '';
+  const options = tierMemberOptions();
+  (window.__tierCardsState || []).forEach((t, i) => wrap.appendChild(tierCardDom(t, i, options)));
+}
+
+function tierCardDom(t, index, options) {
+  const card = document.createElement('div');
+  card.className = 'tier-card policy-card';
+  card.dataset.index = index;
+  const title = document.createElement('div');
+  title.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'tier-name';
+  nameInput.value = t.name || ('Эшелон ' + (index + 1));
+  nameInput.placeholder = 'Имя эшелона (например WARP)';
+  nameInput.setAttribute('aria-label', 'Имя эшелона ' + (index + 1));
+  const up = document.createElement('button');
+  up.type = 'button'; up.className = 'btn btn-gray tier-up'; up.textContent = '↑';
+  up.setAttribute('aria-label', 'Эшелон выше');
+  const down = document.createElement('button');
+  down.type = 'button'; down.className = 'btn btn-gray tier-down'; down.textContent = '↓';
+  down.setAttribute('aria-label', 'Эшелон ниже');
+  const del = document.createElement('button');
+  del.type = 'button'; del.className = 'btn btn-gray tier-del'; del.textContent = '✕ Удалить';
+  title.append(nameInput, up, down, del);
+  const strategyRow = document.createElement('div');
+  strategyRow.className = 'policy-target-row';
+  const strategyLabel = document.createElement('label');
+  strategyLabel.className = 'label';
+  strategyLabel.textContent = 'Стратегия внутри эшелона:';
+  const strategySel = document.createElement('select');
+  strategySel.className = 'tier-strategy';
+  for (const [v, txt] of [['url-test', '⚡ Fastest / url-test'], ['fallback', 'Ordered fallback']]) {
+    const o = document.createElement('option'); o.value = v; o.textContent = txt; strategySel.appendChild(o);
+  }
+  strategySel.value = t.strategy === 'fallback' ? 'fallback' : 'url-test';
+  strategyRow.append(strategyLabel, strategySel);
+  const membersLabel = document.createElement('label');
+  membersLabel.className = 'label';
+  membersLabel.style.cssText = 'display:block;margin-top:8px';
+  membersLabel.textContent = 'Участники (в порядке приоритета внутри эшелона):';
+  const memberList = document.createElement('ul');
+  memberList.className = 'tier-member';
+  (t.members || []).forEach(v => memberList.appendChild(tierMemberItem(v, options)));
+  const addRow = document.createElement('div');
+  addRow.style.cssText = 'display:flex;gap:8px;margin-top:6px;flex-wrap:wrap';
+  const memberSel = document.createElement('select');
+  memberSel.className = 'tier-member-select';
+  memberSel.setAttribute('aria-label', 'Добавить участника в эшелон');
+  const placeholder = document.createElement('option');
+  placeholder.value = ''; placeholder.textContent = options.length ? '— выберите выход —' : 'Реестр целей ещё не построен — выполните Build или загрузите WG/AWG';
+  memberSel.appendChild(placeholder);
+  options.forEach(o => {
+    const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; memberSel.appendChild(opt);
+  });
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button'; addBtn.className = 'btn btn-gray tier-add-member'; addBtn.textContent = '➕ Добавить выход';
+  addRow.append(memberSel, addBtn);
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = 'Порядок участников важен для Ordered fallback; для url-test порядок — приоритет при равной скорости.';
+  card.append(title, strategyRow, membersLabel, memberList, addRow, hint);
+  return card;
+}
+
+function tierMemberItem(value, options) {
+  const li = document.createElement('li');
+  li.dataset.value = value;
+  li.style.cssText = 'display:flex;gap:6px;align-items:center;margin:2px 0';
+  const opt = (options || []).find(o => o.value === value);
+  const span = document.createElement('span');
+  span.textContent = opt ? opt.label : value;
+  span.style.flex = '1';
+  const rm = document.createElement('button');
+  rm.type = 'button'; rm.className = 'btn btn-gray tier-member-rm'; rm.textContent = '✕';
+  rm.setAttribute('aria-label', 'Убрать участника');
+  li.append(span, rm);
+  return li;
+}
+
+function saveTierCardsState() {
+  // DOM → состояние (переживает перерисовку)
+  window.__tierCardsState = Array.from(document.querySelectorAll('#tierCards .tier-card')).map(card => ({
+    name: card.querySelector('.tier-name').value,
+    strategy: card.querySelector('.tier-strategy').value,
+    members: Array.from(card.querySelectorAll('.tier-member li')).map(li => li.dataset.value)
+  }));
+}
+
+function bindTieredUI() {
+  const enable = document.getElementById('cfgTieredFailover');
+  if (!enable) return;
+  enable.addEventListener('change', () => {
+    document.getElementById('tieredPanel').style.display = enable.checked ? 'block' : 'none';
+    if (enable.checked && !(window.__tierCardsState || []).length) {
+      window.__tierCardsState = [{ name: 'WARP', strategy: 'url-test', members: [] }, { name: 'Personal', strategy: 'fallback', members: [] }];
+    }
+    renderTierCards();
+  });
+  document.getElementById('tierCards').addEventListener('click', e => {
+    const card = e.target.closest('.tier-card');
+    saveTierCardsState();
+    if (e.target.classList.contains('tier-del')) { window.__tierCardsState.splice(Number(card.dataset.index), 1); renderTierCards(); return; }
+    if (e.target.classList.contains('tier-up') || e.target.classList.contains('tier-down')) {
+      const i = Number(card.dataset.index), j = e.target.classList.contains('tier-up') ? i - 1 : i + 1;
+      if (j < 0 || j >= window.__tierCardsState.length) return;
+      const arr = window.__tierCardsState; [arr[i], arr[j]] = [arr[j], arr[i]];
+      renderTierCards(); return;
+    }
+    if (e.target.classList.contains('tier-add-member')) {
+      const sel = card.querySelector('.tier-member-select');
+      if (!sel.value) return;
+      if (!window.__tierCardsState[Number(card.dataset.index)].members.includes(sel.value)) {
+        window.__tierCardsState[Number(card.dataset.index)].members.push(sel.value);
+      }
+      renderTierCards(); return;
+    }
+    if (e.target.classList.contains('tier-member-rm')) {
+      const li = e.target.closest('li');
+      const members = window.__tierCardsState[Number(card.dataset.index)].members;
+      const idx = members.indexOf(li.dataset.value);
+      if (idx !== -1) members.splice(idx, 1);
+      renderTierCards();
+    }
+  });
+  document.getElementById('tierCards').addEventListener('input', saveTierCardsState);
+  document.getElementById('btnTierAdd').addEventListener('click', () => {
+    saveTierCardsState();
+    window.__tierCardsState.push({ name: 'Эшелон ' + (window.__tierCardsState.length + 1), strategy: 'url-test', members: [] });
+    renderTierCards();
+  });
+}
+bindTieredUI();
+
 // === STALE BUILD DIAGNOSTICS CONTRACT (v1.9 4B, Explainability) ===
 // Snapshot-модель Inspector/Provider-диагностики остаётся (скрытый Build не
 // выполняется), но она обязана быть честной: после изменения любого input,
@@ -5096,6 +5350,9 @@ async function buildMihomo() {
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
     yaml = applyProviderDialerTargets(yaml);
+
+    // PATCH: Tiered Failover (#148) — только при явном включении; OFF = байт-в-байт.
+    if (tieredEnabled()) yaml = applyTieredFailover(yaml);
 
     // PATCH: Deployment profile — только при профиле vps-gateway.
     // При router/vps-local пост-патч не выполняется вовсе (инвариант byte-for-byte).
