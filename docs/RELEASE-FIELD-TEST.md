@@ -1,5 +1,8 @@
 # Release Field Test — Owner Acceptance Checklist (v1.8.0 RC)
 
+> **Historical (v1.8.0).** Актуальный чеклист для v1.9 — [RELEASE-FIELD-TEST-v1.9.md](RELEASE-FIELD-TEST-v1.9.md);
+> бейджи `v1.8.0-dev` ниже — снимок того цикла, не текущее состояние.
+
 Authoritative human acceptance checklist для production promotion. Заполняется
 владельцем (вручную, в реальном браузере и на реальном роутере) **перед**
 `main → stable`. Документ переиспользуемый: для будущих версий копируется и
