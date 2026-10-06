@@ -1,0 +1,102 @@
+name: Production Pages smoke
+
+# Read-only smoke опубликованного production Pages (после деплоя stable или
+# вручную перед tag/release): HTTP доступность, версия/канал бейджа по
+# GENERATOR_META из source-ветки, детерминированный synthetic Build в браузере.
+# Никаких записей, никаких секретов, никаких реальных подписок/ключей.
+# Expected version/channel берутся из authoritative source (GENERATOR_META
+# ветки source_ref), НЕ хардкодятся.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Production base URL'
+        default: 'https://saymer-alt.github.io/link-generators/'
+      source_ref:
+        description: 'Ветка-источник ожидаемой версии/канала (GENERATOR_META)'
+        default: 'stable'
+      attempts:
+        description: 'Bounded retry: максимум попыток HTTP-доступности'
+        default: '10'
+      interval_seconds:
+        description: 'Пауза между попытками, сек'
+        default: '30'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Pages Production Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout (smoke script)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install transient browser test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          deps="$RUNNER_TEMP/pages-smoke-deps"
+          mkdir -p "$deps"
+          npm install --prefix "$deps" --no-save --no-package-lock playwright@1.55.0
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+          "$deps/node_modules/.bin/playwright" install --with-deps chromium
+          echo "BROWSER_CHANNEL=chromium" >> "$GITHUB_ENV"
+
+      - name: Resolve expected version/channel from source ref
+        id: expected
+        shell: bash
+        run: |
+          set -euo pipefail
+          idx="$(curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${{ inputs.source_ref }}/index.html")"
+          ver="$(printf '%s' "$idx" | grep -oE "version: '[^']+'" | head -1 | sed "s/version: '//; s/'$//")" || ver=''
+          chan="$(printf '%s' "$idx" | grep -oE "channel: '[^']+'" | head -1 | sed "s/channel: '//; s/'$//")" || chan=''
+          {
+            echo "version=$ver"
+            echo "channel=$chan"
+          } >> "$GITHUB_OUTPUT"
+          echo "expected version='$ver' channel='$chan' (source: ${{ inputs.source_ref }})"
+          if [ -z "$ver" ] || [ -z "$chan" ]; then
+            echo "GENERATOR_META не найден в source ref — проверка бейджа будет пропущена (SKIPPED)"
+          fi
+
+      - name: HTTP reachability (bounded retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 "${{ inputs.attempts }}"); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "${{ inputs.base_url }}")"
+            echo "attempt $i/$(( attempts )): HTTP $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep "${{ inputs.interval_seconds }}"
+          done
+          echo "::error::PAGE_UNAVAILABLE — ${{ inputs.base_url }} не отвечает HTTP 200 после ${{ inputs.attempts }} попыток"
+          exit 1
+
+      - name: Browser smoke (runtime, badge, synthetic build, console)
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          EXPECTED_VERSION: ${{ steps.expected.outputs.version }}
+          EXPECTED_CHANNEL: ${{ steps.expected.outputs.channel }}
+          BROWSER_CHANNEL: chromium
+          SMOKE_ATTEMPTS: ${{ inputs.attempts }}
+        run: node tools/pages-smoke.cjs
+
+      - name: Failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-smoke-failure
+          path: |
+            /tmp/pages-smoke/**
+          retention-days: 7
+          if-no-files-found: ignore
