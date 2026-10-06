@@ -395,7 +395,7 @@
       <div id="deviceModelRow" style="margin-top:10px">
         <label for="deviceModelInput">📱 Device Model — имя устройства для панели подписки (необязательно)</label>
         <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
-        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>VPS-SE</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
+        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>Home-Router</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
       </div>
       <div id="realityModernRow" style="margin-top:10px">
         <label for="realityModernInput">🌐 Modern REALITY / Post-Quantum (X25519MLKEM768) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Modern REALITY">?</button><span class="ctx-help-pop" role="note">Опционально только для VLESS + REALITY узлов с подтверждённой поддержкой X25519MLKEM768. Поддержка появилась в Xray-core 25.5.16, но одна только версия Xray не гарантирует совместимость конкретного сервера/клиента. Укажите host или host:port нужных REALITY-серверов — генератор применит modern override только к ним; обычные VLESS/TLS и остальные узлы не изменяются.</span></span></label>
@@ -904,8 +904,8 @@ function wgProfileBuildBean(p, opts) {
 // Список целей для «Промежуточный выход» НЕ ведётся вручную: он собирается
 // префлайт-сборкой текущего состояния через настоящий движок web4core —
 // поэтому значения опций совпадают с итоговыми именами YAML байт-в-байт,
-// включая авто-суффиксы дедупликации (VPS-SE-2) и переименования AWL
-// (PRIMARY-1: VPS-SE). Dialer-назначения профилей в префлайт не передаются:
+// включая авто-суффиксы дедупликации (Proxy-A-2) и переименования AWL
+// (PRIMARY-1: Proxy-A). Dialer-назначения профилей в префлайт не передаются:
 // имена прокси/групп от них не зависят, а сборка не должна падать из-за
 // ещё не выбранного/битого таргета.
 // ⚡ Fastest и GLOBAL исключаются (содержат сам WARP — цикл), как и группы,
@@ -1274,6 +1274,12 @@ function humanizeWgError(raw, confText) {
   }
   if (r.includes('IPv6 literal endpoint')) {
     return 'Endpoint профиля — IPv6-литерал. IPv4-only режим генератора требует IPv4-endpoint или hostname.';
+  }
+  if (r.includes('all AllowedIPs are IPv6')) {
+    return 'Все AllowedIPs профиля — IPv6. После IPv4-only фильтрации список пуст, такой профиль дал бы нерабочий маршрут, поэтому он отклонён. Добавьте IPv4 AllowedIPs (например, 0.0.0.0/0).';
+  }
+  if (r.includes('only IPv6 AllowedIPs')) {
+    return 'У peer все AllowedIPs — IPv6. После IPv4-only фильтрации список пуст, такой peer дал бы нерабочий маршрут, поэтому он отклонён. Добавьте IPv4 AllowedIPs (например, 0.0.0.0/0).';
   }
   return '';
 }
@@ -3884,7 +3890,7 @@ function refreshWgMtuNotes() {
     const lines = [];
     if (pr.chain && pr.chain.length > 1) {
       lines.push('ℹ Цепочка MTU: ' + pr.chain.join(' → ') +
-        (pr.ceiling !== null && pr.ceiling !== undefined ? ' · безопасный потолок ≈ ' + pr.ceiling + ' (worst-case IPv4; YAML не меняется)' : ''));
+        (pr.ceiling !== null && pr.ceiling !== undefined ? ' · расчётный потолок ≈ ' + pr.ceiling + ' (worst-case IPv4; диагностическая модель, YAML не меняется)' : ''));
     }
     (pr.reason || []).forEach(rs => lines.push((pr.confidence === 'error' ? '⚠ ' : 'ℹ ') + rs));
     if (pr.confidence === 'unknown') lines.push('⚠ Автоматический расчёт MTU недоступен — исходный MTU сохранён.');
