@@ -195,6 +195,9 @@ jobs:
       - name: Health-check URL browser regression
         run: node tests/health-check-url.cjs
 
+      - name: Version badge + legacy fallback regression
+        run: node tests/version-badge.cjs
+
       - name: Rule Provider Explorer browser regression
         run: node tests/rule-provider-explorer-browser.cjs
 
