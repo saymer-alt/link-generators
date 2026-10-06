@@ -86,15 +86,29 @@ do not copy an unverified runtime, and do not force-push.
   parameters used by the form: `private-key`, `public-key`, `ip`, `ipv6`, `sni`, and `dns`.
 - **WARPSCOUT/Mihomo MASQUE import path (v1.9, #125):** when the YAML contains proxies with
   `type: masque`, ALL proxies are scanned — never blind `proxies[0]`, and a non-MASQUE proxy
-  is never interpreted as a transport. `network: h2` → H2/TCP; its absence → H3/QUIC.
-  Identity/tunnel fields come from the first candidate holding a `private-key`; each found
-  transport contributes an exact endpoint (`server:port`) and per-transport SNI into the
-  «Advanced MASQUE» fields, with an explainability banner («WARPSCOUT / Mihomo MASQUE
-  detected») naming what was imported as exact and what stays builtin. Several candidates of
-  one transport → an explicit selector by proxy name; silent first-proxy selection is
-  forbidden. A transport without a candidate stays fully builtin. Exact endpoint/SNI fields
-  are per-config facts: any successful import resets them; custom port lists are user
-  preferences and survive re-import.
+  is never interpreted as a transport. Network classification fails closed: absent/empty →
+  H3/QUIC; `network: h2` (case-insensitive) → H2/TCP; any other non-empty token (`tcp`,
+  `h3`, `foo`, …) is an UNSUPPORTED candidate — shown in the banner with proxy name and raw
+  token, never imported as an endpoint, never silently treated as H3.
+  Each found transport contributes an exact endpoint (`server:port`) and per-transport SNI
+  into the «Advanced MASQUE» fields, with an explainability banner («WARPSCOUT / Mihomo
+  MASQUE detected») naming what was imported as exact and what stays builtin. Several
+  candidates of one transport → an explicit selector by proxy name; silent first-proxy
+  selection is forbidden. A transport without a candidate stays fully builtin. Exact
+  endpoint/SNI fields are per-config facts: any successful import resets them (together with
+  the identity fields); custom port lists are user preferences and survive re-import.
+- **MASQUE identity consistency (load-bearing, owner review #134):** the generator holds ONE
+  common WARP identity, so the actually selected H3+H2 pair must be compatible in material
+  identity fields — `private-key`, `public-key`, `ip`, `ipv6` (when present). An incompatible
+  pair is rejected fail-closed BEFORE any import (identity and endpoints are not applied):
+  the diagnostic names the conflicting profiles and field names, never secret values; a
+  hybrid «identity A + endpoint B» is never created. Consistency is checked after the
+  user's actual selection (also through the ambiguity selector); while any transport is
+  ambiguous, nothing is applied until the explicit «Импортировать выбранных» click. DNS is
+  classified separately: differing DNS values between selected candidates do not reject the
+  import but are never chosen silently — an explicit diagnostic names both values and the
+  first is imported consciously. Empty candidate SNI is a deliberate fallback: the banner
+  states «SNI не задан в candidate → используется общий SNI»; no SNI is ever invented.
 - **Per-transport generation precedence (v1.9):** exact imported/manual endpoint → custom
   port list → builtin strategy. Exact endpoints are authoritative and are never rewritten by
   anti-correlation (it only steers generator-selected H2 IPs); a custom port list fully

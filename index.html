@@ -708,8 +708,16 @@ function parseYaml() {
 let lastMasqueCandidates = [];
 
 function classifyMasqueProxy(p) {
-  const net = typeof p.network === 'string' ? p.network.trim().toLowerCase() : '';
-  return net === 'h2' ? 'h2' : 'h3';
+  // Контракт (owner review #134): absent/null/пустая строка → H3/QUIC;
+  // 'h2' (case-insensitive) → H2/TCP; любое иное непустое значение —
+  // UNSUPPORTED transport: не считаем H3 без source-proof, что Mihomo
+  // действительно принимает такой token ('tcp'/'h3'/'foo' не угадываем).
+  let raw = '';
+  if (typeof p.network === 'string') raw = p.network.trim();
+  else if (p.network !== undefined && p.network !== null) raw = String(p.network).trim();
+  if (!raw) return { kind: 'h3', raw: '' };
+  if (raw.toLowerCase() === 'h2') return { kind: 'h2', raw };
+  return { kind: 'unsupported', raw };
 }
 
 function scanMasqueCandidates(docs) {
@@ -717,7 +725,10 @@ function scanMasqueCandidates(docs) {
   for (const doc of docs) {
     if (!doc || !Array.isArray(doc.proxies)) continue;
     doc.proxies.forEach(p => {
-      if (p && typeof p === 'object' && p.type === 'masque') found.push({ proxy: p, transport: classifyMasqueProxy(p) });
+      if (p && typeof p === 'object' && p.type === 'masque') {
+        const cls = classifyMasqueProxy(p);
+        found.push({ proxy: p, transport: cls.kind, networkRaw: cls.raw });
+      }
     });
   }
   found.forEach((c, i) => {
@@ -748,6 +759,57 @@ function readWarpIdentity(p) {
     ipv6: p.ipv6 || '',
     dns: Array.isArray(p.dns) ? p.dns.join(',') : (p.dns || '')
   };
+}
+
+// Материальные identity-поля кандидата (owner review #134): private-key,
+// public-key, ip, ipv6 (если присутствует). Пока у генератора одна общая WARP
+// identity, selected H3 и H2 обязаны быть совместимы по ней — гибрид
+// «identity A + endpoint B» молча не создаётся. Значения НИКОГДА не попадают
+// в диагностику — только имена профилей и имена конфликтующих полей.
+function masqueIdentityFingerprint(p) {
+  const s = v => (v === undefined || v === null) ? '' : String(v).trim();
+  return {
+    privateKey: s(p['private-key'] !== undefined ? p['private-key'] : p.privateKey),
+    publicKey: s(p['public-key'] !== undefined ? p['public-key'] : p.publicKey),
+    ip: s(p.ip),
+    ipv6: s(p.ipv6)
+  };
+}
+
+function masqueIdentityMismatchFields(a, b) {
+  const names = { privateKey: 'private-key', publicKey: 'public-key', ip: 'ip', ipv6: 'ipv6' };
+  return Object.keys(names).filter(k => a[k] !== b[k]).map(k => names[k]);
+}
+
+// null = пара совместима; иначе текст fail-closed diagnostic (имена профилей +
+// конфликтующие поля, без секретов).
+function masquePairIdentityError(pair) {
+  if (pair.length < 2) return null;
+  const bad = masqueIdentityMismatchFields(masqueIdentityFingerprint(pair[0].proxy), masqueIdentityFingerprint(pair[1].proxy));
+  if (!bad.length) return null;
+  return 'Несовместимая WARP identity: «' + pair[0].label + '» и «' + pair[1].label + '» различаются по ' +
+    bad.join(', ') + '. Пара не импортируется (гибрид identity A + endpoint B не создаётся) — выберите только одного кандидата или совместимую пару.';
+}
+
+// DNS классифицируется отдельно от material identity: различие значений между
+// выбранными кандидатами не отвергает импорт, но и не выбирается молча.
+function masquePairDnsLine(pair) {
+  if (pair.length < 2) return '';
+  const a = readWarpIdentity(pair[0].proxy).dns;
+  const b = readWarpIdentity(pair[1].proxy).dns;
+  return (a && b && a !== b) ? 'DNS: различается между кандидатами («' + a + '» vs «' + b + '») — перенесён из первого; проверьте осознанно' : '';
+}
+
+function sniLinePart(cand) {
+  const p = cand.proxy;
+  return (typeof p.sni === 'string' && p.sni.trim()) ? ', SNI ' + p.sni.trim() : ', SNI не задан в candidate → используется общий SNI';
+}
+
+// Единая точка применения согласованной пары: identity + exact endpoint/SNI.
+function applyWarpscoutPair(pair) {
+  const id = readWarpIdentity(pair[0].proxy);
+  ['privateKey', 'publicKey', 'ip', 'ipv6', 'dns'].forEach(k => setWarpField(k, id[k]));
+  pair.forEach(c => applyWarpscoutCandidate(c));
 }
 
 function applyWarpscoutCandidate(cand) {
@@ -787,33 +849,59 @@ function hideWarpscoutInfo() {
 }
 
 function importWarpscoutCandidates(candidates) {
-  const identitySrc = candidates.map(c => c.proxy).find(p => p['private-key'] || p.privateKey);
-  if (!identitySrc) return showToast('В MASQUE-кандидатах не найден private-key', true);
-  const id = readWarpIdentity(identitySrc);
-  if (!id.privateKey) return showToast('Не найден private-key в YAML', true);
-  ['privateKey', 'publicKey', 'ip', 'ipv6', 'dns'].forEach(k => setWarpField(k, id[k]));
-  // Новый YAML — новое транспортное состояние: стейл exact endpoint/SNI от
-  // предыдущего импорта не переживают повторный «Распарсить» (fail-closed).
-  ['h3Endpoint', 'h3Sni', 'h2Endpoint', 'h2Sni'].forEach(k => setWarpField(k, ''));
-  document.getElementById('parsedBadge').style.display = 'inline-block';
-
   const h3 = candidates.filter(c => c.transport === 'h3');
   const h2 = candidates.filter(c => c.transport === 'h2');
-  const lines = ['identity/tunnel: private-key/public-key/ip/ipv6/dns перенесены'];
+  const unsup = candidates.filter(c => c.transport === 'unsupported');
 
-  if (h3.length > 1 || h2.length > 1) showWarpscoutAmbiguity(h3, h2);
+  // Новый YAML — полное состояние импорта с нуля: identity И exact transport
+  // не переживают повторный «Распарсить» (fail-closed, без стейл-гибридов).
+  ['privateKey', 'publicKey', 'ip', 'ipv6', 'dns', 'h3Endpoint', 'h3Sni', 'h2Endpoint', 'h2Sni'].forEach(k => setWarpField(k, ''));
+  document.getElementById('parsedBadge').style.display = 'inline-block';
+
+  if (!candidates.some(c => c.proxy['private-key'] || c.proxy.privateKey)) {
+    showWarpscoutBanner(['❌ В MASQUE-кандидатах не найден private-key — импорт отклонён']);
+    return showToast('В MASQUE-кандидатах не найден private-key', true);
+  }
+
+  const lines = [];
+  unsup.forEach(c => lines.push('UNSUPPORTED network «' + c.networkRaw + '» (' + c.label + ') — кандидат пропущен: значение не распознано, H3 без source-proof не предполагаем'));
+
+  const ambiguous = h3.length > 1 || h2.length > 1;
+  if (ambiguous) showWarpscoutAmbiguity(h3, h2);
   else hideWarpscoutAmbiguity();
 
+  // Автопара — только однозначные синглтоны БЕЗ неоднозначности. При любом
+  // неоднозначном транспорте ничего не применяется до фактического выбора
+  // пользователя (applyWarpscoutSelection) — пара применяется атомарно.
+  const autoPair = [];
+  if (!ambiguous && h3.length === 1) autoPair.push(h3[0]);
+  if (!ambiguous && h2.length === 1) autoPair.push(h2[0]);
+
+  // Identity consistency проверяется на ФАКТИЧЕСКИ выбранной паре, не по
+  // первому элементу списка. Несовместимость → ничего не импортируется.
+  const pairError = masquePairIdentityError(autoPair);
+  if (pairError) {
+    showWarpscoutBanner(lines.concat(['❌ ' + pairError]));
+    showToast('❌ ' + pairError, true);
+    return;
+  }
+
+  if (autoPair.length) applyWarpscoutPair(autoPair);
+
+  lines.push(autoPair.length
+    ? 'identity/tunnel: private-key/public-key/ip/ipv6/dns перенесены (общая identity пары проверена)'
+    : 'identity/tunnel: будет взята из выбранной вами пары (кнопка «Импортировать выбранных»)');
   [['H3 / QUIC', h3], ['H2 / TCP', h2]].forEach(([name, list]) => {
     if (!list.length) { lines.push(name + ': кандидатов нет — останется встроенная стратегия'); return; }
     if (list.length > 1) { lines.push(name + ': кандидатов ' + list.length + ' — выберите в «Advanced MASQUE»'); return; }
-    applyWarpscoutCandidate(list[0]);
     const p = list[0].proxy;
     const ep = (p.server || '?') + ':' + (p.port !== undefined ? p.port : '?');
-    lines.push(name + ': endpoint ' + ep + (typeof p.sni === 'string' && p.sni.trim() ? ', SNI ' + p.sni.trim() : '') + ' → импортирован как точный');
+    lines.push(name + ': endpoint ' + ep + sniLinePart(list[0]) + ' → импортирован как точный');
   });
+  const dnsLine = masquePairDnsLine(autoPair);
+  if (dnsLine) lines.push(dnsLine);
   showWarpscoutBanner(lines);
-  showToast('✅ WARPSCOUT / Mihomo MASQUE распознан');
+  showToast(unsup.length ? '✅ WARPSCOUT / Mihomo MASQUE распознан (есть UNSUPPORTED кандидаты)' : '✅ WARPSCOUT / Mihomo MASQUE распознан');
 }
 
 function showWarpscoutAmbiguity(h3, h2) {
@@ -848,7 +936,7 @@ function hideWarpscoutAmbiguity() {
 function applyWarpscoutSelection() {
   const readSel = selId => {
     const sel = document.getElementById(selId);
-    if (!sel || sel.dataset.active !== '1') return undefined; // 0/1 кандидатов уже применены
+    if (!sel || sel.dataset.active !== '1') return undefined; // 0/1 кандидатов — применяются здесь же
     const i = Number(sel.value);
     return Number.isInteger(i) && i >= 0 ? i : null;
   };
@@ -857,14 +945,28 @@ function applyWarpscoutSelection() {
   if (h3i === null || h2i === null) return showToast('Выберите кандидата для каждого транспорта', true);
   const h3 = lastMasqueCandidates.filter(c => c.transport === 'h3');
   const h2 = lastMasqueCandidates.filter(c => c.transport === 'h2');
-  if (h3i !== undefined && h3[h3i]) applyWarpscoutCandidate(h3[h3i]);
-  if (h2i !== undefined && h2[h2i]) applyWarpscoutCandidate(h2[h2i]);
+  const pickH3 = h3i !== undefined ? h3[h3i] : (h3.length === 1 ? h3[0] : null);
+  const pickH2 = h2i !== undefined ? h2[h2i] : (h2.length === 1 ? h2[0] : null);
+  const pair = [pickH3, pickH2].filter(Boolean);
+  if (!pair.length) return showToast('Кандидаты не найдены', true);
+
+  // Consistency проверяется ПОСЛЕ фактического выбора пользователя. Несовместимо
+  // → fail-closed: ничего не применяется, селектор остаётся открытым.
+  const pairError = masquePairIdentityError(pair);
+  if (pairError) {
+    showWarpscoutBanner(['❌ ' + pairError, 'Исправьте выбор и нажмите «Импортировать выбранных» ещё раз.']);
+    showToast('❌ ' + pairError, true);
+    return;
+  }
+
+  applyWarpscoutPair(pair);
   hideWarpscoutAmbiguity();
-  showWarpscoutBanner([
-    'identity/tunnel: private-key/public-key/ip/ipv6/dns перенесены',
-    'H3 / QUIC: ' + (h3i !== undefined && h3[h3i] ? 'импортирован ' + h3[h3i].label : 'остаётся встроенная стратегия'),
-    'H2 / TCP: ' + (h2i !== undefined && h2[h2i] ? 'импортирован ' + h2[h2i].label : 'остаётся встроенная стратегия')
-  ]);
+  const lines = ['identity/tunnel: private-key/public-key/ip/ipv6/dns перенесены (общая identity пары проверена)'];
+  lines.push(pickH3 ? 'H3 / QUIC: импортирован ' + pickH3.label + sniLinePart(pickH3) : 'H3 / QUIC: остаётся встроенная стратегия');
+  lines.push(pickH2 ? 'H2 / TCP: импортирован ' + pickH2.label + sniLinePart(pickH2) : 'H2 / TCP: остаётся встроенная стратегия');
+  const dnsLine = masquePairDnsLine(pair);
+  if (dnsLine) lines.push(dnsLine);
+  showWarpscoutBanner(lines);
   showToast('✅ Кандидаты импортированы');
 }
 

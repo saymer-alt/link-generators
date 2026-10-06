@@ -121,6 +121,153 @@ const ambiguousYaml = [
   ''
 ].join('\n');
 
+// Owner review #134: identity consistency fixtures.
+const PK2 = 'qF9jH3kLpQ2rS5tU8vW1xY4zA6bC0dE2fG4hJ7kM9oQ=';
+
+const mismatchPkYaml = [
+  'proxies:',
+  '  - name: WARPSCOUT-H3',
+  '    type: masque',
+  '    server: 162.159.192.10',
+  '    port: 443',
+  '    sni: h3.example.net',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  '  - name: WARPSCOUT-H2',
+  '    type: masque',
+  '    server: 162.159.192.20',
+  '    port: 8443',
+  '    network: h2',
+  '    sni: h2.example.net',
+  '    private-key: ' + PK2,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  ''
+].join('\n');
+
+const mismatchIpYaml = [
+  'proxies:',
+  '  - name: WARPSCOUT-H3',
+  '    type: masque',
+  '    server: 162.159.192.10',
+  '    port: 443',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  '  - name: WARPSCOUT-H2',
+  '    type: masque',
+  '    server: 162.159.192.20',
+  '    port: 8443',
+  '    network: h2',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.5.9',
+  ''
+].join('\n');
+
+const ambiguousConsistencyYaml = [
+  'proxies:',
+  '  - name: H3-ok',
+  '    type: masque',
+  '    server: 162.159.192.51',
+  '    port: 443',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  '  - name: H3-bad',
+  '    type: masque',
+  '    server: 162.159.192.52',
+  '    port: 443',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.7.7',
+  '  - name: WARPSCOUT-H2',
+  '    type: masque',
+  '    server: 162.159.192.20',
+  '    port: 8443',
+  '    network: h2',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  ''
+].join('\n');
+
+// Owner review #134: unknown network tokens → UNSUPPORTED (не H3 по умолчанию).
+const mixedUnknownNetworkYaml = [
+  'proxies:',
+  '  - name: WARPSCOUT-H3',
+  '    type: masque',
+  '    server: 162.159.192.10',
+  '    port: 443',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  '  - name: net-foo',
+  '    type: masque',
+  '    server: 162.159.192.61',
+  '    port: 443',
+  '    network: foo',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  '  - name: net-tcp',
+  '    type: masque',
+  '    server: 162.159.192.62',
+  '    port: 443',
+  '    network: tcp',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  '  - name: net-h3-token',
+  '    type: masque',
+  '    server: 162.159.192.63',
+  '    port: 443',
+  '    network: h3',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  ''
+].join('\n');
+
+const upperH2Yaml = [
+  'proxies:',
+  '  - name: WARPSCOUT-H2',
+  '    type: masque',
+  '    server: 162.159.192.20',
+  '    port: 8443',
+  '    network: H2',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  ''
+].join('\n');
+
+const emptyNetworkYaml = [
+  'proxies:',
+  '  - name: WARPSCOUT-H3',
+  '    type: masque',
+  '    server: 162.159.192.10',
+  '    port: 443',
+  '    network: ""',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  ''
+].join('\n');
+
+const sniFallbackYaml = [
+  'proxies:',
+  '  - name: WARPSCOUT-H3',
+  '    type: masque',
+  '    server: 162.159.192.10',
+  '    port: 443',
+  '    private-key: ' + PK,
+  '    public-key: ' + PUB,
+  '    ip: 172.16.0.2',
+  ''
+].join('\n');
+
 async function parse(page, yaml) {
   await page.fill('#yamlInput', yaml);
   await page.locator('button[onclick="parseYaml()"]').click();
@@ -258,6 +405,77 @@ function parseLink(link) {
   assert.equal(await fieldVal('h3Endpoint'), '162.159.192.42:443', 'выбранный кандидат применён');
   assert.equal(await fieldVal('h3Sni'), 'second.example.net');
   ok('неоднозначность: явный селектор кандидатов, silent first отсутствует');
+
+  // 6a. Identity consistency: разные private-key → fail-closed reject пары
+  await parse(page, mismatchPkYaml);
+  assert.equal(await fieldVal('h3Endpoint'), '', 'mismatch PK: H3 не импортирован');
+  assert.equal(await fieldVal('h2Endpoint'), '', 'mismatch PK: H2 не импортирован');
+  assert.equal(await fieldVal('privateKey'), '', 'mismatch PK: identity не импортирована (гибрид не создаётся)');
+  const bPk = await bannerText();
+  assert.match(bPk, /Несовместимая WARP identity/, 'fail-closed diagnostic');
+  assert.match(bPk, /WARPSCOUT-H3 — 162\.159\.192\.10:443.*и.*WARPSCOUT-H2 — 162\.159\.192\.20:8443/s, 'конфликтующие профили названы');
+  assert.match(bPk, /по private-key/, 'конфликтующее поле названо');
+  assert.ok(!bPk.includes(PK) && !bPk.includes(PK2), 'значения ключей не в diagnostics');
+  ok('identity mismatch (private-key): пара отвергнута явно, без секретов в тексте');
+
+  // 6b. Same private-key, другой tunnel IP → тоже reject (материальное поле)
+  await parse(page, mismatchIpYaml);
+  assert.equal(await fieldVal('h3Endpoint'), '', 'mismatch IP: H3 не импортирован');
+  assert.equal(await fieldVal('privateKey'), '', 'mismatch IP: identity не импортирована');
+  const bIp = await bannerText();
+  assert.match(bIp, /Несовместимая WARP identity/);
+  assert.match(bIp, /по ip/, 'конфликт по tunnel ip назван');
+  assert.ok(!bIp.includes(PK), 'private-key значение не в diagnostics');
+  ok('identity mismatch (tunnel ip при том же ключе): отвергнут явно');
+
+  // 6c. Multiple candidates: consistency проверяется ПОСЛЕ выбора пользователя
+  await parse(page, ambiguousConsistencyYaml);
+  assert.ok(await page.evaluate(() => document.getElementById('warpImportAmbiguity').style.display !== 'none'), 'селектор показан');
+  assert.equal(await fieldVal('h3Endpoint'), '', 'до выбора ничего не применено');
+  assert.equal(await fieldVal('h2Endpoint'), '', 'синглтон H2 тоже ждёт выбора (атомарная пара)');
+  assert.equal(await fieldVal('privateKey'), '', 'identity ждёт проверенной пары');
+  // совместимый выбор → импорт
+  await page.selectOption('#h3CandidateSelect', { index: 0 });
+  await page.locator('button[onclick="applyWarpscoutSelection()"]').click();
+  await page.waitForTimeout(100);
+  assert.equal(await fieldVal('h3Endpoint'), '162.159.192.51:443', 'совместимая пара применена');
+  assert.equal(await fieldVal('h2Endpoint'), '162.159.192.20:8443');
+  assert.equal(await fieldVal('privateKey'), PK);
+  // повторный импорт + несовместимый выбор → reject ПОСЛЕ выбора, ничего не применено
+  await parse(page, ambiguousConsistencyYaml);
+  await page.selectOption('#h3CandidateSelect', { index: 1 });
+  await page.locator('button[onclick="applyWarpscoutSelection()"]').click();
+  await page.waitForTimeout(100);
+  assert.equal(await fieldVal('h3Endpoint'), '', 'H3-bad: endpoint не применён');
+  assert.equal(await fieldVal('h2Endpoint'), '', 'H3-bad: H2 синглтон не применён');
+  assert.equal(await fieldVal('privateKey'), '', 'H3-bad: identity не применена');
+  assert.ok(await page.evaluate(() => document.getElementById('warpImportAmbiguity').style.display !== 'none'), 'селектор остался открыт для другого выбора');
+  assert.match(await bannerText(), /Несовместимая WARP identity/);
+  ok('консистентность проверяется после фактического выбора (совместимый → PASS, конфликтный → reject, атомарно)');
+
+  // 6d. Unknown network → UNSUPPORTED: не H3 по умолчанию, diagnostic, без импорта
+  await parse(page, mixedUnknownNetworkYaml);
+  assert.equal(await fieldVal('h3Endpoint'), '162.159.192.10:443', 'обычный H3 кандидат импортируется как раньше');
+  const bNet = await bannerText();
+  assert.match(bNet, /UNSUPPORTED network «foo» \(net-foo/);
+  assert.match(bNet, /UNSUPPORTED network «tcp» \(net-tcp/);
+  assert.match(bNet, /UNSUPPORTED network «h3» \(net-h3-token/);
+  assert.ok(!bNet.includes(PK), 'секреты не в diagnostics');
+  // uppercase H2 распознаётся (case-insensitive), пустая строка = H3
+  await parse(page, upperH2Yaml);
+  assert.equal(await fieldVal('h2Endpoint'), '162.159.192.20:8443', 'network: H2 (uppercase) → H2/TCP');
+  await parse(page, emptyNetworkYaml);
+  assert.equal(await fieldVal('h3Endpoint'), '162.159.192.10:443', 'network: "" → H3/QUIC');
+  assert.equal(await fieldVal('h2Endpoint'), '', 'network: "" не классифицируется как H2');
+  ok('unknown network: fail-closed (foo/tcp/h3 — UNSUPPORTED с raw token и именем); H2 case-insensitive; empty/absent → H3');
+
+  // 6e. SNI fallback — сознательный контракт: empty candidate SNI → общий SNI
+  await parse(page, sniFallbackYaml);
+  assert.equal(await fieldVal('h3Sni'), '', 'candidate SNI пуст → поле не заполняется');
+  assert.match(await bannerText(), /SNI не задан в candidate → используется общий SNI/, 'fallback явно назван в banner');
+  links = await generate(page);
+  assert.equal(parseLink(links[0]).q.sni, '4pda.to', 'генерация использует общий SNI (осознанный fallback)');
+  ok('SNI fallback: явный diagnostic + общий SNI в ссылке; никаких выдуманных SNI');
 
   // 7. Custom ports: H3 и H2 списки, dedup, приоритет exact над ports
   await parse(page, legacyYaml);
