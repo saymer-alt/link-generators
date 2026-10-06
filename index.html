@@ -445,6 +445,7 @@
               <option value="apple">🍎 Apple</option>
               <option value="social">💬 Social Networks</option>
               <option value="direct">⬇️ Direct (свои домены мимо прокси)</option>
+              <option value="proxy">🚀 Proxy (свои домены через прокси)</option>
             </select>
           </span>
         </div>
@@ -2948,7 +2949,12 @@ const POLICY_PRESETS = {
   microsoft: { name: 'MICROSOFT', domains: 'microsoft.com\nmicrosoftonline.com\noffice.com\noffice365.com\nwindowsupdate.com\nlive.com\nxbox.com' },
   apple: { name: 'APPLE', domains: 'apple.com\nicloud.com\nmzstatic.com\nme.com' },
   social: { name: 'SOCIAL', domains: 'facebook.com\ninstagram.com\nx.com\ntwitter.com\nreddit.com\ntiktok.com' },
-  direct: { name: 'DIRECT-LIST', domains: '# домены, которые пойдут мимо прокси (DIRECT)\nexample.com', target: 'DIRECT' }
+  direct: { name: 'DIRECT-LIST', domains: '# домены, которые пойдут мимо прокси (DIRECT)\nexample.com', target: 'DIRECT' },
+  // Симметричный «через прокси» сценарий. Target GLOBAL — ближайший строгий
+  // «через прокси»: во всех режимах GLOBAL не содержит DIRECT (static — листья+REJECT;
+  // subscription — листья+use-подписки+REJECT; AW — PRIMARY/FALLBACK) и вручную
+  // переключить GLOBAL на DIRECT нельзя. Новых engine-таргетов не вводится.
+  proxy: { name: 'PROXY-LIST', domains: '# свои домены, которые пойдут ЧЕРЕЗ прокси (GLOBAL — лучший прокси)\nexample.com', target: 'GLOBAL' }
 };
 
 function policyCardDom(card, index) {

@@ -185,6 +185,62 @@ const root = path.resolve(__dirname, '..');
     assert.equal(errors.filter(Boolean).length, 0, 'FALLBACK path: 0 page errors');
     cases += 3;
 
+    // Пресет «🚀 Proxy (свои домены через прокси)» — симметрия с Direct.
+    // Карточка PROXY-LIST, target GLOBAL (строгий «через прокси»: GLOBAL не содержит
+    // DIRECT ни в одном режиме), домены заполняет пользователь.
+    await page.locator('#policyPresetSelect').selectOption('direct');
+    await page.locator('#btnPolicyAdd').click();
+    await page.locator('#policyPresetSelect').selectOption('proxy');
+    await page.locator('#btnPolicyAdd').click();
+    const nCards = await page.locator('#policyCards .policy-card').count();
+    const proxyCard = page.locator('#policyCards .policy-card').nth(nCards - 1);
+    const proxyName = await proxyCard.locator('.policy-name').inputValue();
+    const proxyTarget = await proxyCard.locator('.policy-target').inputValue();
+    const proxyDomains = await proxyCard.locator('.policy-domains').inputValue();
+    assert.equal(proxyName, 'PROXY-LIST');
+    assert.equal(proxyTarget, 'GLOBAL', 'пресет ставит GLOBAL (строгий «через прокси»)');
+    assert.ok(proxyDomains.includes('ЧЕРЕЗ прокси'), 'домены-подсказка пресета');
+    await proxyCard.locator('.policy-domains').fill('my.example.net\nown.example.org');
+    cases += 3;
+
+    // Сборка: static 2 прокси — RULE-SET цели GLOBAL, порядок, и strict-инвариант
+    await page.locator('#cfgSubMode').setChecked(false);
+    await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#A\nvless://00000000-0000-4000-8000-000000000002@192.0.2.2:443#B');
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    await page.waitForFunction(() => {
+      try { return validateMihomoYaml(document.getElementById('mihomoOutput').value).status === 'VALID'; } catch { return false; }
+    }, null, { timeout: 20000 });
+    const proxyPreset = await page.evaluate(() => {
+      const d = jsyaml.load(document.getElementById('mihomoOutput').value);
+      const rules = (d.rules || []).filter(r2 => typeof r2 === 'string' && r2.startsWith('RULE-SET,'));
+      const global = (d['proxy-groups'] || []).find(g2 => g2.name === 'GLOBAL');
+      return { rules, globalProxies: global && global.proxies };
+    });
+    const proxyPresetPair = proxyPreset.rules.filter(r2 => r2.includes('policy-direct-list') || r2.includes('policy-proxy-list'));
+    assert.deepEqual(proxyPresetPair, [
+      'RULE-SET,policy-direct-list,DIRECT',
+      'RULE-SET,policy-proxy-list,GLOBAL',
+    ], 'порядок правил по карточкам: DIRECT-карточка раньше PROXY-карточки');
+    assert.ok(proxyPreset.rules.some(r2 => r2.endsWith(',GLOBAL')), 'proxy-политика → GLOBAL');
+    assert.ok(proxyPreset.rules.some(r2 => r2.endsWith(',DIRECT')), 'direct-политика → DIRECT');
+    assert.ok(!proxyPreset.globalProxies.includes('DIRECT'), 'GLOBAL не содержит DIRECT (strict proxy)');
+    cases += 4;
+
+    // Редактируемость: пользователь меняет target пресетной карточки штатно
+    await proxyCard.locator('.policy-target').selectOption('DIRECT');
+    await page.locator('button[onclick="buildMihomo()"]').click();
+    await page.waitForFunction(() => {
+      try { return validateMihomoYaml(document.getElementById('mihomoOutput').value).status === 'VALID'; } catch { return false; }
+    }, null, { timeout: 20000 });
+    const flipped = await page.evaluate(() => {
+      const d = jsyaml.load(document.getElementById('mihomoOutput').value);
+      return (d.rules || []).filter(r2 => typeof r2 === 'string' && r2.includes('policy-proxy')).pop();
+    });
+    assert.equal(flipped, 'RULE-SET,policy-proxy-list,DIRECT', 'пользователь может штатно сменить таргет');
+    // вернуть обратно GLOBAL для чистоты состояния
+    await proxyCard.locator('.policy-target').selectOption('GLOBAL');
+    cases += 1;
+
     assert.deepEqual(errors, [], 'no page errors');
     cases += 1;
 
