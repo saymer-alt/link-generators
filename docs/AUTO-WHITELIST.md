@@ -52,7 +52,7 @@ proxy-groups:
       - primary-example.invalid
       - fallback-example.invalid
     filter: "^(PRIMARY-|primary-)`^(FALLBACK-|fallback-)"
-    url: "https://google.com/generate_204"
+    url: "https://www.gstatic.com/generate_204"
     interval: 300
     lazy: false
     empty-fallback: REJECT
@@ -161,7 +161,7 @@ rules:
 ```yaml
 health-check:
   enable: true
-  url: "https://google.com/generate_204"
+  url: "https://www.gstatic.com/generate_204"
   interval: 300
   lazy: false
   expected-status: 204
