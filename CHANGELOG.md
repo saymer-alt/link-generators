@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **CONSTITUTION.md + docs/CONFIGURATION-INTELLIGENCE.md** (порт #123 на post-v1.8 main): инженерная конституция проекта (correctness before feature count, diagnostics before mutation, semantic preservation / no silent semantic change, уровни доказательств SOURCE-PROVEN…UNKNOWN, one source of truth / source-first, explainability как свойство продукта, provenance/freshness внешних фактов, fail-closed при неоднозначности, release authority у владельца, переиспользуемые модели вместо one-off фич) и архитектурное направление Configuration Intelligence (Config Dependency Graph, Domain Coverage / Routing Graph / DNS↔Routing, Semantic Trace, границы v1.9 — canonical scope: issue #125). Docs-only: production/runtime дельты нет.
+
 ### Changed
 
 - Открыт development cycle **v1.9.0** (канонический scope — issue #125 «Configuration Intelligence + WARPSCOUT-aware MASQUE»): `GENERATOR_META` = `1.9.0-dev` / `main` (бейдж `v1.9.0-dev · MAIN`). История v1.8.0 закреплена в секции `[1.8.0]`.
