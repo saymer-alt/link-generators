@@ -132,10 +132,12 @@ const root = path.resolve(__dirname, '..');
     cases += 1;
     const yamlBefore = await page.locator('#mihomoOutput').inputValue();
     const previewText = await page.locator('#rdPreview').textContent();
-    assert.match(previewText, /1\. AI → AI/, 'preview line 1: политика AI → её select-группа AI');
-    assert.match(previewText, /2\. GOOGLE → GOOGLE/, 'preview line 2: политика GOOGLE → своя группа');
+    // v1.9 4A: семантический путь с типом группы и фактическим составом (никакого двусмысленного «AI → AI»)
+    assert.match(previewText, /1\. AI → SELECT-группа «AI» → \[/, 'preview line 1: политика AI → SELECT-группа с составом');
+    assert.match(previewText, /2\. GOOGLE → SELECT-группа «GOOGLE» → \[/, 'preview line 2: политика GOOGLE → своя группа');
+    assert.match(previewText, /Фактически выбранный участник определяется Mihomo во время работы/, 'runtime-selected приписка');
     assert.match(previewText, /Всё остальное → GLOBAL/, 'fallback line present');
-    cases += 3;
+    cases += 4;
     // Inspector: gemini.google.com → победитель AI (DOMAIN,gemini.google.com в payload AI), альтернатива Google
     await page.fill('#rdTestInput', 'gemini.google.com');
     await page.locator('#rdTestBtn').click();

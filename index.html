@@ -490,6 +490,7 @@
         <details id="routingDiagnostics" class="advanced-panel" style="margin-top:12px">
           <summary><span>▶</span> <span class="advanced-badge">DIAGNOSTICS</span> <span>Routing Inspector / Diagnostics</span></summary>
           <div class="hint">Офлайн-анализатор итогового конфига (результат последнего Build). Точно анализируются DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD и inline-провайдеры политик; GEOSITE/GEOIP/external-провайдеры/DNS-зависимые правила честно возвращают UNKNOWN. Инспектор не заменяет диагностику самого Mihomo и ничего не меняет в конфиге.</div>
+          <div id="staleBuildWarn" class="hint" style="display:none;margin:8px 0;color:var(--red);border:1px solid var(--red);padding:6px;background:rgba(255,0,0,.07)">⚠ Настройки изменены после последнего Build. Диагностика ниже относится к предыдущей сборке — пересоберите конфиг, чтобы анализировать актуальную.</div>
           <div id="rdSummary" class="hint" style="margin-top:8px;white-space:pre-line"></div>
           <div id="rdPreviewBox" style="margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)">
             <div class="label" style="font-weight:bold;margin-bottom:4px">Routing order</div>
@@ -3525,13 +3526,14 @@ function policyCardDom(card, index) {
   targetLabel.textContent = 'Куда направлять:';
   const targetSel = document.createElement('select');
   targetSel.className = 'policy-target';
-  for (const [value, text] of [['SELECT', '🎛 Отдельная группа выбора'], ['GLOBAL', '🌐 GLOBAL'], ['DIRECT', '⬇ DIRECT'], ['REJECT', '🚫 REJECT']]) {
+  for (const [value, text] of [['SELECT', '🎛 Своя SELECT-группа (переключается в Mihomo)'], ['GLOBAL', '🌐 GLOBAL'], ['DIRECT', '⬇ DIRECT'], ['REJECT', '🚫 REJECT']]) {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = text;
     targetSel.appendChild(opt);
   }
   targetSel.value = card.target === 'GLOBAL' || card.target === 'DIRECT' || card.target === 'REJECT' ? card.target : 'SELECT';
+  targetLabel.appendChild(makeCtxHelp('Создаёт отдельную proxy-group с именем категории. После запуска Mihomo маршрут этой категории можно переключать между доступными выходами без пересборки конфига. GLOBAL/DIRECT/REJECT ведут RULE-SET напрямую на цель; семантика таргетов не менялась.', 'Куда направлять'));
   targetRow.append(targetLabel, targetSel);
   const domainsLabel = document.createElement('label');
   domainsLabel.className = 'label';
@@ -3732,7 +3734,7 @@ function renderMagiTricklePreview() {
   mapTitle.className = 'label';
   mapTitle.style.cssText = 'margin-bottom:4px';
   mapTitle.textContent = 'Куда направлять группы каждого интерфейса:';
-  mapTitle.appendChild(makeCtxHelp('Маршрут MagiTrickle (network interface) — это не правило Mihomo: группы одного интерфейса получают общий таргет политики. Известные интерфейсы подставляются автоматически: mitun0 → GLOBAL, blackhole → REJECT. Для остальных по умолчанию выбрано «Пропустить» — молча маршрут не угадывается, выберите таргет вручную. «Отдельная группа выбора» создаёт категорию-группу, GLOBAL/DIRECT/REJECT ведут RULE-SET напрямую.'));
+  mapTitle.appendChild(makeCtxHelp('Маршрут MagiTrickle (network interface) — это не правило Mihomo: группы одного интерфейса получают общий таргет политики. Известные интерфейсы подставляются автоматически: mitun0 → GLOBAL, blackhole → REJECT. Для остальных по умолчанию выбрано «Пропустить» — молча маршрут не угадывается, выберите таргет вручную. «Своя SELECT-группа» создаёт категорию-группу, GLOBAL/DIRECT/REJECT ведут RULE-SET напрямую.'));
   mapBox.appendChild(mapTitle);
   for (const iface of p.ifaces) {
     const row = document.createElement('div');
@@ -3745,7 +3747,7 @@ function renderMagiTricklePreview() {
     sel.dataset.iface = iface;
     for (const [value, text] of [
       ['GLOBAL', '🌐 GLOBAL'],
-      ['SELECT', '🎛 Отдельная группа выбора'],
+      ['SELECT', '🎛 Своя SELECT-группа (переключается в Mihomo)'],
       ['DIRECT', '⬇ DIRECT'],
       ['REJECT', '🚫 REJECT'],
       ['skip', '⏭ Пропустить'],
@@ -4194,6 +4196,24 @@ function routingPreview(doc, humanNames) {
   });
   return out;
 }
+// Explainability (v1.9 4A): если таргет — proxy-group из generated config,
+// показываем семантический путь с типом группы и ФАКТИЧЕСКИМИ участниками из
+// конфига (никакого двусмысленного «AI → AI»); состав не хардкодится.
+// Runtime-selected участник честно помечен общей припиской под списком.
+const RD_BUILTIN_TARGETS = new Set(['GLOBAL', 'DIRECT', 'REJECT', 'PASS']);
+const RD_GROUP_TYPE_LABELS = { select: 'SELECT-группа', 'url-test': 'url-test-группа', fallback: 'fallback-группа', 'load-balance': 'load-balance-группа', relay: 'relay-группа' };
+function rdSemanticTargetText(doc, target) {
+  if (!target) return '—';
+  if (RD_BUILTIN_TARGETS.has(target)) return target;
+  const groups = (doc && Array.isArray(doc['proxy-groups'])) ? doc['proxy-groups'] : [];
+  const g = groups.find(x => x && x.name === target);
+  if (!g) return target; // leaf-прокси: дальше статики не видно
+  const typeLabel = RD_GROUP_TYPE_LABELS[String(g.type || '').toLowerCase()] || ('группа ' + String(g.type || '?'));
+  const members = [];
+  (Array.isArray(g.proxies) ? g.proxies : []).slice(0, 8).forEach(m => members.push(String(m)));
+  (Array.isArray(g.use) ? g.use : []).slice(0, 4).forEach(u => members.push('provider:' + String(u)));
+  return typeLabel + ' «' + target + '» → [' + members.join(' / ') + (members.length ? '' : 'пусто') + ']';
+}
 function routingDprHumanNames(policies) {
   const used = new Set();
   const map = {};
@@ -4321,6 +4341,55 @@ function routingProviderInventory(doc) {
 }
 /* === ROUTING DIAGNOSTICS CORE — RD-CORE-END === */
 
+// === STALE BUILD DIAGNOSTICS CONTRACT (v1.9 4B, Explainability) ===
+// Snapshot-модель Inspector/Provider-диагностики остаётся (скрытый Build не
+// выполняется), но она обязана быть честной: после изменения любого input,
+// влияющего на Build, диагностика помечается STALE заметным баннером, а после
+// нового Build — снова current. Контракт: fingerprint build-релевантного
+// состояния (супермножество контролов Builder-вкладки + WG-профили + DPR-карточки);
+// чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
+// ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
+// но визуально помечен как previous Build.
+const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput']);
+let lastBuildFingerprint = null;
+
+function buildStateFingerprint() {
+  const parts = [];
+  document.querySelectorAll('#tab-mihomo input, #tab-mihomo select, #tab-mihomo textarea').forEach(el => {
+    if (BUILD_STALE_EXCLUDED_IDS.has(el.id)) return;
+    if (el.type === 'file') return; // содержимое файлов отражено в wgProfiles
+    parts.push((el.id || el.name || el.className) + '=' + (el.type === 'checkbox' ? String(el.checked) : el.value));
+  });
+  parts.push('wgProfiles=' + wgProfiles.map(p => [p.filename, p.mode, p.target].join(':')).join('|'));
+  const cards = document.querySelectorAll('#policyCards .policy-card');
+  const cardParts = Array.from(cards).map(card => {
+    const g = sel => { const el = card.querySelector(sel); return el ? el.value : ''; };
+    return [g('.policy-name'), g('.policy-target'), g('.policy-domains')].join(':');
+  });
+  parts.push('policies=' + cardParts.join('|'));
+  return parts.join('\n');
+}
+
+function refreshBuildStaleness() {
+  const warn = document.getElementById('staleBuildWarn');
+  if (!warn) return;
+  if (lastBuildFingerprint === null) { warn.style.display = 'none'; return; }
+  warn.style.display = buildStateFingerprint() !== lastBuildFingerprint ? 'block' : 'none';
+}
+
+function markBuildFresh() {
+  lastBuildFingerprint = buildStateFingerprint();
+  refreshBuildStaleness();
+}
+
+(function bindBuildStalenessWatch() {
+  const tab = document.getElementById('tab-mihomo');
+  if (!tab) return;
+  // input/change покрывают текстовые поля, селекты и чекбоксы; click нужен для
+  // кнопок, мутирующих состояние (добавить/удалить политику, WG-профили, очистить).
+  ['input', 'change', 'click'].forEach(ev => tab.addEventListener(ev, () => setTimeout(refreshBuildStaleness, 0)));
+})();
+
 // === ROUTING DIAGNOSTICS UI (read-only; только отображает результаты ядра) ===
 const RD_NL = String.fromCharCode(10);
 let lastRoutingDoc = null;
@@ -4357,7 +4426,8 @@ function updateRoutingDiagnostics(yaml) {
     });
     summary.textContent = lines.join(RD_NL);
     const preview = routingPreview(doc, lastRoutingHumanNames);
-    previewEl.textContent = preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + (p.target || '—')).join(RD_NL);
+    previewEl.textContent = preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + rdSemanticTargetText(doc, p.target)).join(RD_NL)
+      + RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы.';
     if (typeof web4core.planWireGuardMtu === 'function') {
       try { lastMtuPlan = web4core.planWireGuardMtu(doc); } catch (_) { lastMtuPlan = null; }
     } else lastMtuPlan = null;
@@ -4403,7 +4473,7 @@ function runRoutingInspector() {
   }
   const w = res.winner;
   const rule = res.matched.find(m => m.index === w).rule;
-  let text = '✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + rule.raw + RD_NL + RD_NL + 'Маршрут: ' + labelOf(w) + ' → ' + (rule.target || '—');
+  let text = '✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + rule.raw + RD_NL + RD_NL + 'Маршрут: ' + labelOf(w) + ' → ' + rdSemanticTargetText(lastRoutingDoc, rule.target || '—') + RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы.';
   const others = res.matched.filter(m => m.index !== w);
   if (others.length) {
     text += RD_NL + RD_NL + 'Также совпало:' + RD_NL + others.map(m => '#' + (m.index + 1) + ' ' + m.rule.raw).join(RD_NL);
@@ -4807,6 +4877,7 @@ async function buildMihomo() {
 
     document.getElementById('mihomoOutput').value = yaml;
     updateRoutingDiagnostics(yaml);
+    markBuildFresh();
     renderCompatSummary(yaml);
     showToast('✅ Mihomo config built!');
     if (realityModern.invalid > 0) {
