@@ -682,10 +682,17 @@ const expectedAwg = {
     const proxy = awg.doc.proxies[0];
     for (const [key, value] of Object.entries(expectedAwg)) assert.equal(proxy['amnezia-wg-option'][key], value, key);
     assert.match(await page.locator('#mihomoCompatBox').innerText(), /AmneziaWG 3\.1.*1\.19\.30/s);
-    // NIGHT-06: PersistentKeepalive = 25-35 — диапазон не поддерживается Mihomo,
-    // значение НЕ эмитится (без auto-конвертации в 25), карточка предупреждает.
-    assert.equal(proxy['persistent-keepalive'], undefined, 'PK range не эмитится (NIGHT-06 контракт)');
-    assert.match(await page.locator('#wgList').innerText(), /25-35/, 'карточка предупреждает о PK range');
+    // NIGHT-06 strict контракт живёт под OFF тоггла 🛡 (#137): диапазон PK не
+    // эмитится, WARN остаётся. Под DEFAULT-ON политикой #137 диапазон 25-35 →
+    // persistent-keepalive: 25 с явной диагностикой (explicit fallback, fixed 25
+    // не эквивалентен random-range) — user-visible policy, не silent mutation.
+    assert.match(await page.locator('#wgList').innerText(), /25-35/, 'карточка предупреждает о PK range (fallback под ON)');
+    assert.equal(proxy['persistent-keepalive'], 25, 'PK range + DEFAULT ON → 25 (explicit #137 policy)');
+    assert.match(await page.locator('#wgList').innerText(), /25-35 → 25/, 'карточка показывает explicit fallback trace');
+    await page.locator('#cfgAwgKeepalive').uncheck();
+    const awgStrict = await build('awg31');
+    assert.equal(awgStrict.doc.proxies[0]['persistent-keepalive'], undefined, 'PK range + OFF → не эмитится (NIGHT-06 strict контракт сохранён)');
+    await page.locator('#cfgAwgKeepalive').check();
     assert.deepEqual(proxy.dns, ['1.1.1.1', '8.8.8.8']);
     assert.equal(proxy['amnezia-wg-option'].h1, '100001-100010');
     const stages = await page.evaluate(text => {

@@ -368,6 +368,29 @@ x-device-model on preview fetches; fallback is
 the user's Device Model value when filled (fallback `Saymer Link Generators Preview`); HWID is unaffected. HWID contract
 unchanged: stable per-browser identity, never random-per-request.
 
+### AWG stability policy (#137)
+
+Two explicit user-visible toggles in the WG/AWG section (Builder tab), applied to build-time
+bean COPIES (`wgEngineBeans`) — original profiles are never mutated; switching a toggle off
+restores the strict contract byte-for-byte. Regression: `tests/awg-stability.cjs`.
+
+- «🛡 Поддерживать AWG-соединение через NAT (keepalive 25 с)» — **DEFAULT ON**, AWG-only
+  scope (plain WireGuard is deliberately outside the policy: no existing contract justifies
+  extending its semantics). A valid source integer `PersistentKeepalive` (including 0 =
+  disabled) is never replaced. Missing/incompatible value (e.g. range `25-35`) → emitted
+  `persistent-keepalive: 25` with an `awgFieldReport` trace (`SUPPORTED_NORMALIZED`,
+  «explicit user-enabled Mihomo compatibility fallback; fixed 25 не эквивалентен исходной
+  random-range semantics»). Toggle OFF → current strict behavior (range not emitted,
+  WARN/UNSUPPORTED stays).
+- «🧪 Тест обрывов: отключить RandomTrailers» — **DEFAULT OFF**. When ON, AWG profiles with
+  `random-trailers: true` get `random-trailers: false` at build time, an explicit red
+  warning (controlled diagnostic experiment, NOT a proven universal fix) and an
+  `IGNORED_BY_POLICY` trace entry. MTU/PrivateKey/PSK/HPK and unrelated fields are never
+  touched by either toggle.
+
+Card notes preview what Build will do with the profile under current toggle state; every
+policy change is visible in the existing WG/AWG diagnostic report. No silent mutation.
+
 ### buildFromRequest contract
 
 `buildFromRequest({ core, input, wgBeans, options })` → `{ kind: "yaml", data: <string> }`.
