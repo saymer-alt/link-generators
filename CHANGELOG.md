@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Шаблон политики «🚀 Proxy (свои домены через прокси)»** (порт #116): симметрия к «⬇️ Direct» — создаёт обычную DPR-политику с таргетом GLOBAL (вписанные домены пойдут через лучший доступный прокси, никогда DIRECT: группа GLOBAL не содержит DIRECT ни в одном режиме сборки — static: листья+REJECT, подписки: листья+use-подписки+REJECT, AW: PRIMARY/FALLBACK — и не переключается на него вручную в дашборде). Наличие REJECT в GLOBAL означает точную семантику «proxy-or-reject», а не обещание обязательной доставки. Новых engine-таргетов/групп не вводится; карточка полностью штатная (редактируется/удаляется). Для строго фиксированного прокси выберите leaf-прокси в таргете карточки.
 - **CONSTITUTION.md + docs/CONFIGURATION-INTELLIGENCE.md** (порт #123 на post-v1.8 main): инженерная конституция проекта (correctness before feature count, diagnostics before mutation, semantic preservation / no silent semantic change, уровни доказательств SOURCE-PROVEN…UNKNOWN, one source of truth / source-first, explainability как свойство продукта, provenance/freshness внешних фактов, fail-closed при неоднозначности, release authority у владельца, переиспользуемые модели вместо one-off фич) и архитектурное направление Configuration Intelligence (Config Dependency Graph, Domain Coverage / Routing Graph / DNS↔Routing, Semantic Trace, границы v1.9 — canonical scope: issue #125). Docs-only: production/runtime дельты нет.
 
 ### Changed
