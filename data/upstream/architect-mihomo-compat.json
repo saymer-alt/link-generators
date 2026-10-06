@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "target": "mihomo",
+  "source": {
+    "repository": "Vadim-Khristenko/Any-Tech-ARCHITECT",
+    "branch": "main",
+    "observed_tree_sha": "7eb128dd104cb66b8ce494c2befa44468ee8e17e",
+    "checked_at": "2026-10-06",
+    "files": {
+      "src/engines/awg/generator/clients.ts": {
+        "blob_sha": "0a960369473cf56ea75bb4928a261057712c9735",
+        "purpose": "client compatibility profile"
+      },
+      "src/engines/awg/generator/engines.ts": {
+        "blob_sha": "6acad476709befdcc3366ba91739dadf4532b5d0",
+        "purpose": "engine CPS tag vocabulary"
+      },
+      "src/engines/awg/generator/versions.ts": {
+        "blob_sha": "4559e5a2ee82a34d5111b9fe80eced292224114b",
+        "purpose": "AWG protocol capability table"
+      },
+      "src/engines/awg/mihomoFormat.ts": {
+        "blob_sha": "4ac9de867156b7dbc7ffd996741f7b71ff73f88b",
+        "purpose": "Mihomo exporter semantics"
+      },
+      "src/engines/awg/__tests__/mihomo.test.ts": {
+        "blob_sha": "5865c270b43e2dad1e65579fd5559d86b64b3d79",
+        "purpose": "Mihomo exporter regression contract"
+      }
+    }
+  },
+  "policy": {
+    "authority": "reference-not-source-of-truth",
+    "rule": "Upstream observations must be independently verified against current Mihomo/amneziawg-go source or runtime tests before they silently constrain generated output.",
+    "allowed_evidence_levels": [
+      "UPSTREAM-OBSERVED",
+      "SOURCE-PROVEN",
+      "RUNTIME-PROVEN",
+      "FIELD-OBSERVED",
+      "CONFLICT",
+      "UNKNOWN"
+    ]
+  },
+  "architect_profile": {
+    "client_id": "mihomo",
+    "client_name": "mihomo / Clash.Meta",
+    "engine": "amneziawg-go",
+    "engine_label": "amneziawg-go 3.x",
+    "engine_verified_by_upstream": true,
+    "cps_tags": ["b", "t", "r", "rc", "rd", "d", "ds", "dz"],
+    "unsupported_cps_tags": ["c"],
+    "max_h_value": 4294967295,
+    "supports_s3_s4": true,
+    "supports_i1_i5": true,
+    "max_jc": 10,
+    "max_s4": 32,
+    "manages_header_protection": false,
+    "notes": ["client.note.goNoTagC", "client.note.mihomoVersion3"],
+    "evidence": "UPSTREAM-OBSERVED"
+  },
+  "protocol_capabilities": {
+    "3.1": {
+      "ranged_headers": true,
+      "extra_sizes": true,
+      "cps": true,
+      "header_protection": true,
+      "feature_flags": true,
+      "feature_flag_examples": ["RandomTrailers", "DisableCookies"],
+      "evidence": "UPSTREAM-OBSERVED"
+    },
+    "3.0": {
+      "ranged_headers": true,
+      "extra_sizes": true,
+      "cps": true,
+      "header_protection": true,
+      "feature_flags": false,
+      "evidence": "UPSTREAM-OBSERVED"
+    }
+  },
+  "known_discrepancies": [
+    {
+      "id": "architect-mihomo-version3-branch",
+      "status": "CONFLICT",
+      "summary": "Architect mihomoFormat.ts and mihomo.test.ts currently gate/assert `version: 3` only for their AWG 3.0 branch. Link Generators v1.8 research established Mihomo AWG v3/3.1 behavior independently, so this upstream behavior must not be copied automatically.",
+      "action": "Review current Mihomo source before changing generator behavior."
+    }
+  ],
+  "consumer_rules": {
+    "browser_runtime_fetch": false,
+    "release_check_required": true,
+    "semantic_mutation_from_upstream_observation_only": false,
+    "diagnostic_on_stale_snapshot": true
+  }
+}
