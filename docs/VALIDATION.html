@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VALIDATION — pre-copy валидатор Mihomo YAML — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/VALIDATION.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="validation-pre-copy-валидатор-mihomo-yaml">VALIDATION — pre-copy валидатор Mihomo YAML</h1>
+<h2 id="автоматический-режим-белых-списков-2026-09-15-4">Автоматический режим белых списков (2026-09-15)</h2>
+<p>Контракт и точная структура YAML: <a href="AUTO-WHITELIST">AUTO-WHITELIST.md</a>.
+UI передаёт опциональный <code>fallbackInput</code>; engine строит один плоский GLOBAL fallback
+с конечными узлами primary → fallback, без DIRECT и вложенных групп (#2588). Выключенный режим сохраняет прежний путь.
+Опции «на каждый прокси» и VPS исключаются независимо от скрытия UI; существующий validator
+проверяет итоговый YAML. Runtime требуется с поддержкой нового generic API.</p>
+<p>Ревизия v1.19.31: MIPS для обычного и «TUN на каждый прокси» и AWG 3.1 fixture проходят структурную
+проверку. Runtime ограничивает выбор нового TUN stack; валидатор по-прежнему
+не проверяет глубоко <code>tun.stack</code>, AWG ranges или ключи. Это не <code>mihomo -t</code>.
+Сверка enum выявила отставание: в ядре 28 типов, в <code>MIHOMO_PROXY_TYPES</code> пока 27
+(нет <code>easytier</code>). Генератор не создаёт EasyTier, изменение отложено в
+<a href="AUDIT-MIHOMO-1.19.31">proposal</a>. Ниже перечислены прежние проверки, а не
+утверждение о полном совпадении со всеми типами v1.19.31.</p>
+<p>Полное описание слоя валидации (добавлен в <code>f5ea0a3</code>, 2026-09-08). Код — в <code>index.html</code>,
+секция <code>// === MIHOMO BASIC VALIDATION ===</code>. Решение о подходе утверждено владельцем
+2026-09-08 (Вариант A+B по ТЗ исследования).</p>
+<h2 id="почему-появился-валидатор">Почему появился валидатор</h2>
+<p>Реальный кейс: ссылка Mieru с опечаткой давала в готовом YAML</p>
+<pre><code class="language-yaml">- name: Sweden Mieru
+  type: mieru
+  server: 5.175.236.6
+  transport: TPC        # ← опечатка; mihomo требует ровно TCP или UDP
+</code></pre>
+<p>Mihomo отвергал такой конфиг уже <strong>после</strong> того, как пользователь копировал его на роутер.
+Поле приходит из пользовательской ссылки (web4core передаёт <code>transport</code> из URL как есть,
+дефолт <code>TCP</code>) — чинить только генерацию недостаточно, произвольный ввод может содержать
+любой мусор. Поэтому проверяется <strong>итоговый YAML после <code>buildFromRequest()</code> и всех
+патчей</strong>, а не исходные ссылки.</p>
+<h2 id="почему-это-не-настоящий-mihomo-и-не-wasm-архитектурное-ограничение">Почему это не настоящий Mihomo и не WASM (архитектурное ограничение)</h2>
+<p>Исследование 2026-09-08 (факты, не догадки):</p>
+<ul>
+<li>официальные релизы MetaCubeX/mihomo не содержат wasm/wasip1/js-таргетов (v1.19.30 —
+128 ассетов, ноль browser-сборок);</li>
+<li><code>config.Parse</code> неотделим от ядра (<code>adapter</code>, <code>listener</code>, <code>dns</code>, <code>tunnel</code>); обязательная
+зависимость quic-go под WASM собирается только как wasip1 с host-сокетами — браузеры UDP
+не предоставляют;</li>
+<li>официальный дашборд metacubexd валидирует только через живое ядро по REST API —
+статической странице нечем;</li>
+<li>готового браузерного runtime с настоящим кодом mihomo не существует; форк «только
+парсера» невозможен, а полный форк — вечное обслуживание.</li>
+</ul>
+<p><strong>Вывод:</strong> настоящий <code>mihomo -t</code> в браузере нереализуем. Выбранный вариант — локальный
+структурный validator, проверяющий только то, что mihomo гарантированно отвергнет, с
+честной формулировкой результата (никаких «✅ Mihomo config проверен»). Это архитектурное
+ограничение, а не временная недоделка.</p>
+<blockquote>
+<p><strong>Этот validator не является реализацией <code>mihomo -t</code> и не гарантирует, что Mihomo
+примет конфигурацию.</strong> Он структурный: ловит уверенные ошибки до копирования, но
+пропущенные им конфиги могут быть отвергнуты ядром. Авторитетная проверка — на
+целевой машине:</p>
+<pre><code class="language-bash">mihomo -t -f /opt/etc/mihomo/config.yaml
+</code></pre>
+<p>Если browser validator показывает VALID, а настоящий Mihomo отвечает ошибкой, это не повод добавлять правило наугад. Для воспроизводимого разбора нужны <strong>полный сгенерированный YAML</strong> и <strong>полный stdout/stderr <code>mihomo -t</code></strong> на том же файле. Только после этого ошибка либо превращается в доказуемое структурное правило + regression fixture, либо фиксируется как граница browser validation, если без ядра/окружения её надёжно определить нельзя.</p>
+</blockquote>
+<h3 id="контракт-поддержки-после-build">Контракт поддержки после Build</h3>
+<p>Сгенерированный YAML <strong>можно</strong> изменять вручную — проект это не запрещает. Но после любого
+ручного добавления, удаления или изменения строк, значений, отступов либо структуры файл
+считается пользовательской конфигурацией.</p>
+<p>Результат browser validator и гарантии генератора относятся только к YAML, полученному
+непосредственно после <strong>⚡ Build Config</strong> без последующих изменений. После ручного редактирования
+пользователь самостоятельно отвечает за внесённые изменения и обязан проверить итоговый файл
+на целевой версии Mihomo:</p>
+<pre><code class="language-bash">mihomo -t -f /path/to/config.yaml
+</code></pre>
+<p>Сообщение об ошибке генератора или validator gap принимается к воспроизводимому разбору только
+если ошибка повторяется на <strong>неизменённом YAML непосредственно из генератора</strong>. Evidence должен
+содержать этот YAML и полный stdout/stderr <code>mihomo -t</code>, выполненного именно на нём. Ошибка,
+возникшая только после ручного изменения YAML, сама по себе не является доказательством дефекта
+генератора или browser validator.</p>
+<h2 id="архитектура-1">Архитектура</h2>
+<pre><code class="language-text">⚡ Build Config
+      ↓
+web4core.buildFromRequest() → YAML-строка
+      ↓  пост-обработка страницы: injectWgDns → allow-lan патч
+финальный YAML (= содержимое #mihomoOutput)
+      ↓
+runMihomoValidation(yaml)     [async: VALIDATING отрисован ~30 мс]
+      ↓
+validateMihomoYaml(yaml)      [чистая функция: jsyaml.load + структурные проверки]
+      ↓
+{ status: VALID|INVALID, errors[], warnings[] }
+      ↓
+статус-бокс + блокировка/разрешение Copy YAML
+</code></pre>
+<p>Валидатор — чистая функция над строкой: не пишет в DOM, не влияет на генерацию, сетевых
+вызовов нет. Динамический HTML статус-бокса проходит <code>escapeHtml()</code> (значения полей —
+пользовательский ввод).</p>
+<h2 id="state-machine">State machine</h2>
+<pre><code class="language-text">             ┌────────────┐
+  загрузка/  │  NOT_BUILT │ ←— любое input/change событие на документе
+  ошибка     │            │     (поля, чекбоксы, select, файлы, WG DNS)
+  сборки     └─────┬──────┘
+                  │ Build Config (yaml получен)
+                  ▼
+             ┌────────────┐
+             │ VALIDATING │  «⏳ Базовая проверка конфигурации...»
+             └─────┬──────┘
+        ошибок нет │          │ есть ERROR
+                   ▼          ▼
+             ┌────────┐   ┌─────────┐
+             │  VALID │   │ INVALID │   Copy: включена / заблокирована
+             └────────┘   └─────────┘
+</code></pre>
+<ul>
+<li><strong>Generation counter (<code>mihomoValidationSeq</code>)</strong>: инкрементируется при старте проверки и
+при каждом сбросе. Финальный статус применяется только если поколение не изменилось —
+сброс во время асинхронного окна не может быть перезаписан поздним <code>VALID</code> (защита от
+race), а «хвост» старой проверки после второго Build не перезаписывает новую.</li>
+<li><strong>Сброс</strong>: document-level capture-слушатели <code>input</code> + <code>change</code> — любое изменение любого
+элемента страницы инвалидирует результат. Программные записи <code>.value</code>/<code>textContent</code>
+события не создают, поэтому собственные записи страницы ложных сбросов не дают.</li>
+<li><strong>Copy gating — двойной рубеж</strong>: <code>#copyYamlBtn.disabled = (state !== &#39;VALID&#39;)</code> и guard в
+начале <code>copyMihomo()</code> (toast «Копирование заблокировано…», выход до обращения к
+clipboard). Silently-success невозможен.</li>
+</ul>
+<p>Формулировки результата — ровно как утверждено владельцем:</p>
+<ul>
+<li><code>⚠️ Базовая проверка пройдена. Это не эквивалент проверки mihomo -t.</code>; интерфейс также показывает пример финальной команды и требования к evidence для случаев, когда ядро отклоняет YAML</li>
+<li><code>❌ Ошибка базовой проверки</code> + блоки <code>Proxy: … / Field: … / Value: … / Ошибка: …</code><ul>
+<li>«Исправьте конфигурацию и выполните ⚡ Build Config снова.»</li>
+</ul>
+</li>
+</ul>
+<h2 id="error-фактические-проверки-блокируют-copy">ERROR — фактические проверки (блокируют Copy)</h2>
+<p>Каждая сверена с исходниками mihomo (Alpha, линия v1.19.x) — «уверенная» означает «ядро
+это отвергнет»:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Проверка</th>
+<th>Обоснование из mihomo</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>YAML не парсится (<code>jsyaml.load</code> бросает)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Корень YAML — не словарь</td>
+<td>decode конфига</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Скалярные порты <code>port</code>/<code>socks-port</code>/<code>mixed-port</code>/<code>redir-port</code>/<code>tproxy-port</code> — не целые 1–65535</td>
+<td>диапазон портов</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>dns</code>/<code>tun</code>/<code>proxy-providers</code>/<code>rule-providers</code> — не словари; <code>rules</code>/<code>listeners</code>/<code>inbounds</code> — не списки; правило — не непустая строка</td>
+<td>decode секций</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>proxies[i]</code>: <code>name</code> отсутствует/пустое</td>
+<td>обязательное поле</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Дубликат имени прокси</td>
+<td><code>config.go</code>: «proxy … is the duplicate name»</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>type</code> отсутствует или не из списка 27 типов (<code>MIHOMO_PROXY_TYPES</code>)</td>
+<td><code>adapter/parser.go</code>: <code>unsupport proxy type</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td>Для 19 server-based типов: <code>server</code> отсутствует/пустое</td>
+<td>обязательное поле (для <code>direct/reject/dns/rematch/openvpn/tailscale/zerotier/wireguard</code> не требуется — сознательно не строже ядра)</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>port</code> — не целое 1–65535 (те же 19 типов)</td>
+<td>decode int + диапазон</td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>mieru</code>: <code>transport ∉ {TCP, UDP}</code> (в т.ч. кейс <code>TPC</code>)</td>
+<td><code>adapter/outbound/mieru.go</code>: «transport must be TCP or UDP»</td>
+</tr>
+<tr>
+<td>10a</td>
+<td><code>mieru</code> с непустым <code>port-range</code>: (а) одновременно задан <code>port</code> ≠ 0; (б) <code>port-range</code> — не строка вида <code>N-M</code>; (в) границы вне 1–65535 или начало &gt; конец. При наличии <code>port-range</code> поле <code>port</code> НЕ требуется — правило 9 для <code>mieru</code> не применяется</td>
+<td><code>adapter/outbound/mieru.go</code>: <code>PortRange string</code> (<code>proxy:&quot;port-range,omitempty&quot;</code>), формат <code>%d-%d</code>, взаимоисключимость с <code>port</code> («port and port-range cannot be set at the same time»), границы 1–65535, begin &lt;= end; рантайм при заданном <code>server_ports</code> пишет <code>port-range</code> и НЕ пишет <code>port</code></td>
+</tr>
+<tr>
+<td>11</td>
+<td><code>proxy-groups[i]</code>: <code>name</code>/<code>type</code> отсутствуют; тип не из <code>{select, url-test, fallback, load-balance, relay}</code></td>
+<td><code>adapter/outboundgroup/parser.go</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td>Дубликат имени группы; имя группы == имени прокси-элемента не блокируется (см. WARNING)</td>
+<td><code>config.go</code>: «the duplicate name»</td>
+</tr>
+<tr>
+<td>13</td>
+<td>Ссылка в <code>group.proxies</code> не разрешается в прокси/группу/builtin (<code>DIRECT, REJECT, REJECT-DROP, PASS, COMPATIBLE, GLOBAL</code>); forward-ссылки на группы разрешены</td>
+<td>проверка резолвера групп</td>
+</tr>
+<tr>
+<td>14</td>
+<td><code>listeners</code>/<code>inbounds</code>: элемент — не словарь, <code>port</code> вне 1–65535, дубликат <code>name</code></td>
+<td><code>config.go</code>: listener duplicate name</td>
+</tr>
+</tbody></table>
+<p>Списки типов — точные копии switch-веток исходников; при обновлении целевой версии mihomo
+их стоит сверить заново (<code>MIHOMO_PROXY_TYPES</code>, <code>MIHOMO_GROUP_TYPES</code> в <code>index.html</code>).</p>
+<h2 id="warning-предупреждения-copy-не-блокируют">WARNING — предупреждения (Copy не блокируют)</h2>
+<ul>
+<li><strong>dialer-циклы (ERROR)</strong> и <strong>dynamic provider-ветви (WARNING)</strong> — анализ через единый
+dependency-graph рантайма <code>web4core.analyzeDialerGraph</code>: см. «Конфигурация Mihomo как
+ориентированный граф» в <a href="MIHOMO">MIHOMO.md</a>. Цикл (маршрут, возвращающийся к исходному
+outbound) — ERROR с полным путём; провайдер dialer-группы без <code>override.dialer-proxy</code> —
+WARNING dynamic/unknown (статически цикл не доказан и не исключён, содержимое подписки
+неизвестно; UDP-совместимость не проверяется).</li>
+<li>имя группы совпадает с именем прокси (пересечение пространств имён);</li>
+<li>у группы пустой список <code>proxies</code>;</li>
+<li>Compatibility-требования (например, MIPS/AWG/Modern REALITY) вынесены в отдельный неблокирующий блок после Build и не считаются warning валидатора.</li>
+</ul>
+<h2 id="deliberate-omissions-что-сознательно-не-проверяется">Deliberate omissions — что сознательно НЕ проверяется</h2>
+<p>Принцип: <strong>ложная блокировка валидного конфига хуже пропущенной ошибки</strong> — валидатор не
+должен быть строже эталона.</p>
+<ul>
+<li><strong>Неизвестные/лишние поля</strong> — mihomo декодирует YAML без <code>KnownFields</code>, незнакомые поля
+игнорирует; флагать их значило бы блокировать то, что ядро примет.</li>
+<li><strong>Глубокая проверка DNS</strong> (<code>dns:</code>), <code>tun</code>, <code>sniffer</code> и т.п. — только форма секции.</li>
+<li><strong>Правила <code>rules</code></strong> — только «непустая строка»; синтаксис правил не парсится.</li>
+<li><strong>url-test URL / expected-status / интервалы</strong> — не проверяются.</li>
+<li><strong>AWG-специфичные поля</strong> (<code>amnezia-wg-option</code>) — passthrough не валидируется, чтобы не
+сломать AWG 3.1 (свежая функциональность генератора); проверяется регресс-тестом, что
+AWG 3.1 конфиг проходит валидацию.</li>
+<li><strong>Семантика паролей/ключей/UUID</strong> — не проверяется.</li>
+</ul>
+<h2 id="как-это-тестируется">Как это тестируется</h2>
+<p>Юнит-матрица (42 кейса) и браузерные e2e сценарии — <a href="TESTING">TESTING.md</a>. Регрессионный
+минимум: <code>transport: TPC → INVALID</code> + Copy заблокирована; <code>TCP → VALID</code>; AWG 3.1 → VALID;
+изменение входа сбрасывает <code>VALID</code>.</p>
+<h2 id="связанные-документы-5">Связанные документы</h2>
+<p>Место валидатора в конвейере — <a href="DATAFLOW">DATAFLOW.md</a>, <a href="ARCHITECTURE">ARCHITECTURE.md</a>;
+как прогонять тесты — <a href="TESTING">TESTING.md</a>; жизненный цикл рантайма и его влияние на
+enum-списки — <a href="UPDATES">UPDATES.md</a>.</p>
+
+</div>
+</body>
+</html>

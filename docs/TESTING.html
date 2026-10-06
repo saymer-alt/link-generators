@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TESTING — реальная тестовая стратегия — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/TESTING.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="testing-реальная-тестовая-стратегия">TESTING — реальная тестовая стратегия</h1>
+<h2 id="masquedpi-генератор-детерминированная-регрессия-2026-09-18">MASQUE/DPI генератор: детерминированная регрессия — 2026-09-18</h2>
+<p><code>tests/masque-dpi-regression.cjs</code> (Playwright, env как у <code>browser.cjs</code>): <code>Math.random</code>
+подменяется только в тесте (очередь граничных значений через <code>addInitScript</code>,
+продакшн-рандомность не трогается) — детерминированно закрывает каждый взвешенный
+бакет портов (границы включительно-по-верхнему краю: 0.7 → 443, 0.700001 → 8443,
+0.9 → 8443, 0.900001 → 4443, 0.95 → 4443, 0.950001 → 8095), полный режим (500/1701/4500),
+фиксированный QUIC-пул и порт 443, диапазоны H2-IP (октеты 1–254), анти-корреляционную
+ветку (форсированная коллизия с QUIC-IP + escape-hatch attempts&gt;18), <code>urlEncodeKey</code>
+(%2B/%2F/%3D сквозь ссылку), дефолты (SNI/DNS/туннельный IP/профиль) и имена
+<code>PROFILE-QUIC[-N]</code>/<code>PROFILE-H2-&lt;port&gt;[-N]</code>; сгенерированные ссылки прогоняются через
+парсер рантайма (round-trip ключей, sni, network=h2, dns). Смыслость проверена мутацией
+(нейтрализация исключения в <code>getRandomH2Ip</code> ломает тест), 5 повторов подряд — без
+флаковости; CI-воркфлоу этот файл не запускает (ручной/локальный запуск).</p>
+<h2 id="selective-modern-reality-реальный-handshake-e2e-2026-09-18">Selective Modern REALITY: реальный handshake E2E — 2026-09-18</h2>
+<p><code>tests/mihomo-reality-handshake.manual.cjs</code> — ручной интеграционный тест (никогда не CI):
+реальный Xray-core сервер + реальный mihomo v1.19.31, конфиг которого собран нашим
+рантаймом из vless-ссылки; dest — локальный <code>openssl s_server</code> (TLS 1.3, группы
+<code>X25519MLKEM768:X25519</code>), то есть ML-KEM-способная цель, как в предупреждении
+release notes Xray v25.5.16. Трафик доказывается HTTP-запросом через mihomo →
+xray → локальную цель; <code>mihomo -t</code> доказательством не считается.
+Бинарники в репозиторий не входят; фиксированные URL — в шапке теста.
+Требования: OpenSSL ≥ 3.5 в PATH, <code>XRAY_DIR</code>, <code>MIHOMO_BIN</code>, <code>JS_YAML_PATH</code>, <code>TEST_OUTPUT_DIR</code>.</p>
+<p>Замеренная матрица (mihomo v1.19.31, синтетические эфемерные ключи, 2026-09-18):</p>
+<table>
+<thead>
+<tr>
+<th>Xray</th>
+<th>selective (match)</th>
+<th>legacy / non-match / plain-TLS</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>v25.3.6 + ML-KEM dest</td>
+<td><strong>FAIL</strong> — xray «processed invalid connection», REALITY auth нет</td>
+<td>OK, ML-KEM не используется</td>
+</tr>
+<tr>
+<td>v25.5.16 + ML-KEM dest</td>
+<td><strong>OK — сквозное ML-KEM-согласование</strong> (mihomo: «is using X25519MLKEM768 …: true»)</td>
+<td>OK, legacy</td>
+</tr>
+<tr>
+<td>v26.7.11</td>
+<td>FAIL для проверенной связки с Mihomo v1.19.31</td>
+<td>FAIL для той же связки</td>
+</tr>
+</tbody></table>
+<p>Выводы этой лаборатории привязаны к <strong>Mihomo v1.19.31</strong>. Xray v25.5.16 — проверенная
+рабочая точка для selective ML-KEM в этой матрице, но не универсальный минимальный
+порог совместимости для любых будущих клиентов/серверов. Аналогично, наблюдавшийся
+FAIL на Xray v26.7.11 не является вечной «верхней границей» Xray: это результат
+конкретной связки Xray v26.7.11 + Mihomo v1.19.31. На v25.3.6 клиентский hello с
+ML-KEM key share отвергается только тогда, когда цель поддерживает ML-KEM (при цели
+без ML-KEM старый сервер терпит тот же hello), поэтому формулировка продукта
+«только для совместимых серверов» точнее любого голого версионного порога.
+<code>support-x25519mlkem768</code> проставляется только совпавшему узлу; <code>client-fingerprint: chrome</code> только при отсутствии своего; plain VLESS/TLS не затронут; provider-выражения
+scoped через <code>has(&quot;reality-opts&quot;)</code> с <code>additional-prefix</code> поверх (проверено генерацией).
+Словесные формулировки UI (A2) не расширялись.</p>
+<h2 id="awl-приоритет-и-production-интервалы-2026-09-18">AWL-приоритет и production-интервалы — 2026-09-18</h2>
+<p><code>tests/mihomo-awl-priority.cjs</code> (быстрые интервалы 2s, детерминированный) фиксирует
+семантический контракт AWL против обычного url-test на одинаковых листьях: медленный,
+но живой primary удерживается приоритетом; восстановившийся, но всё ещё медленный
+primary возвращает трафик (url-test не возвращается); пассивное обнаружение смерти
+primary без трафика укладывается в один-два интервала проверок. Запуск в том же
+стиле, что и <code>mihomo-failover.cjs</code>:</p>
+<pre><code class="language-bash">MIHOMO_BIN=/absolute/mihomo JS_YAML_PATH=/absolute/js-yaml.min.js \
+TEST_OUTPUT_DIR=/absolute/out node tests/mihomo-awl-priority.cjs
+</code></pre>
+<p>Варианты провайдеров B/C/D и сосуществование <code>override-expr</code> + <code>additional-prefix</code>
+проверены отдельными лабораторными прогонами NIGHT-24A (<code>mihomo -t</code> + живой прогон)
+на кандидате, который затем вошёл в v1.4.0; временная ветка кандидата больше не является
+источником истины. Артефакты лаборатории — вне репозитория.
+<code>tests/mihomo-awl-soak.manual.cjs</code> — ручной soak на generated-интервалах
+(300s/60000ms), ~25 минут, в CI не ставится: активный failover на dial-ошибках,
+автоматический failback по сетке планировщика, чисто пассивное обнаружение
+(трафик затихает за 60 с до kill, дальше только read-only API-опросы), поведение
+«все узлы мертвы» и восстановление. Запускать эксклюзивно, без параллельных
+Mihomo-лабораторий.</p>
+<h2 id="awg-field-check-relaxed-group-status-2026-09-23">AWG field-check: relaxed group status — 2026-09-23</h2>
+<p>Полевой кандидат для кейса Max: AWG 3.1 после ручного Ping получает latency, но затем
+может снова стать недоступным для GLOBAL. Исходники Mihomo v1.19.31 показывают, что
+<code>alive</code> сам по времени не протухает: состояние меняет следующий <code>URLTest()</code>. При этом
+MetaCubeXD manual Ping вызывает <code>/delay?url=...&amp;timeout=...</code> без <code>expected-status</code>, а
+сгенерированный ранее GLOBAL требовал точный код (для Google — 204).</p>
+<p>Кандидат на <code>main</code> поэтому убирает <code>expected-status</code> <strong>только у плоского GLOBAL
+fallback</strong>. URL, <code>interval: 300</code>, <code>lazy: false</code>, dial-failure окно и provider
+health-check не меняются; HTTP providers по-прежнему сохраняют строгий
+<code>expected-status</code>. Обычный режим генератора также не меняется.</p>
+<p>Полевой прогон после сборки нового runtime:</p>
+<ol>
+<li>Сгенерировать новый Auto Whitelist config с тем же AWG и тем же Ping server.</li>
+<li>Reload/restart Mihomo и больше не нажимать Ping у AWG вручную.</li>
+<li>Проверить, появляется ли latency/живое состояние автоматически.</li>
+<li>Наблюдать минимум 15–20 минут (не менее трёх циклов по 300 секунд).</li>
+<li>По возможности воспроизвести БС → fallback → восстановление сети и проверить
+автоматический возврат к первому доступному PRIMARY.</li>
+<li>Зафиксировать время, выбранный GLOBAL и состояние AWG до/после каждого 300-секундного
+цикла. Если AWG снова становится dead, следующий кандидат — отдельный keep-warm
+health-check; production <code>stable</code> до этого не менять.</li>
+</ol>
+<p>Успех этого field-check подтверждает практическую пригодность изменения, но сам по себе
+не доказывает, какой HTTP-код возвращался в прежнем неудачном цикле. Для точного root
+cause при повторении нужны логи health-check/URLTest или ответ тестового endpoint.</p>
+<h2 id="wireguard-dialer-proxy-туннель-в-туннеле-2026-09-30">WireGuard dialer-proxy (туннель в туннеле) — 2026-09-30</h2>
+<p>Опции <code>wgDialerProxy</code> / <code>wgDialerGroupMembers</code>: WireGuard/WARP устанавливает соединение с сервером через другой proxy/группу. Контракт и схема — <a href="MIHOMO">MIHOMO.md</a>.</p>
+<ul>
+<li>Source: <code>tools/tests/mihomo-wg-dialer.test.mjs</code> (13 тестов): byte-parity при пустых опциях, Variant A (имя proxy/группы), Variant B (авторская select-группа перед остальными, дефолт имени <code>WARP-DIALER</code>), отказы (неизвестный таргет/участник, конфликт имени, self-named без кандидатов), исключение транзитного WG-профиля (SE2-аналог Keenetic), проброс в subscription- и AWL-priority путях (таргет — ФИНАЛЬНОЕ имя прокси, AWL-пути префиксуют имена).</li>
+<li>Consumer: <code>tests/runtime.cjs</code> — 6 dialer-кейсов (53→59).</li>
+<li>Variant C (provider-backed, 2026-09-30): source <code>mihomo-wg-dialer.test.mjs</code> — 8 кейсов (13→21): группа <code>use:</code> на существующие провайдеры, несколько провайдеров, комбинированная группа proxies+use, дефолт <code>WARP-DIALER</code>, неизвестный URL → fail-closed, без subscription-режима → fail-closed, конфликт имени, provider-группа не может содержать WG-прокси по построению. Consumer: 4 кейса (59→63). Browser: поля <code>wgDialerProviders</code> → <code>use:</code>-группа + UDP-предупреждение валидатора; <code>mihomo -t</code>: 1 и 2 провайдера — successful, <code>use:</code>-призрак отвергнут ядром.</li>
+<li>Browser: поля <code>wgDialerInput</code>/<code>wgDialerMembers</code> → Build → <code>dialer-proxy</code> в YAML; валидатор: таргет-призрак/self-reference → INVALID, <code>GLOBAL</code>-таргет и MTU&gt;1300/без mtu → предупреждения, UDP-only подсказка для http-таргета.</li>
+<li><code>mihomo -t</code> v1.19.31: позитивы (имя proxy; авторская группа) — successful; негативы (<code>dialer-proxy: GHOST</code>, self-reference) отвергаются ядром — Builder зеркалит статическую проверку ядра (<code>config/utils.go</code>).</li>
+<li><strong>Централизация (2026-09-30)</strong>: детектор перенесён в рантайм (<code>web4core.analyzeDialerGraph</code> — циклы с полными маршрутами + <code>dynamicGroups</code>/<code>dynamicProviders</code>); валидатор страницы вызывает его, локальная копия — только fallback до доставки нового runtime. Mixed-группы (<code>proxies:</code> + <code>use:</code> одновременно) вносят обе категории рёбер (регрессии: валидная mixed-группа, цикл через static-члена, цикл через provider override — source + build gate + браузер). Провайдер без override — dynamic/unknown (warning), не «доказанный тупик».</li>
+<li><strong>Полевой harness <code>tools/warp-dialer-fieldtest/</code> (2026-10-01)</strong>: автоматизированные полевые измерения dialer-proxy/provider-схем (sweep узлов, switchtest A→B→A, MTU-лестница с восстановлением конфига, WARP-over-WARP). Offline-тесты harness — 22 кейса (аргументы, redaction, классификация по curl-кодам, CSV, null-device, MTU-редактирование, план, нормализация API); CI проверяет только синтаксис/offline-тесты/отсутствие секретов — реальные field tests в CI не запускаются. Методика и ловушка PIN — README инструмента.</li>
+<li><strong>Dependency-graph цикл-детектор (2026-09-30, WG-over-WG)</strong>: source <code>mihomo-wg-dialer.test.mjs</code> — 9 кейсов (21→30): валидные <code>WG-A→WG-B</code>, <code>WG-A→WG-B→WG-C</code>, группа-медиированные цепочки; self-loop, 2-node loop, loop через группу, loop через две группы, цикл через provider <code>override.dialer-proxy</code> — отвергаются; provider без override — тупик (валидно). Consumer/browser probe: 11 сценариев (валидные цепочки не блокируются, <code>GLOBAL</code>-таргет — ошибка). <code>mihomo -t</code>: generated <code>WARP-OUTER → WARP-INNER</code> и ручная 3-node цепочка — successful; group-loop ядро пропускает (наш валидатор строже). Механический runtime-прогон: запрос маршрутизируется в <code>WARP-OUTER</code>, ядро поднимает цепочку и уходит в WG-handshake-таймаут на synthetic-ключах (dialer-механика между двумя WG-outbound живая; реальный handshake — field-test).</li>
+<li>Живая механическая цепочка (два инстанса v1.19.31 на одной машине): main-инстанс <code>TARGET</code> (socks5, <code>dialer-proxy: DIAL</code>) → dialer-инстанс; сквозной HTTPS-трафик проходит; негативный контроль (DIAL на мёртвом порту) блокирует трафик полностью. Полная WARP-цепочка через удалённый VPS — полевой тест (см. WARPSCOUT-VPS.md).</li>
+</ul>
+<h2 id="дополнительный-runtime-review-2588">Дополнительный runtime review #2588</h2>
+<p>Подробно: <a href="FALLBACK-REVIEW">FALLBACK-REVIEW.md</a>. На v1.19.31 баг воспроизведён
+локальными HTTP-пробами: dead wrapper + alive child → трафик ошибочно уходит на БС.
+После замены nested-групп плоским GLOBAL тест <code>tests/mihomo-failover.cjs</code>
+доказывает реальный PRIMARY → FALLBACK → PRIMARY для static/providers/mixed.
+Проверяется полный health-check providers, continued probes без primary-трафика
+и effective порядок узлов. Тестовый interval=1s; generated default=300s.
+<code>--nested-repro</code> самодостаточно реконструирует отвергнутую схему.</p>
+<h2 id="автоматический-режим-белых-списков-2026-09-15-3">Автоматический режим белых списков — 2026-09-15</h2>
+<ul>
+<li>Source (web4core, <code>tools/tests/*.test.mjs</code>, автообнаружение): после v1.4.0 —
+<strong>11 файлов / 82 теста</strong>, включая selective REALITY и расширенный
+<code>per-proxy-health</code>; <code>amnezia.test.mjs</code> требует <code>npm run build:worker</code>
+(workers/api/dist/worker.mjs, gitignored).</li>
+<li>Runtime: <code>tests/runtime.cjs</code> — <strong>49 проверок без baseline / 65 с baseline</strong>.
+Для разных вопросов используются два именованных якоря: <code>21c3010</code> — исторический
+переход consumer на source-level fork; <code>927c446</code> — ближайший функциональный
+production baseline перед selective REALITY/static-health кандидатом. При baseline
+скрытая группа <code>🌐 static-health</code> маскируется целиком, поэтому её критичный
+<code>lazy: false</code> проверяется независимо в <code>tests/whitelist.cjs</code> вне baseline-режима.</li>
+<li>Существующий browser suite: обе вкладки, AWG, VPS, MIPS, baseline; validator — 47 cases.
+Тестовый текст AWG нормализуется LF для одинаковой работы regex на Windows/Linux.</li>
+<li>Selective REALITY fixture в <code>tests/whitelist.cjs</code> использует фиксированный валидный
+X25519 public key (base64url, 32 raw bytes), а не синтетическую строку <code>TESTPBK</code>.
+Это сохраняет детерминизм browser-теста и позволяет тем же YAML проходить реальный
+<code>mihomo -t</code> без искусственной ошибки ключа.</li>
+<li>Новый <code>tests/whitelist.cjs</code>: 10 YAML-сценариев (1+1, несколько+несколько,
+subscription+subscription, mixed+mixed, links с Sub Mode; каждый gVisor/MIPS).
+Проверены скрытие, восстановление, подмена запрещённых DOM-значений, отсутствие
+поддержки в старом runtime, пустой резерв и блокировка Copy; плюс зависимости UI
+реальными кликами (TUN → MIPS и «TUN на каждый прокси», Mixed Port → «SOCKS-порт на
+каждый прокси»: disable+reset)
+и fail-safe клампы сборки при подмене DOM (в т.ч. Mixed off + «SOCKS-порт на каждый
+прокси», которого
+нет в 256-матрице, и fail-closed «нет ни одного inbound»).</li>
+<li>256 сравнений UI-output с исходным <code>21c3010</code>: Sub Mode, TUN, «TUN/SOCKS на каждый
+прокси»,
+MIPS, LAN, Web UI, generic/VPS. RNG стабилизирован только в тесте; маска нормализуется
+по реальным UI-зависимостям перед выставлением DOM на обеих сторонах (VPS → TUN=true;
+TUN=false → MIPS=false и «TUN на каждый прокси»=false), невозможные состояния в baseline не
+участвуют и проверяются отдельными bypass-тестами. Выключенный режим byte-for-byte.</li>
+<li>Официальный Mihomo v1.19.31 windows amd64 (Go 1.26.8, with_gvisor): <code>-t</code> прошёл
+для 17 файлов — 10 новых и 7 прежних (обычный TUN/«на каждый прокси»/VPS/AWG).
+Это проверка конфигураций, не сетевого failover или handshake.</li>
+</ul>
+<p>Новый browser test использует те же <code>NODE_PATH</code>, <code>JS_YAML_PATH</code>, <code>BROWSER_CHANNEL</code>,
+<code>TEST_OUTPUT_DIR</code>, <code>BASELINE_REF</code>, что и существующий suite:</p>
+<pre><code class="language-bash">BASELINE_REF=21c3010 JS_YAML_PATH=/absolute/js-yaml.min.js \
+TEST_OUTPUT_DIR=/absolute/yaml node tests/whitelist.cjs
+mihomo -t -d /absolute/isolated-test-home -f /absolute/yaml/whitelist-mixed-mips.yaml
+</code></pre>
+<p>Для каждого YAML использовать отдельный тестовый home; реальные подписки и
+credentials не нужны. Workflow автообновления теперь: <code>npm run build:worker</code>
+(артефакт для amnezia-тестов) → <code>node --test tools/tests/*.test.mjs</code>
+(автообнаружение всех unit-тестов) → runtime smoke test нового API до
+копирования артефакта; оба job ограничены <code>timeout-minutes</code>.</p>
+<p>С 2026-09-15 доступны автоматические регрессии <code>tests/runtime.cjs</code> (только Node,
+без npm install) и <code>tests/browser.cjs</code> (внешняя установка Playwright и браузер).
+После Vladimir UX pass browser suite также фиксирует понятную подпись «URL-подписки
+(Sub Mode)», динамическую подсказку для ordinary links/subscription URLs, readonly
+preview итогового YAML и evidence-текст с <code>mihomo -t</code> для случаев, когда ядро
+отвергает browser-VALID конфиг.
+Workflow автообновления запускает runtime-тест до замены бандла.
+Исторические ручные прогоны и матрицы ниже сохранены с их датами.</p>
+<h2 id="воспроизводимый-прогон-v11931">Воспроизводимый прогон v1.19.31</h2>
+<pre><code class="language-bash">node --check web4core.runtime.js
+node tests/runtime.cjs
+# Исторический якорь перехода на source-level fork:
+BASELINE_REF=21c3010 node tests/runtime.cjs
+# Ближайший функциональный baseline перед кандидатом v1.4.0:
+BASELINE_REF=927c446 node tests/runtime.cjs
+# Playwright установлен вне репозитория; его node_modules доступны через NODE_PATH.
+JS_YAML_PATH=/absolute/path/js-yaml.min.js TEST_OUTPUT_DIR=/absolute/path/yaml \
+BASELINE_REF=927c446 node tests/browser.cjs
+</code></pre>
+<p>В PowerShell задавать переменные через <code>$env:NAME=&#39;value&#39;</code>. <code>JS_YAML_PATH</code> — локальная
+копия <strong>js-yaml 4.1.0</strong>, того же файла, который загружает страница; с baseline обязательна,
+без baseline может быть опущена (тогда используется CDN страницы).
+<code>BROWSER_CHANNEL</code> по умолчанию <code>msedge</code>, можно выбрать установленный <code>chrome</code>.
+<code>TEST_OUTPUT_DIR</code> опционален, должен находиться вне репозитория.
+Inline JS отдельно извлечь из последнего <code>&lt;script&gt;</code> и проверить <code>node --check</code>.</p>
+<p>Runtime: 49 проверок без baseline / 65 с baseline. Обычный TUN, все Per-Proxy listeners,
+Sub Mode, no-TUN, explicit gvisor, invalid values, прямой buildMihomoYaml, неизменность
+байтов исходного вывода в 16 комбинациях. Случайный subscription x-hwid фиксируется
+только внутри тестового VM. Три проверки textual patch удалены вместе со скриптом; все функциональные проверки сохранены.</p>
+<p>Browser: Compatibility Summary проверяется как consumer-only слой над финальным YAML:
+блок скрыт без специальных требований; MIPS, AWG 3.1, provider override-expr / Modern
+REALITY и experimental Mieru/TrustTunnel определяются без изменения YAML и без влияния
+на Copy.
+Browser: UI default/off/on, инвалидирование Copy, обычный/per-proxy MIPS, VPS с обеими
+формами TUN и DNS toggle, generic→VPS→generic, AWG .conf upload со всеми девятью 3.1
+полями и проверкой промежуточных стадий, on/off и альтернативные booleans, scalar/range,
+false-only auto-version, plain WG, int-range; baseline generic/VPS × links/AWG,
+TPC→INVALID / TCP→VALID и обе вкладки (WARP YAML→MASQUE→Builder→Copy).
+Clipboard в тесте подменён тестовым адаптером; вызов и guard страницы остаются реальными.
+Дополнительно в браузере выполнены 47 структурных cases валидатора: 17 позитивных типов,
+порты, обязательные поля, YAML/секции, listeners, группы/ссылки, Mieru port-range.</p>
+<h3 id="результат-проверки-ядром-2026-09-15">Результат проверки ядром 2026-09-15</h3>
+<p>Официальный <code>mihomo-windows-amd64-v1-v1.19.31.zip</code>, вывод <code>-v</code>:
+<code>Mihomo Meta v1.19.31 windows amd64 with go1.26.8</code>, build <code>2026-09-14</code>, tag <code>with_gvisor</code>.
+Команда: <code>mihomo -t -d &lt;isolated-test-home&gt; -f &lt;generated-file&gt;</code>.
+Успешно прошли <strong>7 файлов</strong>: default gvisor, MIPS, Per-Proxy MIPS, VPS MIPS,
+VPS + Per-Proxy MIPS, AWG 3.1, AWG 3.1 + VPS MIPS. Никаких пользовательских credentials.
+Это реальная проверка ядром, но не запуск TUN и не handshake AWG-сервера.</p>
+<h3 id="воспроизводимость-source-level-runtime">Воспроизводимость source-level runtime</h3>
+<p>Runtime собирается штатно из <code>saymer-alt/web4core@link-generators</code>; команды —
+<a href="DEVELOPMENT">DEVELOPMENT.md</a>. Перед миграцией сборка на базе upstream <code>8998983</code>
+с MIPS в <code>src/build.js</code>/<code>src/core/yaml.js</code> побайтово совпала с runtime из commit <code>6b3368e</code>:
+193683 байта, SHA-256 <code>b445d1884c819f9a6da49c57d30ddb67e5d8b5cd01f9ca5412f7e0555f68fa1e</code>.
+Windows checkout отличается только CRLF. Runtime руками не редактируется.
+В fork добавлены source tests на базе существующего <code>node:test</code>; старые тесты сохранены.
+Ниже датированные прогоны 2026-09-08/09 — исторические результаты.</p>
+<h2 id="инфраструктура-прогона">Инфраструктура прогона</h2>
+<pre><code class="language-bash">cd link-generators
+py -m http.server 8017 --bind 127.0.0.1
+# открыть http://127.0.0.1:8017/index.html (in-app browser или обычный браузер)
+</code></pre>
+<p>Юнит-кейсы валидатора вызываются прямо на странице (<code>validateMihomoYaml(yaml)</code> — глобальная
+функция; состояние — <code>MIHOMO_VALIDATION_STATE</code>); e2e — через UI или те же evaluate-вызовы
+(<code>buildMihomo()</code>, <code>copyMihomo()</code>). Файлы WG подсовываются через <code>DataTransfer</code> + событие
+<code>change</code> на <code>#wgFile</code> (нативный file-пикер не автоматизируется). Все фикстуры —
+синтетические (фейковые base64-ключи); реальные конфиги пользователя в тестах не
+использовать никогда.</p>
+<p>Гочаи прогона:</p>
+<ul>
+<li>после правок обновлять вкладку (<code>reload</code>) — свежий page build может закэшироваться;</li>
+<li><strong>Sub Mode включён по умолчанию</strong>: <code>buildMihomo</code> отвергает не-URL ввод («Provide one or
+more HTTP(S) URLs…») — для ссылок выключать <code>#cfgSubMode</code> (это не баг патчей);</li>
+<li>mieru-ссылка требует userinfo: <code>mieru://user:pass@host:port?transport=…</code>, иначе
+«mieru: missing username/password»;</li>
+<li>клик по Build в evaluate — через <code>#tab-mihomo button[onclick=&quot;buildMihomo()&quot;]</code>
+(первая <code>.btn</code> вкладки — кнопка загрузки WG-файла).</li>
+</ul>
+<h2 id="юнит-матрица-валидатора-42-кейса-все-зелёные-на-2026-09-08">Юнит-матрица валидатора (42 кейса, все зелёные на 2026-09-08)</h2>
+<p>Функция <code>validateMihomoYaml(yaml)</code>:</p>
+<ul>
+<li><strong>TPC-регресс</strong>: <code>mieru</code> c <code>transport: TPC</code> → INVALID, ошибка содержит
+Proxy=<code>Sweden Mieru</code>, Field=<code>transport</code>, Value=<code>&quot;TPC&quot;</code>; с <code>TCP</code> → VALID (0 ошибок);</li>
+<li><strong>mieru port-range (регресс 2026-09-09)</strong>: <code>mieru</code> c <code>port-range: &quot;20000-22000&quot;</code> без
+<code>port</code> → VALID (ошибка «порт должен быть целым числом» здесь запрещена — mihomo
+принимает <code>port-range</code> вместо <code>port</code>, взаимоисключимо); <code>port</code> + <code>port-range</code>
+одновременно → INVALID; <code>port-range: &quot;20000&quot;</code> (без дефиса) → INVALID;
+<code>&quot;70000-80000&quot;</code> → INVALID; <code>&quot;22000-20000&quot;</code> (begin &gt; end) → INVALID;
+<code>&quot;20000,21000&quot;</code> (список — mihomo <code>Sscanf(&quot;%d-%d&quot;)</code> не парсит) → INVALID;</li>
+<li>неизвестный <code>type</code> (<code>vles</code>) → INVALID; отсутствующий <code>server</code> → INVALID; порты
+<code>0</code>, <code>70000</code>, <code>&quot;abc&quot;</code>, <code>443.5</code> → INVALID;</li>
+<li>битый YAML → INVALID с сообщением о синтаксисе; корень-список → INVALID; <code>dns</code> не
+словарь → INVALID;</li>
+<li>неизвестное дополнительное поле → <strong>VALID</strong> (намеренно не проверяется);</li>
+<li>группы: битая ссылка на несуществующий прокси → INVALID; неизвестный тип группы
+(<code>fallback2</code>) → INVALID; forward-ссылка на группу → VALID; все 5 типов групп → VALID;
+пустой <code>proxies</code> группы → VALID + 1 warning;</li>
+<li>listeners: порт <code>0</code> → INVALID; дубликат имени → INVALID; дубликат имени прокси → INVALID;</li>
+<li>AWG 3.1 фикстура (wireguard + <code>amnezia-wg-option</code> с <code>version: 3</code>, header-protection-key,
+диапазоны) → <strong>VALID</strong> — валидатор не должен ломать AWG;</li>
+<li>17 позитивов: ss, ssr, vmess, vless, trojan, hysteria2, tuic, ssh, anytls, masque,
+trusttunnel, mieru (TCP), http, socks5, hysteria (<code>type: hysteria</code> в YAML — v1 ядро
+поддерживает, хотя ссылки <code>hysteria://</code> не парсятся, см. <a href="PROTOCOLS">PROTOCOLS.md</a>),
+snell, direct (без server) → VALID;</li>
+<li>коллизия «имя группы = имени прокси» → VALID + warning.</li>
+</ul>
+<h2 id="браузерные-e2e-выполнены-2026-09-08">Браузерные e2e (выполнены 2026-09-08)</h2>
+<table>
+<thead>
+<tr>
+<th>Сценарий</th>
+<th>Ожидание</th>
+<th>Статус</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>VLESS-ссылка → Build Config</td>
+<td>state <code>VALID</code>, бокс «⚠️ Базовая проверка пройдена. Это не эквивалент проверки mihomo -t.», Copy включена</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>изменение input после VALID (событие input)</td>
+<td>state <code>NOT_BUILT</code>, Copy выключена</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>mieru://…?transport=TPC</code> → Build</td>
+<td>state <code>INVALID</code>, Copy выключена, бокс с Proxy/Field/Value; <code>TPC</code> реально в готовом YAML (валидация пост-билд)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>та же ссылка с <code>TCP</code> → Build</td>
+<td>state <code>VALID</code>, Copy включена</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>copyMihomo()</code> в INVALID</td>
+<td>toast «Копирование заблокировано…», clipboard не тронут (guard)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>AWG 3.1 <code>.conf</code> (фейковые ключи, <code>PersistentKeepalive = 25-35</code>, <code>HeaderProtectionKey</code>) через DataTransfer → Build</td>
+<td>state <code>VALID</code>; в YAML <code>version: 3</code>, <code>persistent-keepalive: 25</code>, <code>amnezia-wg-option</code> на месте — AWG-слой не задет</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>захват фактических YAML (links / per-proxy SOCKS / per-proxy TUN / sub-mode / mieru / masque / socks5 / WG)</td>
+<td>сверка структуры с документацией (<code>docs/</code>)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>отказы рантайма: <code>sdns://</code>, <code>socks4://</code>, <code>hysteria://</code></td>
+<td>«Mihomo does not support: sdns/socks4», «Unknown link: hysteria»</td>
+<td>✅</td>
+</tr>
+</tbody></table>
+<h2 id="браузерные-e2e-mieru-port-range-2026-09-09-все-зелёные">Браузерные e2e — mieru port-range (2026-09-09, все зелёные)</h2>
+<p>Полный round-trip через UI (<code>#mihomoInput</code> → Build Config → валидатор), синтетические
+креды (<code>203.0.113.0/24</code>, testuser/testpass):</p>
+<table>
+<thead>
+<tr>
+<th>Сценарий</th>
+<th>Ожидание</th>
+<th>Статус</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>mierus://testuser:testpass@203.0.113.10:20000-22000?protocol=TCP#…</code> → Build</td>
+<td>state <code>VALID</code>; в YAML прокси: <code>port-range: &quot;20000-22000&quot;</code>, поля <code>port</code> нет</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>mieru://…@203.0.113.11:20000?protocol=TCP</code> → Build</td>
+<td>state <code>VALID</code>; в YAML <code>port: 20000</code> (обычный одиночный Mieru не сломан)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>mieru://…@203.0.113.12:70000-80000?protocol=TCP</code> → Build</td>
+<td>state <code>INVALID</code>; ошибка на <code>port-range</code> (границы вне 1–65535)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>регресс <code>mieru … transport=TPC</code> → Build</td>
+<td>state <code>INVALID</code> на <code>transport</code> (прежнее поведение сохранено)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>регресс: <code>vless</code> → VALID; <code>ss</code> без <code>port</code> → INVALID</td>
+<td>прежнее поведение сохранено</td>
+<td>✅</td>
+</tr>
+</tbody></table>
+<h2 id="проверка-runtime-перед-commit">Проверка runtime перед commit</h2>
+<pre><code class="language-bash">git status --short
+git diff --check
+node --check web4core.runtime.js
+node tests/runtime.cjs
+</code></pre>
+<p>Изменённый runtime должен воспроизводиться сборкой fork; сравнение и baseline —
+<a href="DEVELOPMENT">DEVELOPMENT.md</a>.</p>
+<h2 id="регрессионный-минимум-перед-любым-пушем">Регрессионный минимум перед любым пушем</h2>
+<ol>
+<li>Обе вкладки: полный сценарий «YAML бота → ссылки → Builder → Build → Copy».</li>
+<li>Валидатор: TPC → INVALID + Copy заблокирована; TCP → VALID; изменение input сбрасывает.</li>
+<li>AWG 3.1 <code>.conf</code> → VALID (<code>version: 3</code> в YAML, булевы <code>random-trailers</code>/<code>disable-cookies</code>
+из <code>on</code>/<code>off</code> присутствуют как booleans).</li>
+<li>Allow LAN: <code>allow-lan: true</code> + <code>bind-address: &quot;*&quot;</code> в выводе (регэксп-патч не сломан).</li>
+<li><code>web4core.runtime.js</code> воспроизводится сборкой fork; функциональные регрессии проходят.</li>
+<li>Профиль развёртывания: вывод router/vps-local посимвольно равен эталону; при
+vps-gateway — контракт из раздела «Профиль VPS Gateway» (auto-route false,
+dns-тумблер, find-process-mode, store-*, DDP). Полный обязательный набор для
+profile/UX-правок — <a href="DEPLOYMENT-PROFILES-TEST-CONTRACT">DEPLOYMENT-PROFILES-TEST-CONTRACT.md</a> §9.</li>
+</ol>
+<h2 id="профиль-vps-gateway-opt-in-добавлен-2026-09-09">Профиль VPS Gateway (opt-in; добавлен 2026-09-09)</h2>
+<blockquote>
+<p><strong>Историческая запись.</strong> Этот раздел описывает прогоны 2026-09-09, когда модель
+профилей называлась <code>generic</code>/<code>vps</code>. С PR #79 (2026-10-01) пользовательская модель —
+<code>router</code> / <code>vps-local</code> / <code>vps-gateway</code> (дефолт <code>router</code>); «generic» в записях ниже
+соответствует нынешнему router/vps-local-выводу, «vps» — профилю <code>vps-gateway</code>.
+Актуальные прогоны новой модели — см. «Domain Policy Routing» и «VPS Domain
+Detection Package» в конце файла.</p>
+</blockquote>
+<p>Селектор «Профиль развёртывания» (<code>#cfgProfile</code>); на момент прогона дефолт был
+<code>generic</code>. Реализация —
+<code>applyDeploymentProfile()</code> в <code>index.html</code>, вызывается <strong>только</strong> для gateway-профиля
+(после <code>injectWgDns</code>, до allow-lan патча). Прогон 2026-09-09 (базовый HEAD <code>b7af2b1</code>, до
+коммита): <strong>все проверки зелёные</strong>.</p>
+<p>Фикстуры: синтетическая vless-ссылка, trojan-ссылка, URL подписки, синтетический AWG 3.1
+<code>.conf</code> (длинные base64 I1/I5/HeaderProtectionKey по 140+ символов, <code>PersistentKeepalive = 25</code>, <code>RandomTrailers = 1</code>). Baseline Generic-вывода снят до правок и сохранён вне
+репозитория.</p>
+<h3 id="generic-инвариант-byte-for-byte">Generic-инвариант (byte-for-byte)</h3>
+<ul>
+<li>5 эталонных входов (ссылки+дефолты; Sub Mode URL; Per-Proxy SOCKS ×2 ссылки;
+allow-lan off; AWG файл) → вывод после добавления профиля <strong>посимвольно равен
+baseline</strong> — ✅</li>
+<li>повторная generic-сборка после цикла generic→vps→generic — посимвольно равна
+baseline (мусор не остаётся) — ✅</li>
+<li>профильная функция при generic не вызывается (guard <code>if (deploymentProfile === &#39;vps&#39;)</code> в <code>buildMihomo()</code>; инспекция кода) — ✅</li>
+<li>AWG DNS injection (<code>injectWgDns</code>) и allow-lan патч работают как раньше — входят
+в эталоны — ✅</li>
+<li>Sub Mode: сравнение с нормализацией случайного <code>x-hwid</code> (генерируется заново на
+каждую сборку — поведение рантайма, НЕ регресс) — ✅</li>
+</ul>
+<h3 id="vps-контракт">VPS-контракт</h3>
+<ul>
+<li>текущий default UI-path даёт <code>tun.{enable, device: tun-mihomo, stack: mips, auto-route: false, auto-detect-interface: true, mtu: 1420, gso: true}</code>; top-level
+<code>tun.inet4-address</code> отсутствует — ✅</li>
+<li><code>endpoint-independent-nat</code> отсутствует; при ручной инъекции в YAML удаляется
+(юнит-прогон <code>applyDeploymentProfile</code>) — ✅</li>
+<li><code>find-process-mode: &#39;off&#39;</code> в корне (jsyaml квотит строку <code>off</code> — YAML 1.1 bool
+protection; для mihomo/yaml.v3 это строка <code>&quot;off&quot;</code>, семантика верна) — ✅</li>
+<li><code>profile.store-selected/store-fake-ip = false</code>, merge без замены секции — ✅</li>
+<li><code>auto-route: false</code> в выводе; <code>auto-route: true</code> нигде; в DOM нет контрола
+управления auto-route — ✅</li>
+<li>passthrough редактируемых полей: <code>device</code> и <code>mtu</code> идут в <code>tun</code>, а
+<code>fake-ip-range</code> / <code>listen</code> — в включённую секцию <code>dns</code>; отдельного редактируемого
+top-level <code>inet4-address</code> в текущем VPS-профиле нет — ✅</li>
+<li>явно выбранные experimental stack <code>system</code> / <code>mixed</code> сохраняются, а не переписываются
+молча в gVisor; при MIPS checkbox off используется gVisor — ✅</li>
+<li>DNS sub-toggle: off → <code>dns</code> отсутствует целиком (без частичных остатков) — ✅</li>
+<li>пустые поля → боевые дефолты (device=tun-mihomo, nameserver=1.1.1.1/8.8.8.8) — ✅</li>
+<li>Sub Mode + VPS: <code>proxy-providers</code> на месте + gateway-tun — ✅</li>
+<li>AWG + VPS (двойной jsyaml-roundtrip): <code>amnezia-wg-option</code> (включая I1/I5 по 140
+символов, <code>version: 3</code>) идентичен generic-сборке — ✅</li>
+<li>allow-lan патч на VPS-выводе: <code>allow-lan: true</code> + <code>bind-address: &quot;*&quot;</code> — ✅</li>
+<li>валидатор: все VPS-сборки → VALID; регресс <code>transport: TPC</code> → INVALID — ✅</li>
+</ul>
+<h3 id="переключение">Переключение</h3>
+<ul>
+<li>generic → vps → generic: панель скрывается, <code>cfgTun</code> разблокируется и
+восстанавливается в прежнее состояние, вывод чистится от VPS-значений — ✅</li>
+</ul>
+<h2 id="awg-self-hosted-31-импорт-добавлен-2026-09-09">AWG self-hosted 3.1 импорт (добавлен 2026-09-09)</h2>
+<p>Production-case: реальный self-hosted AWG 3.1 <code>.conf</code> (Amnezia, <code>HeaderProtectionKey</code> +
+диапазонные таймеры + <code>RandomTrailers</code>/<code>DisableCookies = on|off</code>) импортировался с потерей
+полей. Прогон фикса (все проверки выполнены в браузере, синтетические fixture с нулевыми
+ключами — реальные ключи в репозиторий не попадают): <strong>все зелёные</strong>.</p>
+<p>Baseline ДО фикса (зафиксирован тем же прогоном на неизменённом коде):
+<code>RandomTrailers/DisableCookies = on|off</code> молча пропадали из <code>amnezia-wg-option</code>
+(официальный формат литералов 3.1 не входил в набор парсера); range-значения int-полей
+(<code>S1 = 100-200</code>, <code>Itime = 10-16</code>) уходили в YAML строками → mihomo не декодировал бы весь
+конфиг. Range-строки легальных полей (<code>h1-h4</code>, шесть таймеров 3.x) и так проходили
+корректно — passthrough не менялся.</p>
+<h3 id="матрица-fixture-после-фикса">Матрица fixture (после фикса)</h3>
+<ul>
+<li><code>user31</code> (форма production-конфига: HP + 6 диапазонов + <code>RandomTrailers = on</code>,
+<code>DisableCookies = off</code>, <code>PersistentKeepalive = 25-35</code>, <code>AllowedIPs = 0.0.0.0/0, ::/0</code>):
+<code>random-trailers: true</code>, <code>disable-cookies: false</code> (booleans), <code>version: 3</code>,
+<code>header-protection-key</code> на месте, все 6 таймеров — range-строками («3-7», «100-120»,
+«150-180», «5-15», «15-20», «10-100»), <code>persistent-keepalive: 25</code>, <code>allowed-ips: [&#39;0.0.0.0/0&#39;]</code> + <code>ip-version: ipv4</code>, DNS <code>100.64.0.1</code> → <code>1.1.1.1, 8.8.8.8</code> — ✅</li>
+<li><code>fi31</code> (та же форма без булевых строк, диапазоны «3-8»/«7-13»): булевы ключи
+отсутствуют, остальное идентично <code>user31</code> — ✅</li>
+<li><code>boolOff</code> (<code>RandomTrailers = OFF</code>): <code>random-trailers: false</code> (boolean), <code>version: 3</code> — ✅</li>
+<li><code>boolYes0</code> (<code>RandomTrailers = yes</code>, <code>DisableCookies = 0</code> — штатный путь парсера):
+<code>true</code>/<code>false</code>, регресс не сломан — ✅</li>
+<li><code>intrange</code> (<code>S1 = 100-200</code>, <code>Itime = 10-16</code>): свёрнуты к нижней границе — <code>s1: 100</code>,
+<code>itime: 10</code> (числа), <code>jc</code> не тронут, <code>version</code> не появляется (нет 3.x-полей) — ✅</li>
+<li><code>premium</code> (H1–H4 диапазонами, I1–I5 CPS): без изменений — диапазоны строками, I1/I5
+целые (148/153 симв., в YAML не перенесены), <code>version</code> НЕ проставляется — ✅</li>
+<li><code>plain</code> (обычный WireGuard без AWG): <code>amnezia-wg-option</code> отсутствует целиком — ✅</li>
+<li><code>dual</code> (<code>Address</code> v4+v6, <code>AllowedIPs = 0.0.0.0/0, ::/0</code>): <code>ipv6</code> сохранён, <code>::/0</code> в
+<code>allowed-ips</code>, <code>ip-version</code> не проставляется — ✅</li>
+<li>юнит <code>normalizeWgText</code>: <code>on</code>→<code>1</code>, <code>OFF</code>→<code>0</code>, <code>true</code> не тронут, BOM снят,
+<code>PersistentKeepalive = 25-35</code> → <code>25</code> — ✅</li>
+</ul>
+<h3 id="регрессия-прочих-слоёв">Регрессия прочих слоёв</h3>
+<ul>
+<li>валидатор: vless (TCP) → VALID; <code>mieru … transport=TPC</code> → INVALID — ✅</li>
+<li>VPS-профиль × AWG 3.1 (интеграция): <code>tun.device: tun-mihomo</code>, <code>auto-route: false</code>,
+<code>dns.listen: 0.0.0.0:53</code> + полный <code>amnezia-wg-option</code> (<code>version: 3</code>,
+<code>random-trailers: true</code>), VALID — ✅</li>
+</ul>
+<h2 id="что-не-тестируется">Что не тестируется</h2>
+<p>Workflow автоматически запускает source Mihomo tests, сборку, проверку синтаксиса
+и runtime suite. Browser suite и реальный <code>mihomo -t</code> запускаются отдельно;
+после публикации остаётся проверка живой страницы.</p>
+<p>Для AWG-импорта за рамками тестов остаются два уровня, которые страница проверить не может:
+фактический AWG-хендшейк против
+self-hosted 3.1 сервера и поведение конкретной сборки ядра (требование mihomo ≥ 1.19.30
+для 3.1-ключей — см. <a href="PROTOCOLS">PROTOCOLS.md</a>). Успешная структурная валидация ≠
+работающий туннель.</p>
+<h2 id="domain-policy-routing-variant-b-2026-10-01">Domain Policy Routing (Variant B) — 2026-10-01</h2>
+<p>Коммиты: web4core <code>2daf383</code> (эмиссия: <code>src/core/mihomo.js</code>, <code>src/build.js</code>,
+<code>src/core/yaml.js</code>, <code>tools/tests/mihomo-policy-routing.test.mjs</code>), consumer —
+runtime <code>dcc16b68…</code> (Source: <code>saymer-alt/web4core@2daf383bde5257c1d8bd15a0f4c719c6b3f8e5d8</code>).</p>
+<ul>
+<li>Source-тесты форка: <code>node --test tools/tests/mihomo-policy-routing.test.mjs</code> — 12/12;
+полный набор форка 158/158; <code>test:amnezia</code> 12/12.</li>
+<li>Consumer node-регресс: <code>JS_YAML_PATH=… node tests/policy-routing.cjs</code> — 33 кейса
+(parity off, basic, shared provider, <code>proxy: DIRECT</code>, AW-совместимость, static,
+предупреждения, структурные ошибки).</li>
+<li>Браузерный UI: <code>node tests/policy-routing-browser.cjs</code> — 14 кейсов (панель,
+карточки add/remove, пресеты, сборка, дубликат имён, кламп per-proxy, VALID).</li>
+<li>Полный потребительский набор после изменений: <code>runtime.cjs</code> 63/63,
+<code>whitelist.cjs</code> 10 кейсов, <code>browser.cjs</code> 47 валидатор + pipeline — PASS.</li>
+<li>Реальный <code>mihomo -t</code> v1.19.31 (Windows-бинар) на 5 пробах из поставляемого
+runtime: dpr-subscription (GEOSITE/KEYWORD/CIDR), dpr-static, dpr-aw,
+dpr-off-parity, dpr-cyrillic — все successful; per-proxy+DPR отклонён
+движком как задумано. После интеграции с deployment profiles
+(<code>router / vps-local / vps-gateway</code>): 9/9 combined-проб на 1.19.31
+(router/vps-local/vps-gateway × DPR on/off, vps-gateway DNS-off,
+MIPS, gVisor) и 5/5 ключевых на <strong>1.19.32</strong> (recommended/current;
+minimum остаётся 1.19.31). Живой PoC маршрутизации — тестовый VPS, 2026-10-01
+(журнал владельца): DOMAIN→POLICY→PROVIDER→NODE доказан на обеих версиях.</li>
+</ul>
+<h2 id="vps-domain-detection-package-2026-10-01">VPS Domain Detection Package — 2026-10-01</h2>
+<p>Ветка lg <code>feat/vps-domain-detection</code> (index.html: <code>applyDeploymentProfile</code>
+плюс пакет; без изменений web4core/runtime), gateway-ветка
+<code>feat/domain-detection-store-fake-ip</code> (<code>8f41759</code>): патчер сохраняет
+<code>store-fake-ip</code> генератора; тест <code>tests/test-mihomo-config-patch.sh</code>
+расширен (preserved <code>true</code> + сквозной DDP-фикстура) — 5/5 gateway-тестов
+в WSL.</p>
+<ul>
+<li><code>tests/vps-detection-browser.cjs</code> (новый): 46 кейсов — точные формы
+dns-hijack/sniffer/store-fake-ip (dns on), удаление с dns off
+(sniffer остаётся), DPR on/off coexistence, generic byte-parity
+(hwid-нормализация), валидатор VALID.</li>
+<li>Регресс после пакета: runtime 63/63, browser 47, whitelist 10,
+masque 7, policy-routing 33/14 — PASS (non-VPS untouched).</li>
+<li><code>mihomo -t</code> v1.19.31: 4/4 (vps+package mips/gvisor/DPR/dns-off) +
+6/6 интеграционных DPR-проб.</li>
+<li>Live staging (тестовый VPS, Saymer, production-like generated config):
+normal DNS fake-ip; dns-hijack внешнего :53 (9.9.9.9 → fake-ip); DoH →
+sniffer; pure-IP TLS → sniffer; HTTP Host → sniffer; YouTube QUIC —
+полный handshake через TUN; DPR: chatgpt→RuleSet(policy-ai)→AI,
+youtube (fake-ip/pure-IP/:80)→RuleSet(policy-media)→MEDIA,
+example.com→Match→GLOBAL; QUIC negative: тот же IP + SNI example.com →
+GLOBAL; restart gate: fake-ip (youtube=.4/openai=.5/chatgpt=.6)
+восстановлен 1:1 после рестарта, потоки в правильные политики
+(journal PID нового процесса), мисатрибуции нет; cold-start провайдера
+с пустым cache.db — 99 узлов (proxy: DIRECT контракт).</li>
+</ul>
+<h2 id="docshelp-reconciliation-2026-10-01-pre-release-audit">Docs/help reconciliation — 2026-10-01 (pre-release audit)</h2>
+<p>Документационно-UX арка (без изменений генерации): речонсиляция доков под модель
+профилей <code>router / vps-local / vps-gateway</code>, версионный контракт (minimum 1.19.31 /
+recommended 1.19.32), merged-статус gateway-патчера (PR #33), исторические заголовки
+у датированных аудитов; новая страница <a href="../quick-start.html">quick-start.html</a> и
+контекстная help-система <code>?</code> (<code>.ctx-help</code>) в Builder.</p>
+<ul>
+<li>Новый <code>tests/help-ux-browser.cjs</code>: ссылка «❓ Помощь / Быстрый старт» ведёт на
+существующий <code>quick-start.html</code>; обратная ссылка на генератор; страница без
+<code>fetch</code>/<code>XMLHttpRequest</code>/<code>localStorage</code>/telemetry; help-маркеры <code>?</code> присутствуют,
+открываются кликом и с клавиатуры (Enter/Escape), <code>aria-expanded</code> переключается;
+клик по <code>?</code> НЕ меняет состояние чекбокса; YAML до/после help-взаимодействия
+идентичен (x-hwid-нормализация); DPR-подсказка видна в выключенном состоянии;
+gateway-подсказки присутствуют в панели vps-gateway.</li>
+<li>Полная батарея перезапущена на ветке арки — см. финальный отчёт PR.</li>
+<li>Generated YAML: byte/semantic parity с <code>origin/main</code> на представительных сценариях
+(router/vps-local/vps-gateway ± DNS, DPR, БС, WG+dialer) — требование контракта §24.</li>
+</ul>
+<h2 id="per-profile-wgawg-manager-2026-10-01">Per-profile WG/AWG manager — 2026-10-01</h2>
+<p>Runtime-контракт web4core (<code>b2a56bb</code>/<code>0567353</code>+fix, ветка link-generators): bean-поле
+<code>wireguard.dialerProxy</code>, <code>wgDialerGroupOnly</code>, ремап dialer-таргетов при
+PRIMARY/FALLBACK-переименовании; DPR Fastest fix. Source-тесты форка: <strong>171/171</strong>;
+consumer runtime пересобран из форка (provenance в коммите runtime).</p>
+<ul>
+<li><code>tests/wg-profiles-browser.cjs</code> — <strong>15 кейсов</strong>: single, cancel-no-op, append,
+список без секретов, remove, dup-skip, WG+AWG3.1, clear-all, коллизия имён,
+per-profile dialer (Variant A), смешанный direct+dialer с разными таргетами,
+пустой таргет fail-closed, UI-карточка (режим+таргет инвалидируют сборку),
+re-add после удаления, async race.</li>
+<li>Battery: runtime 63/63, whitelist 10, masque 7, policy-routing 33+14,
+browser 47+, vps-detection 54/54, failover 3/3, AWL priority PASS.</li>
+<li>Parity vs <code>origin/main</code> (3680b5c): <strong>byte</strong> — wg-single/router/vps-gateway;
+<strong>semantic</strong> — wg-dialer (миграция глобального поля в per-profile наследование).</li>
+<li><code>mihomo -t</code>: 6/6 — 2 direct / 1 direct+1 dialer (группа) / 3 mixed с разными
+таргетами, на <strong>1.19.31</strong> и <strong>1.19.32-compatible</strong> (Windows compatible-бинар).</li>
+</ul>
+<h2 id="advanced-container-reorg-2026-10-02-ui-only">ADVANCED container reorg — 2026-10-02 (UI-only)</h2>
+<p>Блок «⚙ Расширенный TUN stack» перенесён внутрь ADVANCED-контейнера; контейнер
+переименован в «ADVANCED — Расширенные настройки»; внутри две подсекции
+(TUN stack / Отдельный вход на каждый прокси). TUN Interface и MIPS остались
+снаружи. IDs, JS-логика, fail-safe клампы и DOM-tamper защита не менялись.</p>
+<ul>
+<li>browser.cjs: расширена регрессия спойлера — в закрытом ADVANCED стек-контролы
+скрыты, подсекции присутствуют внутри details, значения (master, advanced
+stack, system) переживают open/close, YAML байт-идентичен до/после цикла;
+состояния восстанавливаются для последующих фаз.</li>
+<li>Battery: runtime 63/63, whitelist 10, masque 7, policy-routing 33+14,
+browser 47+, vps-detection 54/54, failover 3/3, AWL PASS.</li>
+<li>YAML parity vs <code>origin/main</code> (3680b5c): router/vps-gateway с расширенными
+состояниями — byte-identical (перенос UI не меняет генерацию).</li>
+</ul>
+<h2 id="contrastreadability-pass-2026-10-02-css-only">Contrast/readability pass — 2026-10-02 (CSS-only)</h2>
+<p>Палитра централизована: <code>--link</code>/<code>--link-hover</code> (ссылки, заголовок, валидация-в-процессе),
+<code>--text</code>/<code>--muted</code> подняты; active-вкладка — светлый текст + синий underline; hints
+переведены с #484f58 на var(--muted); посещённые ссылки закреплены за --link
+(без фиолетового). WCAG-контраст на карточке: hint 2.09 → 7.11:1; ссылки 1.84 → 8.89:1;
+hover 11.25:1. Семантические green/yellow/red не менялись; разрозненные hex
+(#e3b341/#b8860b/#d9534f/#a5d6ff) переведены на переменные. Сгенерированный YAML
+не затронут (CSS-only). Полная батарея зелёная; browser.cjs 9/9 прогонов подряд.</p>
+<h2 id="integration-xp-professional-redesign-2026-10-02">Integration + XP Professional redesign — 2026-10-02</h2>
+<p>Интеграция ночной цепочки (#82 docs/help → #84 WG manager/per-profile dialer/DPR+AWL fix → #86 contrast, #83 superseded #84, #85 внутри #86) в <code>integration/v1.6-xp-ui</code>; pre-theme baseline <code>1fe6c5d</code>.</p>
+<ul>
+<li>Интеграционная батарея (11 suites) — зелёная до редизайна.</li>
+<li><strong>Theme-only parity gate: 13/13 сценариев byte-identical</strong> между 1fe6c5d и XP-деревом
+(router, router+DPR, router+AWL, vps-local, vps-gateway ± DNS, WG single/multi direct,
+WG per-profile dialer, WG/AWG mixed, Per-Proxy, advanced system, advanced mixed).</li>
+<li>Батарея на XP-дереве: runtime 63/63, whitelist 10, masque 7, policy-routing 33+14,
+browser 47+, policy-routing-browser 14, vps-detection 54/54, help-ux 10, wg-profiles 15,
+failover 3/3, AWL priority PASS.</li>
+<li><code>mihomo -t</code>: 6/6 (2 direct / dialer-группа / 3 mixed) на <strong>1.19.31</strong> и <strong>1.19.32-compatible</strong>.</li>
+<li>Owner acceptance bundle: 12 скриншотов (builder/warp/profiles/WG manager/ADVANCED ±/DPR/
+validation ±/quick-start/mobile 390 main + WG cards).</li>
+</ul>
+<h2 id="xp-layout-polish-file-picker-accept-2026-10-02-cssdom-attribute-only">XP layout polish + file picker accept — 2026-10-02 (CSS/DOM-attribute only)</h2>
+<ul>
+<li>Layout cleanup поверх XP-редизайна: одна Luna-titlebar (quick-start <code>h2</code> → section
+headings), вложенные рамки ADVANCED упрощены, <code>.card-title</code> hardened, кнопки одной
+высоты, WG-карточки без распирания; responsive 1440/1024/768/390.</li>
+<li><code>#wgFile accept=&quot;.conf,.wg,.awg&quot;</code> (было <code>…,text/plain</code> — Windows TXT-first);
+<code>multiple</code> сохранён; regression в <code>tests/wg-profiles-browser.cjs</code> (16-й кейс).</li>
+<li>Theme-only parity: <strong>13/13 byte-identical</strong> к baseline 1fe6c5d; батарея зелёная.</li>
+</ul>
+<h2 id="v162-2026-10-02-dialer-selector-profile-contracts-ctx-help-regression">v1.6.2 (2026-10-02): dialer selector + profile contracts + ctx-help regression</h2>
+<ul>
+<li>Новый <code>tests/profile-matrix.cjs</code> — <strong>11 кейсов</strong>: матрица дефолтов (Sub Mode ON во
+всех профилях, БС/Per-Proxy доступны только в router), переходы
+router→vps-local→router / router→vps-gateway→router / vps-local→vps-gateway без
+stale-флагов и silent-подмен, per-profile snapshots (ручное router-состояние
+переживает визит в VPS: БС ON, Per-Proxy ON+children, ручной Sub Mode OFF),
+DOM-tamper: БС в VPS → явная ошибка сборки без silent-конверсии; Per-Proxy в VPS →
+Per-Proxy конфигурация не генерируется.</li>
+<li>Новый <code>tests/wg-dialer-selector.cjs</code> — <strong>12 кейсов</strong>: authoritative registry
+(префлайт-сборка движком; точные имена incl. <code>collide</code>/<code>collide-2</code>), self-exclusion
+по итоговому имени, WG→WG / WG→static / WG→generated group / WG→provider-backed
+group, manual-ADVANCED путь (dangling → ошибка «не существует в генерируемом
+конфиге»), target removed → сброс + пометка, became-self после схлопывания
+коллизии, dynamic refresh (ввод, WG-файлы, dialer-группа, Sub Mode), cycle
+A→B→A отклоняется движком, AWL rename в dropdown.</li>
+<li><code>tests/help-ux-browser.cjs</code> расширен до <strong>16 кейсов</strong>: hover (<code>:hover</code>) и
+focus (<code>:focus-within</code>) открывают tooltip, mouseleave закрывает, <code>.open</code>
+переживает mouseleave, Escape закрывает и снимает фокус, новые подсказки
+(Sub Mode, БС, Per-Proxy master, MagiTrickle, WG-карточки, MT-маппинг).</li>
+<li><code>tests/browser.cjs</code> переведён на контракт v1.6.2: Sub Mode явно задаётся после
+каждого переключения профиля (per-profile default), vps-gateway без Per-Proxy
+listeners + восстановление router-Per-Proxy после VPS, БС router-only
+(профиль не подменяется), snapshot-блоки без БС-манипуляций в VPS.</li>
+<li><code>tests/whitelist.cjs</code> — открытие переведено на контракт router-only (БС/Per-Proxy
+disabled в vps-gateway, восстановление router-children), tamper-блок: БС+VPS →
+явная ошибка без сборки; БС+children → кламп.</li>
+<li>Parity: 7/7 byte-identical vs main (5837cea); DPR-off байт-идентичен; <code>mihomo -t</code>
+6 YAML × (1.19.31, 1.19.32) successful; HTML integrity clean.</li>
+</ul>
+<hr>
+<h2 id="ci-automation-vs-owner-field-test-2026-10-03">CI automation vs owner field test (2026-10-03)</h2>
+<p>Вся deterministic-батарея выполняется GitHub Actions на exact SHA — агент не
+прогоняет её руками при каждом изменении и в отчётах ссылается на runs
+(<code>run &lt;id&gt;</code>, commit, job, PASS/failure-анализ), а не на «я прогнал».</p>
+<h3 id="что-где-выполняется-merge-gates">Что где выполняется (merge-gates)</h3>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Workflow / job</th>
+<th>Что покрывает</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>static + node</td>
+<td><code>generator-ci.yml</code> / static-and-node</td>
+<td>repo-invariants, merge-маркеры, <code>node --check</code> (runtime + все tests/*.cjs + fieldtest), HTML-контракт (dup ids, raw .md links), <strong>wiring-gate</strong> (каждый не-manual <code>tests/*.cjs</code> обязан быть подключён к CI — новый сюит без workflow-правки ломает CI), <code>runtime.cjs</code>, policy-routing (node), fieldtest unit+secret-scan</td>
+</tr>
+<tr>
+<td>browser</td>
+<td><code>generator-ci.yml</code> / browser</td>
+<td><code>browser.cjs</code> (валидатор, DPR/профили/БС/snapshots/tamper, subscription inspection, <strong>4 race-теста reordered-promise</strong>: input/subMode mutation in flight, double Build, preview/inspected-cache), help-ux, MASQUE, policy-routing-browser, vps-detection, wg-profiles, magitrickle-import, <strong>profile-matrix</strong>, <strong>wg-dialer-selector</strong>, whitelist, <strong>YAML parity vs merge-base</strong> (<code>tests/parity.cjs</code>, BASE = merge-base с <code>main</code>; red = молча меняется дефолтный YAML)</td>
+</tr>
+<tr>
+<td>mihomo compat</td>
+<td><code>generator-ci.yml</code> / mihomo-compat (matrix)</td>
+<td>whitelist + failover + awl-priority против <strong>реального Mihomo</strong>, версии <strong>pinned 1.19.31/1.19.32 с sha256-верификацией архива</strong> (новый релиз Mihomo сам не меняет смысл CI)</td>
+</tr>
+<tr>
+<td>runtime provenance</td>
+<td><code>update-web4core-runtime.yml</code> / build-runtime</td>
+<td>полные fork-тесты web4core (auto-discovery <code>tools/tests/*.test.mjs</code> — вкл. subscription fetch/worker/exclude-filter/tun-stack/amnezia), deterministic rebuild, <code>node --check</code>, <code>runtime.cjs</code>, <strong>tracked-vs-built provenance</strong>; на push в main — write-back job (copy-only)</td>
+</tr>
+<tr>
+<td>stacked provenance</td>
+<td><code>update-web4core-runtime.yml</code> / stacked-runtime-provenance</td>
+<td>для стековых PR: файл <code>.github/web4core-source-ref</code> объявляет candidate-ref web4core; job строит его, гоняет полный fork suite + <code>runtime.cjs</code> и требует байт-совпадение с tracked runtime. Production-проверка (build-runtime) от файла не зависит и остаётся красной до merge зависимости — это задокументированное исключение; после merge файл удаляется (guard: ref == published tip → job красный с напоминанием)</td>
+</tr>
+<tr>
+<td>fieldtest harness</td>
+<td><code>fieldtest-checks.yml</code></td>
+<td>offline unit + secret-scan; живые field-test режимы в CI запрещены guard-шагом</td>
+</tr>
+</tbody></table>
+<p>Правила: fail-closed (никаких <code>continue-on-error</code>/<code>|| true</code> на обязательных
+шагах); пути к dependency-артефактам — copy-only; версии зависимостей
+зафиксированы (playwright 1.55.0, js-yaml 4.1.0, node 22).</p>
+<h4 id="порядок-сборки-runtime-в-ci">Порядок сборки runtime в CI</h4>
+<p>В Fork CI и Update runtime workflow веб-runtime собирается ДО запуска
+тестов: <code>subscription-endpoint.test.mjs</code> читает собранный бандл и
+доказывает, что production CORS endpoint совпадает с source. Если
+добавляется тест, читающий бандл, — порядок уже корректен (build → test).
+<code>build-runtime</code> в Update workflow использует тот же порядок.</p>
+<h3 id="server-list-subscription-exclusion-ux-issue-100-2026-10-03">Server list / subscription exclusion UX (issue #100, 2026-10-03)</h3>
+<ul>
+<li>Toggle <code>cfgServerList</code> OFF по умолчанию: Sub ON + Build = ноль
+<code>fetchSubscription</code>-вызовов; provider YAML без browser inspection.</li>
+<li>Toggle ON + явная кнопка «Получить список»: fetch ровно по клику;
+список имён (только display names, без URI/UUID/кредов); счётчики
+«Уникальных имён / исключается / останется».</li>
+<li>Device Model: пусто → fallback <code>Saymer Link Generators Preview</code>;
+заполнено → пользовательское значение в x-device-model; HWID
+не меняется.</li>
+<li>Selection: галочки → union с manual filter (exact-match escaping);
+Sub ON/OFF — одинаковое исключение; search фильтрует только
+отображение; select all / clear all; refresh prune.</li>
+<li>Sub OFF: mandatory fetch с toggle OFF (inline expansion требует
+содержимое подписки); union применяется к развёрнутым узлам.</li>
+<li>Stale-safe: поздний/неудачный ответ не меняет output/state/Copy;
+server list stale race отбрасывается.</li>
+<li>WG/AWG hint: текст про несколько файлов/профилей.</li>
+</ul>
+<h2 id="owner-field-test-не-автоматизируется">Owner field test (не автоматизируется)</h2>
+<p>Только то, что требует внешнего мира: реальная GeoDema/Remnawave account с
+device-лимитом (стабильность HWID между сборками на живой панели), production
+deployed worker <code>sub.saymer-87.workers.dev</code> (POST-контракт с device headers + production smoke в deploy workflow),
+реальные CORS/сетевые особенности браузера, живой Keenetic/VPS при необходимости.
+Manual-сюиты (<code>*.manual.cjs</code>: reality-handshake matrix, awl-soak) — по явному
+запросу владельца, guard не даёт их случайно подключить к CI.</p>
+
+</div>
+</body>
+</html>

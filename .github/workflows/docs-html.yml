@@ -1,0 +1,67 @@
+name: Docs HTML
+
+# Build-time генерация HTML-версий документации из Markdown (source of truth):
+# регенерация → проверка детерминизма (committed HTML == свежая генерация) →
+# проверка внутренних ссылок → превью-артефакт. Production Pages (legacy, ветка
+# stable) не затрагиваются этим workflow; HTML попадает на Pages через merge в
+# stable, как и остальные файлы.
+
+on:
+  push:
+    branches:
+      - main
+      - stable
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'tools/docs-build.mjs'
+      - '.github/workflows/docs-html.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'tools/docs-build.mjs'
+      - '.github/workflows/docs-html.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Docs HTML build + link check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install transient build dependency (marked, pinned)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock marked@12.0.2
+          test -d node_modules/marked
+
+      - name: Build docs HTML (includes broken-link check)
+        shell: bash
+        run: node tools/docs-build.mjs
+
+      - name: Determinism check (committed HTML == fresh build)
+        shell: bash
+        run: git diff --exit-code -- docs
+
+      - name: Upload docs preview artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-html
+          path: docs
+          retention-days: 7
+          if-no-files-found: error

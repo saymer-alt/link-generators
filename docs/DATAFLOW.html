@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DATAFLOW — прохождение данных — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/DATAFLOW.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="dataflow-прохождение-данных">DATAFLOW — прохождение данных</h1>
+<h2 id="автоматический-режим-белых-списков-2026-09-15-1">Автоматический режим белых списков (2026-09-15)</h2>
+<p>Контракт и точная структура YAML: <a href="AUTO-WHITELIST">AUTO-WHITELIST.md</a>.
+UI передаёт опциональный <code>fallbackInput</code>; engine строит один плоский GLOBAL fallback
+с конечными узлами primary → fallback, без DIRECT и вложенных групп (#2588). Выключенный режим сохраняет прежний путь.
+Опции «на каждый прокси» и VPS исключаются независимо от скрытия UI; существующий validator
+проверяет итоговый YAML. Runtime требуется с поддержкой нового generic API.</p>
+<p>Описывает фактический путь данных через код, включая MIPS TUN (2026-09-15). Имена функций — из кода;
+<code>web4core.*</code> означает <code>web4core.runtime.js</code>, остальное — <code>index.html</code>. Схемы входов — в
+<a href="PROTOCOLS">PROTOCOLS.md</a>, параметры Builder&#39;а — в <a href="MIHOMO">MIHOMO.md</a>.</p>
+<h2 id="входы-вкладки-2-mihomo-builder">Входы вкладки 2 (Mihomo Builder)</h2>
+<p>Три независимых источника, которые смешиваются при сборке:</p>
+<table>
+<thead>
+<tr>
+<th>Вход</th>
+<th>Как попадает</th>
+<th>Куда идёт</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Ссылки (<code>vmess://</code>, <code>vless://</code>, …)</td>
+<td>textarea <code>#mihomoInput</code></td>
+<td><code>web4core.buildBeansFromInput()</code> → beans</td>
+</tr>
+<tr>
+<td>Подписки (HTTP(S) URL)</td>
+<td>та же textarea, любой режим</td>
+<td>Sub Mode ON → <code>proxy-providers</code> (скачивает Mihomo); OFF → браузер читает подписку и встраивает текущие узлы в <code>proxies</code></td>
+</tr>
+<tr>
+<td>Файлы <code>.conf</code> / <code>.wg</code> / <code>.awg</code></td>
+<td><code>&lt;input type=&quot;file&quot; id=&quot;wgFile&quot;&gt;</code>, multiple</td>
+<td><code>web4core.parseWireGuardConf()</code> → <code>wgBeans</code></td>
+</tr>
+</tbody></table>
+<p>В обычном (не Sub) режиме http(s)-URL в textarea раньше трактовался как <strong>ссылка на
+http-прокси</strong> (мусор). С subscription-inspection это исправлено: при Build без Sub Mode
+страница один раз читает подписку (<code>web4core.fetchSubscription</code>, см. ниже), разворачивает
+её в обычные proxy-links и передаёт их статическому builder&#39;у — пользователь получает
+актуальные <code>proxies:</code> вместо мусорного http-прокси. URL <strong>с</strong> кредами и все не-URL строки
+парсятся как обычные ссылки. Если подписку прочитать не удалось, сборка в OFF-режиме
+падает с понятной ошибкой (молча терять узлы нельзя); в ON-режиме (provider) неудача
+preview не мешает сборке.</p>
+<h2 id="beans-внутреннее-представление">Beans — внутреннее представление</h2>
+<p>Каждая распарсенная ссылка/файл → bean (plain object):</p>
+<pre><code class="language-text">bean = {
+  proto: &#39;vless&#39; | &#39;vmess&#39; | &#39;trojan&#39; | &#39;ss&#39; | &#39;http&#39; | &#39;socks&#39; | &#39;hy2&#39; | &#39;tuic&#39;
+       | &#39;anytls&#39; | &#39;wireguard&#39; | &#39;mieru&#39; | &#39;masque&#39; | &#39;trusttunnel&#39; | &#39;sdns&#39;,
+  name, host, port,
+  auth: { uuid | password | … },
+  stream: { security, sni, alpn, fp, reality{pbk,sid,spx,pqv}, ech{…}, packet_encoding, … },
+  &lt;proto-specific&gt;: wireguard{…} | mieru{…} | masque{…} | trusttunnel{…} | ss{…} | socks{…} | hysteria2{…} | tuic{…}
+}
+</code></pre>
+<p>Перед сборкой каждый bean проходит <code>web4core.validateBean()</code> (наличие host/port,
+корректность reserved и т.п.) и <code>assertCoreSupports(…, &#39;mihomo&#39;)</code> — проверку, что proto
+входит в базовый набор mihomo (<code>vmess, vless, trojan, anytls, ss, socks, http, hy2, tuic, wireguard, masque, mieru, trusttunnel</code>; <code>sdns</code> не входит → ошибка).</p>
+<h2 id="ссылка-bean-mihomo-proxy">Ссылка → bean → Mihomo proxy</h2>
+<p><code>web4core.buildMihomoProxy(bean)</code> по <code>proto</code> строит узел <code>proxies</code> (полная таблица — в
+<a href="PROTOCOLS">PROTOCOLS.md</a>). Общие применения: <code>udp</code>/<code>udp-over-tcp</code>/<code>ip-version</code>,
+TLS-блок (<code>tls</code>, <code>servername</code>/<code>sni</code>, <code>alpn</code>, <code>skip-cert-verify</code>, <code>client-fingerprint</code>,
+<code>reality-opts</code>), <code>network</code>-транспорт. Дубликаты прокси дедуплицируются
+(<code>deduplicateProxies</code>), коллизии имён гасятся суффиксами <code>-2</code>, <code>-3</code> (поэтому в
+сгенерированном YAML дублей имён не бывает — валидатор ловит их только в ручных правках).</p>
+<h2 id="ссылки-yaml-обычный-режим">Ссылки → YAML (обычный режим)</h2>
+<p><code>buildMihomoConfig(beans, opts)</code> + <code>buildMihomoYaml(...)</code>:</p>
+<pre><code class="language-text">proxies        ← beans → buildMihomoProxy
+proxy-groups   ← ≤1 прокси: GLOBAL select [прокси, REJECT]
+                 ≥2:      &quot;⚡ Fastest&quot; url-test (url=urlTest, interval 300, expected-status)
+                          + GLOBAL select [&quot;⚡ Fastest&quot;, все прокси, REJECT]
+                 per-proxy режим: &quot;🔒 &lt;имя&gt;&quot; select на каждый прокси + GLOBAL из них
+rules          ← [ &quot;MATCH,GLOBAL&quot; ]   (единственное правило)
+listeners      ← «SOCKS-порт на каждый прокси»: socks-&lt;имя&gt; на портах 7890+i (тогда mixed-port убирается)
+mixed-port     ← 7890, если «SOCKS-порт на каждый прокси» выключен
+</code></pre>
+<p>Эмиссия YAML — собственный сериализатор рантайма <code>toYAML</code> (НЕ jsyaml): накладывает секции
+на текстовый шаблон <code>MIHOMO_DEFAULT_TEMPLATE</code> (<code>overlayMihomoYaml</code>, секции через
+<code>upsertSection</code>, поддерживает <code>__comments</code> → <code>#</code>-комментарии). Строковые скаляры
+кавычируются выборочно — длинные base64-строки AWG проходят без переносов.</p>
+<h2 id="sub-mode-proxy-providers-подписки-браузером-не-скачиваются">Sub Mode → proxy-providers (подписки браузером НЕ скачиваются)</h2>
+<p><code>buildMihomoSubscriptionConfig(subUrls, extraBeans, opts)</code>: для каждого URL создаётся
+провайдер:</p>
+<pre><code class="language-yaml">proxy-providers:
+  &lt;имя-хоста&gt;:
+    type: http
+    proxy: DIRECT
+    header: { x-hwid: [&lt;случайный hex32&gt;] }   # generateSecretHex32, на каждую сборку новый
+    url: &lt;URL подписки&gt;
+    interval: 43200                            # 12 часов
+    health-check: { enable: true, interval: 300, url: &lt;urlTest&gt;, expected-status: 204 }
+</code></pre>
+<p>Группы: <code>&quot;⚡ Fastest&quot;</code> (url-test) и <code>GLOBAL</code> ссылаются на провайдеров через <code>use:</code>; при
+per-proxy режимах — группы <code>SUB-&lt;провайдер&gt;</code>.</p>
+<p><strong>Subscription inspection (owner-approved 2026-10-02, issue #100).</strong> В обоих режимах
+страница при Build (только по явному действию пользователя, без фоновых запросов) читает
+подписки браузером через <code>web4core.fetchSubscription()</code>: Sub Mode ON — для preview
+фактических имён узлов и подбора Exclude Filter; OFF — для разворачивания в статические
+proxies. Прямой fetch предпочтителен; при CORS-блокировке используется
+<code>sub.saymer-87.workers.dev</code>. Запрос несёт device-identity preview-клиента: <code>x-hwid</code>
+(случайный 32-hex, хранится в <code>localStorage[&#39;link-generators.subscription-preview-hwid.v1&#39;]</code>,
+это НЕ HWID Mihomo-провайдера) и <code>x-device-model</code> (пользовательское значение из поля Device Model, либо fallback <code>Saymer Link Generators Preview</code>). Worker
+и рантайм пересылают только эти два заголовка (allowlist; POST JSON контракт с деградацией
+до legacy GET). Приватность — см. раздел «Сеть и приватность» ниже.</p>
+<h2 id="wireguard-amneziawg-yaml">WireGuard / AmneziaWG → YAML</h2>
+<p>Локальный конвейер (всё в <code>index.html</code>, шаги 1–2 и 4 — собственные патчи этого репо):</p>
+<pre><code class="language-text">1. normalizeWgText(text)          Реальные AWG-конфиги нескалярны: PersistentKeepalive
+                                  = 25-35 (Premium и self-hosted 3.1) и булевы
+                                  RandomTrailers/DisableCookies = on/off (официальный
+                                  формат литералов AWG 3.1), а парсер рантайма понимает
+                                  только скаляры и 1/true/yes-булевы → диапазон
+                                  сворачивается к нижней границе, on/off → 1/0 ДО
+                                  парсинга; заодно снимается UTF-8 BOM.
+2. web4core.parseWireGuardConf()  [Interface]/[Peer] → bean proto &#39;wireguard&#39;:
+                                  privateKey/publicKey/addresses/dns/mtu/persistentKeepalive,
+                                  amnezia-wg-option (Jc…H4, I1–I5, version,
+                                  header-protection-key, random-trailers, …),
+                                  peers (endpoint→server:port, allowed-ips, reserved).
+                                  IPv6: без IPv6-адреса AllowedIPs с «:» отбрасываются
+                                  (ipVersion: &#39;ipv4&#39;) — поведение рантайма, намеренное.
+3. normalizeWgBeans(wgBeans)      ЛОКАЛЬНЫЙ ПАТЧ, два правила:
+                                  а) range-строки («10-20») на int-полях mihomo
+                                     (jc/jmin/jmax/s1-s4/itime — AWG_INT_KEYS)
+                                     сворачиваются к нижней границе: иначе weakly-typed
+                                     декодер mihomo уронил бы декодирование ВСЕГО
+                                     конфига;
+                                  б) если в amnezia-wg-option есть любой 3.x-ключ
+                                     (header-protection-key, content-padding-addition,
+                                     rekey-*, random-trailers, …) и нет version →
+                                     version: 3. Без этого mihomo ≥1.19.30 выбирает
+                                     legacy-движок и 3.x-поля молча не работают.
+4. buildMihomoProxy(wireguard)    type: wireguard + private-key/public-key/ip/ipv6/
+                                  allowed-ips/mtu/persistent-keepalive/peers[+reserved]/
+                                  amnezia-wg-option (passthrough).
+5. injectWgDns(result, wgBeans)   ЛОКАЛЬНЫЙ ПАТЧ, после buildFromRequest: если задан
+                                  #wgCustomDns — jsyaml.load YAML, всем wireguard-прокси
+                                  ставится dns (+remote-dns-resolve), пустое поле — dns
+                                  удаляется; повторный dump ОБЯЗАТЕЛЬНО с
+                                  { lineWidth: -1 }, иначе jsyaml переносит длинные
+                                  base64 I1–I5/H-строки и портит их.
+</code></pre>
+<p>DNS-перехват (16690f2): при загрузке файла, если в конфиге найден <code>100.64.0.1</code> (нестабильный
+DNS Amnezia Premium), поле подставляет <code>1.1.1.1, 8.8.8.8</code> и показывает красное
+предупреждение; иначе поле заполняется DNS из конфига. Без DNS в конфиге поле пустое →
+шаг 5 удалит <code>dns</code> из прокси.</p>
+<h2 id="post-processing-точный-порядок-в-buildmihomo">Post-processing: точный порядок в <code>buildMihomo()</code></h2>
+<p>Выбор TUN stack передаётся до сериализации YAML:</p>
+<pre><code class="language-text">cfgTunMips → tunStack → options.mihomoTunStack → buildFromRequest
+policyCards → collectPolicyRouting() → options.mihomoDomainPolicy → buildFromRequest (inline rule-providers + policy groups + RULE-SET rules; выключено → byte-parity)
+#cfgProfile=vps-gateway + #vpsDnsEnabled → applyDeploymentProfile() → tun.dns-hijack + profile.store-fake-ip + sniffer (VPS Domain Detection Package; router/vps-local не затрагиваются)
+          → mihomoTunOpts.stack → opts.tun.stack в buildMihomoYaml
+          → normal TUN / Per-Proxy listeners
+</code></pre>
+<p>Checkbox MIPS включён по умолчанию (NIGHT-09): <code>tunStack = &#39;mips&#39;</code>; снят — <code>&#39;gvisor&#39;</code>.
+Расширенные значения <code>system</code>/<code>mixed</code> — только через крышку <code>cfgTunStackAdvanced</code>
+(+<code>cfgTunStackEx</code>); активный override снимает MIPS-чекбокс, невалидное значение
+подменённого DOM откатывается к gvisor/mips.
+До сборки <code>buildMihomo()</code> клампит опции по UI-зависимостям, не доверяя DOM:
+<code>addTun=false</code> → <code>perProxyTun=false</code> и <code>tunStack=&#39;gvisor&#39;</code>; <code>addSocks=false</code> →
+<code>perProxySocks=false</code>; БС-режим дополнительно исключает оба режима «на каждый прокси».
+Runtime (с NIGHT-02) валидирует стек через <code>resolveMihomoTunStack</code>: допустимы
+<code>gvisor|system|mixed|mips</code>, невалидное значение — ошибка (не silent fallback).
+Выбор стека сам по себе TUN не включает.
+VPS получает тот же <code>tunStack</code> третьим аргументом ниже: штатный UI передаёт
+<code>mips</code> по умолчанию, а <code>gvisor</code> остаётся fallback функции на случай отсутствующего
+явного значения.</p>
+<pre><code class="language-text">1. result = web4core.buildFromRequest({ core:&#39;mihomo&#39;, input, wgBeans: normalizeWgBeans(wgBeans), options })
+2. injectWgDns(result, wgBeans)                       # правка YAML (wireguard dns)
+3. applyDeploymentProfile(yaml, profile, tunStack)    # ТОЛЬКО при профиле «VPS Gateway» (vps-gateway):
+                                                      #   gateway-постпатч tun/dns/find-process-mode/
+                                                      #   profile; при router/vps-local НЕ вызывается —
+                                                      #   см. VPS-GATEWAY.md
+4. allow-lan патч: регэксп allow-lan: false → true
+   + вставка bind-address: &quot;*&quot; сразу после            # привязан к текстовому формату рантайма:
+   allow-lan: true (если bind-address ещё нет)        # смена формата ломает его молча — проверять
+5. #mihomoOutput.value = yaml                          # итог показан
+6. runMihomoValidation(yaml)                           # валидатор, см. VALIDATION.md
+</code></pre>
+<p>Валидатор работает <strong>только с финальной строкой YAML после шагов 1–5</strong>, а не с beans:
+ошибка может появиться именно на этапе генерации (реальный кейс — <code>transport: TPC</code> у
+Mieru, пришедший из пользовательской ссылки).</p>
+<h2 id="вкладка-1-yaml-бота-warp-identity-masque">Вкладка 1: YAML бота → WARP identity → masque://</h2>
+<p>Здесь намеренно разделены <strong>identity</strong> и <strong>transport</strong>.</p>
+<p><code>parseYaml()</code> (<code>jsyaml.loadAll</code>, ищет <code>proxies[0]</code> или объект с <code>private-key</code>, иначе
+отказ) читает из YAML Telegram-бота только параметры зарегистрированного WARP-профиля,
+которые заполняют форму: <code>private-key</code>, <code>public-key</code>, <code>ip</code>, <code>ipv6</code>, <code>sni</code>, <code>dns</code>.
+Поля источника <code>server</code>, <code>port</code> и <code>network</code> не являются входом транспортной стратегии
+существующего Telegram-сценария. Это сознательное поведение, а не потеря данных парсером.</p>
+<p>Дальше <code>generateWarp()</code> сам выбирает transport endpoint&#39;ы и генерирует пары ссылок QUIC+H2
+по DPI-стратегии: фиксированный пул QUIC <code>162.159.198.1/2, 162.159.199.2:443</code>; H2 — IP
+из 198/199-подсетей, взвешенные порты; анти-корреляция IP при совпадении портов;
+base64-ключи URL-энкодятся <code>+ / =</code> → <code>%2B %2F %3D</code>.
+<code>sendToMihomo()</code> кладёт результат в <code>#mihomoInput</code> и вызывает сборку.</p>
+<p>Поток данных:</p>
+<pre><code class="language-text">Telegram WARP YAML
+        │
+        │ identity/tunnel parameters only
+        ▼
+parseYaml()
+        ├─ private-key / public-key
+        ├─ ip / ipv6
+        ├─ sni
+        └─ dns
+        │
+        │ source server / port / network intentionally do not select transport
+        ▼
+generateWarp()
+        ├─ project QUIC endpoint pool
+        ├─ project H2 endpoint selection
+        ├─ weighted H2 ports
+        └─ anti-correlation
+        ▼
+masque:// links
+</code></pre>
+<p>Если внешний инструмент уже нашёл конкретный рабочий endpoint и его надо сохранить,
+это должен быть отдельный явный путь импорта/конвертации, а не изменение семантики
+<code>parseYaml()</code> или <code>generateWarp()</code>.</p>
+<p>Формат ссылки — контракт, см. <a href="../AGENTS.md">AGENTS.md</a>, раздел «Input formats and contracts».</p>
+<h2 id="сеть-и-приватность">Сеть и приватность</h2>
+<ul>
+<li>Страница (<code>index.html</code>) не содержит <code>fetch</code>/<code>XMLHttpRequest</code>/<code>sendBeacon</code>. Ключи, ссылки
+и сгенерированный YAML никуда не отправляются.</li>
+<li>С CDN jsdelivr грузится только <code>js-yaml@4.1.0</code> (код библиотеки, не данные).</li>
+<li><strong>Subscription inspection (owner-approved 2026-10-02, issue #100):</strong> при Build страница
+читает подписки через <code>web4core.fetchSubscription()</code> — только по явному действию
+пользователя. При CORS-блокировке URL подписки раскрывается стороннему воркеру
+<code>sub.saymer-87.workers.dev</code>. Запрос идентифицируется стабильным случайным preview-HWID
+(<code>localStorage[&#39;link-generators.subscription-preview-hwid.v1&#39;]</code> — единственное, что
+хранится persistently) и подписью устройства (пользовательский Device Model или fallback <code>Saymer Link Generators Preview</code>); это НЕ HWID
+Mihomo-провайдера. Allowlist заголовков жёсткий (x-hwid, x-device-model); subscription
+URL, содержимое подписки и proxy credentials не сохраняются и не логируются; аналитики
+и телеметрии нет.</li>
+<li>В Sub Mode ON финальный YAML остаётся provider-based: скачивание выполняет Mihomo на
+устройстве пользователя.</li>
+<li>Буфер обмена (<code>navigator.clipboard.writeText</code>) — единственный «экспорт» данных.</li>
+</ul>
+<h2 id="связанные-документы">Связанные документы</h2>
+<p>Параметры сборки и структура YAML — <a href="MIHOMO">MIHOMO.md</a>; валидация —
+<a href="VALIDATION">VALIDATION.md</a>; обновления рантайма — <a href="UPDATES">UPDATES.md</a>.</p>
+
+</div>
+</body>
+</html>

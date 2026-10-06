@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Политики по доменам (Domain Policy Routing, Variant B) — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/POLICY-ROUTING.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="политики-по-доменам-domain-policy-routing-variant-b-1">Политики по доменам (Domain Policy Routing, Variant B)</h1>
+<p>Опциональный режим Mihomo Builder (чекбокс «🚦 Политики по доменам»): домены
+пользователя направляются в разные логические группы выхода, не привязываясь
+к конкретным серверам подписки.</p>
+<pre><code class="language-text">DOMAIN / RULE-SET
+        ↓ rules (RULE-SET,…) — стабильные имена
+POLICY GROUP (select)   ← пользователь переключает в дашборде
+        ↓
+POLICY-AUTO (url-test)  ← use: на provider подписки
+        ↓
+PROXY-PROVIDER (http)   ← платная HTTP(S)-подписка
+        ↓
+CURRENT LIVE NODE       ← состав меняет сам провайдер
+</code></pre>
+<p>Реализация: эмиссия — <code>web4core:link-generators</code>
+(<code>src/core/mihomo.js</code>, <code>src/build.js</code>, <code>src/core/yaml.js</code>); UI-карточки,
+валидатор и предупреждения — <code>index.html</code>. Контракт проверен живым PoC на
+Mihomo <strong>v1.19.31 и v1.19.32</strong> (2026-10-01, тестовый VPS): маршрутизация
+<code>DOMAIN → POLICY → PROVIDER → LIVE NODE</code> доказана journal-строками и
+<code>/connections</code> chains; динамика провайдера (добавление/удаление/сбой
+обновления) пережита без изменения правил.</p>
+<h2 id="что-генерируется">Что генерируется</h2>
+<p>Для каждой политики <code>NAME</code> со списком доменов:</p>
+<pre><code class="language-yaml">rule-providers:
+  policy-&lt;slug&gt;:
+    type: inline
+    behavior: classical
+    format: yaml
+    payload:
+      - &quot;DOMAIN-SUFFIX,openai.com&quot;
+      - &quot;DOMAIN-SUFFIX,chatgpt.com&quot;
+
+proxy-groups:
+  - name: NAME-AUTO        # только в режиме URL-подписок
+    type: url-test
+    use: [&lt;все proxy-providers подписок&gt;]
+    url: &lt;выбранный health-check URL&gt;
+    interval: 300
+    tolerance: 50
+    expected-status: 204
+    empty-fallback: REJECT
+  - name: NAME             # select над AUTO
+    type: select
+    proxies: [NAME-AUTO, ⚡ Fastest, GLOBAL, DIRECT]
+
+rules:
+  - &quot;RULE-SET,policy-&lt;slug&gt;,NAME&quot;   # по одной на политику, в порядке карточек
+  - &quot;MATCH,GLOBAL&quot;                  # неизменное DEFAULT-правило, всегда последнее
+</code></pre>
+<h3 id="таргет-политики">Таргет политики</h3>
+<p>У каждой карточки есть селектор «Куда направлять:»:</p>
+<table>
+<thead>
+<tr>
+<th>Таргет</th>
+<th>Правило</th>
+<th>Группа категории</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>🎛 Отдельная группа выбора</code> (по умолчанию)</td>
+<td><code>RULE-SET,policy-&lt;slug&gt;,NAME</code></td>
+<td>создаётся (см. таблицу режимов ниже)</td>
+</tr>
+<tr>
+<td><code>🌐 GLOBAL</code></td>
+<td><code>RULE-SET,policy-&lt;slug&gt;,GLOBAL</code></td>
+<td>не создаётся</td>
+</tr>
+<tr>
+<td><code>⬇ DIRECT</code></td>
+<td><code>RULE-SET,policy-&lt;slug&gt;,DIRECT</code></td>
+<td>не создаётся</td>
+</tr>
+<tr>
+<td><code>🚫 REJECT</code></td>
+<td><code>RULE-SET,policy-&lt;slug&gt;,REJECT</code></td>
+<td>не создаётся</td>
+</tr>
+</tbody></table>
+<p>Фиксированные таргеты (<code>GLOBAL</code>/<code>DIRECT</code>/<code>REJECT</code>) ведут правило напрямую к цели:
+домены политики направляются мимо категории-группы, поэтому группа не генерируется
+и вывод не зависит от режима подписок. Некорректное значение таргета отклоняется
+движком при сборке.</p>
+<h3 id="импорт-magitrickle-mtrickle">Импорт MagiTrickle (.mtrickle)</h3>
+<p>Кнопка «📂 Импорт MagiTrickle» в панели политик читает JSON-экспорт MagiTrickle
+локально в браузере (FileReader, никуда не отправляется) и показывает предпросмотр:
+группы с интерфейсами, счётчики активных/пропущенных правил и типов.</p>
+<ul>
+<li><strong>Маршрут ≠ политика.</strong> Интерфейс MagiTrickle (network interface) не является
+правилом Mihomo — группы интерфейсов маппятся на таргеты политик: известные
+<code>mitun0</code> → <code>GLOBAL</code> и <code>blackhole</code> → <code>REJECT</code> подставляются автоматически,
+остальные интерфейсы — «⏭ Пропустить» (молча не угадываем). Маппинг меняется
+в предпросмотре до применения.</li>
+<li><strong>Конвертация типов</strong> MagiTrickle → Mihomo: <code>namespace</code> → <code>DOMAIN-SUFFIX</code>,
+<code>domain</code> → <code>DOMAIN</code>, <code>wildcard</code> → <code>DOMAIN-WILDCARD</code>, <code>regex</code> → <code>DOMAIN-REGEX</code>,
+<code>subnet</code> → <code>IP-CIDR,…,no-resolve</code> (IPv6-значения — <code>IP-CIDR6</code>, одиночный адрес
+получает <code>/32</code>/<code>/128</code>), <code>subnet6</code> → <code>IP-CIDR6,…,no-resolve</code>.</li>
+<li><strong>Что пропускается</strong> (с честным итогом в предпросмотре и в результате):
+отключённые правила и группы целиком, дубли внутри одной группы, неизвестные
+типы правил, unmappable-значения (например, битый CIDR).</li>
+<li><strong>Добавление, не замена.</strong> Повторный импорт добавляет политики к текущим
+(коллизии имён — авто-суффикс <code>-2</code>); галочка «Очистить текущие политики перед
+импортом» возвращает поведение замены.</li>
+<li><strong>Fail-closed.</strong> Файл не-JSON или без массива <code>groups</code> отклоняется с
+человеческой ошибкой; WG/AWG-конфиги, поданные в этот импорт, получают
+подсказку про раздел WireGuard.</li>
+</ul>
+<h3 id="режимы-builder">Режимы Builder</h3>
+<table>
+<thead>
+<tr>
+<th>Режим</th>
+<th>Группы категории</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>URL-подписки</td>
+<td><code>NAME-AUTO</code> (url-test над общим provider) + <code>NAME</code> (select <code>[NAME-AUTO, ⚡ Fastest, GLOBAL, DIRECT]</code>)</td>
+</tr>
+<tr>
+<td>Только proxy-ссылки</td>
+<td><code>NAME</code> = select <code>[⚡ Fastest, GLOBAL, DIRECT]</code> — AUTO-групп без подписок нет (честное ограничение UI)</td>
+</tr>
+<tr>
+<td>Автоматический режим белых списков</td>
+<td><code>NAME</code> = select <code>[GLOBAL, DIRECT]</code> — политика указывает на существующий плоский fallback; вложенность <code>fallback → url-test</code> не создаётся (контракт #2588)</td>
+</tr>
+<tr>
+<td>«На каждый прокси» (per-proxy)</td>
+<td>несовместимо: чекбокс блокируется в UI и отклоняется движком</td>
+</tr>
+</tbody></table>
+<h3 id="разбор-пользовательских-строк">Разбор пользовательских строк</h3>
+<ul>
+<li>голый домен <code>example.com</code> → <code>DOMAIN-SUFFIX,example.com</code> (с поддоменами);</li>
+<li><code>*.example.com</code> → <code>DOMAIN-SUFFIX,example.com</code>;</li>
+<li>явные формы: <code>DOMAIN,</code>, <code>DOMAIN-SUFFIX,</code>, <code>DOMAIN-KEYWORD,</code>, <code>DOMAIN-WILDCARD,</code>, <code>DOMAIN-REGEX,</code> (значение);</li>
+<li><code>GEOSITE,&lt;категория&gt;</code> — готовые категории v2fly (<code>youtube</code>, <code>telegram</code>, <code>openai</code>, <code>category-ai-!cn</code>, …); сам механизм GEOSITE опционален для пользователя, архитектура от него не зависит;</li>
+<li>CIDR <code>192.0.2.0/24</code> (голый или <code>IP-CIDR,…</code>) → <code>IP-CIDR,…,no-resolve</code>;
+вставленные правила mihomo с хвостовым <code>,no-resolve</code> принимаются (опция
+срезается перед разбором и добавляется заново); другие опции (<code>src</code>) —
+нераспознанная строка с предупреждением;</li>
+<li><code>#</code>-комментарии и пустые строки пропускаются; нераспознанные строки
+пропускаются с <strong>неблокирующим предупреждением</strong> после сборки;</li>
+<li>имена политик: непустые, без запятых, уникальные, не из зарезервированных
+(<code>GLOBAL</code>, <code>DIRECT</code>, <code>REJECT</code>, <code>⚡ Fastest</code>, …) — дубликаты и конфликты
+отклоняются при сборке.</li>
+</ul>
+<h2 id="почему-правила-не-зависят-от-серверов-подписки">Почему правила не зависят от серверов подписки</h2>
+<p>Правила ссылаются на <strong>имена групп</strong>; группы получают узлы через <code>use:</code> — это
+ссылка на provider, а не копия списка. Провайдер может добавлять, удалять,
+переименовывать серверы: состав групп обновляет сам Mihomo при очередном
+обновлении подписки (12 ч; либо вручную из дашборда), правила остаются
+байтово теми же. Поэкспериментально подтверждено (PoC 2026-10-01): add/remove
+узлов, удаление выбранного узла (автовыбор первого живого), недоступный и
+битый провайдер (работает последний хороший список), пустое обновление
+(отклоняется ядром), пустой фильтр (<code>empty-fallback: REJECT</code>) — во всех
+случаях <code>rules</code> не менялись.</p>
+<h2 id="контракт-провайдера-proxy-direct">Контракт провайдера: <code>proxy: DIRECT</code></h2>
+<p>Каждый HTTP-провайдер подписки обязан сохранять <code>proxy: DIRECT</code> (скачивание
+подписки напрямую). Без него фетч подписки идёт через собственные правила
+инстанса (<code>[TCP] mihomo --&gt; &lt;provider-host&gt; match Match using GLOBAL[…]</code>),
+и на холодном старте возникает deadlock: группа пуста → REJECT → провайдер
+не может загрузиться. Зафиксировано regression-тестами движка и consumer-набора.</p>
+<h2 id="ограничения-честно">Ограничения (честно)</h2>
+<ul>
+<li><strong>Домен нужно сначала увидеть.</strong> В режиме URL-подписок + mixed-port (SOCKS)
+домен приносит сам клиент. Для TUN-трафика без секций <code>dns</code>/<code>sniffer</code>
+(обычный вывод генератора) Mihomo видит только IP: классификация работает
+для клиентов, передающих имя, и не работает для чистых IP-потоков. Полный
+пакет домен-детекта (<code>tun.dns-hijack</code>, <code>sniffer</code>, fake-ip persistence)
+уже реализован как инвариант профиля vps-gateway — см. раздел
+«VPS Gateway: Domain Detection Package» ниже и <a href="VPS-GATEWAY">VPS-GATEWAY.md</a>.</li>
+<li>TLS ECH скрывает SNI, клиентский DoH/DoT проходит мимо hijack,
+hardcoded-IP приложения не классифицируются доменными правилами — это
+ограничения механизма Mihomo, не генератора.</li>
+<li>Названия категорий — пользовательские имена групп; они видны в дашборде
+как обычные группы.</li>
+<li>Внешние HTTP rule-providers в этой арке сознательно не реализованы
+(приватность: пользовательские списки не покидают устройство).</li>
+</ul>
+<h2 id="взаимодействие-с-auto-whitelist">Взаимодействие с AUTO-WHITELIST</h2>
+<p>Разрешённая схема: <code>RULE-SET → политика (select) → GLOBAL → существующий плоский fallback PRIMARY→FALLBACK</code>. Категорийные AUTO-группы в режиме БС не
+создаются; <code>url-test</code> никогда не вкладывается в <code>fallback</code> (issue mihomo
+#2588, воспроизведён на v1.19.31). Существующий контракт БС не меняется;
+покрыто regression-тестами (<code>tests/policy-routing.cjs</code>, <code>mihomo-priority.test.mjs</code>).</p>
+<h2 id="vps-gateway-domain-detection-package-реализовано">VPS Gateway: Domain Detection Package (реализовано)</h2>
+<p>Профиль <strong>vps-gateway</strong> (после арки deployment profiles <code>router / vps-local / vps-gateway</code>) автоматически включает пакет домен-детекта (PoC 2026-10-01,
+production-like стенд, Mihomo 1.19.31; recommended/current — 1.19.32).
+Профили <code>router</code> и <code>vps-local</code> пакет НЕ получают: router — обычный контракт
+Keenetic, vps-local — локальный SOCKS-режим без TUN (hijack/fake-ip там
+семантически неприменимы):</p>
+<pre><code class="language-yaml">profile:
+  store-fake-ip: true      # при включённом fake-ip DNS (sub-toggle); false без него
+tun:
+  dns-hijack: [any:53, tcp://any:53]   # только при включённом fake-ip DNS
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  force-dns-mapping: true
+  override-destination: false   # hostname только для матчинга, dial-цель не меняется
+  sniff: {TLS: [443, 8443], QUIC: [443, 8443], HTTP: [80, 8080-8880]}
+</code></pre>
+<p>Режим включения — автоматический, без нового UI-toggle: пакет является
+инвариантом профиля (как <code>auto-route: false</code>); де-факто отказ возможен
+выключением fake-ip DNS (<code>vpsDnsEnabled</code>), тогда hijack и persistence
+семантически не имеют смысла. От DPR пакет не зависит (полезен и без политик).
+Live-проверено: hijack внешнего :53 DNS, DoH/pure-IP/HTTP-host/QUIC
+классификация, рестарт с восстановлением fake-ip mapping без мисатрибуции,
+cold-start провайдера. Инварианты (<code>auto-route: false</code>, <code>device</code>,
+<code>fake-ip-range</code>, MIPS/gVisor, mixed-port/controller) не тронуты.</p>
+<p><strong>Межпроектный контракт:</strong> <code>amnezia-mihomo-gateway</code> до PR #33
+(<code>feat/domain-detection-store-fake-ip</code>, <code>8f41759</code>, merged в <code>main</code> gateway
+2026-10-01) принудительно переписывал
+<code>profile.store-fake-ip</code> в <code>false</code> при установке (патчер §2.7) — PR
+меняет патчер на сохранение значения генератора (при отсутствии ключа
+по-прежнему дописывается <code>false</code>); в stable-канал установщика попадёт после
+promotion в том репозитории. Неизвестные ключи (<code>tun.dns-hijack</code>,
+<code>sniffer</code>) патчер и раньше пропускал дословно — покрыто его тестом.
+Восстановление fake-ip маршрута после рестартов принадлежит gateway
+(<code>check-warp-routing.timer</code> ≤1 мин, <code>routing_ok</code> проверяет
+<code>ip route show &lt;fake-ip-range&gt; dev tun-mihomo</code>) и не меняется.</p>
+<h2 id="security-privacy">Security / privacy</h2>
+<ul>
+<li>Пользовательские домены и подписки никуда не отправляются: страница по-
+прежнему без <code>fetch</code>/XHR/telemetry; inline rule-providers живут только в
+сгенерированном YAML.</li>
+<li>Валидатор не выводит URL подписок и заголовки в диагностике.</li>
+<li>Публичные списки шаблонов (AI/Media/Telegram/Google/Direct) содержат
+только публичные домены и лишь заполняют textarea.</li>
+</ul>
+<h2 id="связанные-документы-3">Связанные документы</h2>
+<p>Параметры Builder — <a href="MIHOMO">MIHOMO.md</a>; поток данных — <a href="DATAFLOW">DATAFLOW.md</a>;
+тесты — <a href="TESTING">TESTING.md</a>; PoC-отчёт и исследование — журнал задач
+владельца (2026-10-01).</p>
+
+</div>
+</body>
+</html>

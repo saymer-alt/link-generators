@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIHOMO — Builder, генерируемый YAML, валидация — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/MIHOMO.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="mihomo-builder-генерируемый-yaml-валидация">MIHOMO — Builder, генерируемый YAML, валидация</h1>
+<h2 id="автоматический-режим-белых-списков-2026-09-15-2">Автоматический режим белых списков (2026-09-15)</h2>
+<p>Контракт и точная структура YAML: <a href="AUTO-WHITELIST">AUTO-WHITELIST.md</a>.
+UI передаёт опциональный <code>fallbackInput</code>; engine строит один плоский GLOBAL fallback
+с конечными узлами primary → fallback, без DIRECT и вложенных групп (#2588). Выключенный режим сохраняет прежний путь.
+Опции «на каждый прокси» и VPS исключаются независимо от скрытия UI; существующий validator
+проверяет итоговый YAML. Runtime требуется с поддержкой нового generic API.</p>
+<p>Факты по коду, включая MIPS TUN (2026-09-15): настройки UI → опции → секции YAML; в конце — краткое
+описание pre-copy валидатора (полностью — <a href="VALIDATION">VALIDATION.md</a>).</p>
+<h2 id="vps-gateway-domain-detection-package-2026-10-01">VPS Gateway: Domain Detection Package (2026-10-01)</h2>
+<p>Профиль «VPS Gateway» автоматически генерирует пакет домен-детекта:
+<code>tun.dns-hijack</code> + <code>profile.store-fake-ip: true</code> (вместе с fake-ip DNS,
+sub-toggle) и пассивный <code>sniffer</code> (TLS/QUIC/HTTP, <code>override-destination: false</code>). Включение автоматическое — без нового toggle (пакет = инвариант
+профиля); от DPR не зависит. Инварианты gateway не тронуты; контракт с
+<code>amnezia-mihomo-gateway</code> (сохранение <code>store-fake-ip</code> в патчере
+установщика) — PR #33 (<code>8f41759</code>), merged в <code>main</code> gateway 2026-10-01. Подробности:
+<a href="POLICY-ROUTING">POLICY-ROUTING.md</a>, <a href="VPS-GATEWAY">VPS-GATEWAY.md</a>.</p>
+<h2 id="политики-по-доменам-domain-policy-routing-variant-b">Политики по доменам (Domain Policy Routing, Variant B)</h2>
+<p>Опциональный чекбокс «🚦 Политики по доменам»: карточки «имя + домены» превращаются
+в inline <code>rule-providers</code> (<code>policy-&lt;slug&gt;</code>), категории-группы и <code>RULE-SET</code>-правила
+перед неизменным <code>MATCH,GLOBAL</code>. В режиме URL-подписок категория получает
+<code>NAME-AUTO</code> (url-test, <code>use:</code> на общий provider — несколько групп на один
+провайдер) и select <code>[NAME-AUTO, ⚡ Fastest, GLOBAL, DIRECT]</code>; без подписок —
+select <code>[⚡ Fastest, GLOBAL, DIRECT]</code>; в БС-режиме — select <code>[GLOBAL, DIRECT]</code>
+(плоский fallback не вкладывается, #2588). <code>proxy: DIRECT</code> у провайдеров —
+обязательный контракт (без него холодный старт дедлочит фетч подписки).
+Выключенный режим — byte-parity. Полное описание, ограничения (ECH/DoH/hardcoded IP,
+домен-детект для TUN) и PoC-доказательства — <a href="POLICY-ROUTING">POLICY-ROUTING.md</a>.</p>
+<h2 id="настройки-вкладки-mihomo-config-builder">Настройки вкладки «⚙️ Mihomo Config Builder»</h2>
+<table>
+<thead>
+<tr>
+<th>Элемент UI</th>
+<th>id</th>
+<th>Опция <code>buildFromRequest</code></th>
+<th>Дефолт</th>
+<th>Эффект в YAML</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>🌐 Allow LAN (0.0.0.0)</td>
+<td><code>cfgLan</code></td>
+<td>— (пост-патч страницы)</td>
+<td>☑</td>
+<td><code>allow-lan: true</code> + <code>bind-address: &quot;*&quot;</code></td>
+</tr>
+<tr>
+<td>🔌 Mixed Port 7890</td>
+<td><code>cfgSocks</code></td>
+<td><code>addSocks</code></td>
+<td>☑</td>
+<td><code>mixed-port: 7890</code> (или per-proxy listeners)</td>
+</tr>
+<tr>
+<td>🖥️ Web UI</td>
+<td><code>cfgWebUI</code></td>
+<td><code>webUI</code></td>
+<td>☑</td>
+<td><code>external-controller: 0.0.0.0:9090</code>, <code>external-ui: ui</code>, <code>external-ui-url</code> (+URL metacubexd), <code>secret:</code> пустой</td>
+</tr>
+<tr>
+<td>🎛️ Дашборд Web UI</td>
+<td><code>webUiSelect</code> + <code>webUiCustomUrl</code></td>
+<td><code>webUiDashboard</code> / <code>webUiCustomUrl</code></td>
+<td>MetaCubeXD</td>
+<td>MetaCubeXD (tgz, дефолт — byte-parity) / Yacd-meta (gh-pages.zip) / Zashboard (dist.zip) / Custom http(s)-URL; виден при включённом Web UI; URL только генерируется, не проверяется браузером</td>
+</tr>
+<tr>
+<td>📡 Использовать URL-подписки</td>
+<td><code>cfgSubMode</code></td>
+<td><code>mihomoSubscriptionMode</code></td>
+<td>☑</td>
+<td>HTTP(S) URL → <code>proxy-providers</code>; обычные proxy-ссылки без подписок в стандартном сценарии удобнее обрабатывать с выключенным режимом</td>
+</tr>
+<tr>
+<td>🚦 Routing Diagnostics</td>
+<td><code>routingDiagnostics</code> (панель DPR)</td>
+<td>— (read-only)</td>
+<td>свёрнуто</td>
+<td>офлайн-анализ итогового routing: порядок правил, победитель для домена/IP, дубликаты, перекрытия; DOMAIN/SUFFIX/KEYWORD + inline — точно, GEOSITE/GEOIP/external/DNS — UNKNOWN; YAML не меняет</td>
+</tr>
+<tr>
+<td>🔍 Rule Provider Explorer</td>
+<td><code>ruleProviderExplorer</code> (внутри <code>routingDiagnostics</code>)</td>
+<td>— (read-only)</td>
+<td>свёрнуто</td>
+<td>инвентарь <code>rule-providers</code> итогового YAML в порядке YAML: <code>type</code>/<code>behavior</code>/<code>format</code>/<code>source</code> + scalar-метаданные, все RULE-SET-ссылки («used by», одна строка на использование), «UNUSED» и «Referenced but missing»; счётчики: «Внешние» = только http</td>
+</tr>
+<tr>
+<td>🌐 Modern REALITY</td>
+<td><code>realityModernInput</code></td>
+<td><code>mihomoRealityModernHosts</code></td>
+<td>пусто</td>
+<td>multiline <code>host</code> / <code>host:port</code> / <code>[ipv6]:port</code>: только REALITY-узлы этих серверов получают <code>support-x25519mlkem768: true</code> + chrome fp (если не задан) и override-expr у провайдеров; пусто — legacy; только для совместимых серверов: X25519MLKEM768 появился в Xray v25.5.16, но сама версия не гарантирует совместимость (решение владельца A2)</td>
+</tr>
+<tr>
+<td>🚫 Exclude Filter</td>
+<td><code>excludeFilterInput</code></td>
+<td><code>excludeFilter</code></td>
+<td>пусто</td>
+<td>regexp/keyword <code>exclude-filter</code> в КАЖДЫЙ http-provider (upstream-паритет); только режим URL-подписок; пусто — поле не добавляется; сериализация цитирования покрыта source-тестами</td>
+</tr>
+<tr>
+<td>📱 Device Model</td>
+<td><code>deviceModelInput</code></td>
+<td><code>deviceModel</code></td>
+<td>пусто</td>
+<td>понятное имя устройства для панели подписки; уходит как <code>x-device-model</code> в preview-запросы списка серверов; пусто — служебный fallback <code>Saymer Link Generators Preview</code>; на provider-заголовки не влияет, HWID не меняет</td>
+</tr>
+<tr>
+<td>📋 Показать серверы подписки</td>
+<td><code>cfgServerList</code></td>
+<td>— (опция страницы)</td>
+<td>☐</td>
+<td>opt-in: OFF = ноль подписочных fetch из браузера при Build; ON = список имён по явной кнопке, выбранные узлы = OR-union с <code>excludeFilter</code></td>
+</tr>
+<tr>
+<td>Промежуточный proxy / dialer-proxy (Legacy глобальный)</td>
+<td><code>wgDialerInput</code></td>
+<td><code>wgDialerProxy</code></td>
+<td>пусто</td>
+<td>основной путь — per-profile селектор в карточке WG/AWG (см. секцию ниже); эти глобальные поля — ручной/Legacy override для общей группы; пусто — поле не добавляется (byte-parity)</td>
+</tr>
+<tr>
+<td>Транзитные узлы dialer-группы</td>
+<td><code>wgDialerMembers</code></td>
+<td><code>wgDialerGroupMembers</code></td>
+<td>пусто</td>
+<td>авторская select-группа (имя из <code>wgDialerInput</code> или <code>WARP-DIALER</code>) перед остальными группами; узлы-участники сами не получают <code>dialer-proxy</code></td>
+</tr>
+<tr>
+<td>URL-подписки для dialer-группы</td>
+<td><code>wgDialerProviders</code></td>
+<td><code>wgDialerProviders</code></td>
+<td>пусто</td>
+<td>группа получает <code>use:</code> на СУЩЕСТВУЮЩИЕ proxy-providers (URL должен совпадать с одной из URL-подписок); узлы не разворачиваются; режим C ниже</td>
+</tr>
+<tr>
+<td>🛡️ TUN Interface</td>
+<td><code>cfgTun</code></td>
+<td><code>addTun</code></td>
+<td>☑</td>
+<td>секция <code>tun:</code> (mitun0, default mips / снят чекбокс → gvisor, <code>auto-route: false</code>)</td>
+</tr>
+<tr>
+<td>⚡ MIPS stack для TUN</td>
+<td><code>cfgTunMips</code></td>
+<td><code>mihomoTunStack</code></td>
+<td>☑</td>
+<td><code>stack: mips</code>; снят → <code>gvisor</code>; Mihomo &gt;= 1.19.31 (показывается в Compatibility Summary); требует <code>cfgTun</code>; продуктовый дефолт (NIGHT-09)</td>
+</tr>
+<tr>
+<td>⚙ Расширенный TUN stack</td>
+<td><code>cfgTunStackAdvanced</code> + <code>cfgTunStackEx</code></td>
+<td><code>mihomoTunStack</code></td>
+<td>☐/—</td>
+<td><code>system</code>/<code>mixed</code> внутри ADVANCED-секции («Расширенные настройки»); override снимает MIPS; невалидное значение → gvisor; Mihomo &gt;= 1.19.31</td>
+</tr>
+<tr>
+<td>🧩 Расширенный режим: отдельный вход</td>
+<td><code>cfgPerProxyMaster</code></td>
+<td>—</td>
+<td>☐</td>
+<td>защитная крышка; OFF → оба child выключены и сброшены; скрыт в БС-режиме</td>
+</tr>
+<tr>
+<td>🔒 TUN на каждый прокси</td>
+<td><code>cfgPerProxyTun</code></td>
+<td><code>mihomoPerProxyTun</code></td>
+<td>☐</td>
+<td>TUN-листенеры по одному на прокси/группу; требует <code>cfgPerProxyMaster</code> + <code>cfgTun</code>; скрыт в БС-режиме</td>
+</tr>
+<tr>
+<td>🔌 SOCKS-порт на каждый прокси</td>
+<td><code>cfgPerProxySocks</code></td>
+<td><code>perProxyPort</code></td>
+<td>☐</td>
+<td><code>listeners: socks-&lt;имя&gt;</code> на портах 7890+i, <code>mixed-port</code> убирается; требует <code>cfgPerProxyMaster</code> + <code>cfgSocks</code>; скрыт в БС-режиме; static-листья чекаются скрытой группой «🌐 static-health»</td>
+</tr>
+<tr>
+<td>🏓 Ping server</td>
+<td><code>pingSelect</code></td>
+<td><code>urlTest</code></td>
+<td>Google</td>
+<td><code>url</code>/<code>expected-status</code> url-test группы и health-check провайдеров</td>
+</tr>
+<tr>
+<td>🎯 Профиль развёртывания</td>
+<td><code>cfgProfile</code></td>
+<td>— (пост-патч страницы)</td>
+<td>Роутер / обычный TUN (Keenetic)</td>
+<td>три профиля <code>router</code> / <code>vps-local</code> / <code>vps-gateway</code>; при vps-gateway — gateway-постпатч YAML; подробно <a href="VPS-GATEWAY">VPS-GATEWAY.md</a></td>
+</tr>
+</tbody></table>
+<p>Для Selective Modern REALITY реальная handshake-матрица (Xray + Mihomo + ML-KEM-capable TLS target)
+описана в <a href="TESTING#selective-modern-reality-%D1%80%D0%B5%D0%B0%D0%BB%D1%8C%D0%BD%D1%8B%D0%B9-handshake-e2e--2026-09-18">TESTING.md</a>.
+Версия Xray сама по себе не считается гарантией совместимости.</p>
+<h3 id="web-ui-external-controller">Web UI / external-controller</h3>
+<p>Штатная схема проекта предполагает, что <code>external-controller</code> доступен внутри доверенной
+локальной среды роутера. Поэтому пустой <code>secret:</code> в генерируемом YAML — намеренная и
+допустимая конфигурация проекта. <code>external-controller: 0.0.0.0:9090</code> означает bind на
+интерфейсы устройства, но сам по себе не доказывает публикацию controller в Интернет:
+граница доступа задаётся маршрутизацией/firewall/NAT самого устройства. Если оператор
+явно пробрасывает 9090 на WAN, публикует controller через reverse proxy или использует
+другую внешнюю топологию, защита этого доступа становится отдельной обязанностью такой
+топологии. Генератор не трактует пустой <code>secret</code> как ошибку или предупреждение без
+доказанной внешней экспозиции.</p>
+<p>Зависимости UI (группа «Отдельный вход на каждый прокси»): «⚡ MIPS stack для TUN» и
+«🔒 TUN на каждый прокси» включаемы только при <code>cfgTun</code>, «🔌 SOCKS-порт на каждый прокси» —
+только при <code>cfgSocks</code>; выключение родителя отключает и сбрасывает зависимую опцию
+(<code>updateMihomoOptionStates()</code>). <code>buildMihomo()</code> не доверяет DOM и повторно клампит те же
+зависимости (fail-safe против прямой подмены DOM): при <code>addTun=false</code> — <code>mihomoPerProxyTun=false</code>
+и <code>mihomoTunStack=gvisor</code>, при <code>addSocks=false</code> — <code>perProxyPort=false</code>.</p>
+<p>Дефолты UI после v1.4.0: <code>cfgTun</code> и <code>cfgTunMips</code> в HTML стоят <code>checked</code>, поэтому
+обычный пользовательский TUN генерируется со <code>stack: mips</code>. Снятие MIPS переключает
+его на <code>gvisor</code>. Расширенный Per-Proxy master и обе дочерние Per-Proxy опции по умолчанию
+выключены; <code>system</code>/<code>mixed</code> доступны только через отдельную расширенную крышку.</p>
+<p>Ограничение рантайма: нужен хотя бы один inbound — при <code>addSocks=false</code> и <code>addTun=false</code>
+ошибка «Mihomo: enable at least one inbound (TUN or SOCKS5)». Пустой ввод без wgBeans —
+«No valid links or profiles provided». В обычном Builder режиме URL-подписок без хотя бы одного HTTP(S) URL runtime возвращает
+«Provide one or more HTTP(S) URLs…», а UI переводит это в понятную подсказку:
+«Режим „URL-подписки“ включён, но URL подписки не найден…». Это важная UX-граница:
+режим включён по умолчанию, поэтому при вводе только обычных proxy-ссылок его следует выключить.</p>
+<h2 id="базовый-шаблон-yaml">Базовый шаблон YAML</h2>
+<p>Всегда присутствует (<code>MIHOMO_DEFAULT_TEMPLATE</code> рантайма):</p>
+<pre><code class="language-yaml">mixed-port: 7890          # убирается режимом «SOCKS-порт на каждый прокси»
+allow-lan: false          # страница патчит на true + bind-address: &quot;*&quot;
+tcp-concurrent: true
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+profile:
+  store-selected: true
+  store-fake-ip: true
+proxy-groups: …
+rules:
+  - &quot;MATCH,GLOBAL&quot;        # единственное правило: всё в группу GLOBAL
+</code></pre>
+<p>Production-дефолт — <code>warning</code>: обычные успешные TCP/UDP-соединения уровня <code>info</code> не
+записываются, но предупреждения и ошибки остаются видимыми. Это особенно важно для VPS, где
+stdout/stderr Mihomo перенаправляется в постоянный файл: <code>info</code> может создавать строку на каждое
+соединение и без внешней ротации раздувать лог до гигабайтов. Поддерживаемые Mihomo уровни:
+<code>silent</code>, <code>error</code>, <code>warning</code>, <code>info</code>, <code>debug</code>. Для временной диагностики уровень можно
+вручную повысить до <code>info</code> или <code>debug</code>, но production output генератора использует <code>warning</code>.</p>
+<h2 id="proxy-groups-обычный-режим-ссылки">Proxy-groups (обычный режим, ссылки)</h2>
+<ul>
+<li>≤1 прокси: <code>GLOBAL</code> (select) = [прокси, REJECT].</li>
+<li>≥2 прокси: <code>&quot;⚡ Fastest&quot;</code> (url-test: <code>url</code> = выбранный health-check, <code>interval: 300</code>
+секунд, <code>expected-status: 204/200</code>) + <code>GLOBAL</code> (select) = [&quot;⚡ Fastest&quot;, все прокси, REJECT].</li>
+<li>Режимы «на каждый прокси» («TUN на каждый прокси» и/или «SOCKS-порт на каждый прокси»):
+на каждый прокси — select группа <code>🔒 &lt;имя&gt;</code> = [прокси, REJECT]; <code>GLOBAL</code> = [все <code>🔒</code>-группы, REJECT].</li>
+</ul>
+<p>Режим «Использовать URL-подписки» (технически Sub Mode): вместо <code>proxies</code> в группах — <code>use:</code> на провайдеров; группы <code>SUB-&lt;провайдер&gt;</code>
+в режимах «на каждый прокси»; <code>⚡ Fastest</code> с <code>tolerance: 50</code> и <code>empty-fallback: REJECT</code>.</p>
+<h2 id="tun-два-режима">TUN: два режима</h2>
+<p>С ревизии v1.19.31 checkbox <code>cfgTunMips</code> передаёт <code>options.mihomoTunStack</code>.
+В текущем продукте (v1.4.0+) он <strong>включён по умолчанию</strong>, поэтому UI передаёт <code>mips</code>
+для обычного TUN, Per-Proxy TUN и VPS Gateway. Снятие checkbox даёт <code>gvisor</code>.
+<strong>MIPS — TUN stack, не CPU architecture; требуется Mihomo &gt;= 1.19.31.</strong>
+На уровне engine API отсутствие значения по-прежнему нормализуется в безопасный
+<code>gvisor</code>; это fallback API, а не пользовательский UI-default. Явные <code>mips</code>,
+<code>gvisor</code>, <code>system</code> и <code>mixed</code> принимаются текущим runtime; произвольное неизвестное
+значение engine отклоняет как <code>invalid TUN stack</code>. UI дополнительно не даёт штатно
+передать произвольную строку. Новая опция сама по себе TUN не включает. Прямой <code>buildMihomoYaml</code> принимает <code>opts.tun.stack</code> с тем же
+engine fallback. Обоснование по исходникам — <a href="AUDIT-MIHOMO-1.19.31">аудит</a>.</p>
+<ul>
+<li>Обычный (<code>addTun</code>): при UI-дефолтах <code>tun: { enable: true, stack: mips, auto-route: false, auto-detect-interface: true, device: mitun0 }</code>. <code>auto-route: false</code> принципиален —
+конфиги вставляются в окружения (роутеры), где захват всех маршрутов недопустим.
+Снятие MIPS checkbox переключает только стек на <code>gvisor</code>.</li>
+<li>TUN на каждый прокси (техн. Per-Proxy TUN; <code>addTun</code> + <code>mihomoPerProxyTun</code>): отдельные
+tun-листенеры в секции <code>listeners</code>: <code>mihomo-tun-N</code> (device <code>mitunN</code>, default mips / снят чекбокс → gvisor,
+<code>auto-route: false</code>, <code>auto-detect-interface: false</code>, <code>inet4-address: 198.19.x.y/30</code>), каждый с
+<code>proxy:</code> на свою <code>🔒</code>-группу / <code>SUB-</code>-группу.</li>
+<li>Профиль VPS Gateway (opt-in, селектор «Профиль развёртывания»): пост-патч поверх
+готового YAML — основная секция <code>tun:</code> получает <code>device: tun-mihomo</code>, выбранный stack,
+<code>auto-route: false</code>, <code>auto-detect-interface: true</code>, <code>mtu</code> и <code>gso</code>; добавляются
+<code>find-process-mode: off</code>, <code>profile.store-*: false</code> и опциональная секция <code>dns:</code> (fake-ip).
+Для целевого Mihomo 1.19.31 top-level <code>tun.inet4-address</code> намеренно не генерируется:
+effective IPv4-префикс TUN определяется через <code>dns.fake-ip-range</code>. По умолчанию профиль
+выключен и на Generic-вывод не влияет; подробно — <a href="VPS-GATEWAY">VPS-GATEWAY.md</a>.</li>
+</ul>
+<h2 id="health-check-endpoints-web4coreurltestchoices">Health-check endpoints (<code>web4core.URLTEST_CHOICES</code>)</h2>
+<p>Google (<code>www.gstatic.com/generate_204</code>, 204 — Mihomo recommended), Cloudflare (<code>cp.cloudflare.com</code>, 204 — Mihomo recommended), Apple
+(<code>captive.apple.com</code>, 200), Microsoft (<code>msftconnecttest.com</code>, 200), Ubuntu, Fedora.
+Выбор пользователя попадает в <code>url</code> url-test группы и health-check провайдеров.</p>
+<h2 id="особенности-сгенерированного-yaml">Особенности сгенерированного YAML</h2>
+<ul>
+<li>Правка Allow LAN — <strong>регэксп по тексту</strong> после сборки: <code>allow-lan: false</code> → <code>true</code> и
+вставка <code>bind-address: &quot;*&quot;</code> после строки <code>allow-lan:</code> (если её ещё нет). Патч привязан к
+текущему формату вывода рантайма: после обновления рантайма проверять, что замена
+находит свои строки (см. <a href="UPDATES">UPDATES.md</a>).</li>
+<li>YAML сериализует собственный <code>toYAML</code> рантайма (не jsyaml); <code>__comments</code> → <code>#</code>-комментарии
+(встречаются в sub-mode секциях провайдеров).</li>
+<li>Имена групп содержат emoji: <code>⚡ Fastest</code>, <code>🔒 &lt;прокси&gt;</code> — норма, не баг.</li>
+<li>Правила: всегда ровно <code>MATCH,GLOBAL</code> — разделение трафика делает не конфиг, а
+потребитель (на роутере — MagiTrickle и т.п.).</li>
+</ul>
+<h2 id="загрузка-wgawg-профилей-append-модель-2026-10-01">Загрузка WG/AWG-профилей (append-модель, 2026-10-01)</h2>
+<p>Кнопка «📂 Загрузить .conf / .wg / .awg» <strong>добавляет</strong> файлы к уже загруженным профилям
+(до 2026-10-01 повторное открытие picker&#39;а молча заменяло весь набор). Загруженное
+видно списком (<code>✓ файл.conf — имя-proxy [WG/AWG]</code>) с удалением по одному («✕») и
+явной очисткой («🧹 Очистить все WG/AWG»). Отмена picker&#39;а (0 файлов) — no-op.</p>
+<p>Контракт:</p>
+<ul>
+<li><strong>Mihomo</strong> поддерживает несколько <code>type: wireguard</code> outbound&#39;ов (проверено
+<code>mihomo -t</code> на v1.19.31); имена прокси уникальны — дубликат имени Mihomo
+отвергает («is the duplicate name»). Один wireguard-outbound несёт <strong>одного</strong>
+пира в топ-полях, но поддерживает и список <code>peers:</code> — .conf с несколькими
+секциями <code>[Peer]</code> превращается в один прокси с массивом <code>peers</code> (обе модели
+различаются: несколько файлов = несколько прокси, один файл с N peer&#39;ов =
+один прокси с N пирами);</li>
+<li><strong>дедупликация на загрузке</strong>: файл, чей транспорт посимвольно совпадает с уже
+загруженным (без учёта имени), пропускается с уведомлением «Дубликат(ов)
+пропущено»; на сборке рантайм дополнительно молча выкидывает идентичные
+транспорты (deduplicateProxies) — пользовательский список при этом честный;</li>
+<li><strong>коллизия имён</strong> при разном содержимом разрешается рантаймом авто-суффиксом
+(<code>collide</code> → <code>collide-2</code>) — в YAML имена всегда уникальны, сборка не падает;</li>
+<li><strong>WireGuard DNS</strong> — одно общее поле на ВСЕ WG/AWG-профили (<code>injectWgDns</code>
+проставляет одинаковые <code>dns</code>/<code>remote-dns-resolve</code> каждому wireguard-outbound;
+пустое поле — DNS удаляется). При добавлении файлов поле автозаполняется
+только если оно пусто (ручное значение не затирается); замену значений из
+.conf per-профильно движок не поддерживает;</li>
+<li><strong>dialer-proxy — per-profile</strong> (2026-10-01): в карточке каждого профиля выбирается
+«Напрямую» (по умолчанию) или «Через промежуточный proxy» с индивидуальным таргетом.
+С v1.6.2 таргет выбирается из списка «Промежуточный выход»: реестр целей строится
+префлайт-сборкой текущего состояния движком web4core, значения — точные итоговые
+имена YAML (суффиксы дедупликации, переименования AW); свой outbound, <code>GLOBAL</code>/
+<code>⚡ Fastest</code> (цикл) и группы со ссылками на них в списке не показываются; ручной
+ввод — «Другое / вручную… (ADVANCED)» с проверкой при сборке (несуществующая цель —
+ошибка «цель «…» не существует в генерируемом конфиге»); исчезнувшая цель сбрасывается
+с пометкой. Глобальные поля описывают только dialer-ГРУППУ (имя + члены +
+подписки): GROUP DEFINITION ≠ PROFILE ASSIGNMENT. Runtime-контракт: bean-поле
+<code>wireguard.dialerProxy</code> (web4core <code>buildMihomoProxy</code>), группа строится опцией
+<code>wgDialerGroupOnly</code> без глобального штампа; глобальный <code>wgDialerProxy</code> сохранён для
+совместимости и не применяется к профилям с явным bean-assignment. В Auto-Whitelist
+таргеты переименовываются вместе с листьями (<code>PRIMARY-1: VPS-SE</code>); в AW-режиме
+dialer-таргет не может быть группой (fail-closed). Пустой таргет при «Через proxy» —
+ошибка сборки с именем профиля;</li>
+<li>приватность: карточки показывают только имя файла, сгенерированное имя прокси,
+endpoint, Address и тип (WG/AWG по факту <code>amnezia-wg-option</code>); ключи в DOM не попадают.</li>
+</ul>
+<h2 id="dialer-proxy-туннель-в-туннеле-wireguardwarp-через-промежуточный-proxy">dialer-proxy: туннель в туннеле (WireGuard/WARP через промежуточный proxy)</h2>
+<blockquote>
+<p>Короткая пользовательская инструкция: <a href="GENERATOR-GUIDE">GENERATOR-GUIDE.md</a>. Автоматизированные полевые измерения: <code>tools/warp-dialer-fieldtest/</code>.</p>
+</blockquote>
+<p>Начиная с этой версии Builder умеет штатное поле Mihomo <code>dialer-proxy</code>: WireGuard/WARP-outbound устанавливает своё UDP-соединение с сервером (например, Cloudflare) <strong>через другой proxy или группу</strong>, оставаясь обычным outbound текущего конфига. Это программный аналог WireGuard-over-WireGuard, который уже работает на Keenetic (SE2 → WARP) с MTU ≈ 1200.</p>
+<pre><code class="language-text">Mihomo (VPS SE)
+  ├─ WARP (wireguard outbound) ──dialer-proxy──▶ WARP-DIALER (select: VPS-DK / VPS-EE / …)
+  └─ обычный трафик ──▶ GLOBAL
+WARP-dial → VPS-DK → [сеть DK] → Cloudflare WARP endpoint → Интернет
+</code></pre>
+<p>Отличие от обычного multi-hop: при multi-hop трафик идёт <code>VPS A → VPS B → Mihomo B → WARP B</code>, а здесь WARP остаётся outbound <strong>текущего</strong> Mihomo, и через промежуточный proxy идёт только его туннельное UDP-соединение. Сайты по-прежнему видят Cloudflare WARP; меняется только сеть, из которой WARP «выходит» на Cloudflare.</p>
+<h3 id="режимы">Режимы</h3>
+<ul>
+<li><strong>A — имя proxy/группы</strong>: в поле <code>wgDialerInput</code> указывается существующее имя (<code>VPS-DK</code> или группа). Значение должно существовать в итоговом YAML — иначе runtime и валидатор отклоняют сборку (зеркалирует статическую проверку Mihomo: <code>dialer-proxy [Y] not found</code>).</li>
+<li><strong>B — авторская группа</strong>: заполняется список транзитных узлов; Builder сам создаёт <code>select</code>-группу (имя из поля выше или <code>WARP-DIALER</code>) и добавляет <code>dialer-proxy</code>. Транспорт WARP меняется выбором в группе/дашборде без пересборки WARP-outbound.</li>
+<li><strong>C — provider-backed группа (<code>use:</code>)</strong>: перечисляются URL уже введённых URL-подписок (строго те же строки) — Builder создаёт <code>select</code>-группу с <code>use:</code> на соответствующие proxy-providers (например <code>account.geodema.org</code>), не разворачивая содержимое подписки. Провайдер-ноды по построению не могут попасть в статические <code>proxies:</code> группы, поэтому группа не может содержать сам WARP. <strong>Состав подписки на этапе генерации неизвестен — UDP-совместимость узлов не проверяется и не гарантируется</strong>: для WireGuard dialer пользователь вручную выбирает в группе узел с поддержкой UDP relay; TCP-only узел приводит к ошибке соединения. Валидатор страницы предупреждает об этом для каждой provider-backed dialer-группы.</li>
+</ul>
+<h3 id="правила-применения-и-защита-от-циклов-dependency-graph">Правила применения и защита от циклов (dependency graph)</h3>
+<ul>
+<li><code>dialer-proxy</code> получают <strong>все</strong> wireguard-профили, кроме: (1) совпадающих по имени с таргетом (self) и (2) перечисленных в списке участников группы — транзитные узлы обязаны диалить напрямую, иначе возникает dial-цикл, который статический валидатор Mihomo <strong>не</strong> ловит (он проверяет только прямые рёбра <code>proxy → dialer</code>).</li>
+<li><strong>WireGuard-over-WireGuard разрешён</strong>: цепочки <code>WG-A → WG-B</code>, <code>WG-A → WG-B → WG-C</code>, <code>WG-A → группа → WG-B → группа → WG-C</code> валидны, если маршрут хендшейка нигде не возвращается к исходному outbound. Оба WARP-профиля остаются независимыми (свои ключи, endpoint, tunnel IP); <code>dialer-proxy</code> ссылается на отдельный полноценный outbound по имени и не смешивает профили.</li>
+<li><strong>Циклы запрещены (dependency graph)</strong>: сборка и валидатор страницы анализируют полный граф — dialer-рёбра, статическое членство групп и provider <code>use:</code> (провайдер с <code>override.dialer-proxy</code> даёт ребро; без override — тупик, статически безопасный). Маршрут, возвращающийся к старту (<code>WG-A → WG-A</code>, <code>WG-A → WG-B → WG-A</code>, <code>WG-A → группа → WG-A</code>, цикл через две группы или provider override) — ошибка сборки / <code>INVALID</code>. Ядро Mihomo ловит только прямые рёбра — наш детектор строже (fail-closed): например <code>WG-A → GLOBAL</code> отвергается, потому что GLOBAL содержит сам WARP.</li>
+<li>Self-reference, неизвестный таргет/участник и конфликт имени группы отклоняются с понятной ошибкой ещё на сборке; валидатор страницы дополнительно помечает <code>INVALID</code> таргет-призраки в итоговом YAML (в том числе после ручных правок).</li>
+<li>Таргет <code>GLOBAL</code>/<code>⚡ Fastest</code> — предупреждение валидатора: эти группы содержат сам WARP, и при выборе WARP внутри группы возникает цикл на dial. Валидатор также предупреждает о TCP-only таргетах (<code>http</code>): WireGuard/hy2/tuic через них не работают — UDP-релей у таргета обязателен.</li>
+</ul>
+<h2 id="конфигурация-mihomo-как-ориентированный-граф-dialer-proxy-model">Конфигурация Mihomo как ориентированный граф (dialer-proxy model)</h2>
+<p>Модель валидации dialer-конфигураций — не «типы протоколов», а структура зависимостей.
+Централизованная реализация — в рантайме (<code>web4core.analyzeDialerGraph(doc)</code>); генератор и
+валидатор страницы используют один и тот же код (в builder-гейте — fail-closed на сборке,
+в валидаторе — ERROR/WARNING по итогам анализа итогового YAML).</p>
+<ul>
+<li><strong>Вершины</strong>: proxies, proxy-groups, proxy-providers, DIRECT/REJECT.</li>
+<li><strong>Рёбра</strong>: <code>dialer-proxy</code> (proxy → proxy/group); <code>proxies:</code> (группа → член); <code>use:</code>
+(группа → провайдер); провайдер с <code>override.dialer-proxy</code> даёт ребро от себя.
+Смешанная группа (<code>proxies:</code> + <code>use:</code> одновременно) вносит <strong>обе</strong> категории рёбер.</li>
+<li><strong>valid path</strong>: любой маршрут хендшейка, не возвращающийся к исходному outbound.
+<code>WG-A → WG-B → DIRECT</code>, <code>WG-A → WG-B → WG-C</code>, <code>WG-A → select-group → WG-B</code>,
+<code>WG-A → static group → TUIC</code>, <code>WG-A → provider-backed group</code> — всё валидно.</li>
+<li><strong>cycle</strong>: маршрут, возвращающийся к старту (<code>WG-A → WG-A</code>, через прокси-цепочку,
+через одну группу или через две) — ERROR сборки / INVALID валидатора с полным путём
+вида <code>WG-A → WARP-DIALER → WG-B → WG-A</code> (не просто «cycle detected»).</li>
+<li><strong>dynamic provider</strong>: провайдер в dialer-группе без <code>override.dialer-proxy</code> не даёт
+статического ребра. Его содержимое на этапе генерации неизвестно, поэтому ветвь
+помечается <strong>dynamic/unknown</strong>: статически цикл не доказан и не исключён. Это
+предупреждение, а не ошибка и не утверждение «cycle impossible»; UDP-совместимость
+удалённых узлов не проверяется в принципе и остаётся полевым тестом.</li>
+</ul>
+<p>Предел статической проверки: ядро Mihomo v1.19.31 ловит только прямые dialer-рёбра;
+модель проекта строже (ходит по членству групп и провайдерам), но провайдерные ветви
+без override принципиально недоказуемы статически — они помечаются, а не разрешаются.</p>
+<h3 id="mtu">MTU</h3>
+<p>Без явного <code>mtu</code> Mihomo использует <strong>1408</strong> (wireguard.go v1.19.31). Во вложенном туннеле добавляется overhead промежуточного транспорта, поэтому для WARP-over-dialer рекомендуется явный <code>MTU = 1200–1280</code> в .conf (на Keenetic-аналоге используется ≈1200). Генератор MTU не меняет сам — валидатор лишь предупреждает, если у wireguard с <code>dialer-proxy</code> MTU не задан или выше 1300.</p>
+<h3 id="проверено">Проверено</h3>
+<ul>
+<li>Исходники Mihomo <strong>v1.19.31</strong>: <code>dialer-proxy</code> — поле <code>BasicOption</code>, у wireguard применяется к bind-dialer (<code>adapter/outbound/base.go:199,212</code>, <code>wireguard.go:369</code>); UDP-хендшейк идёт через <code>proxyDialer.listenPacket</code> (UDP-релей таргета); статические проверки — <code>config/utils.go:148</code> (существование таргета + DFS по прямым рёбрам).</li>
+<li><code>mihomo -t</code>: позитивы (имя proxy и авторская группа) — successful; негативы (несуществующий таргет) отвергаются ядром — статическая валидация Builder зеркалит ядро.</li>
+<li><code>mihomo -t</code>: provider-backed группа (<code>use:</code>, один и два провайдера) — successful; <code>use:</code> с несуществующим провайдером отвергается ядром — статическая валидация Builder зеркалит ядро.</li>
+<li>Полевые измерения: <code>tools/warp-dialer-fieldtest/</code> — автоматизированный harness (sweep узлов транспортной группы, switchtest, MTU-лестница, WARP-over-WARP); методика, ловушка PIN и ограничения — README инструмента.</li>
+<li>Переключение узла в dialer-группе не пересоздаёт установленный WG-хендшейк немедленно: в поле старый transport path сохранялся более 150 секунд (SE VPS, 2026-10-01). Чистая смена пути — reload конфига (fresh handshake); учтено в harness (<code>--fresh-handshake</code>) и в UI-подсказке.</li>
+<li>Живая механическая цепочка двух локальных инстансов v1.19.31 (TARGET/socks5 через dialer-proxy → второй инстанс): сквозной HTTPS-трафик проходит; негативный контроль (dialer на мёртвом порту) блокирует трафик полностью. Полная WARP-цепочка (UDP-хендшейк через удалённый VPS) — полевой тест: см. WARPSCOUT-VPS.md.</li>
+</ul>
+<h2 id="сводка-требований-используемых-функций">Сводка требований используемых функций</h2>
+<p>После успешной сборки UI анализирует <strong>финальный YAML</strong> и, если в нём есть функции с
+особыми требованиями, показывает отдельный неблокирующий блок
+«🧩 Требования используемых функций». Сводка не меняет YAML, не влияет на validator
+state и не блокирует Copy. Если специальных требований нет, блок скрыт.</p>
+<p>Сейчас определяются:</p>
+<ul>
+<li><code>stack: mips</code> в обычном TUN или TUN-listener → Mihomo &gt;= 1.19.31;</li>
+<li><code>amnezia-wg-option.version: 3</code> → AWG 3.1, Mihomo &gt;= 1.19.30;</li>
+<li>provider <code>override.override-expr</code> → Mihomo &gt;= 1.19.29;</li>
+<li><code>support-x25519mlkem768: true</code> в static REALITY или provider override-expr →
+предупреждение о selective Modern REALITY: Xray v25.5.16 является проверенной
+рабочей точкой лаборатории, но версия сама по себе не гарантирует совместимость;</li>
+<li><code>mieru</code> и <code>trusttunnel</code> → пометка экспериментального пути генератора.</li>
+</ul>
+<p>Сводка строится по фактическому результату, а не по одному состоянию checkbox: поэтому
+отключённая/клампнутая функция в неё не попадает. При изменении любого входа блок
+сбрасывается вместе с результатом валидации и появляется снова только после Build.</p>
+<h2 id="выходной-yaml-и-pre-copy-валидатор">Выходной YAML и pre-copy валидатор</h2>
+<p>Поле <code>Mihomo YAML</code> — <strong>readonly preview</strong>, а не второй редактор конфигурации. Изменения вносятся только через входные данные и настройки Builder, после чего нужно заново выполнить Build Config. Это сохраняет один источник истины для генерации и валидации.</p>
+<p>Полностью о проверке — <a href="VALIDATION">VALIDATION.md</a>.</p>
+<h3 id="pre-copy-валидатор">Pre-copy валидатор</h3>
+<p>После Build Config финальный YAML автоматически проверяется <code>validateMihomoYaml()</code>:</p>
+<ul>
+<li><strong>успех</strong> → «⚠️ Базовая проверка пройдена. Это не эквивалент проверки mihomo -t.»,
+Copy YAML доступна; UI дополнительно напоминает команду финальной проверки и просит сохранить полный YAML + полный вывод <code>mihomo -t</code>, если ядро всё же отвергнет конфиг;</li>
+<li><strong>уверенная ошибка</strong> → «❌ Ошибка базовой проверки» + Proxy/Field/Value/причина,
+Copy YAML заблокирована (disabled + guard в <code>copyMihomo()</code>);</li>
+<li><strong>предупреждения</strong> — показываются, Copy не блокируют;</li>
+<li>изменение любого входа сбрасывает статус (<code>NOT_BUILT</code>) — нужно пересобрать.</li>
+</ul>
+<p>ERROR ловят только то, что mihomo гарантированно отвергнет: битый YAML, обязательные поля
+(name/type/server/port), неизвестный тип прокси/группы (списки сверены с исходниками mihomo
+v1.19.x), дубликаты имён, битые ссылки групп, <code>mieru.transport ∉ {TCP,UDP}</code> (кейс
+<code>transport: TPC</code>), некорректные порты.</p>
+<h3 id="почему-это-не-mihomo--t-и-почему-не-настоящий-mihomo-в-браузере">Почему это не <code>mihomo -t</code> и почему не настоящий Mihomo в браузере</h3>
+<p>Настоящего Mihomo WASM не существует: официальные релизы mihomo (проверен v1.19.30 — 128
+ассетов) не содержат wasm/wasip1-таргетов; <code>config.Parse</code> тянет всё ядро; обязательная
+зависимость quic-go собирается под WASM только с host-сокетами (в браузере UDP нет);
+официальный дашборд metacubexd валидирует только через живое ядро по REST API. Поэтому
+валидатор — архитектурное ограничение, а не недоделка: он структурный и <strong>не гарантирует</strong>,
+что Mihomo примет конфиг. Авторитетная проверка — на целевой машине:</p>
+<pre><code class="language-bash">mihomo -t -f /opt/etc/mihomo/config.yaml
+</code></pre>
+<h2 id="связанные-документы-2">Связанные документы</h2>
+<p>Данные и пост-обработка — <a href="DATAFLOW">DATAFLOW.md</a>; протоколы — <a href="PROTOCOLS">PROTOCOLS.md</a>;
+полное описание валидатора — <a href="VALIDATION">VALIDATION.md</a>; тесты — <a href="TESTING">TESTING.md</a>.</p>
+
+</div>
+</body>
+</html>

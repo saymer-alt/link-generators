@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARCHITECTURE — link-generators — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/ARCHITECTURE.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="architecture-link-generators">ARCHITECTURE — link-generators</h1>
+<h2 id="автоматический-режим-белых-списков-2026-09-15">Автоматический режим белых списков (2026-09-15)</h2>
+<p>Контракт и точная структура YAML: <a href="AUTO-WHITELIST">AUTO-WHITELIST.md</a>.
+UI передаёт опциональный <code>fallbackInput</code>; engine строит один плоский GLOBAL fallback
+с конечными узлами primary → fallback, без DIRECT и вложенных групп (#2588). Выключенный режим сохраняет прежний путь.
+Опции «на каждый прокси» и VPS исключаются независимо от скрытия UI; то же для зависимостей TUN/Mixed →
+дочерние опции (MIPS, «на каждый прокси»): UI disable+reset, <code>buildMihomo()</code> повторно клампит.
+Существующий validator
+проверяет итоговый YAML. Runtime требуется с поддержкой нового generic API.</p>
+<p>Внутренняя документация. Учитывает source-level MIPS в fork и regression tests (2026-09-15).
+Источник истины — код; при расхождении чинить документацию или
+код, но не делать вид, что расхождения нет. Полный контракт для агентов — <a href="../AGENTS.md">AGENTS.md</a>
+в корне репо; здесь — архитектурная картина.</p>
+<h2 id="что-это">Что это</h2>
+<p>«WARP &amp; Mihomo Unified Generator» — статический одностраничный веб-инструмент на GitHub
+Pages: <a href="https://saymer-alt.github.io/link-generators/">https://saymer-alt.github.io/link-generators/</a> . Две вкладки; по умолчанию открывается
+<strong>⚙️ Mihomo Config Builder</strong>:</p>
+<ol>
+<li><strong>⚙️ Mihomo Config Builder</strong> — сборка <code>config.yaml</code> для Mihomo (Clash Meta) из ссылок,
+подписок и WireGuard/AmneziaWG-файлов + pre-copy базовая валидация результата.</li>
+<li><strong>⚡ WARP MASQUE Links</strong> — генератор пар <code>masque://</code>-ссылок (QUIC + HTTP/2) из ключей
+WARP с анти-DPI стратегией портов/IP.</li>
+</ol>
+<h2 id="чего-в-проекте-нет-принципиально">Чего в проекте нет (принципиально)</h2>
+<ul>
+<li>Бэкенда. Всё исполняется в браузере.</li>
+<li>package.json / npm-зависимостей / build step у приложения. Бандл собирается из
+saymer-alt/web4core@link-generators и после проверок коммитится
+готовым файлом (см. <a href="UPDATES">UPDATES.md</a>).</li>
+<li>ES-модулей. Подключение классическое (<code>&lt;script src&gt;</code>), поэтому страница работает и с <code>file://</code> — это фича.</li>
+</ul>
+<p><code>main</code> — integration/development. Production-канал GitHub Pages — <code>stable</code>; пользовательское
+состояние попадает туда только через явный promotion <code>main → stable</code> после CI и требуемых
+functional/field checks. Язык проекта — русский.</p>
+<p>В <code>tests/</code> есть Node/browser regression tests и fixtures. Единственный workflow —
+автообновление runtime; он запускает source tests, build, <code>node --check</code> и runtime test перед
+сравнением/заменой бандла. Browser test использует внешний Playwright, см. <a href="TESTING">TESTING.md</a>.</p>
+<h2 id="состав-репозитория">Состав репозитория</h2>
+<table>
+<thead>
+<tr>
+<th>Файл</th>
+<th>Природа</th>
+<th>Роль</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>index.html</code></td>
+<td><strong>handwritten</strong></td>
+<td>Единственная страница приложения: inline CSS + inline JS</td>
+</tr>
+<tr>
+<td><code>web4core.runtime.js</code></td>
+<td><strong>generated/vendor</strong></td>
+<td>IIFE-бандл fork saymer-alt/web4core@link-generators. Руками не редактировать</td>
+</tr>
+<tr>
+<td><code>tests/</code></td>
+<td>regression tests</td>
+<td>Node runtime tests, внешний Playwright browser test и синтетические fixtures</td>
+</tr>
+<tr>
+<td><code>.github/workflows/update-web4core-runtime.yml</code></td>
+<td>handwritten (automation)</td>
+<td>Сборка fork с read-only правами; отдельный job коммитит runtime в <code>main</code></td>
+</tr>
+<tr>
+<td><code>README.md</code></td>
+<td>документация</td>
+<td>Пользовательская документация (обновляется вручную)</td>
+</tr>
+<tr>
+<td><code>AGENTS.md</code></td>
+<td>документация</td>
+<td>Контракт для AI-агентов</td>
+</tr>
+<tr>
+<td><code>docs/</code></td>
+<td>документация</td>
+<td>Эта внутренняя база знаний</td>
+</tr>
+<tr>
+<td><code>.nojekyll</code></td>
+<td>служебный</td>
+<td>Отключает Jekyll на Pages</td>
+</tr>
+<tr>
+<td><code>LICENSE</code></td>
+<td>BSD-3-Clause</td>
+<td>Унаследована от web4core</td>
+</tr>
+</tbody></table>
+<p>Внешняя сетевая зависимость страницы: <code>js-yaml@4.1.0</code> с jsdelivr CDN. Всё остальное —
+локальные файлы. Сама страница <code>fetch</code> не использует; исключение по сети внутри рантайма
+одного — <code>fetchSubscription</code> (см. <a href="DATAFLOW">DATAFLOW.md</a>, в текущем UI не задействован).</p>
+<h2 id="где-какая-логика">Где какая логика</h2>
+<h3 id="indexhtml-handwritten-слой"><code>index.html</code> — handwritten слой</h3>
+<ul>
+<li><strong>Вкладка 1</strong>: <code>parseYaml()</code> (импорт YAML от Telegram-бота), <code>generateWarp()</code> (генерация
+ссылок, DPI-стратегия «П.1/П.2/П.3»), <code>sendToMihomo()</code> (передача в Builder).
+Граница ответственности намеренная: <code>parseYaml()</code> импортирует WARP identity/tunnel
+parameters (<code>private-key</code>, <code>public-key</code>, <code>ip</code>, <code>ipv6</code>, <code>sni</code>, <code>dns</code>), а
+<code>generateWarp()</code> сам владеет выбором <code>server</code>/<code>port</code>/QUIC-vs-H2. Поля
+<code>server</code>, <code>port</code>, <code>network</code> из Telegram YAML не должны начинать влиять на
+существующую генерацию. Для источников с уже выбранным endpoint&#39;ом нужен отдельный
+явный import/conversion flow, не подмена legacy-пути.</li>
+<li><strong>Вкладка 2, обёртка над рантаймом</strong>: <code>buildMihomo()</code> (сборка options и вызов
+<code>web4core.buildFromRequest</code>), <code>initWgUpload()</code> (чтение .conf/.awg файлов).</li>
+<li><strong>Вкладка 2, собственные слои поверх рантайма</strong> (добавлены локально, существуют только в этом репо):<ul>
+<li><strong>AWG-совместимость</strong> (c0b28ce): <code>normalizeWgText</code> (диапазон <code>PersistentKeepalive = 25-35</code>
+→ нижняя граница до парсинга), <code>normalizeWgBeans</code> (вывод <code>version: 3</code> для AWG 3.x),
+<code>injectWgDns</code> (инжекция <code>dns</code>/<code>remote-dns-resolve</code> в wireguard-прокси после сборки);</li>
+<li><strong>DNS-защита</strong> (16690f2): перехват нестабильного DNS Amnezia <code>100.64.0.1</code> → подстановка
+публичных DNS + поле «WireGuard DNS» (<code>#wgCustomDns</code>);</li>
+<li><strong>Pre-copy валидатор</strong> (f5ea0a3): <code>validateMihomoYaml()</code> + state machine + блокировка
+Copy YAML. Подробно — <a href="VALIDATION">VALIDATION.md</a>.</li>
+</ul>
+</li>
+</ul>
+<h3 id="web4coreruntimejs-весь-парсинг-и-генерация-yaml"><code>web4core.runtime.js</code> — весь парсинг и генерация YAML</h3>
+<p>Парсеры всех схем, внутреннее представление (beans), строители mihomo/sing-box/xray,
+эмиссия YAML (собственный сериализатор <code>toYAML</code>, не jsyaml). Точка экспорта одна:
+<code>globalThis.web4core = { … }</code> — 18 функций (полный список в <a href="UPDATES">UPDATES.md</a>).</p>
+<p>Страница использует только три: <code>buildFromRequest</code>, <code>parseWireGuardConf</code>, <code>URLTEST_CHOICES</code>.
+Остальные — публичный API рантайма, зарезервированный для будущих задач.</p>
+<p>MIPS — source-level расширение в <code>saymer-alt/web4core@link-generators</code>:
+<code>src/build.js</code> передаёт <code>options.mihomoTunStack</code>, <code>src/core/yaml.js</code> выбирает
+стек обычного TUN и per-proxy listeners. На уровне engine отсутствие значения
+даёт безопасный <code>gvisor</code>, а точное <code>mips</code> включает MIPS. Это не UI-default:
+в продукте v1.4.0+ <code>cfgTunMips</code> включён по умолчанию, поэтому обычный UI-путь
+явно передаёт <code>mips</code>; снятие checkbox переключает на gVisor. Runtime остаётся
+generated/vendor; ручные правки бандла запрещены.</p>
+<p><code>spatiumstas/web4core → saymer-alt/web4core (source-level extensions) → built runtime → link-generators</code>.
+Upstream sync требует review и тестов до обновления custom branch; consumer workflow
+автоматически забирает только эту ветку (см. <a href="UPDATES">UPDATES.md</a>).</p>
+<h3 id="исторический-артефакт-mihomohtml">Исторический артефакт: <code>mihomo.html</code></h3>
+<p>Ранее в репо жил <code>mihomo.html</code> — побайтовая копия <code>index.html</code> под вторым адресом
+(заведён через GitHub web-upload на заре проекта). Удалён 2026-09-08 как неиспользуемый
+артефакт: ни код, ни workflows, ни README на него не ссылались. URL <code>/mihomo.html</code> на
+Pages теперь 404 — это ожидаемо, redirect не предусмотрен. <code>index.html</code> — единственная
+страница приложения.</p>
+<h2 id="схема-потоков-по-фактическому-коду">Схема потоков (по фактическому коду)</h2>
+<pre><code class="language-text">ВКЛАДКА 1: YAML от бота → parseYaml() → поля формы → generateWarp() → пары masque://-ссылок
+                                                       └→ sendToMihomo() → вставка во вкладку 2
+
+ВКЛАДКА 2 (Mihomo Builder), путь данных:
+
+  textarea #mihomoInput (ссылки/подписки)        файлы .conf/.awg (#wgFile)
+        │                                              │
+        │                                    normalizeWgText()      ← локальный патч (PKA-диапазон)
+        │                                              │
+        │                                   web4core.parseWireGuardConf()
+        │                                              │ wgBeans
+        ▼                                              ▼
+  web4core.buildFromRequest({ core:&#39;mihomo&#39;, input, wgBeans, options })
+        │   внутри: buildBeansFromInput → beans; validateBean; assertCoreSupports;
+        │   buildMihomoConfig / buildMihomoSubscriptionConfig → buildMihomoYaml (toYAML)
+        ▼
+  { kind: &#39;yaml&#39;, data: &lt;YAML-строка&gt; }
+        │
+        ▼
+  injectWgDns(result, wgBeans)        ← локальный патч: DNS из #wgCustomDns в wireguard-прокси
+        │                               (jsyaml.load → правка → jsyaml.dump { lineWidth: -1 })
+        ▼
+  allow-lan регэксп-патч              ← локальный патч: allow-lan: false→true + bind-address: &quot;*&quot;
+        │
+        ▼
+  #mihomoOutput (readonly textarea)   ← итоговый YAML показан пользователю
+        │
+        ▼
+  runMihomoValidation(yaml)           ← локальный слой
+        │   state: NOT_BUILT → VALIDATING → validateMihomoYaml(yaml) → VALID | INVALID
+        ▼
+  ┌─────────────────────────────────────────────┐
+  │ VALID   → #copyYamlBtn включена             │
+  │ INVALID → статус «❌ Ошибка базовой         │
+  │           проверки» + Proxy/Field/Value,    │
+  │           Copy заблокирована (двойной       │
+  │           рубеж: disabled + guard)          │
+  └─────────────────────────────────────────────┘
+        │
+        ▼
+  copyMihomo() → navigator.clipboard.writeText
+</code></pre>
+<p>Любое событие <code>input</code>/<code>change</code> на документе сбрасывает состояние валидации в <code>NOT_BUILT</code>
+(устаревший <code>VALID</code> недопустим).</p>
+<h2 id="границы-и-инварианты-которые-нельзя-нарушать">Границы и инварианты, которые нельзя нарушать</h2>
+<ul>
+<li><p><code>web4core.runtime.js</code> — generated/vendor из исходников fork. Ручные правки запрещены;
+source-изменения требуют согласованного scope и проверок (см. <a href="UPDATES">UPDATES.md</a>).</p>
+</li>
+<li><p>Никакого backend, npm, ES-модулей, телеметрии: конфиги и ключи не покидают браузер
+(сетевые исключения перечислены в <a href="DATAFLOW">DATAFLOW.md</a>).</p>
+</li>
+<li><p>Формат <code>masque://</code>-ссылок и структура выходного YAML — внешние контракты (их парсят
+сторонние импортеры и роутеры), не «улучшать» молча.</p>
+</li>
+<li><p>DPI-стратегия генерации ссылок (фиксированный QUIC-пул, веса портов H2, анти-корреляция
+IP) — load-bearing, описана в <a href="../AGENTS.md">AGENTS.md</a>.</p>
+</li>
+</ul>
+<h2 id="related-documentation">Related documentation</h2>
+<ul>
+<li><a href="WEB4CORE-FORK">WEB4CORE-FORK.md</a> — граница engine/UI, ветки двух репозиториев и выбор слоя изменения.</li>
+<li><a href="DATAFLOW">DATAFLOW.md</a> — прохождение данных по каждому типу входа, beans, post-processing, приватность.</li>
+<li><a href="MIHOMO">MIHOMO.md</a> — настройки Builder&#39;а, структура генерируемого YAML, валидатор кратко.</li>
+<li><a href="PROTOCOLS">PROTOCOLS.md</a> — таблица «протокол → парсер → bean → mihomo type», ограничения.</li>
+<li><a href="VALIDATION">VALIDATION.md</a> — pre-copy валидатор: полный список ERROR/WARNING, state machine, почему не <code>mihomo -t</code>.</li>
+<li><a href="UPDATES">UPDATES.md</a> — жизненный цикл <code>web4core.runtime.js</code>, workflow автообновления.</li>
+<li><a href="DEVELOPMENT">DEVELOPMENT.md</a> — как запускать, менять и проверять; safe change rules.</li>
+<li><a href="TESTING">TESTING.md</a> — реальная тестовая стратегия и выполненные прогоны.</li>
+</ul>
+
+</div>
+</body>
+</html>

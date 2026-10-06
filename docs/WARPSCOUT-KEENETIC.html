@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WARPSCOUT на Keenetic / Entware — практическая инструкция — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/WARPSCOUT-KEENETIC.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="warpscout-на-keenetic-entware-практическая-инструкция">WARPSCOUT на Keenetic / Entware — практическая инструкция</h1>
+<p>Эта страница дополняет инструкции для <a href="WARPSCOUT-WINDOWS">Windows</a> и
+<a href="WARPSCOUT-VPS">VPS</a>. Здесь собран практический сценарий запуска WARPSCOUT
+прямо на роутерах Keenetic с установленным Entware.</p>
+<p>Цель та же, что и на Windows/VPS:</p>
+<ol>
+<li>проверить plain WARP / WireGuard как общий baseline там, где он применим, и AWG на фильтрованных сетях;</li>
+<li>проверить MASQUE H3 / QUIC;</li>
+<li>проверить MASQUE H2 / TCP;</li>
+<li>получить Mihomo YAML с MASQUE identity для импорта во вкладку
+<strong>WARP MASQUE Links</strong>.</li>
+</ol>
+<p>Важно: текущий импорт в link-generators использует WARPSCOUT YAML только как источник
+<strong>MASQUE identity</strong> — ключи, SNI, внутренний IP и DNS. Найденные WARPSCOUT
+<code>server</code>, <code>port</code> и <code>network</code> намеренно не заменяют transport-стратегию генератора.
+Для H2 по умолчанию продолжают использоваться Safe Ports Only.</p>
+<hr>
+<h2 id="0-установка-на-keenetic-entware">0. Установка на Keenetic / Entware</h2>
+<p>Проверенный на двух 512 MB-class дачных 1012 роутерах способ:</p>
+<pre><code class="language-sh">opkg update &amp;&amp; opkg install curl ca-bundle &amp;&amp; \
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/entware-go/gh-action-build/warpscout/install.sh | sh
+</code></pre>
+<p>В полевой проверке 2026-09-25 пакет <code>warpscout</code> ещё отсутствовал в подключённых
+opkg feeds, поэтому installer штатно перешёл на GitHub latest release,
+скачал <code>warpscout_0.16.0-1_aarch64-3.10.ipk</code>, установил WARPSCOUT 0.16.0 и
+запустил регистрацию WARP account. Это fallback installer&#39;а, а не ошибка установки.</p>
+<p>На фильтрованной GSM/LTE-сети прямой Cloudflare registration API и relay не прошли;
+installer/ WARPSCOUT смог зарегистрировать account через generated QUIC I1. Не
+копируйте в документацию или issue приватную строку I1 и содержимое
+<code>warpscout-account.json</code>.</p>
+<h2 id="1-где-запускать">1. Где запускать</h2>
+<p>Для Keenetic удобно держать WARPSCOUT в отдельном каталоге Entware:</p>
+<pre><code class="language-sh">mkdir -p /opt/etc/warpscout
+cd /opt/etc/warpscout
+</code></pre>
+<p>Проверьте бинарник:</p>
+<pre><code class="language-sh">warpscout version
+</code></pre>
+<p>В наших тестах использовался WARPSCOUT 0.16.0.</p>
+<p>Если <code>warpscout</code> не находится через PATH, используйте полный путь к бинарнику,
+который установили в Entware.</p>
+<hr>
+<h2 id="2-warp-account">2. WARP account</h2>
+<p>WARPSCOUT хранит регистрацию в файле:</p>
+<pre><code class="language-text">warpscout-account.json
+</code></pre>
+<p>Он ищется в <strong>текущем каталоге</strong>, поэтому перед сканированием удобно всегда делать:</p>
+<pre><code class="language-sh">cd /opt/etc/warpscout
+</code></pre>
+<p>Первичная регистрация:</p>
+<pre><code class="language-sh">warpscout register
+</code></pre>
+<p>После этого последующие команды должны писать примерно:</p>
+<pre><code class="language-text">Using cached WARP account from warpscout-account.json
+</code></pre>
+<p>Файл <code>warpscout-account.json</code> содержит приватные данные WARP. Не публикуйте его и
+не добавляйте в GitHub.</p>
+<hr>
+<h2 id="3-ограничить-параллелизм-на-роутере">3. Ограничить параллелизм на роутере</h2>
+<p>На Keenetic не нужно запускать WARPSCOUT с серверным уровнем параллелизма.
+Для роутеров мы используем ограничение примерно до четырёх параллельных задач:</p>
+<pre><code class="language-sh">JT=4
+</code></pre>
+<p>Дальше переменная передаётся через:</p>
+<pre><code class="language-sh">-jt &quot;$JT&quot;
+</code></pre>
+<p>Это особенно полезно на моделях с 128/256 MB RAM и снижает лишнюю нагрузку на CPU/RAM.</p>
+<hr>
+<h2 id="4-plain-warp-wireguard-baseline-и-awg">4. Plain WARP / WireGuard baseline и AWG</h2>
+<p>Полный скан:</p>
+<pre><code class="language-sh">warpscout scan -p wg -P -jt &quot;$JT&quot;
+</code></pre>
+<p>Только лучший endpoint:</p>
+<pre><code class="language-sh">warpscout scan -p wg -P -jt &quot;$JT&quot; -best
+</code></pre>
+<p>Получить конфиг:</p>
+<pre><code class="language-sh">warpscout scan -p wg -P -jt &quot;$JT&quot; -conf warp-wg.conf
+</code></pre>
+<p>Потом файл можно посмотреть:</p>
+<pre><code class="language-sh">cat warp-wg.conf
+</code></pre>
+<h3 id="проверка-cloudflare-node">Проверка Cloudflare node</h3>
+<p>Если нужно понять, в какой Cloudflare node попадает WARP-трафик, смотрите
+<code>NODE</code>, <code>NODE LOCATION</code> и <code>SEEN AS</code> в полном WG scan.</p>
+<p>Если есть подозрение на проблемный node, например <code>ARN</code>, можно проверить наличие
+альтернативы:</p>
+<pre><code class="language-sh">warpscout scan -p wg -P -jt &quot;$JT&quot; \
+  -exclude-node ARN \
+  -best
+</code></pre>
+<p>Если WARPSCOUT отвечает, что все endpoint&#39;ы исключены, то в текущем маршруте
+альтернативного node он не видит. Бесконечный перебор IP/портов в такой ситуации
+обычно бессмысленен.</p>
+<h3 id="awg-на-фильтрованных-сетях">AWG на фильтрованных сетях</h3>
+<p>Обычный <code>-p wg</code> полезен как baseline, но в полевых тестах 2026-09-25 на двух
+дачных 1012 основной рабочий сценарий был <strong>AWG</strong>, а не plain WG:</p>
+<pre><code class="language-sh">warpscout scan -p awg -P -jt &quot;$JT&quot; -gen-i1 quic
+</code></pre>
+<p>Для поиска пути без российского Cloudflare node/country:</p>
+<pre><code class="language-sh">warpscout scan -p awg -P -jt &quot;$JT&quot; -gen-i1 quic -exclude-country RU
+</code></pre>
+<p><code>-exclude-country RU</code> фильтрует выбранный Cloudflare path/node в терминах
+WARPSCOUT. Он <strong>не гарантирует смену выходной GeoIP-страны</strong>: в обоих дачных
+тестах после исключения DME/российского path поле <code>SEEN AS</code> всё равно оставалось
+<code>RU</code>.</p>
+<p>Важно для журнала тестов: сегодняшнее A/B-сравнение проводного NC-1012 и GSM
+KN-1012 проверяло именно <code>-p awg</code>. Plain <code>-p wg</code> <strong>намеренно не включён</strong> в
+дачный acceptance: для целевого российского фильтрованного сценария обычный
+WARP/WireGuard не является рабочим транспортом, поэтому отдельный A/B-прогон
+не даёт практической пользы. Команды <code>-p wg</code> в этой инструкции остаются только
+как общий baseline для других сетей/маршрутов, где plain WG применим.</p>
+<hr>
+<h2 id="5-masque-h3-quic">5. MASQUE H3 / QUIC</h2>
+<p>В WARPSCOUT H3 соответствует протоколу <code>masque</code>.</p>
+<pre><code class="language-sh">warpscout scan -p masque -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to
+</code></pre>
+<p>Лучший endpoint:</p>
+<pre><code class="language-sh">warpscout scan -p masque -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to \
+  -best
+</code></pre>
+<p>Mihomo YAML с MASQUE identity:</p>
+<pre><code class="language-sh">warpscout scan -p masque -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+</code></pre>
+<p>Полученный <code>proxies:</code> блок можно вставить во вкладку <strong>WARP MASQUE Links</strong>
+как источник MASQUE identity.</p>
+<hr>
+<h2 id="6-masque-h2-tcp">6. MASQUE H2 / TCP</h2>
+<p>Для H2 используется <code>masque-h2</code>.</p>
+<pre><code class="language-sh">warpscout scan -p masque-h2 -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to
+</code></pre>
+<p>Лучший endpoint:</p>
+<pre><code class="language-sh">warpscout scan -p masque-h2 -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to \
+  -best
+</code></pre>
+<p>Mihomo YAML:</p>
+<pre><code class="language-sh">warpscout scan -p masque-h2 -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+</code></pre>
+<p>В H2-блоке будет:</p>
+<pre><code class="language-yaml">network: h2
+</code></pre>
+<p>Но текущий link-generators не обязан наследовать найденные WARPSCOUT
+<code>server</code> / <code>port</code>. При стандартной настройке H2 transport продолжает собираться
+по Safe Ports Only:</p>
+<pre><code class="language-text">443, 8443, 4443, 8095
+</code></pre>
+<p>Порты <code>500</code>, <code>1701</code>, <code>4500</code>, которые иногда находит WARPSCOUT, в стандартную
+Safe Ports стратегию проекта не входят.</p>
+<hr>
+<h2 id="7-точечная-проверка-endpoint39ов">7. Точечная проверка endpoint&#39;ов</h2>
+<p>На роутере особенно полезно не гонять полный набор повторно, а проверить несколько
+конкретных адресов через <code>-target</code>.</p>
+<pre><code class="language-sh">warpscout scan -p masque-h2 -P -jt &quot;$JT&quot; \
+  -target 162.159.198.30,162.159.199.51 \
+  -masque-sni consumer-masque.cloudflareclient.com
+</code></pre>
+<p>Ещё один пример:</p>
+<pre><code class="language-sh">warpscout scan -p masque-h2 -P -jt &quot;$JT&quot; \
+  -target 162.159.198.80,162.159.199.203 \
+  -masque-sni consumer-masque.cloudflareclient.com
+</code></pre>
+<p>Если получаете <code>No working endpoints found</code> или сообщение
+<code>handshake ok, then cut mid-stream</code>, это ещё не доказывает, что MASQUE H2 в сети
+роутера не работает вообще. Результат зависит от конкретного endpoint, SNI,
+текущего маршрута и состояния Cloudflare.</p>
+<hr>
+<h2 id="8-sni-имеет-значение">8. SNI имеет значение</h2>
+<p>В сегодняшних тестах на Keenetic поведение H2 заметно менялось при смене SNI.</p>
+<p>Для обычных тестов проекта мы часто используем <code>4pda.to</code>, но для диагностики
+самого Cloudflare MASQUE полезно отдельно проверить:</p>
+<pre><code class="language-sh">warpscout scan -p masque-h2 -P -jt &quot;$JT&quot; \
+  -masque-sni consumer-masque.cloudflareclient.com
+</code></pre>
+<p>Практический вывод: один неудачный скан с одним SNI не следует превращать в вывод
+«H2 на этом Keenetic не работает». Для диагностики сравнивайте как минимум два SNI
+и несколько endpoint&#39;ов.</p>
+<hr>
+<h2 id="9-получить-identity-для-link-generators">9. Получить identity для link-generators</h2>
+<p>H3:</p>
+<pre><code class="language-sh">warpscout scan -p masque -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+</code></pre>
+<p>H2:</p>
+<pre><code class="language-sh">warpscout scan -p masque-h2 -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+</code></pre>
+<p>В выводе нужен <code>proxies:</code> блок с <code>private-key</code>, <code>public-key</code>, <code>ip</code>, <code>sni</code>
+и <code>dns</code>. Для H2 дополнительно будет <code>network: h2</code>.</p>
+<p>Вставьте YAML во вкладку <strong>WARP MASQUE Links</strong> и нажмите
+<strong>«Распарсить»</strong>. Генератор заберёт identity-поля, после чего сам применит свою
+QUIC/H2 transport-стратегию.</p>
+<hr>
+<h2 id="10-не-путать-три-разных-результата">10. Не путать три разных результата</h2>
+<p>На Keenetic удобно разделять:</p>
+<pre><code class="language-text">1. WARPSCOUT нашёл рабочий endpoint
+2. WARPSCOUT поднял через него тестовый WARP/MASQUE туннель
+3. production Mihomo реально использует свой endpoint и transport
+</code></pre>
+<p>Это не одно и то же.</p>
+<hr>
+<h2 id="11-минимальный-набор-команд-для-роутера">11. Минимальный набор команд для роутера</h2>
+<pre><code class="language-sh">cd /opt/etc/warpscout
+JT=4
+
+# Plain WARP / WG baseline
+warpscout scan -p wg -P -jt &quot;$JT&quot; -best
+
+# AWG — основной полевой сценарий на фильтрованных сетях
+warpscout scan -p awg -P -jt &quot;$JT&quot; -gen-i1 quic
+
+# MASQUE H3
+warpscout scan -p masque -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to \
+  -best
+
+# MASQUE H2
+warpscout scan -p masque-h2 -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to \
+  -best
+
+# MASQUE H3 identity для link-generators
+warpscout scan -p masque -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+
+# MASQUE H2 identity для link-generators
+warpscout scan -p masque-h2 -P -jt &quot;$JT&quot; \
+  -masque-sni 4pda.to \
+  -conf - -conf-type mihomo
+</code></pre>
+<hr>
+<h2 id="12-что-записывать-при-сравнении-роутеров">12. Что записывать при сравнении роутеров</h2>
+<pre><code class="language-text">модель Keenetic
+KeeneticOS
+провайдер
+протокол: WG / AWG / MASQUE H3 / MASQUE H2
+SNI
+endpoint
+working / torn down
+TUN ping / loss
+SEEN AS
+NODE / NODE LOCATION
+время проверки
+</code></pre>
+<p>Один и тот же WARPSCOUT может показывать заметно разные результаты на домашнем,
+рабочем или мобильном подключении из-за различий маршрута провайдера.</p>
+<hr>
+<h2 id="13-полевой-кейс-kn-1012-через-gsmlte-2026-09-25">13. Полевой кейс: KN-1012 через GSM/LTE, 2026-09-25</h2>
+<p>Реальная проверка выполнялась на <strong>Keenetic Giga KN-1012 / KeeneticOS 5.1.6 / aarch64</strong>
+в роли дачного GSM/LTE-роутера. Entware находился во внутреннем UBIFS <code>/opt</code>,
+активен штатный zRAM; параллельно работали Mihomo 1.19.31 с <code>tun.stack: mips</code>
+и MagiTrickle. Для WARPSCOUT использовалась версия <strong>0.16.0</strong> и ограничение:</p>
+<pre><code class="language-sh">JT=4
+</code></pre>
+<p>На этом профиле WARPSCOUT занимал примерно 3.1 MB, каталог
+<code>/opt/etc/warpscout</code> — несколько килобайт; после установки на <code>/opt</code> оставалось
+около 60 MB свободного места. Для такого 512 MB-класса <code>-jt 4</code> показал себя
+нормальной консервативной стартовой настройкой.</p>
+<h3 id="контекст-uplink-на-момент-полевых-тестов">Контекст uplink на момент полевых тестов</h3>
+<p>Системный снимок того же вечера показывает двухмодемную схему:</p>
+<ul>
+<li><code>UsbLte0</code> — <strong>MCN Telecom / T2</strong>, модем <strong>Fibocom FM350-GL</strong>,
+APN <code>modem.tele2.ru</code>; именно этот интерфейс был default route;</li>
+<li><code>UsbLte1</code> — резервный <strong>Megafon</strong>, модем <strong>L860-GL-16</strong>,
+APN <code>router.megafon.ru</code>; интерфейс был подключён, но не являлся default gateway;</li>
+<li>в конфигурации есть multipathing policy с обоими LTE-интерфейсами, поэтому для
+любого вывода о конкретном per-flow пути лучше опираться на отдельную трассировку,
+а не только на наличие двух активных модемов.</li>
+</ul>
+<p>На post-test снимке основной FM350-GL работал как <strong>4G+</strong> с агрегацией
+<strong>B3 + B3 + B7</strong>; наблюдались примерно <code>RSRP -95 dBm</code>, <code>RSRQ -8 dB</code>,
+<code>RSSI -70 dBm</code>, <code>CINR 3 dB</code>. Резервный L860-GL-16 был на <strong>B3</strong> с более
+слабым уровнем: примерно <code>RSRP -113 dBm</code>, <code>RSRQ -10 dB</code>,
+<code>RSSI -84 dBm</code>, <code>CINR 4 dB</code>.</p>
+<p>Это <strong>контекстный снимок после тестов, а не синхронный radio capture каждой
+WARPSCOUT попытки</strong>. Радиопараметры и serving cell могут меняться, поэтому их
+нельзя использовать как точные условия каждого отдельного scan. Для сегодняшнего
+A/B важен более устойчивый факт: GSM-роутер работал в двухмодемной LTE-схеме с
+MCN/T2 на основном/default пути и Megafon как резервом.</p>
+<h3 id="регистрация-warp-account-на-фильтрованной-сети">Регистрация WARP account на фильтрованной сети</h3>
+<p>Прямой доступ к Cloudflare registration API не прошёл. Relay тоже не смог
+зарегистрировать account. WARPSCOUT затем перебрал generated AWG I1 и успешно
+зарегистрировал свежий account через <strong>generated QUIC I1</strong>. В ходе разных запусков
+рабочими маскировочными host для generated QUIC I1 встречались
+<code>cdn.jsdelivr.net</code>, <code>www.microsoft.com</code> и <code>www.google.com</code>.</p>
+<p>Приватную строку I1 и содержимое <code>warpscout-account.json</code> публиковать нельзя.</p>
+<h3 id="awg">AWG</h3>
+<p>Команда:</p>
+<pre><code class="language-sh">warpscout scan -p awg -P -jt &quot;$JT&quot; -gen-i1 quic
+</code></pre>
+<p>дала <strong>70/70 working</strong> в одном полном прогоне. Наблюдались Cloudflare nodes:</p>
+<pre><code class="language-text">DME  ARN  FRA  AMS
+</code></pre>
+<p>При этом <code>SEEN AS</code> оставался <code>RU</code>. Лучший DME-маршрут был примерно 30 ms
+внутри туннеля; ARN — примерно 51–65 ms.</p>
+<p>Повтор:</p>
+<pre><code class="language-sh">warpscout scan -p awg -P -jt &quot;$JT&quot; -gen-i1 quic -exclude-country RU
+</code></pre>
+<p>убрал DME из результата и оставил ARN/FRA/AMS, но <code>SEEN AS</code> всё равно остался
+<code>RU</code>. Это практическое подтверждение: выбор/исключение Cloudflare node или country
+в WARPSCOUT <strong>не следует трактовать как гарантированную смену страны выходного IP</strong>.
+Node/colo описывает путь обработки трафика, а не обещание GeoIP выхода.</p>
+<h3 id="masque-h2">MASQUE H2</h3>
+<p>Для H2 штатный:</p>
+<pre><code class="language-text">consumer-masque.cloudflareclient.com
+</code></pre>
+<p>дал <strong>0/14</strong> в <code>find-sni</code>.</p>
+<p>Зато:</p>
+<pre><code class="language-text">www.apple.com
+</code></pre>
+<p>дал <strong>14/14 working</strong> в <code>find-sni -p masque-h2</code>, а полный запуск:</p>
+<pre><code class="language-sh">warpscout scan -p masque-h2 -P -jt &quot;$JT&quot; \
+  -masque-sni www.apple.com
+</code></pre>
+<p>дал <strong>70/70 working</strong>, nodes DME и FRA, loss 0%.</p>
+<p>В конкретном прогоне лучший DME endpoint был на <code>:4500</code> примерно с 32 ms TUN ping,
+а FRA встречался, например, на <code>:8095</code> примерно с 69 ms. Для проекта важно
+разделять эти результаты и transport-стратегию генератора: стандартный
+<strong>Safe Ports Only</strong> по-прежнему использует только:</p>
+<pre><code class="language-text">443, 8443, 4443, 8095
+</code></pre>
+<p>и не наследует автоматически найденные WARPSCOUT <code>500/1701/4500</code>.</p>
+<h3 id="masque-h3-quic">MASQUE H3 / QUIC</h3>
+<p>H3 оказался принципиально другим.</p>
+<p><code>find-sni -p masque</code> показал:</p>
+<ul>
+<li><code>consumer-masque.cloudflareclient.com</code> — <strong>0/14</strong>;</li>
+<li><code>www.apple.com</code> — <strong>4/14</strong>;</li>
+<li><code>www.google.com</code> — <strong>4/14</strong>;</li>
+<li><code>www.microsoft.com</code> — <strong>4/14</strong>;</li>
+<li><code>cdn.jsdelivr.net</code> — <strong>4/14</strong>.</li>
+</ul>
+<p>Но последующие полноценные запуски с лучшим найденным SNI:</p>
+<pre><code class="language-sh">warpscout scan -p masque -P -jt &quot;$JT&quot; \
+  -masque-sni www.apple.com
+</code></pre>
+<p>несколько раз подряд завершались:</p>
+<pre><code class="language-text">no MASQUE endpoint passed data - this network blocks it, try -p awg
+</code></pre>
+<p>Точечная перепроверка именно IP, которые <code>find-sni</code> предварительно называл
+рабочими, дала тот же результат:</p>
+<pre><code class="language-sh">warpscout scan -p masque -P -jt &quot;$JT&quot; \
+  -target 162.159.198.1,162.159.198.2 \
+  -masque-sni www.apple.com
+</code></pre>
+<p>Итог для этого GSM/LTE-подключения: <strong>MASQUE H3 не прошёл реальный data-path
+acceptance</strong>, даже несмотря на предварительные <code>4/14</code> в <code>find-sni</code>.</p>
+<h3 id="главное-правило-из-этого-кейса">Главное правило из этого кейса</h3>
+<p><strong>Успех <code>find-sni</code> не равен подтверждению работоспособности MASQUE транспорта.</strong></p>
+<p><code>find-sni</code> используется для поиска кандидата SNI. После него обязателен
+полноценный <code>scan</code> с найденным SNI; при необходимости — повторный точечный
+<code>-target</code> scan. Только прохождение реального data-path scan следует считать
+acceptance.</p>
+<p>Итоговая матрица этого KN-1012 GSM/LTE:</p>
+<table>
+<thead>
+<tr>
+<th>Транспорт</th>
+<th>Результат</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>AWG + generated QUIC I1</td>
+<td>работает стабильно, до 70/70</td>
+</tr>
+<tr>
+<td>MASQUE H2 + <code>www.apple.com</code></td>
+<td>работает стабильно, 70/70</td>
+</tr>
+<tr>
+<td>MASQUE H3 + <code>www.apple.com</code></td>
+<td><code>find-sni</code> видел 4/14, но полноценный scan не передал данные</td>
+</tr>
+<tr>
+<td>MASQUE H3 + штатный Cloudflare SNI</td>
+<td>не работает</td>
+</tr>
+</tbody></table>
+<p>Это наблюдение относится к конкретному операторскому маршруту GSM/LTE на момент
+проверки. Оно не доказывает универсальную блокировку H3 у оператора или на всех
+Keenetic; цель кейса — показать правильную методику проверки и различие H2/H3 на
+одной и той же сети.</p>
+<hr>
+<h2 id="14-полевой-кейс-nc-1012-через-проводной-wan-2026-09-25">14. Полевой кейс: NC-1012 через проводной WAN, 2026-09-25</h2>
+<p>Для сравнения с GSM/LTE-профилем выполнен тот же WARPSCOUT-набор на
+<strong>Netcraze Giga NC-1012 / KeeneticOS 5.1.6 / aarch64</strong> с проводным WAN.
+Фактический WAN этого роутера — <strong>PPPoE <code>Mynetcity</code></strong> поверх
+<code>GigabitEthernet1</code>; live snapshot показывает link <strong>1 Gbit/s</strong>, PPPoE MTU <strong>1492</strong>
+и default route через <code>PPPoE0</code>. Entware находится на внешнем EXT4 <code>/opt</code>
+на пользовательском <strong>USB/NVMe 32 GB</strong> накопителе — по диагностическому
+снимку это USB 3.x media device. WARPSCOUT 0.16.0 запускался с:</p>
+<pre><code class="language-sh">JT=4
+</code></pre>
+<h3 id="awg-1">AWG</h3>
+<pre><code class="language-sh">warpscout scan -p awg -P -jt &quot;$JT&quot; -gen-i1 quic
+</code></pre>
+<p>дал <strong>65/70 working</strong>. Наблюдались nodes <strong>DME / ARN / AMS</strong>, <code>SEEN AS RU</code>.
+Лучший DME-маршрут был около <strong>10 ms</strong> TUN ping; ARN — около <strong>28–30 ms</strong>,
+AMS — около <strong>50–53 ms</strong>.</p>
+<p>При повторе:</p>
+<pre><code class="language-sh">warpscout scan -p awg -P -jt &quot;$JT&quot; -gen-i1 quic -exclude-country RU
+</code></pre>
+<p>остались только <strong>ARN / AMS</strong>, результат был <strong>30/35 working</strong>, но
+<code>SEEN AS</code> всё равно оставался <code>RU</code>. Это повторяет GSM-наблюдение: исключение
+Cloudflare country/node влияет на путь/colo, но не гарантирует смену GeoIP выхода.</p>
+<h3 id="masque-h2-1">MASQUE H2</h3>
+<p><code>find-sni -p masque-h2</code> дал:</p>
+<ul>
+<li><code>consumer-masque.cloudflareclient.com</code> — <strong>0/14</strong>;</li>
+<li><code>www.apple.com</code> — <strong>0/14</strong>;</li>
+<li><code>www.google.com</code> — <strong>14/14 working</strong>.</li>
+</ul>
+<p>То есть для этого проводного uplink лучшим найденным H2 SNI был
+<strong><code>www.google.com</code></strong>, а не <code>www.apple.com</code> как на GSM/LTE.</p>
+<p>Полный acceptance-scan с тем же SNI:</p>
+<pre><code class="language-sh">warpscout scan -p masque-h2 -masque-sni www.google.com
+</code></pre>
+<p>дал <strong>70/70 working</strong>, node <strong>DME</strong>, <code>SEEN AS RU</code>. Лучшие показанные endpoint&#39;ы:</p>
+<pre><code class="language-text">162.159.198.44:500   ~5 ms endpoint ping
+162.159.199.59:8443  ~6 ms endpoint ping
+</code></pre>
+<p>Для стандартной transport-стратегии link-generators из этих результатов интересен
+<code>:8443</code>; <code>:500</code> в Safe Ports Only не входит.</p>
+<h3 id="masque-h3">MASQUE H3</h3>
+<p><code>find-sni -p masque</code> дал:</p>
+<ul>
+<li><code>consumer-masque.cloudflareclient.com</code> — <strong>0/14</strong>;</li>
+<li><code>www.apple.com</code> — <strong>4/14</strong>;</li>
+<li><code>www.google.com</code> — <strong>4/14</strong>;</li>
+<li><code>www.microsoft.com</code> — <strong>4/14</strong>;</li>
+<li><code>cdn.jsdelivr.net</code> — <strong>14/14 working</strong>.</li>
+</ul>
+<p>Лучшим найденным H3 SNI был <strong><code>cdn.jsdelivr.net</code></strong>.</p>
+<p>Полный acceptance-scan с тем же SNI:</p>
+<pre><code class="language-sh">warpscout scan -p masque -masque-sni cdn.jsdelivr.net
+</code></pre>
+<p>дал <strong>13/14 working</strong>, node <strong>DME</strong>, <code>SEEN AS RU</code>. Лучшие показанные endpoint&#39;ы:</p>
+<pre><code class="language-text">162.159.198.2:8095  ~30 ms endpoint ping
+162.159.198.1:8443  ~33 ms endpoint ping
+</code></pre>
+<p>Итог: на проводном WAN MASQUE H3 <strong>реально проходит data path</strong>, в отличие от
+проверенного GSM/LTE-профиля, где H3 после <code>find-sni</code> не прошёл ни полный scan,
+ни точечную перепроверку.</p>
+<p>Для практической задачи этого проводного дачного роутера есть дополнительный
+критерий: <strong>избежать DME</strong>. В текущем полном acceptance и H2, и H3 дали только
+node <strong>DME</strong>, поэтому технически рабочие MASQUE H2/H3 сейчас не решают эту задачу.
+AWG, напротив, показал ARN/AMS после исключения российского path и потому является
+проверенным non-DME-кандидатом. Это вывод про текущий маршрут, а не запрет на
+MASQUE вообще: при другом uplink/маршруте node может измениться.</p>
+<p>Plain WARP/WG (<code>-p wg</code>) в этот дачный A/B намеренно не включался: для целевого
+российского фильтрованного сценария он не является практическим транспортом.
+Не следует записывать результаты AWG как доказательство plain WG, но и отдельный
+plain-WG acceptance здесь не нужен.</p>
+<p>Этот A/B-кейс усиливает правило из GSM/LTE-теста:
+<strong>результаты <code>find-sni</code> и полноценного <code>scan</code> нужно связывать одним и тем же
+SNI</strong>. Здесь отрицательный scan с <code>www.apple.com</code> не описывал транспорт в целом:
+правильные SNI <code>www.google.com</code> для H2 и <code>cdn.jsdelivr.net</code> для H3 дали
+успешный full-scan.</p>
+<h3 id="сравнение-проводного-wan-и-gsmlte-на-даче">Сравнение проводного WAN и GSM/LTE на даче</h3>
+<table>
+<thead>
+<tr>
+<th>Профиль</th>
+<th>AWG</th>
+<th>MASQUE H2</th>
+<th>MASQUE H3</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>KN-1012 GSM/LTE</td>
+<td>до 70/70; DME/ARN/FRA/AMS</td>
+<td>70/70 с <code>www.apple.com</code></td>
+<td>не прошёл full data-path scan</td>
+</tr>
+<tr>
+<td>NC-1012 проводной WAN</td>
+<td>65/70; DME/ARN/AMS</td>
+<td>70/70 с <code>www.google.com</code></td>
+<td>13/14 с <code>cdn.jsdelivr.net</code></td>
+</tr>
+</tbody></table>
+<p>Практический вывод: различие H3 между двумя роутерами нельзя объяснить только
+моделью железа или WARPSCOUT — на проводном <strong>Mynetcity/PPPoE</strong> uplink H3 проходит,
+а на дачном GSM-профиле с <strong>MCN Telecom/T2 как основным/default LTE path</strong> — нет.
+Это сильный признак зависимости от конкретного сетевого маршрута/фильтрации uplink,
+но не доказательство универсальной политики конкретного оператора. Наличие второго
+активного Megafon-модема и multipathing policy тоже нужно помнить: без отдельного
+per-flow capture нельзя превращать эту запись в универсальное утверждение о каждом
+пакете конкретного scan.</p>
+<h2 id="см-также">См. также</h2>
+<ul>
+<li><a href="WARPSCOUT-WINDOWS">WARPSCOUT на Windows</a></li>
+<li><a href="WARPSCOUT-VPS">WARPSCOUT на VPS</a></li>
+<li><a href="https://github.com/vernette/warpscout/blob/master/README_RU.md">WARPSCOUT upstream README_RU</a></li>
+<li><a href="https://github.com/vernette/warpscout/blob/master/docs/ru/masque.md">WARPSCOUT: MASQUE</a></li>
+</ul>
+
+</div>
+</body>
+</html>

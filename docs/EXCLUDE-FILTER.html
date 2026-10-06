@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mihomo `exclude-filter`: практическая проверка — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/EXCLUDE-FILTER.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="mihomo-exclude-filter-практическая-проверка">Mihomo <code>exclude-filter</code>: практическая проверка</h1>
+<p><code>Exclude Filter</code> в Mihomo Builder передаётся в каждый HTTP <code>proxy-provider</code> как поле <code>exclude-filter</code>. Значение сопоставляется с <strong>фактическим именем узла в подписке</strong>, поэтому язык и формат имени имеют значение.</p>
+<h2 id="почему-rurussia-может-не-сработать">Почему <code>ru|russia</code> может не сработать</h2>
+<p>Полевой тест 2026-10-01 на Mihomo v1.19.31 и реальной Geodema/Remnawave-подписке показал, что пример <code>(?i)ru|russia</code> не удалил ни одного российского узла: их имена были кириллическими, например <code>🇷🇺 Россия Москва</code> и <code>🇷🇺 Новосибирск (xhttp)</code>.</p>
+<p>Для таких подписок нужно включать варианты, которые реально встречаются в именах. Например, как ориентир можно использовать:</p>
+<pre><code class="language-text">(?i)ru|russia|россия|🇷🇺
+</code></pre>
+<p>Это <strong>пример, а не универсальный пресет</strong>: перед применением смотрите фактические имена узлов конкретного provider. Если подписка использует только названия городов без страны/флага, добавьте нужные варианты явно.</p>
+<h2 id="что-проверено">Что проверено</h2>
+<p>На выборке Geodema baseline содержал 99 узлов. Контрольные тесты дали:</p>
+<ul>
+<li><code>Россия|Новосибирск</code> → удалено ровно 6 RU-узлов, false positive = 0, false negative = 0;</li>
+<li><code>Германия</code> → удалено ровно 3 немецких узла;</li>
+<li>exact-name фильтр → удалён ровно 1 выбранный узел;</li>
+<li><code>Россия|Новосибирск|Германия</code> → удалено ровно объединение 9 узлов;</li>
+<li>после удаления фильтра полный baseline восстановился;</li>
+<li>reload конфига применял новый <code>exclude-filter</code> сразу, без обязательного чистого cache/home.</li>
+</ul>
+<p>То есть механизм <code>exclude-filter</code> в генераторе и Mihomo v1.19.31 работает; прежний эффект «RU-фильтр не работает» объясняется несовпадением regexp с фактическими именами узлов, а не поломкой provider-фильтра.</p>
+<h2 id="provider-level-и-group-level">Provider-level и group-level</h2>
+<p>Генератор использует provider-level <code>exclude-filter</code>: исключённые узлы исчезают из самого provider и поэтому не попадают через <code>use:</code> в <code>⚡ Fastest</code> и <code>GLOBAL</code>.</p>
+<p>Group-level фильтр — отдельная семантика Mihomo: provider продолжает содержать полный набор, а фильтруется только представление узлов внутри конкретной группы.</p>
+
+</div>
+</body>
+</html>

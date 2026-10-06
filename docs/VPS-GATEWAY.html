@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VPS-GATEWAY — опциональный профиль генерации для amnezia-mihomo-gateway — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/VPS-GATEWAY.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="vps-gateway-опциональный-профиль-генерации-для-amnezia-mihomo-gateway">VPS-GATEWAY — опциональный профиль генерации для amnezia-mihomo-gateway</h1>
+<blockquote>
+<p>Не путать с профилем «VPS — локальный Mihomo / SOCKS для Xray / 3X-UI»: тот не создаёт TUN вообще (только локальный вход 127.0.0.1:7890 для локальных приложений) и не требует policy routing/iptables. Этот профиль — именно transparent-gateway.</p>
+</blockquote>
+<p>С ревизии v1.19.31 <code>applyDeploymentProfile(yaml, profile, tunStack)</code> сохраняет явный
+выбор MIPS из Builder. С 2026-09-17 (NIGHT-09) продукт по умолчанию шлёт <code>mips</code>
+и для vps-профиля; если gateway-тюнинг (см. <code>rp_filter</code> ниже) рассчитан на gvisor —
+явно выберите gVisor в генераторе. Разрешены <code>mips</code>/<code>gvisor</code>. Это TUN stack,
+не CPU MIPS, требуется Mihomo &gt;= 1.19.31.
+Работает также при VPS + «TUN на каждый прокси» (Per-Proxy TUN): основной TUN и listeners получают выбранный
+стек. Остальные перечисленные ниже gateway-инварианты не менялись.</p>
+<p>Внутренняя документация. Описывает opt-in профиль «VPS Gateway» (добавлен 2026-09-09).
+Реализация — <code>applyDeploymentProfile()</code> в <code>index.html</code>; тесты — раздел «Профиль VPS
+Gateway» в <a href="TESTING">TESTING.md</a>. Источник истины — код; общие правила —
+<a href="../AGENTS.md">AGENTS.md</a>.</p>
+<h2 id="зачем-существует-этот-режим">Зачем существует этот режим</h2>
+<p>Редкий сценарий: <strong>Mihomo на VPS как часть transparent gateway</strong> из проекта
+<a href="https://github.com/saymer-alt/amnezia-mihomo-gateway"><code>amnezia-mihomo-gateway</code></a> —
+трафик Docker-контейнера AmneziaAWG через Linux policy routing заводится в TUN-интерфейс
+<code>tun-mihomo</code> и выходит через proxy/WARP. Для этого Mihomo нужен конфиг с «gateway-видом»
+TUN и fake-ip DNS; обычный вывод генератора (TUN <code>mitun0</code> без <code>inet4-address</code>, без секции
+<code>dns:</code>) этот сценарий не покрывает.</p>
+<p>Профиль готовит <strong>только Mihomo-половину</strong> такой конфигурации. Генератор <strong>не является
+VPS-инсталлятором</strong> и никогда им не станет.</p>
+<h2 id="профили-router-и-vps-local-от-него-не-зависят">Профили router и vps-local от него не зависят</h2>
+<p>Основной сценарий проекта (Keenetic и обычные конфиги) — превалирующий и защищён
+инвариантом:</p>
+<ul>
+<li>селектор «Профиль развёртывания» (<code>#cfgProfile</code>) по умолчанию = <strong>«Роутер / обычный
+TUN (Keenetic)»</strong> (id <code>router</code>); пользовательская модель — три профиля
+<code>router</code> / <code>vps-local</code> / <code>vps-gateway</code> (PR #79);</li>
+<li>при <code>router</code> и <code>vps-local</code> функция <code>applyDeploymentProfile()</code> <strong>не вызывается вовсе</strong> —
+нет ни одного лишнего <code>jsyaml.load/dump</code>, вывод <strong>байт-в-байт</strong> совпадает с обычной
+генерацией (второй аргумент функции внутри кода по-прежнему литерал <code>&#39;vps&#39;</code> — это
+внутреннее имя «gateway-семейства», а не идентификатор профиля);</li>
+<li>при переключении профилей соответствующий UI-state применяется заново
+(path-independent), панель gateway видна только у <code>vps-gateway</code>, «мусора» в YAML
+не остаётся.</li>
+</ul>
+<h2 id="архитектура-и-граница-ответственности">Архитектура и граница ответственности</h2>
+<pre><code class="language-text">link-generators
+      ↓  (генерирует только Mihomo configuration)
+Mihomo configuration (config.yaml)
+      ↓  (развёртывание и маршрутизация)
+amnezia-mihomo-gateway (install.sh)
+      ↓
+Docker / AmneziaWG / Linux policy routing / iptables
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Генератор (эта страница)</th>
+<th>amnezia-mihomo-gateway (НЕ генератор)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>секция <code>tun:</code> gateway-вида</td>
+<td>контейнер <code>amnezia-awg</code>, подсеть, UDP-порт WG</td>
+</tr>
+<tr>
+<td>корневой <code>find-process-mode</code>, <code>profile.store-*</code></td>
+<td><code>ip rule</code> / таблица <code>100 mihomo</code> / fwmark 0x88</td>
+</tr>
+<tr>
+<td>секция <code>dns:</code> (fake-ip, по sub-toggle)</td>
+<td>iptables (MARK, TCPMSS, MASQUERADE, FORWARD)</td>
+</tr>
+<tr>
+<td>proxies / proxy-groups (обычный ввод)</td>
+<td>sysctl (<code>rp_filter=0</code>), resolv.conf, Docker DNS</td>
+</tr>
+<tr>
+<td>—</td>
+<td>systemd-юниты, watchdog, firewall</td>
+</tr>
+</tbody></table>
+<h2 id="параметры-профиля">Параметры профиля</h2>
+<p><strong>Наследуется из Builder:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Параметр</th>
+<th>Значение</th>
+<th>Зачем нужен</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tun.stack</code></td>
+<td>выбранный TUN stack; UI-default v1.4.0+ = <code>mips</code></td>
+<td>профиль сохраняет общий выбор Builder; для совместимости можно явно выбрать <code>gvisor</code></td>
+</tr>
+</tbody></table>
+<p><strong>Fixed (не редактируются, задаются кодом):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Параметр</th>
+<th>Значение</th>
+<th>Зачем нужен</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tun.enable</code></td>
+<td><code>true</code></td>
+<td>TUN — вход перехваченного трафика</td>
+</tr>
+<tr>
+<td><code>tun.auto-route</code></td>
+<td><code>false</code> <strong>(инвариант)</strong></td>
+<td>иначе Mihomo перехватит весь трафик сервера и убьёт SSH; в UI не выставляется</td>
+</tr>
+<tr>
+<td><code>tun.auto-detect-interface</code></td>
+<td><code>true</code></td>
+<td>«критично для upload» (install.sh); корректный egress-интерфейс</td>
+</tr>
+<tr>
+<td><code>tun.gso</code></td>
+<td><code>true</code></td>
+<td>эмпирическая оптимизация v2.0 (замеры install.sh)</td>
+</tr>
+<tr>
+<td><code>find-process-mode</code> (корень)</td>
+<td><code>off</code></td>
+<td>не тратить время на process-matching форвардед-трафика</td>
+</tr>
+<tr>
+<td><code>profile.store-selected</code> / <code>store-fake-ip</code></td>
+<td><code>false</code> / <code>false</code> без fake-ip DNS; <strong><code>store-fake-ip: true</code> при включённом fake-ip DNS</strong> (Domain Detection Package, см. ниже)</td>
+<td>детерминизм при пересоздании правил; persistence fake-ip mapping; merge — прочие ключи <code>profile</code> сохраняются</td>
+</tr>
+</tbody></table>
+<p><strong>Editable (редактируемые поля с боевыми дефолтами):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Поле UI</th>
+<th>Параметр</th>
+<th>Дефолт</th>
+<th>Зачем нужен</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>#vpsDevice</code></td>
+<td><code>tun.device</code></td>
+<td><code>tun-mihomo</code></td>
+<td>имя, которое ищут routing-скрипт и watchdog</td>
+</tr>
+<tr>
+<td><code>#vpsMtu</code></td>
+<td><code>tun.mtu</code></td>
+<td><code>1420</code></td>
+<td>двойная инкапсуляция AWG+WARP; вместе с TCPMSS clamp на Linux-стороне давал ~2x</td>
+</tr>
+<tr>
+<td><code>#vpsFakeIp</code></td>
+<td><code>dns.fake-ip-range</code></td>
+<td><code>198.18.0.0/16</code></td>
+<td>диапазон fake-ip; должен совпадать с main-маршрутом в routing-скрипте</td>
+</tr>
+<tr>
+<td><code>#vpsDnsEnabled</code></td>
+<td>секция <code>dns:</code> целиком</td>
+<td>включён</td>
+<td>DNS-перехват (fake-ip); выключение удаляет <code>dns</code> без остатков</td>
+</tr>
+<tr>
+<td><code>#vpsDnsListen</code></td>
+<td><code>dns.listen</code></td>
+<td><code>0.0.0.0:53</code></td>
+<td>адрес DNS-слушателя Mihomo (см. ниже)</td>
+</tr>
+<tr>
+<td><code>#vpsDnsNs</code></td>
+<td><code>dns.nameserver</code></td>
+<td><code>1.1.1.1, 8.8.8.8</code></td>
+<td>upstream-резолверы</td>
+</tr>
+<tr>
+<td><code>#vpsProxyNs</code></td>
+<td><code>dns.proxy-server-nameserver</code></td>
+<td><code>1.1.1.1</code></td>
+<td>резолвер имён самих proxy-серверов</td>
+</tr>
+</tbody></table>
+<p>Пустое поле → значение по умолчанию. Источник всех дефолтов — <strong>текущий
+<code>install.sh</code> amnezia-mihomo-gateway</strong> (переменные <code>PROXY_IF</code> / <code>TUN_INET_ADDR</code> /
+<code>FAKE_IP_RANGE</code>, пакет v2.0); якорь-комментарий — <code>VPS_GATEWAY_DEFAULTS</code> в <code>index.html</code>.</p>
+<h2 id="четыре-точки-сцепки-с-gateway-контракт">Четыре точки сцепки с gateway (контракт)</h2>
+<table>
+<thead>
+<tr>
+<th>Точка</th>
+<th>Дефолт</th>
+<th>Что сломается при рассинхроне</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tun.device</code></td>
+<td><code>tun-mihomo</code></td>
+<td>routing-скрипт и watchdog ждут интерфейс с этим именем — правил не будет, watchdog будет циклично рестартовать Mihomo</td>
+</tr>
+<tr>
+<td>effective TUN IPv4</td>
+<td>выводится Mihomo 1.19.31 из <code>dns.fake-ip-range</code> с маской <code>/30</code></td>
+<td>наличие IPv4 на TUN по-прежнему требуется для NAT; отдельный top-level <code>tun.inet4-address</code> в RawTun 1.19.31 не применяется</td>
+</tr>
+<tr>
+<td><code>dns.fake-ip-range</code></td>
+<td><code>198.18.0.0/16</code></td>
+<td>не совпадёт с main-маршрутом <code>FAKE_IP_RANGE</code> — пакеты на fake-ip не попадут в TUN</td>
+</tr>
+<tr>
+<td><code>tun.auto-route</code></td>
+<td><code>false</code> (инвариант)</td>
+<td><code>true</code> перехватит весь трафик VPS — потеря SSH; в UI исключено</td>
+</tr>
+</tbody></table>
+<h2 id="listen-000053-что-это-и-почему-осторожно"><code>listen: 0.0.0.0:53</code> — что это и почему осторожно</h2>
+<p>Mihomo поднимает DNS-слушатель на всех интерфейсах — фактически публичный резолвер на
+VPS. Это боевой дефолт схемы (потребители — клиенты/контейнеры, использующие VPS как
+резолвер), но <strong>оставлять его доступным из интернета бездумно нельзя</strong>: открытый резолвер
+притягивает абьюз/amplification. Ограничение доступа (firewall/сетевой уровень VPS) —
+<strong>вне scope генератора</strong>, ответственность VPS-слоя. В UI на <code>0.0.0.0:53</code> показывается
+постоянное предупреждение. Значение редактируемо (например, привязка к конкретному
+адресу/порту).</p>
+<h2 id="правило-синхронизации-с-routing-скриптом">Правило синхронизации с routing-скриптом</h2>
+<p>Изменение <code>device</code> или <code>fake-ip-range</code> <strong>обязано</strong> соответствовать
+переменным routing-скрипта gateway (<code>PROXY_IF</code> / <code>TUN_INET_ADDR</code> / <code>FAKE_IP_RANGE</code>):
+<code>device</code> соответствует <code>PROXY_IF</code>, <code>fake-ip-range</code> — gateway/routing-контракту.
+Установщик при следующем запуске приводит <code>fake-ip-range</code> к своему контракту
+своими значениями (sed-патчи в §2.7 install.sh). Отдельный top-level
+<code>inet4-address</code> для Mihomo 1.19.31 больше не является рабочим способом задания
+IPv4 TUN, поэтому рассинхрон generator/gateway бесполезен и вреден.</p>
+<h2 id="cross-project-contract-generator--gt-gateway--gt-bootstrap">Cross-project contract: generator -&gt; gateway -&gt; bootstrap</h2>
+<p>Этот профиль нельзя рассматривать отдельно от двух соседних проектов:</p>
+<pre><code class="language-text">link-generators
+  -&gt; формирует desired Mihomo config для VPS Gateway
+amnezia-mihomo-gateway
+  -&gt; сегодня применяет host-side AWG -&gt; Mihomo routing/integration
+vps-gateway-bootstrap
+  -&gt; будущий orchestration/ownership/rollback слой
+</code></pre>
+<p>Live-аудит SE2 от 2026-09-23 показал, почему эта граница важна. После старого удаления gateway
+на сервере могли оставаться Docker DNS override, запись <code>100 mihomo</code> и installer-era изменения
+Mihomo config. Поэтому:</p>
+<ul>
+<li>генератор отвечает только за <strong>желаемый YAML</strong>, а не за ownership или rollback системного состояния;</li>
+<li><code>amnezia-mihomo-gateway</code> должен хранить/восстанавливать только доказуемо принадлежащее ему состояние;</li>
+<li>будущий <code>vps-gateway-bootstrap</code> не должен повторно «патчить по догадке» YAML или системные файлы:
+сначала discovery/ownership, затем plan/apply/validate/rollback;</li>
+<li>изменение VPS-профиля здесь требует проверки не только <code>mihomo -t</code>, но и совместимости с
+фактическими host-side инвариантами <code>amnezia-mihomo-gateway</code>;</li>
+<li>значения <code>tun.device</code>, <code>fake-ip-range</code>, DNS и TUN-поля — межпроектный контракт, а не локальная
+деталь UI.</li>
+</ul>
+<h3 id="live-evidence-host-dns-is-not-guaranteed-by-valid-yaml">Live evidence: host DNS is not guaranteed by valid YAML</h3>
+<p>Второй live-аудит 2026-09-23 на Ubuntu 24.04 показал важную границу ответственности.
+Mihomo с <code>dns.listen: 0.0.0.0:53</code> реально слушал TCP/UDP 53, а запросы самого хоста к
+<code>127.0.0.1:53</code> и адресу <code>docker0</code> проходили. При этом контейнер AmneziaWG не мог
+резолвить имена: UFW с default incoming deny блокировал <code>container -&gt; host:53</code>.
+Точечные UDP+TCP правила только от Docker bridge/subnet к адресу host DNS немедленно
+восстановили DNS и HTTPS из контейнера.</p>
+<p>Следствие для этого репозитория: <strong>это не ошибка генератора и не повод добавлять управление
+UFW в <code>link-generators</code></strong>. Валидный <code>dns:</code> в YAML описывает желаемый Mihomo listener, но
+не доказывает, что Linux firewall разрешает реальному потребителю добраться до него.
+Host-side слой обязан отдельно discover/apply/validate такую доступность и владеть своими
+firewall-правилами.</p>
+<p>На том же EE-хосте production Mihomo логировал <code>H3_REQUEST_CANCELLED</code> и закрытия
+<code>WARP-MASQUE-QUIC</code>, а <code>Fastest_MASQUE</code> периодически активировал health-check и в момент
+проверки выбрал H2. Это operational evidence для дальнейшего сравнения H3/H2, но не
+доказательство ошибки MASQUE-генерации и не основание менять transport defaults без
+повторяемых тестов.</p>
+<p>Кроме того, уже на двух VPS наблюдалось расхождение между старым desired YAML
+<code>tun.inet4-address: 10.255.255.1/30</code> и live-адресом <code>tun-mihomo 198.18.0.0/30</code>.
+Причина теперь установлена по исходникам <strong>Mihomo v1.19.31</strong>: top-level <code>RawTun.Inet4Address</code>
+закомментирован, а <code>parseTun()</code> формирует IPv4-префикс TUN из <code>dns.fake-ip-range</code> и
+приводит его к <code>/30</code>. Для <code>198.18.0.0/16</code> это объясняет наблюдаемый <code>198.18.0.0/30</code>.
+Per-proxy TUN listeners используют другой config path, где <code>inet4-address</code> поддерживается.</p>
+<p>Текущий live-audit и rollout-status хранятся в
+<a href="https://github.com/saymer-alt/amnezia-mihomo-gateway/blob/stable/docs/LIVE_AUDIT_2026-09-23.md"><code>amnezia-mihomo-gateway/docs/LIVE_AUDIT_2026-09-23.md</code></a>.
+До отдельного расходного VPS автоматический rollback в gateway остаётся непроверенным; это не
+причина менять значения VPS-профиля генератора без отдельного доказательства.</p>
+<h2 id="domain-detection-package-2026-10-01">Domain Detection Package (2026-10-01)</h2>
+<p>Профиль <strong>vps-gateway</strong> (модель профилей <code>router / vps-local / vps-gateway</code>)
+дополняет gateway-вид конфига пакетом домен-детекта (подробности —
+<a href="POLICY-ROUTING">POLICY-ROUTING.md</a>); профили <code>router</code> и
+<code>vps-local</code> пакет не получают. Версии: minimum Mihomo 1.19.31, проверен
+1.19.32 (recommended/current). Состав: <code>profile.store-fake-ip: true</code> (при
+включённом fake-ip DNS), <code>tun.dns-hijack: [any:53, tcp://any:53]</code> (там же) и
+пассивный <code>sniffer</code> (всегда). Это не меняет четыре точки сцепки выше: device,
+fake-ip-range, <code>auto-route: false</code> и effective IPv4 TUN остаются прежними.</p>
+<p>Два межпроектных следствия:</p>
+<ol>
+<li><strong>Патчер install.sh</strong>: до PR #33 (<code>feat/domain-detection-store-fake-ip</code>,
+<code>8f41759</code>, merged в <code>main</code> amnezia-mihomo-gateway 2026-10-01)
+патчер §2.7 принудительно нормализовал <code>store-fake-ip</code> в <code>false</code> — для
+DPR-конфигов это ломало mapping при рестарте (stale fake-ip + мисатрибуция,
+PoC 2026-10-01). С PR #33 патчер сохраняет существующее значение генератора,
+<code>false</code> дописывается только при отсутствии ключа. <code>tun.dns-hijack</code> и
+<code>sniffer</code> патчер не трогает (неизвестные ключи проходят дословно; тест
+<code>tests/test-mihomo-config-patch.sh</code> фиксирует оба случая). В stable-канал
+установщика патч попадёт после promotion <code>main → stable</code> в том репозитории.</li>
+<li><strong>Восстановление маршрута</strong>: TUN-устройство при рестарте Mihomo исчезает
+вместе с kernel-маршрутом <code>FAKE_IP_RANGE dev tun-mihomo</code>. Восстановление —
+ответственность gateway: <code>check-warp-routing.timer</code> (≤1 мин) проверяет
+<code>routing_ok</code> (включая <code>ip route show &lt;fake-ip-range&gt;</code>) и перезапускает
+<code>warp-docker-routing.service</code>, который пересоздаёт маршрут. До 2026-10-01
+это подтверждалось live: рестарт тестового Mihomo на gateway-хосте
+восстанавливал маршрутизацию в пределах минутного тика. Генератор никаких
+маршрутов не создаёт и не должен.</li>
+</ol>
+<p><code>cache.db</code> (fake-ip mapping) живёт в каталоге <code>-d</code> Mihomo (<code>/etc/mihomo</code>),
+создаётся при первом старте, переживает рестарты; отсутствие/повреждение
+обрабатывается ядром штатно (пустой mapping → новые выдачи; повреждённый файл
+Mihomo 1.19.31 пересоздаёт). Права — как у остальных файлов каталога конфига.</p>
+<h2 id="что-генератор-не-делает-никогда">Что генератор НЕ делает (никогда)</h2>
+<p>Docker, AmneziaWG, <code>ip rule</code>/policy routing, iptables, MASQUERADE, fwmark, TCPMSS,
+sysctl, systemd, watchdog, firewall, любую настройку самого VPS. Это ответственность
+<a href="https://github.com/saymer-alt/amnezia-mihomo-gateway"><code>amnezia-mihomo-gateway</code></a>
+(README «Настройка Mihomo» / «Как это работает», AGENTS.md «Несущая логика»).</p>
+<h2 id="заметки-для-агентов">Заметки для агентов</h2>
+<ul>
+<li>Порядок постобработки в <code>buildMihomo()</code>: <code>injectWgDns</code> → <code>applyDeploymentProfile</code>
+→ allow-lan регэксп-патч. Профильный шаг вызывается <strong>только</strong> для профиля
+<code>vps-gateway</code> (внутренний аргумент функции — литерал <code>&#39;vps&#39;</code>, см. выше).</li>
+<li>Повторная сериализация — только <code>jsyaml.dump(doc, { lineWidth: -1 })</code>, иначе рвутся
+длинные AWG base64-строки (тот же гочай, что в <code>injectWgDns</code>).</li>
+<li>jsyaml квотит строку <code>off</code> (защита от YAML 1.1 bool): в выводе будет
+<code>find-process-mode: &#39;off&#39;</code> — валидный YAML; mihomo (yaml.v3) читает как строку <code>&quot;off&quot;</code>.</li>
+<li>Сочетание VPS-профиля с опциями «на каждый прокси» (Per-Proxy TUN/SOCKS) технически
+возможно (патчится только основная секция <code>tun:</code>), но gateway-сценарий предполагает обычный TUN.</li>
+<li><code>web4core.runtime.js</code> не затронут; расширение — только wrapper&#39;ом, как <code>injectWgDns</code>.</li>
+</ul>
+<h2 id="связанные-документы-6">Связанные документы</h2>
+<p>Параметры Builder&#39;а — <a href="MIHOMO">MIHOMO.md</a>; тесты — <a href="TESTING">TESTING.md</a>;
+контракт для агентов — <a href="../AGENTS.md">AGENTS.md</a>.</p>
+<h3 id="статус-tun-stack-для-vps-mihomo-11931">Статус TUN stack для VPS (Mihomo 1.19.31)</h3>
+<ul>
+<li><strong>gVisor</strong> — рекомендуемый baseline проекта.</li>
+<li><strong>MIPS</strong> — реально запускался на VPS; в сравнительной серии EE оказался примерно на 10 Мбит/с хуже по download, поэтому baseline не меняется.</li>
+<li><strong>system / mixed</strong> — доступны как экспериментальные значения Mihomo, но для нашего gateway не рекомендуются: владелец пробовал их на VPS без устойчивого положительного результата. Генератор не подменяет выбранный stack молча; при эксперименте в YAML остаётся выбранное значение.</li>
+</ul>
+
+</div>
+</body>
+</html>

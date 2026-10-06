@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review #2588: плоский автоматический fallback — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/FALLBACK-REVIEW.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="review-2588-плоский-автоматический-fallback">Review #2588: плоский автоматический fallback</h1>
+<blockquote>
+<p><strong>Historical / snapshot.</strong> Анализ выполнен против Mihomo v1.19.31; выводы
+(плоская fallback-схема вместо вложенных групп) остаются действующим контрактом,
+но номера строк/детали ядра — свидетельство на дату анализа.</p>
+</blockquote>
+<h2 id="verdict-для-mihomo-v11931">Verdict для Mihomo v1.19.31</h2>
+<p>Проблема <strong>не исправлена фактически</strong>. Проверен tag v1.19.31,
+source SHA <code>ab405bad5beeeac8b003bb01f60f134f6df54471</code>, официальный Windows amd64
+binary SHA256 <code>9f2ad8968022eae9b972c01a87de1a4dc19c949834db899d732bc0129b103478</code>.
+Issue <a href="https://github.com/MetaCubeX/mihomo/issues/2588">#2588</a> открыт, но verdict
+основан на исходниках и воспроизведении, а не статусе issue.</p>
+<ul>
+<li><a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/adapter/outboundgroup/fallback.go#L105">fallback.go, findAliveProxy</a>:
+цикл проверяет <code>proxy.AliveForTestUrl(f.testUrl)</code> непосредственно у каждого
+элемента. Рекурсивной проверки дочерних proxy-groups нет.</li>
+<li><a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/adapter/adapter.go#L47">adapter.go, AliveForTestUrl</a>:
+читается сохранённое состояние проверки wrapper; оно независимо от детей.</li>
+<li>В локальном repro сначала PRIMARY реально проваливает HTTP-пробу; затем один
+ребёнок восстанавливается и проходит пробу, wrapper остаётся unhealthy.
+Получено: <code>PRIMARY.alive=false</code>, <code>PRIMARY.now=PRIMARY-2: P-ALIVE</code>,
+<code>child.alive=true</code>, <code>GLOBAL.now=FALLBACK</code>. HTTP-запрос через mixed-port реально
+возвращает идентификатор резервного mock endpoint. Interval 3600 фиксирует
+окно до следующей wrapper-пробы; API delay лишь воспроизводит порядок проб,
+не записывает alive вручную.</li>
+</ul>
+<h2 id="принятое-изменение">Принятое изменение</h2>
+<p>Удалены промежуточные PRIMARY/FALLBACK группы. GLOBAL видит конечные узлы напрямую.
+Фильтр <code>^(PRIMARY-|primary-)</code> и затем <code>^(FALLBACK-|fallback-)</code>, разделённые обратной
+кавычкой, задаёт строгий порядок всего объединённого списка. Пример YAML находится
+в <a href="AUTO-WHITELIST">AUTO-WHITELIST.md</a>.</p>
+<p>Почему недостаточно просто перечислить <code>proxies</code> и <code>use</code> по сторонам:</p>
+<ul>
+<li><a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/adapter/outboundgroup/parser.go#L161">parser.go</a>
+превращает статические proxies в CompatibleProvider и добавляет его перед <code>use</code>.
+Без сортировки живой статический fallback обойдёт живой primary provider.</li>
+<li><a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/adapter/outboundgroup/groupbase.go#L122">groupbase.go, GetProxies</a>
+разворачивает providers; несколько backtick-фильтров сортируют общий список
+всех providers, включая статический CompatibleProvider.</li>
+<li>При одном источнике статических узлов исходный список уже primary → fallback;
+при нескольких источниках применяется глобальная сортировка. Обновление provider
+меняет Version, инвалидируя кеш списка, после чего фильтры применяются вновь.</li>
+</ul>
+<p>В пределах стороны выбирается <strong>первый живой</strong>, а не самый быстрый. Это явный
+компромисс плоского native fallback. Обычный url-test минимизирует задержку,
+но не обеспечивает абсолютный приоритет primary; возврат к nested-группам
+вернул бы #2588. Внешний watchdog или изменение самого Mihomo не добавлены.
+Ручной выбор через controller может отменять автоматический порядок; тесты
+не используют операции выбора. Состояние доступности всё равно зависит от
+свежести health-check, а не от мгновенного знания сетевой доступности.</p>
+<h2 id="providers">Providers</h2>
+<p>Каждый provider генерирует собственные <code>health-check.enable: true</code>, URL,
+interval 300, <code>lazy: false</code>, expected-status из того же resolver, что GLOBAL.
+Контракт проверяется source/browser/network tests.</p>
+<p><a href="https://github.com/MetaCubeX/mihomo/blob/v1.19.31/adapter/provider/healthcheck.go#L48">HealthCheck.process</a>
+проверяет <code>!hc.lazy || since &lt; hc.interval</code>: при false проверки продолжаются без
+трафика через provider. <code>registerHealthCheckTask</code> может добавлять URL группы,
+но совпадающий с provider URL пропускается. Мы не полагаемся на этот механизм:
+полный provider health-check задан явно и сохранён при переходе к плоской схеме.</p>
+<h2 id="runtime-proof">Runtime proof</h2>
+<p><code>tests/mihomo-failover.cjs</code> запускает настоящий Mihomo и локальные HTTP CONNECT
+прокси/HTTP providers. Все слушатели — loopback; внешняя сеть и TUN не используются.
+Из generated YAML для теста меняются только адрес probe, interval (1s), timeout,
+локальные порты/controller/logging. Группы, filter, имена, prefixes, expected-status,
+lazy и membership остаются сгенерированными.</p>
+<table>
+<thead>
+<tr>
+<th>Ввод</th>
+<th>PRIMARY dead+alive</th>
+<th>Все PRIMARY dead</th>
+<th>PRIMARY восстановлен</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Static</td>
+<td>P-ALIVE</td>
+<td>F-ALIVE</td>
+<td>P-ALIVE</td>
+</tr>
+<tr>
+<td>HTTP providers</td>
+<td>P-ALIVE</td>
+<td>F-ALIVE</td>
+<td>P-ALIVE</td>
+</tr>
+<tr>
+<td>Mixed static + HTTP providers</td>
+<td>P-ALIVE из provider</td>
+<td>F-ALIVE static</td>
+<td>P-ALIVE из provider</td>
+</tr>
+</tbody></table>
+<p>Каждая ячейка проверяется реальным запросом через mixed-port и effective <code>GLOBAL.all/now</code>.
+Пока трафик идёт по fallback, тест наблюдает дополнительные попытки к мёртвому
+primary, затем восстанавливает его. Переключение выполняет Mihomo без записей
+выбора и без вызовов forced health-check в положительных сценариях.</p>
+<p>Переменные: <code>MIHOMO_BIN</code> — абсолютный путь к официальному Mihomo;
+<code>JS_YAML_PATH</code> — абсолютный путь к js-yaml 4.1.0;
+<code>TEST_OUTPUT_DIR</code> — отдельная scratch-директория для config/log/evidence.json.</p>
+<pre><code class="language-bash">node tests/mihomo-failover.cjs
+node tests/mihomo-failover.cjs --nested-repro
+</code></pre>
+<p>Для команд использовать разные TEST_OUTPUT_DIR. Последняя реконструирует старую
+архитектуру и ожидает воспроизведение бага, а не исправляет ядро. Тест охватывает
+HTTP/TCP routing semantics; не обещает handshake всех протоколов, UDP или SLA 300s.</p>
+<p>UI, внутренние guards Per-Proxy/VPS и <code>fallbackInput</code> не изменены. Выключенный
+режим повторно проверен 256 byte-for-byte browser baseline cases и runtime suite.
+Commit/push не выполнялись.</p>
+
+</div>
+</body>
+</html>

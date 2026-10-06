@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DEVELOPMENT — как разрабатывать и проверять — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/DEVELOPMENT.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="development-как-разрабатывать-и-проверять">DEVELOPMENT — как разрабатывать и проверять</h1>
+<h2 id="primaryfallback">Primary/fallback</h2>
+<p>Дополнительно к командам ниже запускать</p>
+<pre><code class="language-bash">node --test tools/tests/mihomo-priority.test.mjs # в fork
+node tests/mihomo-failover.cjs # MIHOMO_BIN + JS_YAML_PATH + TEST_OUTPUT_DIR
+node tests/whitelist.cjs # в consumer, окружение Playwright как для browser.cjs
+</code></pre>
+<p>Контракт — <a href="AUTO-WHITELIST">AUTO-WHITELIST.md</a>. Сначала публикуется source fork
+с новым тестом/API, затем consumer; до этого commit/push требует решения владельца.</p>
+<p>Практическая инструкция для разработчика/агента. Полный контракт — <a href="../AGENTS.md">AGENTS.md</a>;
+здесь — рабочий процесс. Команды ниже используют Node.js для проверок и Python через
+<code>py</code> для необязательного static server; само приложение не требует npm или сборки.</p>
+<h2 id="локальный-запуск">Локальный запуск</h2>
+<p>Сборки нет — репо открывается как статика:</p>
+<pre><code class="language-bash">cd link-generators
+py -m http.server 8017 --bind 127.0.0.1     # или любой static server
+# открыть http://127.0.0.1:8017/index.html
+</code></pre>
+<p>Работает и <code>file://</code>-открытие <code>index.html</code> напрямую (скрипты классические, не модули);
+нужен интернет только для <code>js-yaml</code> с jsdelivr CDN. Если <code>globalThis.web4core</code> не
+загрузился, Builder покажет «web4core.runtime не загружен» — это диагностика, а не баг.</p>
+<h2 id="как-менять-код">Как менять код</h2>
+<ul>
+<li><p>Основной файл приложения — <code>index.html</code> (handwritten, inline JS/CSS, секции
+<code>// === … ===</code>); документация и regression tests обновляются по затронутому контракту.</p>
+</li>
+<li><p><code>web4core.runtime.js</code> — generated/vendor из <code>saymer-alt/web4core@link-generators</code>.
+Ручные правки запрещены. Изменения парсинга/эмиссии вносятся в исходники fork;
+wrapper в <code>index.html</code> остаётся для адаптаций входа/выхода. См. <a href="UPDATES">UPDATES.md</a>.</p>
+</li>
+<li><p>DOM-id (<code>mihomoInput</code>, <code>cfgLan</code>, <code>wgFile</code>, <code>copyYamlBtn</code>, …) — стабильный контракт
+между HTML и JS; не переименовывать в одной половине.</p>
+</li>
+<li><p>Стиль: минимальные диффы, не реформатировать чужие участки, русские тексты UI,
+никаких npm/ES-модулей/фреймворков.</p>
+</li>
+</ul>
+<h2 id="проверки-перед-commit">Проверки перед commit</h2>
+<pre><code class="language-bash">git status --short                 # только задуманные файлы
+git diff --check                   # whitespace чисто
+node --check web4core.runtime.js
+node tests/runtime.cjs
+</code></pre>
+<p>Если runtime изменён, он должен точно воспроизводиться штатной сборкой fork:</p>
+<pre><code class="language-bash"># в соседнем checkout web4core, ветка link-generators
+npm ci
+node --test tools/tests/mihomo-exclude-filter.test.mjs tools/tests/mihomo-tun-stack.test.mjs
+npm run build:web:runtime
+# обратно в link-generators
+node tests/runtime.cjs ../web4core/src/web4core.runtime.js
+cmp ../web4core/src/web4core.runtime.js web4core.runtime.js
+# ближайший функциональный baseline перед кандидатом v1.4.0
+BASELINE_REF=927c446 node tests/runtime.cjs
+</code></pre>
+<p>На Windows checkout может иметь CRLF: сравнивать Git blob (LF) с output сборки,
+отдельно подтверждая, что отличие рабочей копии только в переводах строк.
+Baseline проверяет 16 API-сценариев, а не механизм удалённого bundle patch.
+Основные якоря: <code>21c3010</code> — исторический переход consumer на source-level fork;
+<code>927c446</code> — ближайший функциональный production baseline перед selective
+REALITY/static-health кандидатом. В PowerShell, например:
+<code>$env:BASELINE_REF=&#39;927c446&#39;</code>. Полное назначение якорей — в
+<a href="TESTING">TESTING.md</a>.
+Source SHA и SHA-256 бандла фиксировать в review; любые различия объяснить до копирования.</p>
+<p>Inline JS извлечь из последнего <code>&lt;script&gt;</code> и проверить <code>node --check</code>.</p>
+<p>Браузерный regression test — <code>node tests/browser.cjs</code> с <strong>внешней</strong> установкой Playwright
+и браузера; переменные окружения и baseline описаны в <a href="TESTING">TESTING.md</a>.
+Приложение не получает npm-зависимостей или build step. Доступен и ручной прогон: обе вкладки,
+полный сценарий «YAML → Распарсить → Сгенерировать → В Mihomo Builder → Build Config →
+валидация → Copy», состояние валидатора при изменении входа.</p>
+<h2 id="deployment">Deployment</h2>
+<p>Постоянные ветки разделены по назначению:</p>
+<ul>
+<li><code>main</code> — integration/development. Все обычные feature/fix/docs PR сначала попадают сюда.</li>
+<li><code>stable</code> — production channel для GitHub Pages. На <code>stable</code> не разрабатывают напрямую.</li>
+<li>release tag (<code>vX.Y.Z</code>) — неизменяемый снимок проверенного production commit.</li>
+</ul>
+<p>Workflow <code>update-web4core-runtime.yml</code> запускает read-only build/test для <code>main</code> и <code>stable</code>,
+но автоматический write-back <code>web4core.runtime.js</code> разрешён только в <code>main</code>. Это специально:
+новый runtime сначала должен пройти integration и необходимые ручные/полевые проверки, а уже
+затем попасть в production через promotion.</p>
+<p>Promotion выполняется только после зелёного CI и нужных функциональных проверок:</p>
+<ol>
+<li>закончить изменения в <code>main</code> и убедиться, что CI зелёный;</li>
+<li>при изменении поведения пройти релевантный browser/real-Mihomo/field check;</li>
+<li>открыть promotion PR <code>main → stable</code> без дополнительных функциональных правок;</li>
+<li>после зелёного CI merge в <code>stable</code>;</li>
+<li>проверить <a href="https://saymer-alt.github.io/link-generators/">https://saymer-alt.github.io/link-generators/</a>;</li>
+<li>для релиза поставить тег на тот же production commit и опубликовать GitHub Release.</li>
+</ol>
+<p>До первого переключения GitHub Pages source в настройках репозитория необходимо вручную выбрать
+<code>stable</code> / root вместо <code>main</code> / root. После этого обычные commits в <code>main</code> больше не являются
+production deployment.</p>
+<h2 id="safe-change-rules-кратко-полная-версия-agentsmd">Safe change rules (кратко; полная версия — AGENTS.md)</h2>
+<ul>
+<li>Не редактировать <code>web4core.runtime.js</code> вручную; воспроизводить его из исходников fork.</li>
+<li>Не добавлять backend, npm/билд-систему, ES-модули, телеметрию/аналитику — это
+архитектурные границы проекта.</li>
+<li>Не отправлять proxy-ссылки, конфиги, ключи наружу; не вводить сетевые вызовы с
+пользовательскими данными (текущее исключение — подписки, которые скачивает Mihomo, не
+браузер; <code>fetchSubscription</code> не используется).</li>
+<li><code>mihomo.html</code> удалён из репо (2026-09-08) как неиспользуемый артефакт — не
+восстанавливать; исторические ссылки на <code>/mihomo.html</code> отдают 404, это ожидаемо.</li>
+<li>Не ослаблять privacy/security-свойства: страница ничего не хранит и не отправляет.</li>
+<li>Не «улучшать» DPI-стратегию генерации ссылок и формат <code>masque://</code> без задачи владельца —
+это внешние контракты (см. <a href="../AGENTS.md">AGENTS.md</a>).</li>
+<li>Не «восстанавливать» warpscout-парсер — сознательно удалён владельцем 19.08.2026
+и до сих пор отсутствует. WARP-in-WARP / <code>dialer-proxy</code> — наоборот, полноценная
+поддерживаемая функция с 2026-10-01 (static members / provider-backed dialer-группы /
+WG-over-WG с cycle detection): её нельзя «удалить» по старой исторической записи.</li>
+<li>Известные несостыковки (hint про TUN-дефолт vs <code>checked</code>) — не исправлять мимоходом,
+только явным решением владельца.</li>
+<li>Расхождение документации с кодом: источник истины — код; документацию править, код —
+только по задаче.</li>
+</ul>
+<h2 id="связанные-документы-1">Связанные документы</h2>
+<p><a href="ARCHITECTURE">ARCHITECTURE.md</a> — общая карта; <a href="TESTING">TESTING.md</a> — как проверять;
+<a href="UPDATES">UPDATES.md</a> — рантайм и deployment-нюансы; <a href="VALIDATION">VALIDATION.md</a> —
+валидатор.</p>
+
+</div>
+</body>
+</html>

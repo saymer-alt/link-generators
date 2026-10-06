@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deployment profiles: обязательный regression/test contract — WARP & Mihomo Unified</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif; color: #1a1a1a; background: #f4f4f0; margin: 0; }
+.wrap { max-width: 60rem; margin: 0 auto; padding: 16px 20px 48px; background: #fdfdfa; min-height: 100vh; }
+nav.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid #d8d4c8; margin-bottom: 20px; }
+nav.top a { color: #1450a3; text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; border-bottom: 1px solid #e0dccf; padding-bottom: 4px; }
+pre { background: #f0efe8; border: 1px solid #ddd9cb; padding: 10px 12px; overflow-x: auto; font-size: .88rem; }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .92em; background: #f0efe8; padding: 1px 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 12px 0; max-width: 100%; }
+th, td { border: 1px solid #c8c4b8; padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: #efeadb; }
+img { max-width: 100%; }
+a { color: #1450a3; }
+blockquote { border-left: 4px solid #d8d4c8; margin-left: 0; padding-left: 12px; color: #555; }
+@media (max-width: 640px) { .wrap { padding: 10px 12px 32px; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="top">
+<a href="../index.html">⚡ Генератор</a>
+<a href="../quick-start.html">❓ Быстрый старт</a>
+<a href="../docs/index.html">📚 Документация</a>
+<a class="gh" href="https://github.com/saymer-alt/link-generators/blob/stable/docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md" title="Исходник на GitHub (ветка stable)">GitHub source</a>
+</nav>
+<h1 id="deployment-profiles-обязательный-regressiontest-contract">Deployment profiles: обязательный regression/test contract</h1>
+<p>Этот документ фиксирует <strong>минимальный проверочный контракт</strong> для UX-профилей Mihomo Builder и их взаимодействия с Auto-Whitelist, Per-Proxy, DPR, WireGuard/dialer и остальными независимыми настройками.</p>
+<p>Цель — не просто «чтобы тесты были зелёными», а чтобы каждый важный эксплуатационный инвариант имел конкретную regression-проверку и было понятно, <strong>какую поломку она предотвращает</strong>.</p>
+<p>Документ относится к профилям:</p>
+<ul>
+<li><code>router</code> — «Роутер / обычный TUN (Keenetic)»;</li>
+<li><code>vps-local</code> — «VPS — локальный Mihomo / SOCKS для Xray / 3X-UI»;</li>
+<li><code>vps-gateway</code> — «VPS Transparent Gateway (amnezia-mihomo-gateway)».</li>
+</ul>
+<p>Если код/названия профилей ещё находятся в candidate PR, тесты должны выполняться на candidate-ветке. После merge источник истины — актуальный <code>main</code>.</p>
+<hr>
+<h2 id="1-правило-интеграции-параллельных-веток">1. Правило интеграции параллельных веток</h2>
+<p><code>main</code> — единственная интеграционная ветка. <code>stable</code> — только production promotion.</p>
+<p>Параллельные candidate-ветки <strong>не следует сливать друг в друга как постоянную схему интеграции</strong>. Безопасный порядок:</p>
+<ol>
+<li>каждая задача работает в своей ветке/PR;</li>
+<li>перед финальной проверкой агент делает <code>git fetch --all --prune</code> и сравнивает свою базу с актуальным <code>origin/main</code>;</li>
+<li>если <code>main</code> продвинулся, candidate обязан сначала интегрировать свежий <code>main</code> и вручную сохранить семантику обеих сторон;</li>
+<li>после зелёных тестов первый готовый PR merge&#39;ится в <code>main</code>;</li>
+<li>следующий параллельный PR <strong>снова</strong> обновляется от уже нового <code>main</code>, особенно если затронуты те же файлы (<code>index.html</code>, browser-тесты, docs, runtime-related paths);</li>
+<li>после каждого такого обновления полный relevant regression battery запускается заново;</li>
+<li>только когда все нужные задачи объединены и проверены в <code>main</code>, создаётся отдельный promotion PR <code>main → stable</code> без новых функциональных изменений;</li>
+<li>после зелёного <code>stable</code> и Pages acceptance — tag/release.</li>
+</ol>
+<p>Запрещено использовать <code>ours/theirs</code>, force-push, reset чужой ветки или копирование старого <code>index.html</code> поверх нового <code>main</code> как замену semantic merge.</p>
+<p>Если две параллельные ветки меняют одни и те же участки, <strong>правильный путь — последовательная интеграция через <code>main</code></strong>, а не попытка заранее собрать «супер-ветку» из нескольких незавершённых кандидатов.</p>
+<hr>
+<h2 id="2-профильный-контракт-ui-и-yaml">2. Профильный контракт UI и YAML</h2>
+<h3 id="router"><code>router</code></h3>
+<p>Дефолт при чистой загрузке:</p>
+<ul>
+<li>TUN: ON;</li>
+<li>MIPS: ON;</li>
+<li>Mixed Port 7890: ON;</li>
+<li>Allow LAN: ON — router-only опция, доступна пользователю только здесь;</li>
+<li>пользователь может менять router-owned параметры вручную.</li>
+</ul>
+<p>Ключевой инвариант: уход из <code>router</code> и последующий возврат обязан восстановить пользовательский router-owned state.</p>
+<h3 id="vps-local"><code>vps-local</code></h3>
+<p>UI должен механически обеспечивать:</p>
+<ul>
+<li>TUN: OFF + disabled;</li>
+<li>MIPS: OFF + disabled;</li>
+<li>Advanced TUN stack: OFF/недоступен;</li>
+<li>Mixed Port 7890: ON + disabled;</li>
+<li>Allow LAN: OFF + disabled;</li>
+<li>Per-Proxy TUN: OFF.</li>
+</ul>
+<p>Сгенерированный YAML обязан иметь:</p>
+<ul>
+<li><strong>без</strong> top-level <code>tun:</code>;</li>
+<li><code>mixed-port: 7890</code>;</li>
+<li><code>allow-lan: false</code>;</li>
+<li><strong>без</strong> <code>bind-address: &quot;*&quot;</code>.</li>
+</ul>
+<p>Это fail-safe контракт: прямое изменение DOM не должно его обходить.</p>
+<h3 id="vps-gateway"><code>vps-gateway</code></h3>
+<p>UI должен механически обеспечивать:</p>
+<ul>
+<li>TUN: ON + locked;</li>
+<li>gateway panel: visible;</li>
+<li><code>device: tun-mihomo</code> по текущему deployment contract;</li>
+<li>MIPS / Advanced TUN stack / Mixed получают корректный gateway-owned enabled-state независимо от предыдущего профиля;</li>
+<li>Allow LAN: OFF + disabled (router-only контракт, v1.7.x: чекбокс не протекает из router и не влияет на YAML даже при DOM-tamper).</li>
+</ul>
+<p>Сгенерированный YAML обязан иметь:</p>
+<ul>
+<li><code>tun:</code>;</li>
+<li><code>device: tun-mihomo</code>;</li>
+<li><code>auto-route: false</code>;</li>
+<li><code>allow-lan: false</code>;</li>
+<li><strong>без</strong> <code>bind-address: &quot;*&quot;</code>;</li>
+<li><strong>никогда</strong> <code>auto-route: true</code>.</li>
+</ul>
+<p><code>auto-route: false</code> — hard invariant, а не UI default.</p>
+<hr>
+<h2 id="3-все-шесть-прямых-переходов-профилей">3. Все шесть прямых переходов профилей</h2>
+<p>Browser regression обязан проверять <strong>каждый</strong> переход:</p>
+<ol>
+<li><code>router → vps-local</code>;</li>
+<li><code>router → vps-gateway</code>;</li>
+<li><code>vps-local → router</code>;</li>
+<li><code>vps-local → vps-gateway</code>;</li>
+<li><code>vps-gateway → router</code>;</li>
+<li><code>vps-gateway → vps-local</code>.</li>
+</ol>
+<p>Для каждого конечного состояния проверяются минимум:</p>
+<ul>
+<li><code>checked</code>;</li>
+<li><code>disabled</code>;</li>
+<li>visibility gateway panel;</li>
+<li>фактический YAML-контракт.</li>
+</ul>
+<h3 id="зачем">Зачем</h3>
+<p>Проверка только «чистой загрузки» не ловит path-dependent bugs. Пример уже найденной регрессии: <code>vps-local</code> мог оставить <code>Mixed</code>/<code>Allow LAN</code> disabled при переходе в <code>vps-gateway</code>, хотя прямой <code>router → vps-gateway</code> выглядел нормально.</p>
+<p>Конечный UI-state должен зависеть от <strong>целевого профиля</strong>, а не от маршрута, по которому пользователь туда пришёл.</p>
+<hr>
+<h2 id="4-обязательный-router-snapshot-regression">4. Обязательный router snapshot regression</h2>
+<p>Это отдельный тест, его нельзя заменять простой проверкой значения select.</p>
+<p>Минимальная последовательность:</p>
+<pre><code class="language-text">router
+→ вручную изменить router-owned state
+→ vps-local
+→ Auto-Whitelist ON
+→ Auto-Whitelist OFF
+→ router
+</code></pre>
+<p>Перед уходом из <code>router</code> задать минимум одно нестандартное значение, например:</p>
+<pre><code class="language-text">TUN = ON
+MIPS = OFF
+LAN = OFF
+</code></pre>
+<p>После финального возврата в <code>router</code> эти значения должны восстановиться.</p>
+<p>Повторить эквивалентный сценарий через <code>vps-gateway</code>:</p>
+<pre><code class="language-text">router(custom state)
+→ vps-gateway
+→ Auto-Whitelist ON
+→ OFF
+→ router
+</code></pre>
+<h3 id="зачем-1">Зачем</h3>
+<p>Auto-Whitelist временно применяет router/effective contract, но не должен считаться реальным пользовательским переходом профиля и не должен потреблять/очищать сохранённый <code>routerOwnedSnapshot</code>.</p>
+<p>Проверка вида «после БС select снова показывает vps-local/vps-gateway» <strong>недостаточна</strong>: она не доказывает сохранность router snapshot.</p>
+<hr>
+<h2 id="5-auto-whitelist-round-trips">5. Auto-Whitelist round trips</h2>
+<p>Минимум проверить:</p>
+<pre><code class="language-text">router → БС ON → OFF → router
+vps-local → БС ON → OFF → vps-local
+vps-gateway → БС ON → OFF → vps-gateway
+</code></pre>
+<p>Во время БС:</p>
+<ul>
+<li>user-selected profile сохраняется логически;</li>
+<li>effective profile соответствует безопасному БС-контракту;</li>
+<li>выбор профиля заблокирован/скрыт согласно текущему UX;</li>
+<li>gateway panel не должен ошибочно оставаться активным;</li>
+<li>Per-Proxy несовместимые опции выключены;</li>
+<li>после OFF профиль и его собственный UI-state восстанавливаются.</li>
+</ul>
+<p>Отдельно выполнить snapshot-сценарии из предыдущего раздела.</p>
+<h3 id="зачем-2">Зачем</h3>
+<p>Нужно различать:</p>
+<ul>
+<li><strong>selected profile</strong> — что выбрал пользователь;</li>
+<li><strong>effective profile</strong> — что временно применено Auto-Whitelist;</li>
+<li><strong>saved router-owned state</strong> — ручные настройки router.</li>
+</ul>
+<p>Смешение этих трёх состояний уже приводило к потере snapshot.</p>
+<hr>
+<h2 id="6-advanced-контейнер-расширенные-настройки">6. ADVANCED контейнер («Расширенные настройки»)</h2>
+<p>Контейнер с 2026-10-01 содержит две подсекции: «⚙ Расширенный TUN stack»
+(system/mixed) и «🔀 Отдельный вход на каждый прокси». Заголовок summary —
+«Расширенные настройки»; бейдж <code>ADVANCED</code> и маркер <code>▶/▼</code> сохранены. Контракты
+спойлера прежние:</p>
+<p>Regression должен проверять:</p>
+<ol>
+<li><code>&lt;details&gt;</code> закрыт по умолчанию;</li>
+<li>раскрытие <strong>не включает</strong> master switch;</li>
+<li>закрытие <strong>не сбрасывает</strong> master/children;</li>
+<li>после нескольких open/close циклов остаётся DOM-элемент <code>.advanced-badge</code> с текстом <code>ADVANCED</code>;</li>
+<li>отдельный disclosure marker меняется <code>▶ ↔ ▼</code>;</li>
+<li>marker не накапливает пробелы/текст;</li>
+<li><code>summary</code> не переписывается через <code>textContent</code>, уничтожая дочернюю разметку.</li>
+</ol>
+<h3 id="зачем-3">Зачем</h3>
+<p>Тест только свойства <code>details.open</code> пропускает визуальную/DOM-регрессию. Уже был найден вариант, где спойлер открывался, но <code>summary.textContent = ...</code> уничтожало <code>&lt;span class=&quot;advanced-badge&quot;&gt;</code>.</p>
+<hr>
+<h2 id="7-dom-tamper-fail-safe-build">7. DOM tamper / fail-safe build</h2>
+<p>UI <code>disabled</code> — это только UX, не защита контракта.</p>
+<h3 id="vps-local-1"><code>vps-local</code></h3>
+<p>Перед Build программно подменить DOM, например:</p>
+<pre><code class="language-javascript">cfgTun.checked = true;
+cfgTun.disabled = false;
+cfgLan.checked = true;
+</code></pre>
+<p>И всё равно получить:</p>
+<ul>
+<li>no <code>tun:</code>;</li>
+<li><code>mixed-port: 7890</code>;</li>
+<li><code>allow-lan: false</code>;</li>
+<li>no wildcard bind.</li>
+</ul>
+<h3 id="vps-gateway-1"><code>vps-gateway</code></h3>
+<p>Аналогично попытаться выключить/испортить обязательные deployment значения через DOM и проверить, что итог сохраняет:</p>
+<ul>
+<li>TUN;</li>
+<li><code>device: tun-mihomo</code>;</li>
+<li><code>auto-route: false</code>;</li>
+<li><code>allow-lan: false</code> (в т.ч. при <code>cfgLan.disabled = false; cfgLan.checked = true</code> через консоль);</li>
+<li>отсутствие <code>auto-route: true</code> и <code>bind-address: &quot;*&quot;</code>.</li>
+</ul>
+<h3 id="зачем-4">Зачем</h3>
+<p><code>buildMihomo()</code> обязан повторно применять profile clamps и не доверять browser DOM как источнику безопасности/валидности.</p>
+<hr>
+<h2 id="8-независимые-поля-обязаны-переживать-profile-round-trip">8. Независимые поля обязаны переживать profile round trip</h2>
+<p>Перед серией переходов заполнить synthetic значениями все независимые поля, существующие в <strong>актуальном main</strong>, затем проверить побайтное/семантическое сохранение.</p>
+<p>Минимум на текущей архитектуре:</p>
+<ul>
+<li><code>mihomoInput</code> / proxy links;</li>
+<li>URL subscriptions;</li>
+<li>Exclude Filter;</li>
+<li>Device Model;</li>
+<li>Modern REALITY hosts;</li>
+<li>WG/AWG profiles и WireGuard DNS;</li>
+<li><code>wgDialerInput</code>;</li>
+<li>dialer group members;</li>
+<li>dialer provider URLs;</li>
+<li>Web UI/dashboard settings;</li>
+<li>Ping/health-check;</li>
+<li>DPR / Domain Policy Routing fields and policies;</li>
+<li>другие новые поля, добавленные в <code>main</code> после написания этого документа.</li>
+</ul>
+<p>Проверочный цикл:</p>
+<pre><code class="language-text">router
+→ vps-local
+→ vps-gateway
+→ router
+</code></pre>
+<p>и отдельный цикл через Auto-Whitelist.</p>
+<h3 id="зачем-5">Зачем</h3>
+<p>Deployment profile владеет только deployment/inbound state. Он не имеет права очищать transport, provider, routing-policy или пользовательские данные.</p>
+<p>Перед каждым новым profile-related PR список survival fields нужно сверять с актуальным UI: фиксированный старый список быстро устаревает.</p>
+<hr>
+<h2 id="9-mandatory-test-battery">9. Mandatory test battery</h2>
+<p>Точный набор всегда сверять с актуальным <code>AGENTS.md</code>, <code>docs/TESTING.md</code> и фактическим содержимым <code>tests/</code>. Если появились новые обязательные проверки, они имеют приоритет.</p>
+<h3 id="91-базовый-uiruntime-battery-для-profileux-change">9.1. Базовый UI/runtime battery для profile/UX change</h3>
+<pre><code class="language-bash">node tests/browser.cjs
+node tests/whitelist.cjs
+node tests/runtime.cjs web4core.runtime.js
+node tests/masque-dpi-regression.cjs
+node tests/policy-routing.cjs
+node tests/policy-routing-browser.cjs
+</code></pre>
+<h3 id="92-реальный-mihomo-для-бсfailover">9.2. Реальный Mihomo для БС/failover</h3>
+<p>С обязательными env (<code>MIHOMO_BIN</code>, <code>JS_YAML_PATH</code>, <code>TEST_OUTPUT_DIR</code>) согласно <code>docs/TESTING.md</code>:</p>
+<pre><code class="language-text">tests/mihomo-failover.cjs
+tests/mihomo-awl-priority.cjs
+</code></pre>
+<p><code>mihomo-awl-priority.cjs</code> особенно важен для изменений, затрагивающих Auto-Whitelist или profile/БС state machine: browser UI может быть правильным, а фактический priority/failback contract — сломан.</p>
+<h3 id="93-manual-suites-только-когда-затронута-их-семантика">9.3. Manual suites — только когда затронута их семантика</h3>
+<p>Не запускать тяжёлые лаборатории «для галочки», но запускать, если задача меняет соответствующий механизм:</p>
+<ul>
+<li><code>tests/mihomo-awl-soak.manual.cjs</code> — если менялись production intervals, health-check/failback timing, keep-warm или поведение AWL на длительном интервале;</li>
+<li><code>tests/mihomo-reality-handshake.manual.cjs</code> — если менялась selective Modern REALITY/ML-KEM генерация или совместимость;</li>
+<li><code>tools/warp-dialer-fieldtest/</code> — если менялись dialer-proxy, WG/WARP transport switching, fresh-handshake, MTU/endpoint semantics.</li>
+</ul>
+<h3 id="почему-эти-уровни-разные">Почему эти уровни разные</h3>
+<ul>
+<li><code>browser.cjs</code> — доказывает реальный DOM/state-machine/Build UX, а не только helper-функции;</li>
+<li><code>whitelist.cjs</code> — закрывает БС, dependency matrix и её взаимодействие с профилями;</li>
+<li><code>runtime.cjs</code> — ловит несовпадение UI assumptions с vendored web4core runtime;</li>
+<li><code>masque-dpi-regression.cjs</code> — защищает независимую load-bearing WARP/MASQUE стратегию от случайной побочной регрессии в большом <code>index.html</code>;</li>
+<li><code>policy-routing.cjs</code> — фиксирует DPR/domain-policy генерацию и правила;</li>
+<li><code>policy-routing-browser.cjs</code> — доказывает, что browser UI и профильные переходы не ломают DPR-поля/сборку;</li>
+<li><code>mihomo-failover.cjs</code> — проверяет живую failover-семантику реальным Mihomo, чего YAML parser/browser validator доказать не могут;</li>
+<li><code>mihomo-awl-priority.cjs</code> — проверяет priority/failback семантику Auto-Whitelist реальным Mihomo.</li>
+</ul>
+<p>Зелёный GitHub Actions runtime workflow <strong>не заменяет</strong> browser/whitelist/DPR/real-Mihomo regression battery: workflow проверяет другой слой.</p>
+<hr>
+<h2 id="10-mihomo--t-для-каждого-deployment-profile">10. <code>mihomo -t</code> для каждого deployment profile</h2>
+<p>На текущем целевом ядре проекта (на момент записи — Mihomo v1.19.31) сгенерировать synthetic YAML для:</p>
+<ol>
+<li><code>router</code>;</li>
+<li><code>vps-local</code>;</li>
+<li><code>vps-gateway</code>.</li>
+</ol>
+<p>Каждый прогнать настоящим ядром:</p>
+<pre><code class="language-bash">mihomo -t -f &lt;config.yaml&gt;
+</code></pre>
+<p>Проверка browser validator <code>VALID</code> не заменяет <code>mihomo -t</code>.</p>
+<p>Если target Mihomo version в проекте изменится, использовать новую зафиксированную target version и обновить доказательства совместимости.</p>
+<hr>
+<h2 id="11-dialerwireguard-regression-boundary">11. Dialer/WireGuard regression boundary</h2>
+<p>Если profile/UX change <strong>не меняет</strong> dialer transport semantics, реальные VPS field tests повторять не требуется, но нельзя сломать существующие offline/runtime/browser контракты dialer-proxy.</p>
+<p>Если изменение затрагивает:</p>
+<ul>
+<li><code>dialer-proxy</code> graph;</li>
+<li>provider-backed <code>use:</code>;</li>
+<li>WG/WARP transport switching;</li>
+<li>fresh-handshake logic;</li>
+<li>endpoint/MTU behavior;</li>
+</ul>
+<p>тогда применяются соответствующие source/runtime/browser tests и <code>tools/warp-dialer-fieldtest/</code> по его README.</p>
+<p>Полевые результаты (например FRA/AMS) — evidence конкретной сети, а не гарантируемый Cloudflare routing contract.</p>
+<hr>
+<h2 id="12-runtime-provenance-и-параллельные-изменения">12. Runtime provenance и параллельные изменения</h2>
+<p><code>web4core.runtime.js</code> нельзя править руками.</p>
+<p>Перед финалом candidate:</p>
+<ol>
+<li>проверить, не изменился ли <code>origin/main</code>;</li>
+<li>проверить, не появился ли runtime bot commit;</li>
+<li>если runtime изменился — интегрировать свежий <code>main</code> и повторить как минимум runtime/browser/whitelist/DPR и реальные проверки, зависимые от генерации;</li>
+<li>проверить provenance через CI workflow;</li>
+<li>не откатывать runtime просто потому, что candidate начинался от старого SHA.</li>
+</ol>
+<h3 id="зачем-6">Зачем</h3>
+<p>Даже без изменения <code>index.html</code> новый runtime может изменить парсинг/YAML и сделать старые browser assumptions неверными.</p>
+<hr>
+<h2 id="13-diff-discipline">13. Diff discipline</h2>
+<p>Для большого inline <code>index.html</code> перед commit/PR review обязательно:</p>
+<pre><code class="language-bash">git diff --check
+git diff --stat origin/main...
+git diff origin/main... -- index.html
+</code></pre>
+<p>Дополнительно проверить changed-file list.</p>
+<p>Если UX-fix внезапно показывает сотни несвязанных удалений/переформатирования — STOP и переделать patch минимально.</p>
+<hr>
+<h2 id="14-acceptance-evidence-в-отчёте-агента">14. Acceptance evidence в отчёте агента</h2>
+<p>Фраза «все тесты зелёные» недостаточна. Финальный отчёт profile-related задачи должен явно перечислять:</p>
+<ul>
+<li>base <code>origin/main</code> SHA на старте;</li>
+<li><code>origin/main</code> SHA перед финалом;</li>
+<li>candidate HEAD;</li>
+<li>изменённые файлы и diff-stat;</li>
+<li>результаты <code>browser</code>, <code>whitelist</code>, <code>runtime</code>, <code>masque-dpi</code>, <code>policy-routing</code>, <code>policy-routing-browser</code>;</li>
+<li>результаты real-Mihomo <code>mihomo-failover</code> и <code>mihomo-awl-priority</code>, когда задача затрагивает БС/profile interaction;</li>
+<li><code>mihomo -t</code> для <code>router</code>, <code>vps-local</code>, <code>vps-gateway</code>;</li>
+<li>PASS всех 6 прямых profile transitions;</li>
+<li>PASS router snapshot через <code>vps-local + БС ON/OFF + router</code>;</li>
+<li>PASS router snapshot через <code>vps-gateway + БС ON/OFF + router</code>;</li>
+<li>PASS Auto-Whitelist round trips для всех 3 profiles;</li>
+<li>PASS ADVANCED badge/marker multi-cycle;</li>
+<li>PASS DOM tamper обоих VPS profiles;</li>
+<li>PASS independent-field survival, включая актуальный DPR и новые поля;</li>
+<li>подтверждение, что <code>web4core.runtime.js</code> не редактировался вручную;</li>
+<li>подтверждение, что <code>stable</code>, tags и releases не тронуты;</li>
+<li>verdict о готовности candidate к merge в <strong>актуальный</strong> <code>main</code>.</li>
+</ul>
+<hr>
+<h2 id="15-promotion-gate">15. Promotion gate</h2>
+<p>После merge profile/UX PR в <code>main</code> тест считается завершённым только после проверки итогового интеграционного дерева, а не только head candidate-ветки.</p>
+<p>Если затем merge&#39;ится ещё одна параллельная задача, затрагивающая <code>index.html</code>, tests, runtime или builder behavior, relevant regression battery нужно выполнить <strong>снова на новом итоговом main</strong>.</p>
+<p>Только после объединения всех выбранных задач и зелёного acceptance итоговый <code>main</code> можно продвигать отдельным PR в <code>stable</code>.</p>
+<hr>
+<h2 id="16-контракт-v162-router-only-режимы-per-profile-snapshots-dialer-registry">16. Контракт v1.6.2: router-only режимы, per-profile snapshots, dialer registry</h2>
+<p>Действует с PR #91 (v1.6.2). Три слоя защиты контракта: UI-gating, обработчики
+состояния и build-клампы (DOM не доверяется).</p>
+<h3 id="161-router-only-режимы">16.1 Router-only режимы</h3>
+<ul>
+<li><strong>Auto-Whitelist</strong> и <strong>Per-Proxy (master + children)</strong> доступны только в профиле
+<code>router</code>. В <code>vps-local</code>/<code>vps-gateway</code>: чекбоксы <code>disabled</code> + сняты, рядом подсказка
+«Доступно только для профиля &quot;Роутер / обычный TUN&quot;».</li>
+<li><strong>Silent profile substitution запрещён.</strong> Механизм временного router-контракта БС
+(прежний <code>deploymentProfile = autoWhitelist ? &#39;router&#39; : …</code>, скрытие селектора
+профиля, <code>bsTemporaryRouter</code>) удалён. Выбранный профиль не меняется никогда.</li>
+<li><strong>Build-level fail-safe</strong> (не доверяет DOM): БС + VPS-профиль → явная ошибка сборки
+(«доступен только в профиле &quot;Роутер&quot;»), без генерации и без конверсии; Per-Proxy +
+VPS-профиль → Per-Proxy конфигурация не генерируется (кламп), профиль сохраняется.</li>
+<li>Взаимная несовместимость БС × Per-Proxy внутри router сохранена (существующий
+контракт движка).</li>
+</ul>
+<h3 id="162-per-profile-snapshots">16.2 Per-profile snapshots</h3>
+<ul>
+<li>Каждый профиль владеет своим ручным состоянием: Sub Mode, БС, Per-Proxy master
+(+ children perTun/perSocks) и сценарные переключатели router. Уход из профиля
+сохраняет snapshot; вход применяет его; профиль без snapshot получает дефолты
+(Sub Mode ON, БС/Per-Proxy off).</li>
+<li>Следствия (проверены tests/profile-matrix.cjs): ручной Sub Mode OFF в router
+восстанавливается после визита в VPS; первый вход в VPS = Sub Mode ON независимо
+от router-ручного OFF; Per-Proxy ON в router переживает визит в VPS (в VPS
+эффективно OFF/disabled); БС ON в router восстанавливается при возврате.</li>
+</ul>
+<h3 id="163-dialer-target-registry-wgawg-промежуточный-выход">16.3 Dialer target registry (WG/AWG «Промежуточный выход»)</h3>
+<ul>
+<li>Список целей НЕ ведётся вручную: строится префлайт-сборкой текущего состояния
+движком web4core (computeDialerTargetsSync) ⇒ значения опций = точные итоговые
+имена YAML (дедупликация, AW-переименования). Алгоритм именования в UI не
+дублируется.</li>
+<li>Исключения из списка: собственный outbound профиля (по итоговому имени, включая
+коллизии), <code>GLOBAL</code>/<code>⚡ Fastest</code>, группы со статическими ссылками на них (гарантированный
+цикл). Подписочные узлы не разворачиваются — для подписок предлагается
+provider-backed dialer-группа.</li>
+<li>Ручной ввод = «Другое / вручную… (ADVANCED)»; при сборке цель проверяется против
+свежего реестра; неизвестная — ошибка «цель «…» не существует в генерируемом
+конфиге» (никаких dangling dialer-proxy). Циклы ловит централизованный детектор
+web4core (движок + валидатор).</li>
+<li>Dynamic refresh: ввод прокси/подписок, WG upload/remove/clear, поля dialer-группы,
+Sub Mode, БС, DPR-политики, переключение профиля. Исчезнувшая цель сбрасывается с
+видимой пометкой «недоступна для этого профиля»; выбор, ставший именем самого
+профиля (схлопывание коллизии), сбрасывается так же.</li>
+</ul>
+<h3 id="164-матрица-проверки-owner-acceptance">16.4 Матрица проверки (owner acceptance)</h3>
+<p>См. tests/profile-matrix.cjs (11), tests/wg-dialer-selector.cjs (12),
+tests/browser.cjs (profiles/БС/snapshot/tamper блоки), tests/whitelist.cjs
+(router-only открытие + tamper), tests/help-ux-browser.cjs (16, hover-контракт).</p>
+
+</div>
+</body>
+</html>
