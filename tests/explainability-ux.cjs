@@ -68,6 +68,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
 
   // 4B: смена таргета AI → GLOBAL без Build → STALE, снапшот не перезаписан
   await card.locator('.policy-target').selectOption('GLOBAL');
+  await page.waitForTimeout(30);
   assert.equal(await staleVisible(), true, '1: изменение таргета без Build → STALE');
   const previewAfterChange = await page.locator('#rdPreview').textContent();
   assert.match(previewAfterChange, /SELECT-группа «AI»/, 'старый diagnostic output сохранён как previous Build');

@@ -1333,6 +1333,9 @@ let wgUploadPending = false;
 function syncWgCollections() {
   wgBeans = wgProfiles.map(p => p.bean);
   wgFiles = wgProfiles.map(p => p.filename);
+  // WG-профили меняются и вне DOM-событий (async upload/delete) — stale-контракт
+  // должен увидеть это сразу (4B).
+  if (typeof refreshBuildStaleness === 'function') refreshBuildStaleness();
 }
 
 // Клон профиля для Build: dialer-proxy подставляется только в клон
@@ -4387,7 +4390,9 @@ function markBuildFresh() {
   if (!tab) return;
   // input/change покрывают текстовые поля, селекты и чекбоксы; click нужен для
   // кнопок, мутирующих состояние (добавить/удалить политику, WG-профили, очистить).
-  ['input', 'change', 'click'].forEach(ev => tab.addEventListener(ev, () => setTimeout(refreshBuildStaleness, 0)));
+  // Синхронно: bubbling-слушатель на вкладке выполняется ПОСЛЕ элементарных
+  // обработчиков, т.е. после мутации DOM — гонок с ассертами тестов нет.
+  ['input', 'change', 'click'].forEach(ev => tab.addEventListener(ev, refreshBuildStaleness));
 })();
 
 // === ROUTING DIAGNOSTICS UI (read-only; только отображает результаты ядра) ===
