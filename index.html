@@ -509,6 +509,15 @@
             <div id="rpeMissing" class="hint" style="margin-top:6px;white-space:pre-line;display:none;border:1px solid var(--border);padding:6px;background:rgba(255,170,0,.08)"></div>
             <div id="rpeProviders" style="margin-top:8px"></div>
           </details>
+          <details id="domainCoveragePanel" style="margin-top:8px">
+            <summary style="cursor:pointer"><span>▶</span> <span>Domain Coverage Checker</span></summary>
+            <div class="hint">Покрытие доменов итоговым конфигом (результат последнего Build): какое правило выигрывает первым, через inline-правило или провайдера, и статический путь до цели насколько это доказуемо. «Совпадает с правилом» ≠ «гарантированно идёт через конкретный прокси»: для <code>select</code>/<code>url-test</code>/<code>fallback</code> участник определяется Mihomo во время работы (помечается <code>runtime-selected</code>). GEOSITE/GEOIP/внешние провайдеры/DNS-зависимые правила честно возвращают UNKNOWN. По одному домену в строке; только чтение — конфиг не меняется.</div>
+            <textarea id="dcInput" rows="4" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="gemini.google.com&#10;youtube.com&#10;unknown-service.example"></textarea>
+            <div class="btn-group" style="margin-top:6px">
+              <button type="button" class="btn btn-gray" id="dcRunBtn">Проверить покрытие</button>
+            </div>
+            <div id="dcResults" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+          </details>
         </details>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -4199,24 +4208,6 @@ function routingPreview(doc, humanNames) {
   });
   return out;
 }
-// Explainability (v1.9 4A): если таргет — proxy-group из generated config,
-// показываем семантический путь с типом группы и ФАКТИЧЕСКИМИ участниками из
-// конфига (никакого двусмысленного «AI → AI»); состав не хардкодится.
-// Runtime-selected участник честно помечен общей припиской под списком.
-const RD_BUILTIN_TARGETS = new Set(['GLOBAL', 'DIRECT', 'REJECT', 'PASS']);
-const RD_GROUP_TYPE_LABELS = { select: 'SELECT-группа', 'url-test': 'url-test-группа', fallback: 'fallback-группа', 'load-balance': 'load-balance-группа', relay: 'relay-группа' };
-function rdSemanticTargetText(doc, target) {
-  if (!target) return '—';
-  if (RD_BUILTIN_TARGETS.has(target)) return target;
-  const groups = (doc && Array.isArray(doc['proxy-groups'])) ? doc['proxy-groups'] : [];
-  const g = groups.find(x => x && x.name === target);
-  if (!g) return target; // leaf-прокси: дальше статики не видно
-  const typeLabel = RD_GROUP_TYPE_LABELS[String(g.type || '').toLowerCase()] || ('группа ' + String(g.type || '?'));
-  const members = [];
-  (Array.isArray(g.proxies) ? g.proxies : []).slice(0, 8).forEach(m => members.push(String(m)));
-  (Array.isArray(g.use) ? g.use : []).slice(0, 4).forEach(u => members.push('provider:' + String(u)));
-  return typeLabel + ' «' + target + '» → [' + members.join(' / ') + (members.length ? '' : 'пусто') + ']';
-}
 function routingDprHumanNames(policies) {
   const used = new Set();
   const map = {};
@@ -4342,6 +4333,225 @@ function routingProviderInventory(doc) {
   };
   return { items, missing, summary };
 }
+
+// === CONFIG DEPENDENCY GRAPH CORE (pure, v1.9 #125 PHASE 5) — CDG-CORE-START ===
+// Каноническая модель зависимостей, строится ТОЛЬКО из generated config
+// (Build snapshot), без повторной интерпретации live-формы. Без спекуляций:
+// узел/ребро создаётся, только когда связь доказуема из конфига; GEOSITE/GEOIP/
+// внешние провайдеры/DNS-зависимые правила остаются UNKNOWN на уровне verdict'ов.
+// Explainability (4A): если таргет — proxy-group из generated config, показываем
+// семантический путь с типом группы и ФАКТИЧЕСКИМИ участниками из конфига
+// (никакого двусмысленного «AI → AI»); состав не хардкодится. WG/AWG-участники
+// с dialer-proxy помечаются «(через …)» — один уровень, без рекурсии.
+const RD_BUILTIN_TARGETS = new Set(['GLOBAL', 'DIRECT', 'REJECT', 'PASS', 'REJECT-DROP', 'COMPATIBLE']);
+const RD_GROUP_TYPE_LABELS = { select: 'SELECT-группа', 'url-test': 'url-test-группа', fallback: 'fallback-группа', 'load-balance': 'load-balance-группа', relay: 'relay-группа' };
+function rdDialerSuffix(doc, memberName) {
+  const proxies = (doc && Array.isArray(doc.proxies)) ? doc.proxies : [];
+  const p = proxies.find(x => x && x.name === memberName);
+  if (!p) return '';
+  const dp = p['dialer-proxy'] || (p.wireguard && p.wireguard.dialerProxy);
+  return dp ? ' (через ' + String(dp) + ')' : '';
+}
+function rdSemanticTargetText(doc, target, opts) {
+  if (!target) return '—';
+  if (RD_BUILTIN_TARGETS.has(target)) {
+    // GLOBAL в Routing order остаётся компактным (well-known, ноль двусмысленности),
+    // но Domain Coverage с opts.expandGlobal раскрывает фактический состав группы
+    // (включая dialer-маркеры) — это и есть статическая цепочка до прокси.
+    if (!(opts && opts.expandGlobal && target === 'GLOBAL')) return target;
+  }
+  const groups = (doc && Array.isArray(doc['proxy-groups'])) ? doc['proxy-groups'] : [];
+  const g = groups.find(x => x && x.name === target);
+  if (!g) return target + rdDialerSuffix(doc, target); // leaf-прокси: дальше статики не видно
+  const typeLabel = RD_GROUP_TYPE_LABELS[String(g.type || '').toLowerCase()] || ('группа ' + String(g.type || '?'));
+  const members = [];
+  (Array.isArray(g.proxies) ? g.proxies : []).slice(0, 8).forEach(m => members.push(String(m) + rdDialerSuffix(doc, String(m))));
+  (Array.isArray(g.use) ? g.use : []).slice(0, 4).forEach(u => members.push('provider:' + String(u)));
+  const label = (RD_BUILTIN_TARGETS.has(target) && target === 'GLOBAL') ? 'GLOBAL' : typeLabel + ' «' + target + '»';
+  return label + ' → [' + members.join(' / ') + (members.length ? '' : 'пусто') + ']';
+}
+function rdTargetIsRuntimeSelected(doc, target) {
+  const groups = (doc && Array.isArray(doc['proxy-groups'])) ? doc['proxy-groups'] : [];
+  const g = groups.find(x => x && x.name === target);
+  if (!g) return false;
+  return ['select', 'url-test', 'fallback', 'load-balance'].includes(String(g.type || '').toLowerCase());
+}
+
+// Узлы: rule-N, rule-provider:<name>, group:<name>, proxy:<name>, builtin:<T>,
+// dns:config / dns-policy:<entry> (только если doc.dns существует).
+// Рёбра: routes-to, uses, dialed-through, resolves-via (только доказуемые
+// nameserver-policy записи), derived-from (зарезервировано: источник должен
+// быть однозначным; doc-only снапшот спекулятивные derived-from не создаёт).
+function cdgBuildGraph(doc) {
+  // Structural invariants (owner review #140):
+  // 1) один semantic ID → ровно один node (Map; повторное добавление с
+  //    идентичной metadata = no-op, конфликт metadata = явный throw — молчаливого
+  //    overwrite нет);
+  // 2) referential integrity: каждый edge.from и edge.to соответствует
+  //    существующему node — builtin/proxy-provider/unresolved targets создаются
+  //    typed-узлами, чтобы будущий Routing Graph обходил граф без исключений.
+  // Порядок детерминирован: pass 1 — все узлы, pass 2 — все рёбра, sweep —
+  // только builtin/unresolved (эти префиксы больше никто не создаёт).
+  const nodeMap = new Map();
+  const edgeList = [];
+  const add = (id, kind, meta) => {
+    const node = Object.assign({ id, kind }, meta || {});
+    const prev = nodeMap.get(id);
+    if (prev) {
+      const a = JSON.stringify(Object.assign({}, node, { id: '', kind: '' }));
+      const b = JSON.stringify(Object.assign({}, prev, { id: '', kind: '' }));
+      if (a !== b) throw new Error('cdgBuildGraph: conflicting metadata for node ' + id);
+      return id; // deterministic merge: идентичная metadata → no-op
+    }
+    nodeMap.set(id, node);
+    return id;
+  };
+  const link = (from, to, kind) => { edgeList.push({ from, to, kind }); };
+  const rules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const providers = (doc && doc['rule-providers'] && typeof doc['rule-providers'] === 'object') ? doc['rule-providers'] : {};
+  const ppMap = (doc && doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object') ? doc['proxy-providers'] : {};
+  const groups = Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : [];
+  const proxies = Array.isArray(doc && doc.proxies) ? doc.proxies : [];
+  const groupNames = new Set(groups.map(g => g && g.name).filter(Boolean));
+  const proxyNames = new Set(proxies.map(p => p && p.name).filter(Boolean));
+  const targetId = t => {
+    const s = String(t);
+    if (RD_BUILTIN_TARGETS.has(s)) return 'builtin:' + s;
+    if (groupNames.has(s)) return 'group:' + s;
+    if (proxyNames.has(s)) return 'proxy:' + s;
+    if (providers[s]) return 'rule-provider:' + s;
+    return 'unresolved:' + s;
+  };
+
+  // === Pass 1: nodes ===
+  rules.forEach((raw, i) => {
+    const rule = rdParseRule(raw);
+    add('rule:' + i, 'rule', { index: i, raw: String(raw), type: rule.type, value: rule.value, target: rule.target });
+    if (rule.type === 'RULE-SET' && rule.value && providers[rule.value]) {
+      add('rule-provider:' + rule.value, 'rule-provider', { name: rule.value, ptype: providers[rule.value].type || '?', behavior: providers[rule.value].behavior || '?', format: Array.isArray(providers[rule.value].payload) ? 'inline' : (providers[rule.value].format || '?') });
+    }
+  });
+  groups.forEach(g => {
+    add('group:' + g.name, 'proxy-group', { name: g.name, gtype: g.type });
+    (Array.isArray(g.use) ? g.use : []).forEach(u => {
+      // proxy-provider node: только доказуемая metadata из generated config
+      // (name/type/url/path); remote contents не раскрываются, membership
+      // остаётся runtime/external unknown — узлов-членов не выдумываем.
+      const pp = ppMap[u];
+      add('proxy-provider:' + String(u), 'proxy-provider', {
+        name: String(u),
+        ptype: (pp && pp.type) || null,
+        url: (pp && pp.url) || null,
+        path: (pp && pp.path) || null
+      });
+    });
+  });
+  proxies.forEach(p => {
+    add('proxy:' + p.name, 'proxy', { name: p.name, ptype: p.type, isWireguard: p.type === 'wireguard' });
+  });
+  if (doc && doc.dns && typeof doc.dns === 'object') {
+    add('dns:config', 'dns-policy', {
+      enhancedMode: doc.dns['enhanced-mode'] || null,
+      nameservers: Array.isArray(doc.dns.nameservers) ? doc.dns.nameservers.length : null
+    });
+    const np = doc.dns['nameserver-policy'];
+    if (np && typeof np === 'object') {
+      Object.keys(np).forEach(k => {
+        add('dns-policy:' + k, 'dns-entry', { domain: k, servers: Array.isArray(np[k]) ? np[k] : [np[k]] });
+      });
+    }
+  }
+
+  // === Pass 2: edges ===
+  rules.forEach((raw, i) => {
+    const rule = rdParseRule(raw);
+    if (rule.type === 'RULE-SET' && rule.value && providers[rule.value]) {
+      link('rule:' + i, 'rule-provider:' + rule.value, 'uses');
+      link('rule-provider:' + rule.value, targetId(rule.target), 'routes-to');
+    } else {
+      link('rule:' + i, targetId(rule.target), 'routes-to');
+    }
+  });
+  groups.forEach(g => {
+    (Array.isArray(g.proxies) ? g.proxies : []).forEach(m => link('group:' + g.name, targetId(String(m)), 'uses'));
+    (Array.isArray(g.use) ? g.use : []).forEach(u => link('group:' + g.name, 'proxy-provider:' + String(u), 'uses'));
+  });
+  proxies.forEach(p => {
+    const dp = p['dialer-proxy'] || (p.wireguard && p.wireguard.dialerProxy);
+    if (dp) link('proxy:' + p.name, targetId(String(dp)), 'dialed-through');
+  });
+  if (doc && doc.dns && typeof doc.dns === 'object') {
+    const np = doc.dns['nameserver-policy'];
+    if (np && typeof np === 'object') {
+      Object.keys(np).forEach(k => link('dns-policy:' + k, 'dns:config', 'resolves-via'));
+    }
+  }
+
+  // === Referential integrity sweep: builtin/unresolved endpoints ===
+  for (const e of edgeList) {
+    for (const ep of [e.from, e.to]) {
+      if (nodeMap.has(ep)) continue;
+      if (ep.startsWith('builtin:')) add(ep, 'builtin', { name: ep.slice('builtin:'.length) });
+      else if (ep.startsWith('unresolved:')) add(ep, 'unresolved', { name: ep.slice('unresolved:'.length) });
+      else add(ep, 'unresolved', { name: ep });
+    }
+  }
+  return { nodes: Array.from(nodeMap.values()), edges: edgeList };
+}
+
+// Domain Coverage (первый consumer графа): для каждого домена — победившее
+// правило (первое совпадение), inline-провайдер или прямое правило, таргет и
+// статический путь насколько это доказуемо. «Совпадение с правилом» не
+// приравнивается к «гарантированно конкретный прокси»: select/url-test/fallback
+// честно помечаются runtime-selected. stale=true помечает snapshot предыдущей
+// сборки (контракт 4B); скрытый Build не выполняется.
+function cdgDomainCoverage(doc, domainsText, opts) {
+  const stale = !!(opts && opts.stale);
+  const inputs = String(domainsText || '').split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const docRules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const DC_DOMAIN_RE = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+  const results = inputs.map(input => {
+    const kind = rdClassifyInput(input);
+    if (kind.kind === 'empty') return { input, valid: false, verdict: 'INVALID', reason: 'пустая строка', stale };
+    if (kind.kind === 'domain' && !DC_DOMAIN_RE.test(input.toLowerCase())) {
+      return { input, valid: false, verdict: 'INVALID', reason: 'не похож на валидный домен (пробелы/служебные символы); DOMAIN-KEYWORD-совпадения с таким вводом не анализируются', stale };
+    }
+    const res = routingInspect(doc, input);
+    if (res.verdict === 'UNKNOWN') {
+      return { input, valid: true, verdict: 'UNKNOWN', reason: res.message || 'победившее правило недоказуемо офлайн (GEOSITE/GEOIP/внешний провайдер/DNS-зависимое)', stale };
+    }
+    if (res.verdict === 'NO MATCH') {
+      return { input, valid: true, verdict: 'UNCOVERED', reason: res.message || 'ни одно правило не совпало, fallback-правило MATCH отсутствует', stale };
+    }
+    const w = res.winner;
+    const isMatch = res.verdict === 'FALLBACK';
+    let rule, ruleRaw;
+    if (isMatch) {
+      ruleRaw = String(docRules[w]);
+      rule = rdParseRule(docRules[w]);
+    } else {
+      const m = res.matched.find(x => x.index === w);
+      rule = m.rule;
+      ruleRaw = String(rule.raw != null ? rule.raw : docRules[w]);
+    }
+    const runtimeSelected = rdTargetIsRuntimeSelected(doc, rule.target);
+    return {
+      input,
+      valid: true,
+      verdict: isMatch ? 'FALLBACK' : 'MATCHED',
+      ruleIndex: w,
+      ruleRaw,
+      ruleType: rule.type,
+      viaProvider: rule.provider || (rule.type === 'RULE-SET' ? rule.value : null),
+      target: rule.target,
+      chainText: rdSemanticTargetText(doc, rule.target, { expandGlobal: true }),
+      runtimeSelected,
+      stale
+    };
+  });
+  return { results, stale, graph: cdgBuildGraph(doc) };
+}
+/* === CONFIG DEPENDENCY GRAPH CORE — CDG-CORE-END === */
 /* === ROUTING DIAGNOSTICS CORE — RD-CORE-END === */
 
 // === STALE BUILD DIAGNOSTICS CONTRACT (v1.9 4B, Explainability) ===
@@ -4353,7 +4563,7 @@ function routingProviderInventory(doc) {
 // чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
 // ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
 // но визуально помечен как previous Build.
-const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput']);
+const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput']);
 let lastBuildFingerprint = null;
 
 function buildStateFingerprint() {
@@ -4489,7 +4699,35 @@ function runRoutingInspector() {
 }
 document.addEventListener('click', (e) => {
   if (e.target && e.target.id === 'rdTestBtn') { e.preventDefault(); runRoutingInspector(); }
+  if (e.target && e.target.id === 'dcRunBtn') { e.preventDefault(); runDomainCoverage(); }
 });
+
+// Domain Coverage UI (v1.9 PHASE 5): первый consumer Config Dependency Graph.
+// Только отображение результатов ядра (cdgDomainCoverage); snapshot последнего
+// Build; STALE помечает каждую строку, скрытый Build не выполняется.
+function runDomainCoverage() {
+  const out = document.getElementById('dcResults');
+  if (!out) return;
+  if (!lastRoutingDoc) {
+    out.textContent = 'Сначала выполните Build — покрытие анализирует итоговый сгенерированный конфиг.';
+    return;
+  }
+  const stale = document.getElementById('staleBuildWarn') && document.getElementById('staleBuildWarn').style.display === 'block';
+  const res = cdgDomainCoverage(lastRoutingDoc, document.getElementById('dcInput').value, { stale });
+  if (!res.results.length) { out.textContent = 'Введите домены (по одному в строке).'; return; }
+  const lines = [];
+  if (res.stale) lines.push('⚠ Snapshot предыдущей сборки (настройки изменены после Build).');
+  for (const r of res.results) {
+    const head = r.input + ':';
+    if (!r.valid) { lines.push(head + ' INVALID — ' + r.reason); continue; }
+    if (r.verdict === 'UNKNOWN' || r.verdict === 'UNCOVERED') { lines.push(head + ' ' + r.verdict + ' — ' + r.reason); continue; }
+    const via = r.verdict === 'FALLBACK'
+      ? 'fallback MATCH'
+      : (r.viaProvider ? 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw + ' (inline-провайдер «' + r.viaProvider + '»)' : 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw);
+    lines.push(head + ' ' + via + RD_NL + '  → ' + r.chainText + (r.runtimeSelected ? ' — runtime-selected' : '') + (r.stale ? RD_NL + '  (⚠ предыдущая сборка)' : ''));
+  }
+  out.textContent = lines.join(RD_NL);
+}
 
 // MTU chain notes (NIGHT-05, diagnostics-only): отображение результатов
 // web4core.planWireGuardMtu на карточках профилей. GENERATED YAML НЕ МЕНЯЕТСЯ:

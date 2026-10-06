@@ -125,6 +125,9 @@ jobs:
       - name: Routing Diagnostics core regression
         run: node tests/routing-inspector.cjs
 
+      - name: Config Dependency Graph + Domain Coverage core regression
+        run: node tests/dependency-graph.cjs
+
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 
@@ -202,6 +205,9 @@ jobs:
 
       - name: Explainability UX regression (SELECT semantics + stale build)
         run: node tests/explainability-ux.cjs
+
+      - name: Domain Coverage Checker browser regression
+        run: node tests/domain-coverage.cjs
       - name: Health-check URL browser regression
         run: node tests/health-check-url.cjs
 
