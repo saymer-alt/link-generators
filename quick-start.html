@@ -135,7 +135,7 @@
       <tr class="tbody-row"><td data-label="Что у вас есть">Обычные ссылки <code>vless://</code>, <code>trojan://</code>, <code>ss://</code>, <code>masque://</code>…</td><td data-label="Что делать">Вставьте в большое поле; режим «📡 Использовать URL-подписки» выключите.</td></tr>
       <tr class="tbody-row"><td data-label="Что у вас есть">Ссылка-подписка <code>https://…</code></td><td data-label="Что делать">Вставьте в то же поле. Режим «📡 Использовать URL-подписки» включён — получите динамический provider; выключен — генератор один раз скачает текущие узлы и встроит их как статические <code>proxies:</code>.</td></tr>
       <tr class="tbody-row"><td data-label="Что у вас есть">Файлы WireGuard / AmneziaWG <code>.conf/.wg/.awg</code></td><td data-label="Что делать">Кнопка «➕ Загрузить .conf / .wg / .awg» — файлы <b>добавляются</b> к уже загруженным; загруженные профили видны списком (удалить один — «✕», все — «🧹 Очистить все»). Идентичный файл повторно не добавляется.</td></tr>
-      <tr class="tbody-row"><td data-label="Что у вас есть">Свои WARP-ссылки</td><td data-label="Что делать">Вкладка «⚡ WARP MASQUE Links»: вставьте YAML от WARP-бота → «Сгенерировать» → «🚀 В Mihomo Builder».</td></tr>
+      <tr class="tbody-row"><td data-label="Что у вас есть">Свои WARP-ссылки</td><td data-label="Что делать">Вкладка «⚡ WARP MASQUE Links»: вставьте WARP YAML (бот или WARPSCOUT/Mihomo MASQUE) → «Сгенерировать» → «🚀 В Mihomo Builder».</td></tr>
       <tr class="tbody-row"><td data-label="Что у вас есть">Смесь (подписка + ссылки)</td><td data-label="Что делать">Можно вместе в обоих режимах: при включённом URL останется provider, при выключенном URL развернётся в статические узлы, а обычные ссылки сохранятся.</td></tr>
     </tbody>
   </table>
@@ -163,7 +163,7 @@
     <div class="scenario-card">
       <h3>3. WARP / AmneziaWG</h3>
       <ol class="steps">
-        <li>WARP: вкладка «⚡ WARP MASQUE Links» → YAML от бота → «Сгенерировать» → «🚀 В Mihomo Builder».</li>
+        <li>WARP: вкладка «⚡ WARP MASQUE Links» → WARP YAML (бот или WARPSCOUT/MASQUE) → «Сгенерировать» → «🚀 В Mihomo Builder».</li>
         <li>AWG: «➕ Загрузить .conf / .wg / .awg». Если в файле DNS <code>100.64.0.1</code> — подставятся публичные (с предупреждением).</li>
         <li>«⚡ Build Config» → Copy. Несколько файлов станут несколькими WireGuard-прокси. Каждый файл проверяется отдельно — невалидный не попадёт в сборку (имя и причина будут в списке под менеджером).</li>
       </ol>

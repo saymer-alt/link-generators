@@ -176,6 +176,9 @@ jobs:
       - name: YAML scalar hardening regression
         run: node tests/yaml-scalar-hardening.cjs
 
+      - name: WARPSCOUT MASQUE import regression
+        run: node tests/warpscout-import.cjs
+
       - name: YAML parity vs merge-base
         shell: bash
         env:
