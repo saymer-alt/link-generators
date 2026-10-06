@@ -12,8 +12,21 @@
 // красная parity = сигнал, что дефолтный YAML меняется молча.
 const path = require('node:path');
 const fs = require('node:fs');
+const assert = require('node:assert/strict');
 const { pathToFileURL } = require('node:url');
 const { chromium } = require('playwright');
+
+// Anti-regression (issue #122 item 5): EXPECTED-delta normalization ниже должна
+// РЕАЛЬНО применяться к сырому выводу. No-op remove = контрактная строка тихо
+// исчезла (движок перестал эмитить ip-version: ipv4) или регрессия вернулась
+// (снова эмитится persistent-keepalive) — parity при этом осталась бы зелёной.
+// Поэтому сырый вывод ключевых сценариев пиннится напрямую, узко, по сценарию.
+const RAW_CONTRACTS = {
+  'wg-single': raw => {
+    assert.ok(raw.includes('ip-version: ipv4'), 'wg-single: сырой вывод потерял ip-version: ipv4 — регрессия IPv4-only контракта');
+    assert.ok(!/\bpersistent-keepalive\b/.test(raw), 'wg-single: сырой вывод содержит persistent-keepalive — PK range снова эмитится/коллапсирует (25-35 не должен переноситься)');
+  },
+};
 
 async function build(page) {
   await page.locator('button[onclick="buildMihomo()"]').click();
@@ -29,10 +42,26 @@ async function runScenario(browser, root, candRoot, name, actions) {
   await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
   await actions(page, candRoot);
   const yaml = await build(page);
+  if (RAW_CONTRACTS[name]) RAW_CONTRACTS[name](yaml);
   await page.close();
   // x-hwid — случайный per-subscription идентификатор Mihomo-провайдера;
   // нормализуем, он не является частью сравниваемого контракта.
-  return yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, 'XHWID');
+  // Health-check URL сознательно НЕ нормализуется: дефолт
+  // https://www.gstatic.com/generate_204 закреплён в tests/health-check-url.cjs,
+  // и тихий откат на legacy https://google.com/generate_204 должен давать
+  // PARITY-DIFF, а не маскироваться (final corrective pass PR #108).
+  // EXPECTED v1.8.0 contract change (NIGHT-04, IPv4-only): WG/AWG прокси пиннят
+  // 'ip-version: ipv4' (endpoint AAAA protection). Строка есть только в
+  // candidate-выводе; снятие — задокументированное ожидаемое отличие контракта,
+  // любые ДРУГИе отличия по-прежнему дают PARITY-DIFF.
+  // EXPECTED v1.8.0 contract change (NIGHT-06): PersistentKeepalive range
+  // ('25-35') больше не эмитится (Mihomo принимает только целое); в base
+  // consumer collapse давал 'persistent-keepalive: 25' — строка снимается,
+  // candidate её не содержит.
+  return yaml
+    .replace(/^[ \t]*persistent-keepalive: 25\n/gm, '')
+    .replace(/^[ \t]*ip-version: ipv4\n/gm, '')
+    .replace(/^[ \t]+- [0-9a-f]{32}$/gm, 'XHWID');
 }
 
 (async () => {

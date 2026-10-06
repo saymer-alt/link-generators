@@ -121,6 +121,12 @@ jobs:
       - name: Domain Policy Routing regression
         run: node tests/policy-routing.cjs
 
+      - name: Routing Diagnostics core regression
+        run: node tests/routing-inspector.cjs
+
+      - name: Rule Provider Explorer core regression
+        run: node tests/rule-provider-explorer.cjs
+
       - name: Fieldtest harness offline unit tests
         run: node --test tools/warp-dialer-fieldtest/fieldtest.test.mjs
 
@@ -186,6 +192,14 @@ jobs:
 
       - name: Domain Policy Routing browser regression
         run: node tests/policy-routing-browser.cjs
+      - name: Health-check URL browser regression
+        run: node tests/health-check-url.cjs
+
+      - name: Version badge + legacy fallback regression
+        run: node tests/version-badge.cjs
+
+      - name: Rule Provider Explorer browser regression
+        run: node tests/rule-provider-explorer-browser.cjs
 
       - name: VPS domain-detection browser regression
         run: node tests/vps-detection-browser.cjs

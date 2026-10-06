@@ -27,6 +27,11 @@
      background:linear-gradient(180deg,#0a6cf1 0%,var(--luna-hi) 9%,var(--luna) 22%,var(--luna) 70%,var(--luna-deep) 96%);
      text-shadow:1px 1px 1px rgba(0,0,60,.7)}
   h1::before{content:"\2699 ";opacity:.9}
+  /* Бейдж версии генератора (GENERATOR_META): build-channel metadata, не кликабелен,
+     не зависит от сети и storage; на узком экране переносится внутри заголовка. */
+  .gen-version-badge{display:inline-block;padding:1px 10px;border:1px solid rgba(0,0,0,.28);border-radius:10px;
+     background:rgba(255,255,255,.92);color:#123a8c;font-size:.72rem;font-weight:bold;letter-spacing:.4px;
+     white-space:nowrap;user-select:none;text-shadow:none}
   .tabs{display:flex;gap:3px;padding:6px 10px 0;border-bottom:1px solid var(--border);background:var(--face)}
   .tab{flex:0 0 auto;padding:7px 16px 6px;cursor:pointer;border:1px solid var(--border);border-bottom:none;border-radius:4px 4px 0 0;
        background:linear-gradient(180deg,#f6f4ea,var(--face-dark));color:#333;font-size:.92rem;font-weight:bold;font-family:inherit}
@@ -88,6 +93,9 @@
   .wg-mode,.wg-target{width:100%}
   .wg-target-manual{width:100%;padding:4px 8px;font-size:.85rem;margin-top:4px}
   .wg-target-warn{color:var(--warn);font-size:.8rem;margin-top:4px}
+  .wg-target-degraded{color:var(--muted);font-size:.78rem;margin-top:2px}
+  .wg-mtu-note{color:var(--muted);font-size:.78rem;margin-top:2px;white-space:pre-line}
+  .wg-mtu-note-warn{color:var(--warn)}
     .wg-list-del{justify-self:end}
     .btn-group{max-width:560px}
   }
@@ -172,7 +180,7 @@
 </head>
 <body>
 <div class="container">
-  <h1>🔗 WARP & Mihomo Unified</h1>
+  <h1 style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>🔗 WARP & Mihomo Unified</span><span id="genVersionBadge" class="gen-version-badge" role="note"></span></h1>
 
   <div class="tabs">
     <button class="tab" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
@@ -182,12 +190,13 @@
   <!-- TAB 1: WARP GENERATOR -->
   <div id="tab-warp" class="tab-content">
     <div class="card">
-      <div class="card-title">📥 Импорт из Telegram <span id="parsedBadge" class="parsed-badge" style="display:none">Заполнено</span></div>
-      <textarea id="yamlInput" placeholder="Вставь YAML-конфиг от бота..."></textarea>
+      <div class="card-title">📥 Импорт WARP YAML <span id="parsedBadge" class="parsed-badge" style="display:none">Заполнено</span></div>
+      <textarea id="yamlInput" placeholder="Вставьте WARP YAML-конфиг (бот, WARPSCOUT или другой совместимый источник)…"></textarea>
       <div class="btn-group">
         <button class="btn btn-purple" onclick="parseYaml()">🔍 Распарсить</button>
         <button class="btn btn-gray" onclick="document.getElementById('yamlInput').value=''">Очистить</button>
       </div>
+      <div class="hint">Поддерживается совместимый WARP YAML; источник не важен.</div>
     </div>
 
     <div class="card">
@@ -229,9 +238,9 @@
       </div>
       
       <div class="hint" style="margin-top:12px">
-        ℹ️ <b>QUIC:</b> Фиксированный пул (198.2, 198.1, 199.2) :443<br>
-        ℹ️ <b>H2:</b> Взвешенный рандом портов (443≈70%, 8443≈20%, остальные≈10%)<br>
-        ℹ️ <b>Анти-корреляция:</b> При совпадении портов H2 IP ≠ QUIC IP
+        ℹ️ <b>H3 / QUIC — MASQUE over HTTP/3/QUIC:</b> Фиксированный пул (198.2, 198.1, 199.2) :443<br>
+        ℹ️ <b>H2 / TCP — MASQUE over HTTP/2/TCP:</b> Взвешенный рандом портов (443≈70%, 8443≈20%, остальные≈10%)<br>
+        ℹ️ <b>Анти-корреляция:</b> При совпадении портов H2/TCP IP ≠ H3/QUIC IP
       </div>
 
       <div class="btn-group">
@@ -306,6 +315,7 @@
         </div>
         <span class="wg-status" id="wgStatus"></span>
         <div class="hint" style="margin-top:4px">Можно выбрать сразу несколько WG/AWG-конфигов — каждый файл станет отдельным профилем в списке ниже. Добавлять можно и по очереди, несколькими загрузками.</div>
+        <div class="hint" style="margin-top:4px">WG/AWG-конфиги хранятся только в памяти текущей страницы. После обновления или закрытия страницы их нужно загрузить заново. Приватные ключи в browser storage не сохраняются.</div>
       </div>
       <ul class="wg-list" id="wgList" role="list" hidden></ul>
       <div id="wgRejected" class="wg-rejected" role="alert" hidden></div>
@@ -386,7 +396,7 @@
       <div id="deviceModelRow" style="margin-top:10px">
         <label for="deviceModelInput">📱 Device Model — имя устройства для панели подписки (необязательно)</label>
         <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
-        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>VPS-SE</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
+        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>Home-Router</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
       </div>
       <div id="realityModernRow" style="margin-top:10px">
         <label for="realityModernInput">🌐 Modern REALITY / Post-Quantum (X25519MLKEM768) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Modern REALITY">?</button><span class="ctx-help-pop" role="note">Опционально только для VLESS + REALITY узлов с подтверждённой поддержкой X25519MLKEM768. Поддержка появилась в Xray-core 25.5.16, но одна только версия Xray не гарантирует совместимость конкретного сервера/клиента. Укажите host или host:port нужных REALITY-серверов — генератор применит modern override только к ним; обычные VLESS/TLS и остальные узлы не изменяются.</span></span></label>
@@ -439,6 +449,28 @@
           </span>
         </div>
         <div class="hint" id="policyRoutingHint"></div>
+        <details id="routingDiagnostics" class="advanced-panel" style="margin-top:12px">
+          <summary><span>▶</span> <span class="advanced-badge">DIAGNOSTICS</span> <span>Routing Inspector / Diagnostics</span></summary>
+          <div class="hint">Офлайн-анализатор итогового конфига (результат последнего Build). Точно анализируются DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD и inline-провайдеры политик; GEOSITE/GEOIP/external-провайдеры/DNS-зависимые правила честно возвращают UNKNOWN. Инспектор не заменяет диагностику самого Mihomo и ничего не меняет в конфиге.</div>
+          <div id="rdSummary" class="hint" style="margin-top:8px;white-space:pre-line"></div>
+          <div id="rdPreviewBox" style="margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)">
+            <div class="label" style="font-weight:bold;margin-bottom:4px">Routing order</div>
+            <div id="rdPreview" style="font-size:.85rem;white-space:pre-line"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <label class="label" for="rdTestInput" style="display:inline">Проверить домен или IP:</label>
+            <input type="text" id="rdTestInput" placeholder="gemini.google.com" style="flex:1;min-width:180px;padding:4px 8px">
+            <button type="button" class="btn btn-gray" id="rdTestBtn">Проверить</button>
+          </div>
+          <div id="rdResult" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+          <details id="ruleProviderExplorer" style="margin-top:8px">
+            <summary style="cursor:pointer"><span>▶</span> <span>Rule Provider Explorer</span></summary>
+            <div class="hint">Инвентарь <code>rule-providers</code> итогового конфига (результат последнего Build), в порядке YAML. Inline-содержимое доступно локально; содержимое внешних провайдеров браузером не загружается (fetch/HEAD не выполняются), MRS не декодируется. Поиск — case-insensitive подстрока по уже доступному inline-payload, без сохранения. Только чтение — конфиг не меняется.</div>
+            <div id="rpeSummary" class="hint" style="margin-top:8px;white-space:pre-line"></div>
+            <div id="rpeMissing" class="hint" style="margin-top:6px;white-space:pre-line;display:none;border:1px solid var(--border);padding:6px;background:rgba(255,170,0,.08)"></div>
+            <div id="rpeProviders" style="margin-top:8px"></div>
+          </details>
+        </details>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN Interface">?</button><span class="ctx-help-pop" role="note">Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo».</span></span></label>
@@ -478,8 +510,9 @@
       </div>
       <div class="hint">Обычный TUN и MIPS включены по умолчанию и настроены выше. Экспериментальный TUN stack (system / mixed) и режимы отдельного входа на каждый прокси собраны внутри ADVANCED-секции.</div>
 
-      <label style="margin-top:16px">🏓 Ping server (health-check) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Ping server">?</button><span class="ctx-help-pop" role="note">URL, по которому Mihomo проверяет доступность узлов (url-test и health-check провайдеров). Обычно достаточно Google generate_204.</span></span></label>
+      <label style="margin-top:16px">📍 Health-check URL (latency test) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Health-check URL">?</button><span class="ctx-help-pop" role="note">Mihomo выполняет HTTP(S)-проверку задержки/доступности узлов (url-test и health-check провайдеров). Это не ICMP ping. Google и Cloudflare — официальные Mihomo-recommended URL; Custom URL браузером не проверяется — health-check выполняет сам Mihomo.</span></span></label>
       <select id="pingSelect"></select>
+      <input type="text" id="pingCustomUrl" placeholder="https://example.com/generate_204" style="display:none;margin-top:6px" autocomplete="off">
 
       <div class="btn-group">
         <button class="btn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" onclick="buildMihomo()">⚡ Build Config</button>
@@ -503,6 +536,18 @@
 <script src="./web4core.runtime.js"></script>
 
 <script>
+// === GENERATOR META (единственный production source-of-truth версии/канала) ===
+// channel — metadata конкретной сборки, НЕ определение git-ветки в рантайме:
+// development build = 1.8.0-dev / main; release promotion (main → stable) отдельно
+// переводит её на 1.8.0 / stable. UI (бейдж) читает только эти значения.
+const GENERATOR_META = Object.freeze({ version: '1.8.0', channel: 'stable' });
+(function renderGeneratorMeta() {
+  const el = document.getElementById('genVersionBadge');
+  if (!el) return;
+  el.textContent = 'v' + GENERATOR_META.version + ' · ' + GENERATOR_META.channel.toUpperCase();
+  el.title = 'Generator version ' + GENERATOR_META.version + ', channel ' + GENERATOR_META.channel;
+})();
+
 // === TABS ===
 function switchTab(e, name) {
   if (e) e.preventDefault();
@@ -707,10 +752,10 @@ function generateWarp() {
     const buildLink = (serverAddr, port, isH2) => {
       const pkEnc = urlEncodeKey(pk);
       const pubEnc = urlEncodeKey(pub);
-      // Имя профиля: QUIC без порта, H2 с портом
-      const name = isH2 
-        ? `${baseProfile}-H2-${port}${suffix}` 
-        : `${baseProfile}-QUIC${suffix}`;
+      // Имя профиля: H3/QUIC без порта, H2/TCP с портом (терминология транспорта)
+      const name = isH2
+        ? `${baseProfile}-H2-TCP-${port}${suffix}`
+        : `${baseProfile}-H3-QUIC${suffix}`;
       
       let url = `masque://${serverAddr}:${port}?sni=${sni}&private-key=${pkEnc}&public-key=${pubEnc}&ip=${ip}&udp=true&remote-dns-resolve=true`;
       if (ipv6 && ipv6.trim()) url += `&ipv6=${ipv6}`;
@@ -773,16 +818,55 @@ function sendToMihomo() {
 function initPingSelector() {
   const choices = (globalThis.web4core?.URLTEST_CHOICES || []);
   const sel = document.getElementById('pingSelect');
+  const customField = document.getElementById('pingCustomUrl');
+  const applyCustomVisibility = () => {
+    if (customField) customField.style.display = sel.value === '__custom__' ? '' : 'none';
+  };
+  sel.addEventListener('change', applyCustomVisibility);
+  const addOption = (value, text) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    sel.appendChild(opt);
+  };
   if (!choices.length) {
-    sel.innerHTML = '<option value="https://google.com/generate_204">Google (default)</option>';
+    addOption('https://www.gstatic.com/generate_204', 'Google (Mihomo recommended)');
+    addOption('__custom__', 'Custom URL…');
+    applyCustomVisibility();
     return;
   }
-  choices.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.url;
-    opt.textContent = c.label || c.url;
-    sel.appendChild(opt);
-  });
+  const recommended = choices.filter(c => c.group === 'mihomo-recommended');
+  const other = choices.filter(c => c.group !== 'mihomo-recommended');
+  if (recommended.length) {
+    const g = document.createElement('optgroup');
+    g.label = 'Mihomo recommended';
+    recommended.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.url;
+      opt.textContent = (c.label || c.url) + ' — ' + c.url.replace(/^https:\/\//, '');
+      g.appendChild(opt);
+    });
+    sel.appendChild(g);
+  }
+  if (other.length) {
+    const g = document.createElement('optgroup');
+    g.label = 'Other presets';
+    other.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.url;
+      opt.textContent = c.label || c.url;
+      g.appendChild(opt);
+    });
+    sel.appendChild(g);
+  }
+  const gCustom = document.createElement('optgroup');
+  gCustom.label = 'Custom';
+  const customOpt = document.createElement('option');
+  customOpt.value = '__custom__';
+  customOpt.textContent = 'Custom URL…';
+  gCustom.appendChild(customOpt);
+  sel.appendChild(gCustom);
+  applyCustomVisibility();
 }
 
 // === WIREGUARD UPLOAD ===
@@ -821,14 +905,15 @@ function wgProfileBuildBean(p, opts) {
 // Список целей для «Промежуточный выход» НЕ ведётся вручную: он собирается
 // префлайт-сборкой текущего состояния через настоящий движок web4core —
 // поэтому значения опций совпадают с итоговыми именами YAML байт-в-байт,
-// включая авто-суффиксы дедупликации (VPS-SE-2) и переименования AWL
-// (PRIMARY-1: VPS-SE). Dialer-назначения профилей в префлайт не передаются:
+// включая авто-суффиксы дедупликации (Proxy-A-2) и переименования AWL
+// (PRIMARY-1: Proxy-A). Dialer-назначения профилей в префлайт не передаются:
 // имена прокси/групп от них не зависят, а сборка не должна падать из-за
 // ещё не выбранного/битого таргета.
 // ⚡ Fastest и GLOBAL исключаются (содержат сам WARP — цикл), как и группы,
 // чьи статические члены ссылаются на них: для них цикл гарантирован.
 let dialerTargetsCache = []; // [{value, label, kind}]
 let dialerWgNamesCache = []; // имена WG-outbound в порядке wgBeans (для self-exclusion)
+let dialerRegistryDegraded = false; // реестр построен по WG-only проекции: обычный ввод ещё не собирается
 const DIALER_PROVIDER_PREFIX = '__provider__:';
 
 function isDialerProviderTarget(value) { return String(value || '').startsWith(DIALER_PROVIDER_PREFIX); }
@@ -856,9 +941,36 @@ function preflightInputForRegistry(raw) {
   return splitSubscriptionInputForPreview(raw).filter(e => !e.subscription).map(e => e.line).join('\n');
 }
 
+function collectDialerRegistryFromDoc(doc) {
+  const badMembers = new Set(['GLOBAL', '⚡ Fastest']);
+  const out = [];
+  for (const p of (doc.proxies || [])) {
+    if (!p || typeof p !== 'object' || typeof p.name !== 'string' || !p.name) continue;
+    out.push({ value: p.name, label: p.name + ' — ' + dialerKindLabel({ kind: 'proxy', type: p.type }), kind: 'proxy', type: p.type });
+  }
+  for (const g of (doc['proxy-groups'] || [])) {
+    if (!g || typeof g !== 'object' || typeof g.name !== 'string' || !g.name) continue;
+    if (badMembers.has(g.name)) continue;
+    if (Array.isArray(g.proxies) && g.proxies.some(m => badMembers.has(m))) continue; // цикл через GLOBAL/Fastest
+    out.push({ value: g.name, label: g.name + ' — ' + dialerKindLabel({ kind: 'group' }), kind: 'group', type: 'group' });
+  }
+  // URL-подписки — виртуальные UI-targets. dialer-proxy не может ссылаться
+  // прямо на proxy-provider, поэтому при Build для выбранной подписки ниже
+  // создаётся отдельная select-группа с use:[provider]. Browser preview может
+  // прочитать имена узлов, но provider в итоговом YAML остаётся динамическим.
+  const providerMap = doc['proxy-providers'];
+  if (providerMap && typeof providerMap === 'object' && !Array.isArray(providerMap)) {
+    for (const providerName of Object.keys(providerMap)) {
+      if (!providerName) continue;
+      out.push({ value: dialerProviderTarget(providerName), label: providerName + ' — ПОДПИСКА', kind: 'provider', type: 'provider', provider: providerName });
+    }
+  }
+  return out;
+}
+
 function computeDialerTargetsSync() {
   const api = globalThis.web4core;
-  if (!api || !wgProfilesEnabled()) return [];
+  if (!api || !wgProfilesEnabled()) { dialerRegistryDegraded = false; return []; }
   try {
     const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
     const masterEl = document.getElementById('cfgPerProxyMaster');
@@ -879,7 +991,7 @@ function computeDialerTargetsSync() {
       options: {
         addSocks: addSocks,
         addTun: addTun,
-        urlTest: document.getElementById('pingSelect').value || 'https://google.com/generate_204',
+        urlTest: document.getElementById('pingSelect').value || 'https://www.gstatic.com/generate_204',
         mihomoSubscriptionMode: document.getElementById('cfgSubMode').checked,
         excludeFilter: document.getElementById('excludeFilterInput').value,
         deviceModel: document.getElementById('deviceModelInput').value,
@@ -895,37 +1007,45 @@ function computeDialerTargetsSync() {
     });
     const doc = jsyaml.load(typeof result.data === 'string' ? result.data : JSON.stringify(result.data));
     if (!doc || typeof doc !== 'object') return [];
-    const badMembers = new Set(['GLOBAL', '⚡ Fastest']);
-    const out = [];
-    for (const p of (doc.proxies || [])) {
-      if (!p || typeof p !== 'object' || typeof p.name !== 'string' || !p.name) continue;
-      out.push({ value: p.name, label: p.name + ' — ' + dialerKindLabel({ kind: 'proxy', type: p.type }), kind: 'proxy', type: p.type });
-    }
-    for (const g of (doc['proxy-groups'] || [])) {
-      if (!g || typeof g !== 'object' || typeof g.name !== 'string' || !g.name) continue;
-      if (badMembers.has(g.name)) continue;
-      if (Array.isArray(g.proxies) && g.proxies.some(m => badMembers.has(m))) continue; // цикл через GLOBAL/Fastest
-      out.push({ value: g.name, label: g.name + ' — ' + dialerKindLabel({ kind: 'group' }), kind: 'group', type: 'group' });
-    }
-    // URL-подписки — виртуальные UI-targets. dialer-proxy не может ссылаться
-    // прямо на proxy-provider, поэтому при Build для выбранной подписки ниже
-    // создаётся отдельная select-группа с use:[provider]. Browser preview может
-    // прочитать имена узлов, но provider в итоговом YAML остаётся динамическим.
-    const providerMap = doc['proxy-providers'];
-    if (providerMap && typeof providerMap === 'object' && !Array.isArray(providerMap)) {
-      for (const providerName of Object.keys(providerMap)) {
-        if (!providerName) continue;
-        out.push({ value: dialerProviderTarget(providerName), label: providerName + ' — ПОДПИСКА', kind: 'provider', type: 'provider', provider: providerName });
-      }
-    }
     // Имена WG-outbound в порядке wgBeans: движок сохраняет порядок бинов,
     // поэтому i-й wireguard-proxy — это итоговое имя i-го загруженного профиля
     // (включая суффиксы дедупликации — точный self-exclusion при коллизиях).
+    dialerRegistryDegraded = false;
     dialerWgNamesCache = (doc.proxies || []).filter(p => p && p.type === 'wireguard').map(p => p.name);
-    return out;
+    return collectDialerRegistryFromDoc(doc);
   } catch (e) {
-    dialerWgNamesCache = [];
-    return []; // состояние ещё не собирается (например, пустой ввод) — список пуст
+    // Комбинированный префлайт не собирается (например, Sub Mode при пустом вводе
+    // требует хотя бы один URL подписки). Авторитетная валидация не отключается:
+    // настоящий Build отвергнет то же состояние с тем же сообщением. Но WG/AWG-цели
+    // допустимы и без обычных прокси (WG-only сборка валидна), поэтому реестр
+    // честно строится по WG-only проекции ТЕХ ЖЕ бинов: точные resulting-имена,
+    // суффиксы дедупликации, self-exclusion и исключение GLOBAL/⚡ Fastest — те же;
+    // целей из ввода/подписок в этом состоянии нет и не притворяемся, что есть.
+    try {
+      const proj = api.buildFromRequest({
+        core: 'mihomo',
+        input: '',
+        wgBeans: normalizeWgBeans(wgProfiles.map(p => wgProfileBuildBean(p, { noDialer: true }))),
+        options: {
+          addSocks: true,
+          addTun: true,
+          urlTest: document.getElementById('pingSelect').value || 'https://www.gstatic.com/generate_204',
+          mihomoSubscriptionMode: false,
+          mihomoPerProxyTun: false,
+          mihomoTunStack: 'gvisor',
+          perProxyPort: false
+        }
+      });
+      const doc = jsyaml.load(typeof proj.data === 'string' ? proj.data : JSON.stringify(proj.data));
+      if (!doc || typeof doc !== 'object') throw new Error('WG-only projection: no doc');
+      dialerRegistryDegraded = true;
+      dialerWgNamesCache = (doc.proxies || []).filter(p => p && p.type === 'wireguard').map(p => p.name);
+      return collectDialerRegistryFromDoc(doc);
+    } catch (_) {
+      dialerRegistryDegraded = false;
+      dialerWgNamesCache = [];
+      return []; // состояние ещё не собирается (например, пустой ввод) — список пуст
+    }
   }
 }
 
@@ -984,6 +1104,8 @@ function fillWgTargetSelect(sel, p, idx) {
     }
     const warn = row.querySelector('.wg-target-warn');
     if (warn) warn.textContent = p.vanishedTarget ? '⚠ Цель «' + p.vanishedTarget + '» недоступна для этого профиля — выберите заново.' : '';
+    const deg = row.querySelector('.wg-target-degraded');
+    if (deg) deg.textContent = dialerRegistryDegraded ? 'ℹ Обычный ввод ещё не собирается — список предварительный (только WG/AWG); финальная проверка цели — при Build.' : '';
   }
 }
 
@@ -1023,17 +1145,17 @@ function applyProviderDialerTargets(yaml) {
 function wgProfilesEnabled() { return wgProfiles.length > 0; }
 
 // AWG-патч 1/3: рантайм-парсер понимает только скаляры, а реальные AWG-конфиги
-// пишут диапазоны и словесные булевы: PersistentKeepalive = 25-35 (Premium и
-// self-hosted 3.1), RandomTrailers/DisableCookies = on/off (официальный формат
-// литералов AWG 3.1; потеря RandomTrailers критична — флаг двусторонний).
+// пишут словесные булевы: RandomTrailers/DisableCookies = on/off (официальный
+// формат литералов AWG 3.1; потеря RandomTrailers критична — флаг двусторонний).
+// PersistentKeepalive = 25-35 ЗДЕСЬ больше не сворачивается (NIGHT-06):
+// парсер ставит UNSUPPORTED-диагностику, поле не эмитится, WARN на карточке —
+// авто-конвертация 25-35 → 25 меняла семантику random-per-interval без contract.
 // Сводим к скаляру/0-1 ДО парсинга, иначе парсер молча выбрасывает поле
 // (on/off не входит в его 1/true/yes-набор). Заодно снимаем UTF-8 BOM —
 // он ломает разбор первой секции [Interface].
 function normalizeWgText(text) {
   return String(text)
     .replace(/^\uFEFF/, '')
-    .replace(/^(\s*PersistentKeepalive\s*=\s*)(\d+)\s*-\s*\d+(\s*(?:[#;].*)?)$/gim,
-      '$1$2$3')
     .replace(/^(\s*(?:RandomTrailers|DisableCookies)\s*=\s*)(on|off)(\s*(?:[#;].*)?)$/gim,
       (m, p1, p2, p3) => p1 + (p2.toLowerCase() === 'on' ? '1' : '0') + p3);
 }
@@ -1148,6 +1270,18 @@ function humanizeWgError(raw, confText) {
   if (r.includes('missing Address')) return 'Нет Address в [Interface].';
   if (r.includes('missing PublicKey')) return 'Нет PublicKey в [Peer].';
   if (r.includes('missing AllowedIPs')) return 'Нет AllowedIPs в [Peer].';
+  if (r.includes('only an IPv6 interface address')) {
+    return 'WG/AWG профиль содержит только IPv6-адрес интерфейса. link-generators работает в IPv4-only режиме, поэтому профиль нельзя использовать без IPv4 Address.';
+  }
+  if (r.includes('IPv6 literal endpoint')) {
+    return 'Endpoint профиля — IPv6-литерал. IPv4-only режим генератора требует IPv4-endpoint или hostname.';
+  }
+  if (r.includes('all AllowedIPs are IPv6')) {
+    return 'Все AllowedIPs профиля — IPv6. После IPv4-only фильтрации список пуст, такой профиль дал бы нерабочий маршрут, поэтому он отклонён. Добавьте IPv4 AllowedIPs (например, 0.0.0.0/0).';
+  }
+  if (r.includes('only IPv6 AllowedIPs')) {
+    return 'У peer все AllowedIPs — IPv6. После IPv4-only фильтрации список пуст, такой peer дал бы нерабочий маршрут, поэтому он отклонён. Добавьте IPv4 AllowedIPs (например, 0.0.0.0/0).';
+  }
   return '';
 }
 
@@ -1241,6 +1375,17 @@ function initWgUpload() {
         if (requestId !== wgUploadSeq) return;
         rejectedNow.push({ filename: file.name, human: humanizeWgError(e.message, text) || e.message, technical: e.message });
         continue;
+      }
+      // IPv4-only contract (v1.8.0), жёсткая часть: IPv6-only Address и IPv6 literal
+      // endpoint отклоняются на upload (defense-in-depth: emitter на Build reject-ит
+      // тем же контрактом validateWireGuardIpv4Only).
+      if (typeof api.validateWireGuardIpv4Only === 'function') {
+        const v4 = api.validateWireGuardIpv4Only(bean);
+        if (!v4.ok) {
+          if (requestId !== wgUploadSeq) return;
+          rejectedNow.push({ filename: file.name, human: humanizeWgError(v4.reason, text) || v4.reason, technical: v4.reason, code: v4.code });
+          continue;
+        }
       }
       const key = wgBeanKey(bean);
       if (seen.has(key)) { skippedDup++; continue; }
@@ -1376,6 +1521,21 @@ function renderWgList() {
     if (bean.wireguard && bean.wireguard.ip) bits.push('address: ' + bean.wireguard.ip);
     info.textContent = bits.join(' · ');
 
+    // MTU/IPv6/AWG-диагностика — только отображение решений движка
+    // (web4core.analyzeWireGuardProfile: imported MTU, IPv4-only contract,
+    // классификация AWG-параметров; auto-correction в v1.8.0 не выполняется).
+    const mtuInfo = (typeof web4core.analyzeWireGuardProfile === 'function') ? web4core.analyzeWireGuardProfile(bean) : null;
+    if (mtuInfo) {
+      const mtuBits = ['MTU: ' + (mtuInfo.importedMtu !== null ? mtuInfo.importedMtu : '— (default ' + mtuInfo.engineDefaultMtu + ')')];
+      info.textContent += (info.textContent ? ' · ' : '') + mtuBits.join(' · ');
+      for (const note of (mtuInfo.notes || [])) {
+        const noteEl = document.createElement('div');
+        noteEl.className = 'wg-mtu-note' + (note.level === 'warn' ? ' wg-mtu-note-warn' : '');
+        noteEl.textContent = (note.level === 'warn' ? '⚠ ' : 'ℹ ') + note.text;
+        info.appendChild(noteEl);
+      }
+    }
+
     const modeRow = document.createElement('div');
     modeRow.className = 'wg-card-mode';
     const modeLabel = document.createElement('label');
@@ -1417,7 +1577,9 @@ function renderWgList() {
     const targetWarn = document.createElement('div');
     targetWarn.className = 'wg-target-warn';
     if (p.vanishedTarget) targetWarn.textContent = '⚠ Цель «' + p.vanishedTarget + '» недоступна для этого профиля — выберите заново.';
-    targetRow.append(targetLabel, targetSel, targetManual, targetWarn);
+    const targetDegraded = document.createElement('div');
+    targetDegraded.className = 'wg-target-degraded';
+    targetRow.append(targetLabel, targetSel, targetManual, targetWarn, targetDegraded);
     fillWgTargetSelect(targetSel, p, i);
 
     li.append(head, info, modeRow, targetRow);
@@ -3171,6 +3333,695 @@ function updatePolicyRoutingVisibility() {
   document.getElementById('policyRoutingHint').textContent = hints.join(' ');
 }
 
+// === ROUTING DIAGNOSTICS CORE (pure, deterministic) — RD-CORE-START ===
+// Офлайн-анализатор итогового Mihomo YAML: только доказуемые результаты.
+// Вердикты: 'matched' | 'unknown' | 'no-match' | 'fallback'. Никаких догадок:
+// GEOSITE/GEOIP/external payload/DNS-dependent/regex+wildcard — честный UNKNOWN
+// с причиной. Никакой сети и хранилища; функции не зависят от DOM.
+function rdIsIPv4(s) {
+  const m = String(s || '').trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return null;
+  const oct = [m[1], m[2], m[3], m[4]].map(Number);
+  if (oct.some(n => n > 255)) return null;
+  return ((oct[0] << 24) | (oct[1] << 16) | (oct[2] << 8) | oct[3]) >>> 0;
+}
+function rdIsIPv6(s) {
+  let str = String(s || '').trim().toLowerCase();
+  if (!/^[0-9a-f:]+$/.test(str) || !str.includes(':')) return null;
+  const dbl = (str.match(/::/g) || []).length;
+  if (dbl > 1 || /:::/.test(str)) return null;
+  let value = 0n;
+  if (dbl === 1) {
+    const pos = str.indexOf('::');
+    const headStr = str.slice(0, pos);
+    const tailStr = str.slice(pos + 2);
+    const head = headStr ? headStr.split(':') : [];
+    const tail = tailStr ? tailStr.split(':') : [];
+    const gap = 8 - head.length - tail.length;
+    if (gap < 1) return null;
+    const parts = head.concat(Array(gap).fill('0'), tail);
+    if (parts.length !== 8) return null;
+    for (const part of parts) {
+      if (!/^[0-9a-f]{1,4}$/.test(part)) return null;
+      value = (value << 16n) | BigInt(parseInt(part, 16));
+    }
+    return value;
+  }
+  const parts = str.split(':');
+  if (parts.length !== 8) return null;
+  for (const part of parts) {
+    if (!/^[0-9a-f]{1,4}$/.test(part)) return null;
+    value = (value << 16n) | BigInt(parseInt(part, 16));
+  }
+  return value;
+}
+function rdIpInCidr(ip, cidr) {
+  const slash = String(cidr || '').split('/');
+  const prefix = Number(slash[1]);
+  if (!slash[1] || String(slash[1]).trim() === '' || !Number.isInteger(prefix)) return null;
+  if (slash[0].includes(':')) {
+    const base = rdIsIPv6(slash[0]);
+    const ipV = rdIsIPv6(ip);
+    if (base === null || ipV === null || prefix < 0 || prefix > 128) return null;
+    if (prefix === 0) return true;
+    const shift = 128n - BigInt(prefix);
+    return (ipV >> shift) === (base >> shift);
+  }
+  const base = rdIsIPv4(slash[0]);
+  const ipV = rdIsIPv4(ip);
+  if (base === null || ipV === null || prefix < 0 || prefix > 32) return null;
+  if (prefix === 0) return true;
+  const mask = prefix === 32 ? 0xffffffff : (0xffffffff << (32 - prefix)) >>> 0;
+  return ((ipV & mask) >>> 0) === ((base & mask) >>> 0);
+}
+function rdClassifyInput(input) {
+  const s = String(input || '').trim();
+  if (!s) return { kind: 'empty' };
+  if (rdIsIPv4(s) !== null) return { kind: 'ip', value: s, version: 4 };
+  if (rdIsIPv6(s) !== null) return { kind: 'ip', value: s, version: 6 };
+  return { kind: 'domain', value: s.toLowerCase() };
+}
+function rdDomainMatch(op, value, domain) {
+  if (op === 'exact') return domain === value;
+  if (op === 'suffix') return domain === value || domain.endsWith('.' + value);
+  if (op === 'keyword') return domain.includes(value);
+  return false;
+}
+function rdParseRule(raw) {
+  const parts = String(raw || '').split(',').map(s => s.trim());
+  const type = (parts[0] || '').toUpperCase();
+  const noResolve = parts.some(p => p.toLowerCase() === 'no-resolve');
+  let value = '', target = '';
+  if (type === 'MATCH') target = parts[1] || '';
+  else if (type === 'RULE-SET') { value = parts[1] || ''; target = parts[2] || ''; }
+  else { value = parts[1] || ''; target = parts[2] || ''; } // target — всегда третий элемент; флаги (no-resolve) идут после
+  return { raw: String(raw || ''), type, value, target, noResolve };
+}
+function rdInlinePayloadEntries(provider) {
+  const entries = [];
+  const unsupported = [];
+  const behavior = String(provider.behavior || '').toLowerCase();
+  if (String(provider.format || '').toLowerCase() === 'mrs') {
+    return { entries, unsupported: ['MRS contents are not available to the browser'] };
+  }
+  const payload = Array.isArray(provider.payload) ? provider.payload : [];
+  for (const raw of payload) {
+    const line = String(raw || '').trim();
+    if (!line) continue;
+    if (behavior === 'domain') {
+      if (line.startsWith('+.')) entries.push({ op: 'suffix', value: line.slice(2).toLowerCase() });
+      else entries.push({ op: 'exact', value: line.toLowerCase() });
+    } else if (behavior === 'ipcidr') {
+      entries.push({ op: 'ip', value: line });
+    } else {
+      const parts = line.split(',').map(s => s.trim());
+      const type = (parts[0] || '').toUpperCase();
+      const val = (parts[1] || '').toLowerCase();
+      if (type === 'DOMAIN') entries.push({ op: 'exact', value: val });
+      else if (type === 'DOMAIN-SUFFIX') entries.push({ op: 'suffix', value: val });
+      else if (type === 'DOMAIN-KEYWORD') entries.push({ op: 'keyword', value: val });
+      else if (type === 'IP-CIDR' || type === 'IP-CIDR6') entries.push({ op: 'ip', value: parts[1] || '' }); // CIDR operand уже содержит /prefix
+      else if (type === 'DOMAIN-REGEX') unsupported.push('DOMAIN-REGEX inside provider payload (Go RE2 semantics not safely emulated)');
+      else if (type === 'DOMAIN-WILDCARD') unsupported.push('DOMAIN-WILDCARD inside provider payload (wildcard semantics not safely emulated)');
+      else unsupported.push(type + ' inside provider payload (external dataset or unsupported semantics)');
+    }
+  }
+  return { entries, unsupported };
+}
+function rdRuleVerdict(rule, providers, input) {
+  const type = rule.type;
+  if (type === 'MATCH') return { verdict: 'match' };
+  if (input.kind === 'domain') {
+    const d = input.value;
+    if (type === 'DOMAIN') return { verdict: rdDomainMatch('exact', rule.value, d) ? 'match' : 'no-match' };
+    if (type === 'DOMAIN-SUFFIX') return { verdict: rdDomainMatch('suffix', rule.value, d) ? 'match' : 'no-match' };
+    if (type === 'DOMAIN-KEYWORD') return { verdict: rdDomainMatch('keyword', rule.value, d) ? 'match' : 'no-match' };
+    if (type === 'DOMAIN-WILDCARD') return { verdict: 'unknown', reason: 'DOMAIN-WILDCARD semantics are not safely emulated' };
+    if (type === 'DOMAIN-REGEX') return { verdict: 'unknown', reason: 'DOMAIN-REGEX semantics are not safely emulated (Go RE2 vs JS RegExp)' };
+    if (type === 'GEOSITE') return { verdict: 'unknown', reason: 'GEOSITE requires an external dataset (not available offline)' };
+    if (type === 'GEOIP' || type === 'IP-ASN') return { verdict: 'unknown', reason: 'external dataset required (not available offline)' };
+    if (type === 'IP-CIDR' || type === 'IP-CIDR6') {
+      if (rule.noResolve) return { verdict: 'no-match' };
+      return { verdict: 'unknown', reason: 'result depends on DNS resolution' };
+    }
+    if (type === 'RULE-SET') {
+      const provider = providers && providers[rule.value];
+      if (!provider || typeof provider !== 'object') return { verdict: 'unknown', reason: 'rule provider "' + rule.value + '" not found in rule-providers' };
+      const ptype = String(provider.type || '').toLowerCase();
+      if (ptype !== 'inline') return { verdict: 'unknown', reason: 'external provider contents are not available to the browser (' + ptype + ')' };
+      const parsed = rdInlinePayloadEntries(provider);
+      if (parsed.unsupported.length) return { verdict: 'unknown', reason: parsed.unsupported[0] };
+      let sawUnknown = null;
+      let matched = false;
+      for (const e of parsed.entries) {
+        if (e.op === 'ip') {
+          if (rule.noResolve) continue;
+          sawUnknown = 'provider entry IP-CIDR: result depends on DNS resolution';
+          continue;
+        }
+        if (rdDomainMatch(e.op, e.value, d)) { matched = true; break; }
+      }
+      if (matched) return { verdict: 'match', provider: rule.value };
+      if (sawUnknown) return { verdict: 'unknown', reason: sawUnknown };
+      return { verdict: 'no-match' };
+    }
+    return { verdict: 'unknown', reason: 'unsupported rule type ' + type };
+  }
+  if (type === 'IP-CIDR' || type === 'IP-CIDR6') {
+    const sameFamily = input.version === 4 ? !rule.value.includes(':') : rule.value.includes(':');
+    if (!sameFamily) return { verdict: 'no-match' }; // IPv4-литерал не может попасть в IPv6 CIDR и наоборот
+    const res = rdIpInCidr(input.value, rule.value);
+    if (res === null) return { verdict: 'unknown', reason: 'CIDR could not be parsed deterministically' };
+    return { verdict: res ? 'match' : 'no-match' };
+  }
+  if (type === 'GEOIP') return { verdict: 'unknown', reason: 'GEOIP requires an external dataset (not available offline)' };
+  if (type === 'IP-ASN') return { verdict: 'unknown', reason: 'IP-ASN requires an external dataset (not available offline)' };
+  if (['DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-WILDCARD', 'DOMAIN-REGEX', 'GEOSITE'].includes(type)) return { verdict: 'no-match' };
+  if (type === 'RULE-SET') {
+    const provider = providers && providers[rule.value];
+    if (!provider || typeof provider !== 'object') return { verdict: 'unknown', reason: 'rule provider "' + rule.value + '" not found in rule-providers' };
+    const ptype = String(provider.type || '').toLowerCase();
+    if (ptype !== 'inline') return { verdict: 'unknown', reason: 'external provider contents are not available to the browser (' + ptype + ')' };
+    const behavior = String(provider.behavior || '').toLowerCase();
+    if (behavior === 'domain') return { verdict: 'no-match' };
+    const parsed = rdInlinePayloadEntries(provider);
+    if (parsed.unsupported.length) return { verdict: 'unknown', reason: parsed.unsupported[0] };
+    for (const e of parsed.entries) {
+      if (e.op === 'ip') {
+        const sameFamily = input.version === 4 ? !e.value.includes(':') : e.value.includes(':');
+        if (!sameFamily) continue; // IPv6-CIDR против IPv4-литерала — детерминированный no-match
+        const res = rdIpInCidr(input.value, e.value);
+        if (res === null) return { verdict: 'unknown', reason: 'provider CIDR could not be parsed deterministically' };
+        if (res) return { verdict: 'match', provider: rule.value };
+      }
+    }
+    return { verdict: 'no-match' };
+  }
+  return { verdict: 'unknown', reason: 'unsupported rule type ' + type };
+}
+function routingInspect(doc, input) {
+  const kind = rdClassifyInput(input);
+  if (kind.kind === 'empty') return { verdict: 'EMPTY', message: 'введите домен или IP' };
+  const providers = (doc && doc['rule-providers']) || {};
+  const rules = (Array.isArray(doc && doc.rules) ? doc.rules : []).map(rdParseRule);
+  const matched = [];
+  let winner = null;
+  let fallback = null;
+  let firstUnknown = null;
+  for (let i = 0; i < rules.length; i++) {
+    const rule = rules[i];
+    const res = rdRuleVerdict(rule, providers, kind);
+    if (res.verdict === 'match') {
+      if (rule.type === 'MATCH') { fallback = i; break; } // fallback — не «альтернатива»
+      if (res.provider) rule.provider = res.provider; // имя inline-провайдера для UI
+      if (winner === null) winner = i;
+      matched.push({ index: i, rule });
+    } else if (res.verdict === 'unknown' && firstUnknown === null) {
+      firstUnknown = { index: i, rule, reason: res.reason };
+    }
+  }
+  const unknownBefore = firstUnknown !== null && (winner === null || firstUnknown.index < winner);
+  if (winner !== null && !unknownBefore) {
+    return { verdict: 'MATCHED', kind, winner, matched, unknownAfter: firstUnknown ? [firstUnknown] : [] };
+  }
+  if (firstUnknown !== null) {
+    return { verdict: 'UNKNOWN', kind, firstUnknown, matched, message: 'возможно, победило правило #' + (firstUnknown.index + 1) + ' — ' + firstUnknown.reason };
+  }
+  if (fallback !== null) {
+    return { verdict: 'FALLBACK', kind, winner: fallback, matched, unknownAfter: [] };
+  }
+  return { verdict: 'NO MATCH', kind, matched: [], message: 'ни одно правило не совпало, fallback-правило MATCH отсутствует' };
+}
+function routingFindDuplicates(doc) {
+  const rules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const ruleDups = [];
+  const seen = new Map();
+  rules.forEach((r, i) => {
+    if (typeof r !== 'string') return;
+    if (seen.has(r)) ruleDups.push({ index: i, firstIndex: seen.get(r), raw: r });
+    else seen.set(r, i);
+  });
+  const providers = (doc && doc['rule-providers']) || {};
+  const payloadDups = [];
+  const domainMap = new Map();
+  for (const [name, provider] of Object.entries(providers)) {
+    if (!provider || typeof provider !== 'object' || String(provider.type || '').toLowerCase() !== 'inline') continue;
+    const counts = new Map();
+    const list = Array.isArray(provider.payload) ? provider.payload : [];
+    list.forEach((entry, i) => {
+      const line = String(entry || '').trim();
+      if (!line) return;
+      counts.set(line, (counts.get(line) || 0) + 1);
+      if (counts.get(line) === 2) payloadDups.push({ provider: name, entry: line });
+      const parsed = rdParseRule(line);
+      if (parsed.type === 'DOMAIN' || parsed.type === 'DOMAIN-SUFFIX') {
+        const key = parsed.value.toLowerCase(); // голый домен: DOMAIN и DOMAIN-SUFFIX пересекаются
+        if (!domainMap.has(key)) domainMap.set(key, []);
+        domainMap.get(key).push({ provider: name, entry: line, index: i });
+      }
+    });
+  }
+  const crossPolicy = [];
+  for (const [key, places] of domainMap) {
+    const providers = [...new Set(places.map(p => p.provider))];
+    if (providers.length < 2) continue; // «в нескольких политиках» = минимум 2 разных провайдера
+    crossPolicy.push({ entry: key, providers, places });
+  }
+  return { ruleDups, payloadDups, crossPolicy };
+}
+function routingFindShadowed(doc) {
+  const rules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const providers = (doc && doc['rule-providers']) || {};
+  const shadowed = [];
+  const domainRules = [];
+  rules.forEach((r, i) => {
+    const rule = rdParseRule(r);
+    if (rule.type === 'DOMAIN') domainRules.push({ index: i, op: 'exact', value: rule.value.toLowerCase(), via: 'rule' });
+    else if (rule.type === 'DOMAIN-SUFFIX') domainRules.push({ index: i, op: 'suffix', value: rule.value.toLowerCase(), via: 'rule' });
+    else if (rule.type === 'RULE-SET') {
+      const provider = providers[rule.value];
+      if (provider && typeof provider === 'object' && String(provider.type || '').toLowerCase() === 'inline') {
+        const parsed = rdInlinePayloadEntries(provider);
+        if (!parsed.unsupported.length) {
+          for (const e of parsed.entries) {
+            if (e.op === 'exact' || e.op === 'suffix') domainRules.push({ index: i, op: e.op, value: e.value, via: 'provider ' + rule.value });
+          }
+        }
+      }
+    }
+  });
+  for (let j = 1; j < domainRules.length; j++) {
+    const later = domainRules[j];
+    for (let i = j - 1; i >= 0; i--) {
+      const earlier = domainRules[i];
+      if (earlier.index === later.index) continue;
+      let hit = null;
+      if (earlier.op === 'suffix' && later.op === 'exact' && rdDomainMatch('suffix', earlier.value, later.value)) {
+        hit = later.value + ' matches ' + earlier.value + ' suffix first';
+      } else if (earlier.op === 'suffix' && later.op === 'suffix' && rdDomainMatch('suffix', earlier.value, later.value)) {
+        hit = 'every domain of ' + later.value + ' also matches ' + earlier.value + ' suffix';
+      }
+      if (hit) { shadowed.push({ index: later.index, shadowedBy: earlier.index, via: earlier.via, detail: hit }); break; }
+    }
+  }
+  const matchIndex = rules.findIndex(r => rdParseRule(r).type === 'MATCH');
+  if (matchIndex !== -1 && matchIndex < rules.length - 1) {
+    shadowed.push({ index: matchIndex + 1, shadowedBy: matchIndex, kind: 'unreachable-after-match', detail: 'all rules after MATCH are unreachable', until: rules.length - 1 });
+  }
+  return shadowed;
+}
+function routingPreview(doc, humanNames) {
+  const rules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const out = [];
+  rules.forEach((r, i) => {
+    const rule = rdParseRule(r);
+    if (rule.type === 'MATCH') out.push({ index: i, label: 'Всё остальное', target: rule.target, isMatch: true });
+    else if (rule.type === 'RULE-SET') {
+      const human = humanNames && humanNames[rule.value];
+      out.push({ index: i, label: human || rule.value, target: rule.target, isMatch: false });
+    } else {
+      out.push({ index: i, label: rule.type + ' ' + rule.value, target: rule.target, isMatch: false });
+    }
+  });
+  return out;
+}
+function routingDprHumanNames(policies) {
+  const used = new Set();
+  const map = {};
+  (Array.isArray(policies) ? policies : []).forEach((p, index) => {
+    let base = String(p.name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+    if (!base) base = 'n' + (index + 1);
+    let slug = 'policy-' + base;
+    let i = 2;
+    while (used.has(slug)) slug = 'policy-' + base + '-' + (i++);
+    used.add(slug);
+    map[slug] = p.name;
+  });
+  return map;
+}
+function rdUtf8Bytes(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.codePointAt(i);
+    if (c > 0xffff) i++;
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c < 0x10000) n += 3;
+    else n += 4;
+  }
+  return n;
+}
+function routingProviderReferences(doc) {
+  const rules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const providers = (doc && doc['rule-providers'] && typeof doc['rule-providers'] === 'object') ? doc['rule-providers'] : {};
+  const refs = {};
+  const missing = [];
+  rules.forEach((raw, i) => {
+    const parsed = rdParseRule(raw);
+    if (parsed.type !== 'RULE-SET' || !parsed.value) return;
+    const p = providers[parsed.value];
+    if (p && typeof p === 'object') {
+      if (!refs[parsed.value]) refs[parsed.value] = [];
+      refs[parsed.value].push({ index: i, target: parsed.target });
+    } else {
+      missing.push({ index: i, name: parsed.value, target: parsed.target });
+    }
+  });
+  return { refs, missing };
+}
+function routingProviderPayloadStats(provider) {
+  const p = provider && typeof provider === 'object' ? provider : {};
+  const type = String(p.type || '').trim().toLowerCase();
+  if (type !== 'inline') {
+    // «external» — только доказуемо внешние типы; unknown/other нельзя называть внешними.
+    const kind = (type === 'http' || type === 'file') ? 'external' : 'unknown';
+    return { kind, entries: null, bytes: null, payloadMalformed: false };
+  }
+  if (!Array.isArray(p.payload)) {
+    return { kind: 'inline', entries: 0, bytes: 0, payloadMalformed: p.payload !== undefined && p.payload !== null };
+  }
+  let entries = 0;
+  let bytes = 0;
+  for (const raw of p.payload) {
+    const line = String(raw === null || raw === undefined ? '' : raw);
+    if (!line.trim()) continue;
+    entries++;
+    bytes += rdUtf8Bytes(line);
+  }
+  return { kind: 'inline', entries, bytes, payloadMalformed: false };
+}
+function routingProviderSearch(provider, query) {
+  const q = String(query === null || query === undefined ? '' : query).toLowerCase();
+  const p = provider && typeof provider === 'object' ? provider : {};
+  // поиск допустим только по локально известному inline-payload;
+  // accidental payload[] у http/file/unknown — не локальное содержимое
+  const payload = String(p.type || '').trim().toLowerCase() === 'inline' && Array.isArray(p.payload) ? p.payload : [];
+  const matches = [];
+  for (const raw of payload) {
+    const line = String(raw === null || raw === undefined ? '' : raw);
+    if (!line.trim()) continue;
+    if (q === '' || line.toLowerCase().includes(q)) matches.push(line);
+  }
+  return { query: String(query === null || query === undefined ? '' : query), matches, total: matches.length };
+}
+function routingProviderInventory(doc) {
+  const providers = (doc && doc['rule-providers'] && typeof doc['rule-providers'] === 'object') ? doc['rule-providers'] : {};
+  const { refs, missing } = routingProviderReferences(doc);
+  const items = Object.keys(providers).map(name => {
+    const p = providers[name];
+    const safe = p && typeof p === 'object' ? p : {};
+    const typeRaw = String(safe.type || '').trim().toLowerCase();
+    const behaviorRaw = String(safe.behavior || '').trim().toLowerCase();
+    const formatPresent = safe.format !== undefined && safe.format !== null && String(safe.format).trim() !== '';
+    const format = formatPresent ? String(safe.format).trim().toLowerCase() : 'default';
+    let source = 'unknown';
+    if (typeRaw === 'inline') source = 'inline';
+    else if (safe.url !== undefined && safe.url !== null && String(safe.url).trim() !== '') source = String(safe.url);
+    else if (safe.path !== undefined && safe.path !== null && String(safe.path).trim() !== '') source = String(safe.path);
+    const metadata = [];
+    for (const [k, v] of Object.entries(safe)) {
+      if (k === 'type' || k === 'behavior' || k === 'format' || k === 'payload') continue;
+      if (v === null || v === undefined) continue;
+      const t = typeof v;
+      if (t === 'string' || t === 'number' || t === 'boolean') metadata.push([k, String(v)]);
+    }
+    return {
+      name,
+      type: typeRaw || 'unknown',
+      behavior: behaviorRaw || 'unknown',
+      format,
+      source,
+      metadata,
+      used: refs[name] || [],
+      stats: routingProviderPayloadStats(safe),
+      // локальное содержимое разрешено ТОЛЬКО inline-провайдеру: http/file/unknown/other
+      // с accidental payload[] не экспонируют его через модель (external contents unknown offline)
+      payload: typeRaw === 'inline' && Array.isArray(safe.payload) ? safe.payload.map(v => String(v === null || v === undefined ? '' : v)) : null
+    };
+  });
+  const summary = {
+    providers: items.length,
+    used: items.filter(i => i.used.length > 0).length,
+    unused: items.filter(i => !(i.used.length > 0)).length,
+    inline: items.filter(i => i.type === 'inline').length,
+    external: items.filter(i => i.type === 'http' || i.type === 'file').length, // только доказуемо внешние
+    otherUnknown: items.filter(i => i.type !== 'inline' && i.type !== 'http' && i.type !== 'file').length,
+    missingReferences: missing.length
+  };
+  return { items, missing, summary };
+}
+/* === ROUTING DIAGNOSTICS CORE — RD-CORE-END === */
+
+// === ROUTING DIAGNOSTICS UI (read-only; только отображает результаты ядра) ===
+const RD_NL = String.fromCharCode(10);
+let lastRoutingDoc = null;
+let lastMtuPlan = null; // diagnostics-only результат web4core.planWireGuardMtu (YAML не меняется)
+let lastRoutingHumanNames = null;
+function updateRoutingDiagnostics(yaml) {
+  lastRoutingDoc = null;
+  lastRoutingHumanNames = null;
+  const summary = document.getElementById('rdSummary');
+  const previewEl = document.getElementById('rdPreview');
+  const resultEl = document.getElementById('rdResult');
+  if (!summary || !previewEl || !resultEl) return;
+  try {
+    const doc = jsyaml.load(String(yaml));
+    if (!doc || typeof doc !== 'object' || !Array.isArray(doc.rules)) throw new Error('в конфиге нет секции rules');
+    lastRoutingDoc = doc;
+    try {
+      const policies = collectPolicyRouting();
+      if (policies.length) lastRoutingHumanNames = routingDprHumanNames(policies);
+    } catch (_) { /* дубликаты/пустые карточки — slugs останутся техническими */ }
+    const dups = routingFindDuplicates(doc);
+    const shadowed = routingFindShadowed(doc);
+    const lines = ['✓ Правил маршрутизации: ' + doc.rules.length];
+    dups.ruleDups.forEach(d => lines.push('⚠ Дубликат: правило #' + (d.index + 1) + ' повторяет #' + (d.firstIndex + 1) + ': ' + d.raw));
+    dups.payloadDups.forEach(d => lines.push('⚠ ' + d.provider + ' содержит дубликат записи: ' + d.entry));
+    dups.crossPolicy.forEach(c => lines.push('ℹ ' + c.entry + ' встречается в ' + c.providers.length + ' политиках — порядок правил решает, какая сработает'));
+    shadowed.forEach(s => {
+      if (s.kind === 'unreachable-after-match') lines.push('⚠ Правила после #' + (s.shadowedBy + 1) + ' (MATCH) недостижимы: #' + (s.index + 1) + '–#' + (s.until + 1));
+      else lines.push('⚠ Правило #' + (s.index + 1) + ' перекрыто #' + (s.shadowedBy + 1) + ' (' + s.via + ') — ' + s.detail);
+    });
+    const providerRefs = routingProviderReferences(doc).refs; // единый source-of-truth с Rule Provider Explorer
+    Object.keys(doc['rule-providers'] || {}).forEach(name => {
+      if (!(providerRefs[name] && providerRefs[name].length)) lines.push('⚠ Провайдер «' + name + '» не используется ни одним RULE-SET');
+    });
+    summary.textContent = lines.join(RD_NL);
+    const preview = routingPreview(doc, lastRoutingHumanNames);
+    previewEl.textContent = preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + (p.target || '—')).join(RD_NL);
+    if (typeof web4core.planWireGuardMtu === 'function') {
+      try { lastMtuPlan = web4core.planWireGuardMtu(doc); } catch (_) { lastMtuPlan = null; }
+    } else lastMtuPlan = null;
+    refreshWgMtuNotes();
+    renderRuleProviderExplorer(doc);
+  } catch (e) {
+    summary.textContent = 'Diagnostics недоступен: ' + (e.message || e);
+    previewEl.textContent = '';
+    resultEl.textContent = '';
+    lastMtuPlan = null;
+    refreshWgMtuNotes();
+    renderRuleProviderExplorer(null);
+  }
+}
+function runRoutingInspector() {
+  const out = document.getElementById('rdResult');
+  if (!out) return;
+  if (!lastRoutingDoc) {
+    out.textContent = 'Сначала выполните Build — Inspector анализирует итоговый сгенерированный конфиг.';
+    return;
+  }
+  const input = document.getElementById('rdTestInput').value;
+  const res = routingInspect(lastRoutingDoc, input);
+  const labelOf = (idx) => {
+    const rule = lastRoutingDoc.rules[idx];
+    const parsed = rdParseRule(rule);
+    if (parsed.type === 'RULE-SET' && lastRoutingHumanNames && lastRoutingHumanNames[parsed.value]) return lastRoutingHumanNames[parsed.value];
+    return parsed.type === 'MATCH' ? 'Всё остальное' : (parsed.value || parsed.type);
+  };
+  if (res.verdict === 'EMPTY') { out.textContent = res.message; return; }
+  if (res.verdict === 'UNKNOWN') {
+    out.textContent = '⚠ UNKNOWN — результат не может быть доказан офлайн.' + RD_NL + 'Причина: ' + (res.firstUnknown ? res.firstUnknown.reason : '—') +
+      (res.message ? RD_NL + res.message : '') +
+      RD_NL + 'Инспектор не заменяет диагностику самого Mihomo.';
+    return;
+  }
+  if (res.verdict === 'NO MATCH') { out.textContent = '✗ ' + res.message; return; }
+  if (res.verdict === 'FALLBACK') {
+    // FALLBACK до обращения к matched: MATCH намеренно не попадает в matched[]
+    const rule = rdParseRule(lastRoutingDoc.rules[res.winner]);
+    out.textContent = 'Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + (rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Домен не совпал ни с одним известным правилом до MATCH.)';
+    return;
+  }
+  const w = res.winner;
+  const rule = res.matched.find(m => m.index === w).rule;
+  let text = '✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + rule.raw + RD_NL + RD_NL + 'Маршрут: ' + labelOf(w) + ' → ' + (rule.target || '—');
+  const others = res.matched.filter(m => m.index !== w);
+  if (others.length) {
+    text += RD_NL + RD_NL + 'Также совпало:' + RD_NL + others.map(m => '#' + (m.index + 1) + ' ' + m.rule.raw).join(RD_NL);
+    text += RD_NL + RD_NL + 'Почему победило: Mihomo применяет первое подходящее правило; #' + (w + 1) + ' находится выше ' + (others.length > 1 ? 'остальных' : '#' + (others[0].index + 1)) + '.';
+  }
+  if (res.unknownAfter && res.unknownAfter.length) text += RD_NL + RD_NL + '⚠ Позже встречается недоказуемое правило: ' + res.unknownAfter[0].reason;
+  out.textContent = text;
+}
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'rdTestBtn') { e.preventDefault(); runRoutingInspector(); }
+});
+
+// MTU chain notes (NIGHT-05, diagnostics-only): отображение результатов
+// web4core.planWireGuardMtu на карточках профилей. GENERATED YAML НЕ МЕНЯЕТСЯ:
+// функция только дописывает/обновляет информационные строки на карточках.
+function refreshWgMtuNotes() {
+  const cards = document.querySelectorAll('#wgList .wg-card-info');
+  const planByName = {};
+  if (lastMtuPlan && Array.isArray(lastMtuPlan.profiles)) {
+    lastMtuPlan.profiles.forEach(pr => { planByName[pr.name] = pr; });
+  }
+  wgProfiles.forEach((p) => {
+    const infoEl = cards[wgProfiles.indexOf(p)];
+    if (!infoEl) return;
+    let noteEl = infoEl.querySelector('.wg-mtu-chain');
+    const pr = planByName[p.bean && p.bean.name];
+    if (!pr) { if (noteEl) noteEl.remove(); return; }
+    if (!noteEl) {
+      noteEl = document.createElement('div');
+      noteEl.className = 'wg-mtu-chain';
+      noteEl.style.cssText = 'color:var(--muted);font-size:.78rem;margin-top:2px;white-space:pre-line';
+      infoEl.appendChild(noteEl);
+    }
+    const lines = [];
+    if (pr.chain && pr.chain.length > 1) {
+      lines.push('ℹ Цепочка MTU: ' + pr.chain.join(' → ') +
+        (pr.ceiling !== null && pr.ceiling !== undefined ? ' · расчётный потолок ≈ ' + pr.ceiling + ' (worst-case IPv4; диагностическая модель, YAML не меняется)' : ''));
+    }
+    (pr.reason || []).forEach(rs => lines.push((pr.confidence === 'error' ? '⚠ ' : 'ℹ ') + rs));
+    if (pr.confidence === 'unknown') lines.push('⚠ Автоматический расчёт MTU недоступен — исходный MTU сохранён.');
+    noteEl.textContent = lines.join(RD_NL);
+  });
+}
+
+// === RULE PROVIDER EXPLORER UI (read-only; только отображает модель routingProviderInventory) ===
+const RPE_RENDER_CAP = 500;
+function rpeFormatBytes(n) {
+  if (n < 1024) return n + ' B';
+  return (n / 1024).toFixed(1) + ' KiB';
+}
+function rpeLine(parent, text, cls) {
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  div.textContent = text;
+  parent.appendChild(div);
+  return div;
+}
+function rpeRenderPayloadView(pre, infoEl, provider, query) {
+  const res = routingProviderSearch(provider, query); // поиск всегда по ПОЛНОМУ payload
+  const shown = res.matches.slice(0, RPE_RENDER_CAP); // cap — только на отображение
+  pre.textContent = shown.join(RD_NL);
+  let label = 'Matches: ' + res.total;
+  if (res.total > RPE_RENDER_CAP) label += ' · Showing first ' + RPE_RENDER_CAP + ' of ' + res.total;
+  infoEl.textContent = label;
+}
+function rpeBuildBody(card, item, provider) {
+  const body = document.createElement('div');
+  body.className = 'rpe-body';
+  body.style.cssText = 'margin:6px 0 0 14px;font-size:.85rem';
+  card.appendChild(body);
+  rpeLine(body, 'type: ' + item.type);
+  rpeLine(body, 'behavior: ' + item.behavior);
+  rpeLine(body, 'format: ' + (item.format === 'default' ? 'default (omitted)' : item.format));
+  rpeLine(body, 'source: ' + item.source);
+  item.metadata.forEach(([k, v]) => rpeLine(body, k + ': ' + v));
+  if (item.used.length === 1) {
+    rpeLine(body, 'used by: rule #' + (item.used[0].index + 1) + ' → ' + (item.used[0].target || '—'));
+  } else if (item.used.length > 1) {
+    rpeLine(body, 'used by:');
+    item.used.forEach(u => rpeLine(body, '#' + (u.index + 1) + ' → ' + (u.target || '—')));
+  } else {
+    rpeLine(body, 'used by: UNUSED (нет ни одного RULE-SET)', 'hint');
+  }
+  const stats = item.stats;
+  if (item.type === 'inline') {
+    if (stats.payloadMalformed) {
+      rpeLine(body, '⚠ payload не является списком — содержимое недоступно', 'hint');
+    } else {
+      rpeLine(body, 'payload: ' + stats.entries + ' entries');
+      rpeLine(body, 'payload text size: ' + rpeFormatBytes(stats.bytes) + ' (локальный размер текста payload)', 'hint');
+      const search = document.createElement('input');
+      search.type = 'text';
+      search.className = 'rpe-search';
+      search.placeholder = 'Поиск в payload (подстрока, без сохранения)';
+      search.style.cssText = 'margin-top:6px;padding:4px 8px;min-width:220px';
+      body.appendChild(search);
+      const infoEl = document.createElement('div');
+      infoEl.className = 'hint rpe-matches';
+      infoEl.style.marginTop = '4px';
+      body.appendChild(infoEl);
+      const pre = document.createElement('pre');
+      pre.className = 'rpe-pre';
+      pre.style.cssText = 'margin:4px 0 0;max-height:220px;overflow:auto;border:1px solid var(--border);padding:6px;background:rgba(255,255,255,.45);font-size:.8rem;white-space:pre-wrap';
+      body.appendChild(pre);
+      rpeRenderPayloadView(pre, infoEl, provider, '');
+      search.addEventListener('input', () => rpeRenderPayloadView(pre, infoEl, provider, search.value));
+    }
+  } else if (item.type === 'http' || item.type === 'file') {
+    rpeLine(body, 'payload: unavailable offline', 'hint');
+    rpeLine(body, 'External provider contents are not loaded by the browser.', 'hint');
+    if (item.format === 'mrs') rpeLine(body, 'Contents: unavailable offline (Format: MRS — декодирование не выполняется)', 'hint');
+  } else {
+    // unknown/other: тип не доказан как внешний — нельзя писать «External …»
+    rpeLine(body, 'payload: unavailable offline (тип провайдера не inline — локального содержимого нет)', 'hint');
+  }
+}
+function rpeRenderCard(item, provider) {
+  const card = document.createElement('details');
+  card.className = 'rpe-provider';
+  const sum = document.createElement('summary');
+  sum.style.cursor = 'pointer';
+  const nameEl = document.createElement('span');
+  nameEl.className = 'rpe-name';
+  nameEl.textContent = item.name;
+  nameEl.style.fontWeight = 'bold';
+  sum.appendChild(nameEl);
+  const badge = document.createElement('span');
+  badge.className = 'hint';
+  badge.textContent = ' — ' + item.type + ' · ' + item.behavior + ' · ' + (item.format === 'default' ? 'format: default (omitted)' : 'format: ' + item.format) + ' · ' + (item.used.length ? 'USED' : 'UNUSED');
+  sum.appendChild(badge);
+  card.appendChild(sum);
+  let bodyBuilt = false; // ленивый рендер: тело карточки строится при первом раскрытии
+  card.addEventListener('toggle', () => {
+    if (card.open && !bodyBuilt) { bodyBuilt = true; rpeBuildBody(card, item, provider); }
+  });
+  return card;
+}
+function renderRuleProviderExplorer(doc) {
+  const box = document.getElementById('rpeProviders');
+  const summaryEl = document.getElementById('rpeSummary');
+  const missingEl = document.getElementById('rpeMissing');
+  if (!box || !summaryEl || !missingEl) return;
+  box.textContent = '';
+  summaryEl.textContent = '';
+  missingEl.textContent = '';
+  missingEl.style.display = 'none';
+  if (!doc || typeof doc !== 'object') return;
+  const model = routingProviderInventory(doc);
+  summaryEl.textContent = 'Провайдеры: ' + model.summary.providers +
+    ' · Используются: ' + model.summary.used +
+    ' · Не используются: ' + model.summary.unused + RD_NL +
+    'Inline: ' + model.summary.inline +
+    ' · Внешние: ' + model.summary.external +
+    (model.summary.otherUnknown > 0 ? ' · Other/Unknown: ' + model.summary.otherUnknown : '') +
+    ' · Отсутствующие ссылки: ' + model.summary.missingReferences;
+  if (model.missing.length) {
+    const lines = ['Referenced but missing:'];
+    model.missing.forEach(m => lines.push(m.name + ' — rule #' + (m.index + 1) + ' → ' + (m.target || '—')));
+    missingEl.textContent = lines.join(RD_NL);
+    missingEl.style.display = 'block';
+  }
+  model.items.forEach(item => {
+    box.appendChild(rpeRenderCard(item, (doc['rule-providers'] || {})[item.name]));
+  });
+  if (!model.items.length) rpeLine(box, 'rule-providers отсутствуют в текущем конфиге.', 'hint');
+}
+
 // === MIHOMO BUILDER (via web4core) ===
 async function buildMihomo() {
   if (wgUploadPending) {
@@ -3197,7 +4048,20 @@ async function buildMihomo() {
   }
   const combinedExcludeRegex = combinedExclude.filter ? compileSubscriptionExcludeFilter(combinedExclude.filter).regex : null;
 
-  const urlTest = document.getElementById('pingSelect').value || 'https://google.com/generate_204';
+  let urlTest = document.getElementById('pingSelect').value || 'https://www.gstatic.com/generate_204';
+  if (urlTest === '__custom__') {
+    const customUrl = (document.getElementById('pingCustomUrl') || {}).value || '';
+    const trimmed = customUrl.trim();
+    let parsed = null;
+    try { parsed = new URL(trimmed); } catch (_) {}
+    const creds = parsed && (parsed.username || parsed.password);
+    if (!trimmed) return showToast('❌ Ошибка: выбран Custom URL, но поле пусто — укажите http/https URL', true);
+    if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) {
+      return showToast('❌ Ошибка: Custom health-check URL должен быть абсолютным http/https URL (javascript:, data:, file: и др. запрещены)', true);
+    }
+    if (creds) return showToast('❌ Ошибка: Custom health-check URL не должен содержать учётные данные (user:pass@host)', true);
+    urlTest = trimmed;
+  }
   let addTun = document.getElementById('cfgTun').checked;
   let addSocks = document.getElementById('cfgSocks').checked;
   const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
@@ -3392,6 +4256,7 @@ async function buildMihomo() {
     }
 
     document.getElementById('mihomoOutput').value = yaml;
+    updateRoutingDiagnostics(yaml);
     renderCompatSummary(yaml);
     showToast('✅ Mihomo config built!');
     if (realityModern.invalid > 0) {
