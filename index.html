@@ -3768,6 +3768,7 @@ function routingProviderInventory(doc) {
 // === ROUTING DIAGNOSTICS UI (read-only; только отображает результаты ядра) ===
 const RD_NL = String.fromCharCode(10);
 let lastRoutingDoc = null;
+let lastMtuPlan = null; // diagnostics-only результат web4core.planWireGuardMtu (YAML не меняется)
 let lastRoutingHumanNames = null;
 function updateRoutingDiagnostics(yaml) {
   lastRoutingDoc = null;
@@ -3801,11 +3802,17 @@ function updateRoutingDiagnostics(yaml) {
     summary.textContent = lines.join(RD_NL);
     const preview = routingPreview(doc, lastRoutingHumanNames);
     previewEl.textContent = preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + (p.target || '—')).join(RD_NL);
+    if (typeof web4core.planWireGuardMtu === 'function') {
+      try { lastMtuPlan = web4core.planWireGuardMtu(doc); } catch (_) { lastMtuPlan = null; }
+    } else lastMtuPlan = null;
+    refreshWgMtuNotes();
     renderRuleProviderExplorer(doc);
   } catch (e) {
     summary.textContent = 'Diagnostics недоступен: ' + (e.message || e);
     previewEl.textContent = '';
     resultEl.textContent = '';
+    lastMtuPlan = null;
+    refreshWgMtuNotes();
     renderRuleProviderExplorer(null);
   }
 }
@@ -3852,6 +3859,38 @@ function runRoutingInspector() {
 document.addEventListener('click', (e) => {
   if (e.target && e.target.id === 'rdTestBtn') { e.preventDefault(); runRoutingInspector(); }
 });
+
+// MTU chain notes (NIGHT-05, diagnostics-only): отображение результатов
+// web4core.planWireGuardMtu на карточках профилей. GENERATED YAML НЕ МЕНЯЕТСЯ:
+// функция только дописывает/обновляет информационные строки на карточках.
+function refreshWgMtuNotes() {
+  const cards = document.querySelectorAll('#wgList .wg-card-info');
+  const planByName = {};
+  if (lastMtuPlan && Array.isArray(lastMtuPlan.profiles)) {
+    lastMtuPlan.profiles.forEach(pr => { planByName[pr.name] = pr; });
+  }
+  wgProfiles.forEach((p) => {
+    const infoEl = cards[wgProfiles.indexOf(p)];
+    if (!infoEl) return;
+    let noteEl = infoEl.querySelector('.wg-mtu-chain');
+    const pr = planByName[p.bean && p.bean.name];
+    if (!pr) { if (noteEl) noteEl.remove(); return; }
+    if (!noteEl) {
+      noteEl = document.createElement('div');
+      noteEl.className = 'wg-mtu-chain';
+      noteEl.style.cssText = 'color:var(--muted);font-size:.78rem;margin-top:2px;white-space:pre-line';
+      infoEl.appendChild(noteEl);
+    }
+    const lines = [];
+    if (pr.chain && pr.chain.length > 1) {
+      lines.push('ℹ Цепочка MTU: ' + pr.chain.join(' → ') +
+        (pr.ceiling !== null && pr.ceiling !== undefined ? ' · безопасный потолок ≈ ' + pr.ceiling + ' (worst-case IPv4; YAML не меняется)' : ''));
+    }
+    (pr.reason || []).forEach(rs => lines.push((pr.confidence === 'error' ? '⚠ ' : 'ℹ ') + rs));
+    if (pr.confidence === 'unknown') lines.push('⚠ Автоматический расчёт MTU недоступен — исходный MTU сохранён.');
+    noteEl.textContent = lines.join(RD_NL);
+  });
+}
 
 // === RULE PROVIDER EXPLORER UI (read-only; только отображает модель routingProviderInventory) ===
 const RPE_RENDER_CAP = 500;

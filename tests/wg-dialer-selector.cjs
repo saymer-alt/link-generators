@@ -531,6 +531,81 @@ const fx = n => path.join(__dirname, 'fixtures', n);
   assert.ok(!JSON.stringify(awgDs).includes('fd00:'), 'IPv6 удалён и из AWG-профиля');
   ok('AWG dual-stack: IPv4-only вывод при полном сохранении AWG-опций');
 
+  // 20. NIGHT-05: MTU chain planner (diagnostics-only). Цепочка из §16:
+  // ee(S4=12,CPA 10-100) -> de(S4=12,CPA) -> fi(S4=12,CPA) -> warp(plain, MTU 1200)
+  // -> awg-dual-stack(outermost, без MTU, CPA 5-40).
+  // ovhMax(WG base+S4+CPA max) для ee/de/fi = 32+12+100 = 144;
+  // worst-case на уровень = ovhMax + align 15 + inner IP/UDP 28 = 187.
+  // awg-ds eff 1408 -> warp eff min(1200, 1408−90) = 1200 (не повышается!) ->
+  // fi ceil 1200−187 = 1013 -> de ceil 826 -> ee ceil 639.
+  await page.evaluate(() => {
+    wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList();
+    const inp = document.getElementById('mihomoInput');
+    inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const seqChain = ['wg-ee-like.conf', 'wg-de-like.conf', 'wg-fi-like.conf', 'wg-warp-like.conf', 'wg-awg-dual-stack-like.conf'];
+  // warp-like уже dual-stack MTU 1200; awg-dual-stack не имеет S4/I — используем awg-i-like? он с S4=30? нет —
+  // awg-i-like без S4; но §16 использовал awg-dual-stack-like как пятый профиль — возьмём его (AWG v3, CPA/HPK).
+  for (let i = 0; i < seqChain.length; i++) {
+    await page.locator('#wgFile').setInputFiles(fx(seqChain[i]));
+    await page.waitForFunction(k => wgUploadPending === false && wgProfiles.length === k, i + 1, { timeout: 15000 });
+  }
+  await page.waitForFunction(() => dialerTargetsCache.length >= 5, null, { timeout: 10000 });
+  const idsChain = await page.evaluate(() => wgProfiles.map(p => p.id));
+  const targets = ['wg-de-like', 'wg-fi-like', 'wg-warp-like', 'wg-awg-dual-stack-like'];
+  for (let i = 0; i < 4; i++) {
+    await page.locator('.wg-mode').nth(i).selectOption('proxy');
+    await page.waitForTimeout(120);
+    await page.locator('#wgTarget' + idsChain[i]).selectOption(targets[i]);
+  }
+  r = await build();
+  assert.equal(r.state, 'VALID');
+  const yamlBefore = r.yaml;
+  const plan = await page.evaluate(() => JSON.stringify(lastMtuPlan && lastMtuPlan.profiles));
+  assert.ok(plan && plan !== 'null', 'lastMtuPlan построен после Build');
+  const pp = JSON.parse(plan);
+  const byName = Object.fromEntries(pp.map(x => [x.name, x]));
+  assert.equal(byName['wg-awg-dual-stack-like'].effective, 1408, 'outermost: default 1408');
+  assert.equal(byName['wg-warp-like'].importedMtu, 1200);
+  assert.equal(byName['wg-warp-like'].effective, 1200, 'WARP MTU 1200 никогда не повышается');
+  assert.equal(byName['wg-fi-like'].ceiling, 1013, 'fi: −(32+S4 12+CPA 100+align 15+28) от 1200');
+  assert.equal(byName['wg-de-like'].effective, 826, 'de: planned ceiling 826');
+  assert.equal(byName['wg-ee-like'].effective, 639, 'ee: planned ceiling 639 (>=576)');
+  assert.ok(byName['wg-ee-like'].ceiling < byName['wg-de-like'].ceiling < byName['wg-fi-like'].ceiling, 'monotonic');
+  // diagnostics-only: YAML не изменился планировщиком
+  const yamlAfter = await page.evaluate(() => document.getElementById('mihomoOutput').value);
+  assert.equal(yamlAfter, yamlBefore, 'planner не меняет generated YAML');
+  // карточка цепочки показывает note
+  const chainNote = await page.evaluate(() => {
+    const card = document.querySelectorAll('.wg-card-info')[0];
+    const el = card && card.querySelector('.wg-mtu-chain');
+    return el ? el.textContent : '';
+  });
+  assert.match(chainNote, /Цепочка MTU: wg-ee-like → wg-de-like → wg-fi-like → wg-warp-like → wg-awg-dual-stack-like/, 'chain note на карточке');
+  assert.match(chainNote, /YAML не меняется/, 'явная пометка diagnostics-only');
+  ok('MTU planner: цепочка 5 профилей — monotonic ceilings, YAML нетронут, notes на карточках');
+
+  // non-WG dialer target: analysis stops
+  await page.evaluate(() => {
+    wgProfiles = []; wgRejected = []; syncWgCollections(); renderWgList();
+  });
+  await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#VPS-SE');
+  await page.locator('#wgFile').setInputFiles(fx('wg-simple-a.conf'));
+  await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 1);
+  await page.locator('.wg-mode').first().selectOption('proxy');
+  await page.waitForTimeout(200);
+  await page.locator('#wgTarget' + (await page.evaluate(() => wgProfiles[0].id))).selectOption('VPS-SE');
+  r = await build();
+  assert.equal(r.state, 'VALID');
+  const stoppedPlan = await page.evaluate(() => {
+    const pr = (lastMtuPlan && lastMtuPlan.profiles || []).find(x => x.name === 'wg-simple-a');
+    return pr || {};
+  });
+  assert.equal(stoppedPlan.confidence, 'stopped', 'non-WG target: confidence stopped');
+  assert.equal(stoppedPlan.ceiling, null, 'ceiling не выдаётся');
+  assert.ok(stoppedPlan.reason.some(x => x.includes('non-WG/AWG dialer target')));
+  ok('non-WG dialer target: analysis stops честно (ceiling null)');
+
   assert.deepEqual(errors, [], 'нет pageerror');
   console.log(`WG-dialer-selector: ${passed} проверок — PASS`);
   await browser.close();
