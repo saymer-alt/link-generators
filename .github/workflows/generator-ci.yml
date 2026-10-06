@@ -301,6 +301,9 @@ jobs:
       - name: Deterministic AWL priority integration
         run: node tests/mihomo-awl-priority.cjs
 
+      - name: Tiered Failover runtime lab (#148)
+        run: node tests/tiered-failover-runtime.cjs
+
       - name: Explicit manual/live exclusion guard
         shell: bash
         run: |
