@@ -75,7 +75,7 @@ jobs:
           set -euo pipefail
           for i in $(seq 1 "${{ inputs.attempts }}"); do
             code="$(curl -s -o /dev/null -w '%{http_code}' "${{ inputs.base_url }}")"
-            echo "attempt $i/$(( attempts )): HTTP $code"
+            echo "attempt $i/${{ inputs.attempts }}: HTTP $code"
             if [ "$code" = "200" ]; then exit 0; fi
             sleep "${{ inputs.interval_seconds }}"
           done
