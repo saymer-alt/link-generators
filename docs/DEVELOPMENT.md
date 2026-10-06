@@ -16,6 +16,15 @@
 Значения не дублировать в HTML/tests/JS — бейдж и accessible title вычисляются из
 константы.
 
+## YAML scalar type safety
+
+Пользовательские строковые значения эмитятся типобезопасно: не выполнять
+`String(value)` над всеми полями подряд (ломает numbers/booleans/arrays);
+рискованные YAML-скаляры в строковых полях (`yes`, `no`, `null`, `0123`, даты)
+экранирует автоматический YAML-эмиттер; raw-вставка пользовательского YAML
+сохраняет его YAML-семантику. Контракт и верификация: docs/VALIDATION.md,
+tests/yaml-scalar-hardening.cjs.
+
 ## Development preview и production Pages smoke (NIGHT-11)
 
 - **Preview main**: workflow «Build main preview» (push в main / вручную) выкладывает
