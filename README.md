@@ -19,7 +19,7 @@
 Одна страница — две функции:
 
 - **⚙️ Mihomo Config Builder** — собирает готовый `config.yaml` для Mihomo из proxy-ссылок, HTTP(S)-подписок и файлов WireGuard / AmneziaWG. Перед копированием конфиг проходит базовую структурную проверку.
-- **⚡ WARP MASQUE Links** — генерирует пары ссылок `masque://` (QUIC + HTTP/2) для WARP по анти-DPI стратегии: фиксированный пул QUIC-endpoint'ов, взвешенные «безопасные» порты для H2, анти-корреляция IP.
+- **⚡ WARP MASQUE Links** — генерирует пары ссылок `masque://` (H3 / QUIC + H2 / TCP) для WARP по анти-DPI стратегии: фиксированный пул QUIC-endpoint'ов, взвешенные «безопасные» порты для H2/TCP, анти-корреляция IP.
 
 ## Быстрый старт
 
@@ -47,7 +47,7 @@
 **YAML от WARP-бота → ссылки `masque://`**
 
 1. На вкладке **⚡ WARP MASQUE Links** вставьте YAML-конфигурацию WARP-бота и нажмите **🔍 Распарсить** — в форму импортируются ключи и параметры WARP-профиля. Endpoint и порт из исходного YAML намеренно не задают транспорт генератора.
-2. **⚡ Сгенерировать ссылки** — получите пары `masque://`-ссылок (QUIC + H2); endpoint'ы и порты выбираются самим генератором по его MASQUE/DPI-стратегии.
+2. **⚡ Сгенерировать ссылки** — получите пары `masque://`-ссылок (H3 / QUIC + H2 / TCP); endpoint'ы и порты выбираются самим генератором по его MASQUE/DPI-стратегии.
 3. Кнопка **🚀 В Mihomo Builder** перенесёт их в сборщик конфига.
 
 ## Какие данные можно подать на вход
@@ -66,12 +66,12 @@
 - внутренний IP туннеля `ip` (опционально `ipv6`);
 - `sni` и `dns`.
 
-Название бота не важно — важно наличие этих полей. Из них собираются `masque://`-ссылки; порты и распределение QUIC/H2 подбираются anti-DPI стратегией автоматически.
+Источник не важен — бот, WARPSCOUT или другой совместимый экспорт; важно наличие этих полей. Из них собираются `masque://`-ссылки; порты и распределение H3/QUIC и H2/TCP подбираются anti-DPI стратегией автоматически.
 
 **WARPSCOUT тоже подходит как источник MASQUE identity.** Его вывод
 `-conf - -conf-type mihomo` содержит совместимый `proxies:` блок с ключами, SNI,
 внутренним IP и DNS. Текущий импорт намеренно не переносит найденные WARPSCOUT
-`server` / `port` / `network` в transport-стратегию генератора: H2 продолжает
+`server` / `port` / `network` в transport-стратегию генератора: H2 / TCP продолжает
 использовать Safe Ports по умолчанию. Практические сценарии:
 [Windows](docs/WARPSCOUT-WINDOWS.md), [Keenetic / Entware](docs/WARPSCOUT-KEENETIC.md) и [VPS](docs/WARPSCOUT-VPS.md).
 
@@ -90,7 +90,7 @@ proxy-ссылок отключите **📡 Использовать URL-под
 | TUIC | `tuic://` | `type: tuic` | UUID/пароль или token |
 | AnyTLS | `anytls://` | `type: anytls` | Пароль и параметры сессии |
 | Mieru | `mieru://`, `mierus://` | `type: mieru` | Логин/пароль, TCP/UDP; одиночный порт или `port-range` |
-| MASQUE | `masque://` | `type: masque` | Включая ссылки WARP из вкладки **WARP MASQUE Links**, QUIC и HTTP/2 |
+| MASQUE | `masque://` | `type: masque` | Включая ссылки WARP из вкладки **WARP MASQUE Links**, H3 / QUIC и H2 / TCP |
 | TrustTunnel | `tt://` | `type: trusttunnel` | Payload формата TrustTunnel |
 | SOCKS5 / SOCKS5H | `socks://`, `socks5://`, `socks5h://` | `type: socks5` | Алиасы входа; логин/пароль при необходимости |
 | HTTP / HTTPS proxy | `http://`, `https://` | `type: http` | HTTPS включает TLS; URL прокси не путать с подпиской |

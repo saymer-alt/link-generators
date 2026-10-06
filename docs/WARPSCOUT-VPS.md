@@ -408,14 +408,14 @@ WARPSCOUT во второй фазе поднимает настоящий ту�
 curl -s http://127.0.0.1:9090/proxies/GLOBAL | jq '{now, all}'
 ```
 
-Пример смысла результата:
+Пример смысла результата (имена профилей текущей терминологии — H3 / QUIC + H2 / TCP):
 
 ```json
 {
-  "now": "WARP-MASQUE-QUIC",
+  "now": "WARP-MASQUE-H3-QUIC",
   "all": [
-    "WARP-MASQUE-QUIC",
-    "WARP-MASQUE-H2-443",
+    "WARP-MASQUE-H3-QUIC",
+    "WARP-MASQUE-H2-TCP-443",
     "REJECT"
   ]
 }
@@ -478,7 +478,7 @@ curl -s http://127.0.0.1:9090/proxies/GLOBAL | jq -r '.all[]'
 Подставьте реальное имя H3 из списка:
 
 ```bash
-curl -s -X PUT   -H 'Content-Type: application/json'   -d '{"name":"WARP-MASQUE-QUIC"}'   http://127.0.0.1:9090/proxies/GLOBAL
+curl -s -X PUT   -H 'Content-Type: application/json'   -d '{"name":"WARP-MASQUE-H3-QUIC"}'   http://127.0.0.1:9090/proxies/GLOBAL
 ```
 
 После переключения:
@@ -496,13 +496,13 @@ curl -x socks5h://127.0.0.1:7890 -s   https://speed.cloudflare.com/meta | jq .
 Имя H2 зависит от сгенерированного порта, например:
 
 ```text
-WARP-MASQUE-H2-443
+WARP-MASQUE-H2-TCP-443
 ```
 
 Переключение:
 
 ```bash
-curl -s -X PUT   -H 'Content-Type: application/json'   -d '{"name":"WARP-MASQUE-H2-443"}'   http://127.0.0.1:9090/proxies/GLOBAL
+curl -s -X PUT   -H 'Content-Type: application/json'   -d '{"name":"WARP-MASQUE-H2-TCP-443"}'   http://127.0.0.1:9090/proxies/GLOBAL
 ```
 
 И снова те же две проверки:

@@ -74,10 +74,10 @@ function parseLink(link) {
     // QUIC pool, order, port 443, no network=h2; pair numbering
     let links = await generate([0, 0, 0, 0, 0, 0, 0, 0, 0], { count: 3 });
     assert.equal(links.length, 6);
-    const quic = links.filter(l => parseLink(l).name.includes('-QUIC'));
+    const quic = links.filter(l => parseLink(l).name.includes('-H3-QUIC'));
     assert.deepEqual(quic.map(l => parseLink(l).host + ':' + parseLink(l).port),
       ['162.159.198.2:443', '162.159.198.1:443', '162.159.199.2:443'], 'fixed QUIC pool, always port 443');
-    assert.deepEqual(quic.map(l => parseLink(l).name), ['WARP-MASQUE-QUIC-1', 'WARP-MASQUE-QUIC-2', 'WARP-MASQUE-QUIC-3'],
+    assert.deepEqual(quic.map(l => parseLink(l).name), ['WARP-MASQUE-H3-QUIC-1', 'WARP-MASQUE-H3-QUIC-2', 'WARP-MASQUE-H3-QUIC-3'],
       'count>1 numbers every pair, first included');
     for (const l of quic) assert.ok(!parseLink(l).q['network'], 'QUIC links carry no network=h2');
     rec('quic-pool', { endpoints: quic.map(l => parseLink(l).host + ':' + parseLink(l).port) });
@@ -95,7 +95,7 @@ function parseLink(link) {
       links = await generate([Number(r), 0, 0], { count: 1 });
       const h2 = parseLink(links[1]);
       assert.equal(String(h2.port), port, 'safe bucket rand ' + r + ' -> port ' + port);
-      assert.match(h2.name, new RegExp('-H2-' + port + '$'));
+      assert.match(h2.name, new RegExp('-H2-TCP-' + port + '$'));
     }
     rec('safe-buckets', { covered: [...new Set(safeBuckets.map(b => b[1]))] });
 
@@ -166,7 +166,7 @@ function parseLink(link) {
     assert.equal(q.ip, '172.16.0.2');
     assert.equal(q.udp, 'true');
     assert.equal(q['remote-dns-resolve'], 'true');
-    assert.match(links[0].split('#')[1], /^WARP-MASQUE-QUIC$/, 'empty profile falls back to WARP-MASQUE');
+    assert.match(links[0].split('#')[1], /^WARP-MASQUE-H3-QUIC$/, 'empty profile falls back to WARP-MASQUE');
     rec('defaults', { sni: q.sni, dns: q.dns, ip: q.ip });
 
     console.log('PASS masque-dpi-regression: ' + results.length + ' groups');
