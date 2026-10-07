@@ -128,6 +128,9 @@ jobs:
       - name: Config Dependency Graph + Domain Coverage core regression
         run: node tests/dependency-graph.cjs
 
+      - name: Physical Topology core regression (#149)
+        run: node tests/physical-topology.cjs
+
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 
