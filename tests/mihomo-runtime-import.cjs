@@ -12,7 +12,7 @@ const { pathToFileURL } = require('node:url');
 const { chromium } = require('playwright');
 
 const root = path.resolve(__dirname, '..');
-const CONTROLLER = '10.0.6.78:9090';
+const CONTROLLER = '10.0.0.2:9090';
 let passed = 0;
 const ok = name => { passed++; console.log('  ok —', name); };
 
@@ -94,7 +94,7 @@ async function rtStatus(page) {
   // === 4. Controller URL normalization ===
   const norm = await page.evaluate(() => {
     const out = [];
-    for (const input of ['10.0.6.78:9090', 'http://10.0.6.78:9090/', 'https://ctrl.example.net:9090/base/']) {
+    for (const input of ['10.0.0.2:9090', 'http://10.0.0.2:9090/', 'https://ctrl.example.net:9090/base/']) {
       try { out.push(normalizeRuntimeController(input)); } catch (e) { out.push('ERR:' + e.message); }
     }
     try { normalizeRuntimeController('ftp://x:1'); } catch (e) { out.push('ERR-scheme'); }
@@ -102,7 +102,7 @@ async function rtStatus(page) {
     try { normalizeRuntimeController('no-port-here'); } catch (e) { out.push('ERR-noport'); }
     return out;
   });
-  assert.deepEqual(norm, ['http://10.0.6.78:9090', 'http://10.0.6.78:9090', 'https://ctrl.example.net:9090/base', 'ERR-scheme', 'ERR-empty', 'ERR-noport'], 'нормализация: ' + JSON.stringify(norm));
+  assert.deepEqual(norm, ['http://10.0.0.2:9090', 'http://10.0.0.2:9090', 'https://ctrl.example.net:9090/base', 'ERR-scheme', 'ERR-empty', 'ERR-noport'], 'нормализация: ' + JSON.stringify(norm));
   ok('controller URL: host:port → http://, trailing /, path сохранение, схема/пустой/без-порта отклонены');
 
   // === 5. Нет запроса до клика ===
@@ -225,7 +225,7 @@ async function rtStatus(page) {
   await page.waitForTimeout(300);
   assert.equal(await page.evaluate(() => document.getElementById('staleBuildWarn').style.display === 'block'), false, 'импорт не делает STALE');
   // правка controller/secret тоже не делает STALE:
-  await page.locator('#rtControllerInput').fill('10.0.6.78:9091');
+  await page.locator('#rtControllerInput').fill('10.0.0.2:9091');
   await page.waitForTimeout(100);
   assert.equal(await page.evaluate(() => document.getElementById('staleBuildWarn').style.display === 'block'), false, 'controller/secret input не влияет на fingerprint');
   // а выбор галочкой — делает:
@@ -254,7 +254,7 @@ async function rtStatus(page) {
 
   // === 16. Privаtность: secret/JSON не в localStorage, controller не персистится ===
   const store = await page.evaluate(() => JSON.stringify(localStorage));
-  assert.ok(!store.includes('topsecret') && !store.includes('10.0.6.78') && !store.includes('AEZA') && !store.includes('providers'), 'localStorage: ни secret, ни controller, ни runtime JSON');
+  assert.ok(!store.includes('topsecret') && !store.includes('10.0.0.2') && !store.includes('AEZA') && !store.includes('providers'), 'localStorage: ни secret, ни controller, ни runtime JSON');
   await page.reload();
   await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
   const afterReload = await page.evaluate(() => ({
