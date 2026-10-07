@@ -2,7 +2,7 @@
 
 Практический ручной чеклист владельца перед `main → stable` для v1.10.0.
 Автоматизированные регрессии покрывает Generator CI (зелёный run на freeze-коммите:
-Generator CI run 37647453067 (success) на freeze-коммите 1e74f3c6ccfef9be3ac5bd5142ce0f7dec0f8746; все 4 workflow (Generator CI / Update web4core runtime / Upstream compatibility watch / Build main preview) зелёные на этом SHA); здесь — то, что CI не видит. Заполняется в реальном браузере и на
+Generator CI run 37647453067 (success) на freeze-коммите 1e74f3c6ccfef9be3ac5bd5142ce0f7dec0f8746; все 4 workflow (Generator CI / Update web4core runtime / Upstream compatibility watch / Build main preview) зелёные на этом SHA. Здесь — то, что CI не видит. Заполняется в реальном браузере и на
 реальном роутере. Секреты/URL-токены/HWID в документ и логи не вставлять.
 
 ## 0. Артефакт
