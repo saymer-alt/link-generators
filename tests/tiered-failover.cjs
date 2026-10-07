@@ -56,16 +56,29 @@ const ok = name => { passed++; console.log('  ok —', name); };
   await page.locator('#wgFile').setInputFiles([fx('wg-simple-a.conf'), fx('wg-simple-b.conf')]);
   await page.waitForFunction(() => wgUploadPending === false && wgProfiles.length === 2);
   await page.waitForFunction(() => dialerTargetsCache.length > 0, null, { timeout: 15000 });
+  // Флешируем отложенный scheduleDialerRefresh (250ms) от предыдущих input-событий:
+  // его renderTierCards сбросил бы НЕзафиксированное значение .tier-member-select
+  // между set и click (гонка воспроизведена на медленном CI-раннере 2026-10-07).
+  await page.waitForTimeout(400);
   const addMember = async (cardIdx, value) => {
-    await page.evaluate(({ i, v }) => {
-      const card = document.querySelectorAll('#tierCards .tier-card')[i];
-      const sel = card.querySelector('.tier-member-select');
-      let opt = sel.querySelector('option[value="' + v + '"]');
-      if (!opt) { opt = document.createElement('option'); opt.value = v; opt.textContent = v; sel.appendChild(opt); }
-      sel.value = v;
-    }, { i: cardIdx, v: value });
-    await page.locator('#tierCards .tier-card').nth(cardIdx).locator('.tier-add-member').click();
-    await page.waitForTimeout(30);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.evaluate(({ i, v }) => {
+        const card = document.querySelectorAll('#tierCards .tier-card')[i];
+        const sel = card.querySelector('.tier-member-select');
+        let opt = sel.querySelector('option[value="' + v + '"]');
+        if (!opt) { opt = document.createElement('option'); opt.value = v; opt.textContent = v; sel.appendChild(opt); }
+        sel.value = v;
+      }, { i: cardIdx, v: value });
+      await page.locator('#tierCards .tier-card').nth(cardIdx).locator('.tier-add-member').click();
+      await page.waitForTimeout(60);
+      const added = await page.evaluate(({ i, v }) => {
+        const card = document.querySelectorAll('#tierCards .tier-card')[i];
+        return Array.from(card.querySelectorAll('.tier-member li')).some(li => li.dataset.value === v);
+      }, { i: cardIdx, v: value });
+      if (added) return;
+      await page.waitForTimeout(350); // дать дебаунсу отыграть перед повтором
+    }
+    throw new Error('addMember: «' + value + '» не добавился в эшелон #' + cardIdx + ' за 3 попытки');
   };
   const removeFirstMember = async cardIdx => {
     await page.locator('#tierCards .tier-card').nth(cardIdx).locator('.tier-member li .tier-member-rm').first().click();

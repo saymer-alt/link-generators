@@ -306,10 +306,11 @@ async function listedCount(page) {
 
   // === 13. privacy: localStorage ===
   const store = await page.evaluate(() => ({ keys: Object.keys(localStorage), dump: JSON.stringify(localStorage) }));
-  assert.ok(store.keys.every(k => k === 'link-generators.subscription-preview-hwid.v1'), 'localStorage: только стабильный preview HWID (#152); фактические ключи: ' + store.keys.join(','));
+  const IDENTITY_KEYS = ['link-generators.device-identities.v1', 'link-generators.subscription-preview-hwid.v1'];
+  assert.ok(store.keys.every(k => IDENTITY_KEYS.includes(k)), 'localStorage: только identity-ключи (#152/#156); фактические ключи: ' + store.keys.join(','));
   assert.ok(!store.dump.includes('token-a') && !store.dump.includes('token-b') && !store.dump.includes('token-c'), 'токены подписок не сохраняются');
-  assert.ok(!store.dump.includes('Node-0'), 'имена узлов не сохраняются в localStorage');
-  ok('privacy: localStorage чист (идентификация генератора, не данные)');
+  assert.ok(!store.dump.includes('Node-0') && !store.dump.includes('Main-0') && !store.dump.includes('Alt-0'), 'имена узлов не сохраняются в localStorage');
+  ok('privacy: localStorage чист (только identity-хранилище, не данные)');
 
   assert.deepEqual(errors, [], 'no page errors');
   cases += 1;

@@ -390,8 +390,8 @@
         <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Доступно только в профиле «Роутер / обычный TUN»; в обоих VPS-профилях отключено.</span></span></label>
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090. На VPS controller доступен только локально (127.0.0.1:9090); для удалённого управления используйте SSH-туннель (локальный forwarded-порт — свой на каждый VPS).</span></span></label>
-        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется отдельный стабильный HWID генератора, а не HWID Mihomo/Keenetic.</span></span></label>
-        <label><input type="checkbox" id="cfgServerList"> 📋 Показать серверы подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Показать серверы подписки">?</button><span class="ctx-help-pop" role="note">Позволяет браузеру получить имена узлов подписки для просмотра и выбора исключений. По умолчанию выключено — без этого генератор не запрашивает подписку браузером. Отдельная функция просмотра: работает в обоих режимах «Использовать URL-подписки», список и выбор исключений появляются в разделе Exclude Filter. При CORS может использоваться проектный fallback-воркер; список и URL не сохраняются, локально хранится только стабильный идентификатор генератора.</span></span></label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется стабильный HWID логического устройства (#156), общий для preview и всех провайдеров конфига, — не HWID Mihomo/Keenetic.</span></span></label>
+        <label><input type="checkbox" id="cfgServerList"> 📋 Показать серверы подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Показать серверы подписки">?</button><span class="ctx-help-pop" role="note">Позволяет браузеру получить имена узлов подписки для просмотра и выбора исключений. По умолчанию выключено — без этого генератор не запрашивает подписку браузером. Отдельная функция просмотра: работает в обоих режимах «Использовать URL-подписки», список и выбор исключений появляются в разделе Exclude Filter. При CORS может использоваться проектный fallback-воркер; список и URL не сохраняются, локально хранится только реестр идентичностей устройства (#156).</span></span></label>
       </div>
       <div id="subModeHint" class="hint"></div>
       <div id="webUiRow" style="margin-top:10px">
@@ -408,7 +408,13 @@
       <div id="deviceModelRow" style="margin-top:10px">
         <label for="deviceModelInput">📱 Device Model — имя устройства для панели подписки (необязательно)</label>
         <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
-        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>Home-Router</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
+        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>Home-Router</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На идентификатор устройства (HWID) не влияет и нигде не сохраняется.</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+          <label for="deviceIdentitySelect" style="margin:0">🔑 Идентификатор устройства:</label>
+          <select id="deviceIdentitySelect" style="flex:0 1 auto;min-width:200px"></select>
+          <button type="button" class="btn btn-gray" id="btnDeviceIdentityNew">➕ Новое устройство</button>
+        </div>
+        <div class="hint">Один логический объект (роутер/конфиг) = один стабильный HWID: он одинаков для preview-запросов и для всех proxy-providers конфига, не меняется при пересборках и переименовании Device Model. «➕ Новое устройство» создаёт отдельную идентичность (например, для второго роутера, собранного из этого же браузера) и переключает на неё будущие сборки. Сам HWID нигде не отображается и в диагностику не попадает; локально хранится только реестр идентичностей.</div>
       </div>
       <div id="excludeFilterRow" style="margin-top:10px">
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
@@ -421,7 +427,7 @@
             <span id="subListStats" class="hint" style="margin:0">Список ещё не получен.</span>
           </div>
           <div id="subListStatus" class="hint" style="display:none;margin-top:4px" aria-live="polite"></div>
-          <div id="subListPrivacyHint" class="hint" style="margin-top:4px">Браузер запросит подписку напрямую; при CORS-блокировке — через проектный fallback-воркер (URL подписки при этом виден его инфраструктуре). Список, URL и содержимое не сохраняются; локально хранится только стабильный идентификатор генератора.</div>
+          <div id="subListPrivacyHint" class="hint" style="margin-top:4px">Браузер запросит подписку напрямую; при CORS-блокировке — через проектный fallback-воркер (URL подписки при этом виден его инфраструктуре). Список, URL и содержимое не сохраняются; локально хранится только реестр идентичностей устройства.</div>
           <div id="subListControls" style="display:none;margin-top:6px">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <input type="text" id="subListSearch" placeholder="поиск по имени…" style="flex:1;min-width:160px;padding:4px 8px">
@@ -3050,11 +3056,30 @@ function onWhitelistChange() {
 // родителе (MIPS и «TUN на каждый прокси» — при TUN; «SOCKS-порт на каждый
 // прокси» — при Mixed Port); выключение родителя сбрасывает зависимую опцию.
 // В БС-режиме Per-Proxy принудительно недоступны (плюс кламп в buildMihomo).
-const SUBSCRIPTION_PREVIEW_STORAGE_KEY = 'link-generators.subscription-preview-hwid.v1';
 const SUBSCRIPTION_PREVIEW_DEVICE_MODEL = 'Saymer Link Generators Preview';
-let subscriptionPreviewMemoryHwid = '';
 
-function subscriptionPreviewRandomHwid() {
+// === ИДЕНТИЧНОСТЬ ЛОГИЧЕСКОГО УСТРОЙСТВА (#156) ===
+// Один логический генерируемый объект (роутер/конфиг) = одна стабильная
+// идентичность: preview-запросы и ВСЕ proxy-providers конфига несут один и
+// тот же x-hwid (runtime-опция deviceHwid, web4core#16); пересборка того же
+// объекта молча её не меняет; другое устройство из того же браузера получает
+// свою идентичность только явным «➕ Новое устройство». Device Model —
+// человекочитаемая подпись, на идентичность не влияет. HWID не отображается
+// и в диагностику/trace не попадает. Хранилище:
+// link-generators.device-identities.v1 — единственное новое персистентное
+// значение (документировано в AGENTS.md). Миграция: валидный HWID из
+// legacy-ключа link-generators.subscription-preview-hwid.v1 становится
+// идентичностью первого устройства; сам legacy-ключ не удаляется и больше
+// не пишется.
+const DEVICE_IDENTITY_STORAGE_KEY = 'link-generators.device-identities.v1';
+const LEGACY_PREVIEW_HWID_STORAGE_KEY = 'link-generators.subscription-preview-hwid.v1';
+let deviceIdentityRegistry = null; // кэш реестра (RAM, если localStorage недоступен)
+
+function isValidDeviceHwid(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9=-]{10,64}$/.test(value);
+}
+
+function deviceIdentityRandomHex32() {
   const bytes = new Uint8Array(16);
   try {
     (globalThis.crypto || window.crypto).getRandomValues(bytes);
@@ -3064,17 +3089,90 @@ function subscriptionPreviewRandomHwid() {
   return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function getSubscriptionPreviewHwid() {
-  if (/^[A-Za-z0-9=-]{10,64}$/.test(subscriptionPreviewMemoryHwid)) return subscriptionPreviewMemoryHwid;
-  let stored = '';
-  try { stored = localStorage.getItem(SUBSCRIPTION_PREVIEW_STORAGE_KEY) || ''; } catch (_) {}
-  if (/^[A-Za-z0-9=-]{10,64}$/.test(stored)) {
-    subscriptionPreviewMemoryHwid = stored;
-    return stored;
+function persistDeviceIdentityRegistry() {
+  try {
+    localStorage.setItem(DEVICE_IDENTITY_STORAGE_KEY, JSON.stringify(deviceIdentityRegistry));
+  } catch (_) {} // file:///приватные контексты: реестр живёт только в RAM
+}
+
+function loadDeviceIdentityRegistry() {
+  if (deviceIdentityRegistry) return deviceIdentityRegistry;
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(DEVICE_IDENTITY_STORAGE_KEY) || 'null'); } catch (_) {}
+  const shapeOk = stored && typeof stored.activeId === 'string'
+    && Array.isArray(stored.devices) && stored.devices.length
+    && stored.devices.every(d => d && typeof d.id === 'string' && isValidDeviceHwid(d.hwid))
+    && new Set(stored.devices.map(d => d.id)).size === stored.devices.length
+    && stored.devices.some(d => d.id === stored.activeId);
+  if (shapeOk) {
+    deviceIdentityRegistry = stored;
+    return deviceIdentityRegistry;
   }
-  subscriptionPreviewMemoryHwid = subscriptionPreviewRandomHwid();
-  try { localStorage.setItem(SUBSCRIPTION_PREVIEW_STORAGE_KEY, subscriptionPreviewMemoryHwid); } catch (_) {}
-  return subscriptionPreviewMemoryHwid;
+  // Первое использование (или повреждённое хранилище): реестр с одним
+  // устройством. Миграция: валидный HWID legacy-ключа сохраняется как
+  // идентичность первого устройства (панель не получает лишний device-слот
+  // после обновления генератора).
+  let legacyHwid = '';
+  try { legacyHwid = localStorage.getItem(LEGACY_PREVIEW_HWID_STORAGE_KEY) || ''; } catch (_) {}
+  if (!isValidDeviceHwid(legacyHwid)) legacyHwid = deviceIdentityRandomHex32();
+  const firstDevice = {
+    id: 'dev-' + deviceIdentityRandomHex32().slice(0, 16),
+    hwid: legacyHwid,
+    label: 'Устройство 1',
+    createdAt: new Date().toISOString()
+  };
+  deviceIdentityRegistry = {
+    version: 1,
+    activeId: firstDevice.id,
+    devices: [firstDevice]
+  };
+  persistDeviceIdentityRegistry();
+  return deviceIdentityRegistry;
+}
+
+function getActiveDeviceIdentity() {
+  const reg = loadDeviceIdentityRegistry();
+  return reg.devices.find(d => d.id === reg.activeId);
+}
+
+function renderDeviceIdentitySelect() {
+  const sel = document.getElementById('deviceIdentitySelect');
+  if (!sel) return;
+  const reg = loadDeviceIdentityRegistry();
+  sel.textContent = '';
+  for (const d of reg.devices) {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    const date = (d.createdAt || '').slice(0, 10);
+    opt.textContent = (d.label || 'Устройство') + (date ? ' · с ' + date : '');
+    sel.appendChild(opt);
+  }
+  sel.value = reg.activeId;
+}
+
+function setActiveDeviceIdentity(id) {
+  const reg = loadDeviceIdentityRegistry();
+  if (!reg.devices.some(d => d.id === id)) return;
+  reg.activeId = id;
+  persistDeviceIdentityRegistry();
+  renderDeviceIdentitySelect();
+}
+
+// Явная операция: новая идентичность для ДРУГОГО логического устройства
+// (например, второго роутера, собранного из этого же браузера).
+function createNewDeviceIdentity() {
+  const reg = loadDeviceIdentityRegistry();
+  const device = {
+    id: 'dev-' + deviceIdentityRandomHex32().slice(0, 16),
+    hwid: deviceIdentityRandomHex32(),
+    label: 'Устройство ' + (reg.devices.length + 1),
+    createdAt: new Date().toISOString()
+  };
+  reg.devices.push(device);
+  reg.activeId = device.id;
+  persistDeviceIdentityRegistry();
+  renderDeviceIdentitySelect();
+  showToast('Создана идентичность «' + device.label + '» — будущие сборки и preview-запросы используют её HWID.');
 }
 
 function subscriptionPreviewHeaders() {
@@ -3083,10 +3181,11 @@ function subscriptionPreviewHeaders() {
   // подпись устройства). Больше ничего не отправляем.
   // Device Model: значение пользователя (📱 Device Model), если заполнено —
   // именно его видит панель подписки; иначе подпись web-генератора.
-  // HWID от Device Model не зависит (стабильный localStorage-идентификатор).
+  // HWID: идентичность активного логического устройства (#156) — та же,
+  // что уходит во все proxy-providers конфига (options.deviceHwid).
   const userModel = (document.getElementById('deviceModelInput').value || '').trim();
   return {
-    'x-hwid': getSubscriptionPreviewHwid(),
+    'x-hwid': getActiveDeviceIdentity().hwid,
     'x-device-model': userModel || SUBSCRIPTION_PREVIEW_DEVICE_MODEL
   };
 }
@@ -5457,6 +5556,7 @@ async function buildMihomo() {
         mihomoSubscriptionMode: subMode,
         excludeFilter: (subMode && combinedExclude.filter) ? combinedExclude.filter : undefined,
         deviceModel: subMode ? document.getElementById('deviceModelInput').value : undefined,
+        deviceHwid: subMode ? getActiveDeviceIdentity().hwid : undefined,
         webUiDashboard: webUiEnabled ? webUiChoice : undefined,
         webUiCustomUrl: webUiEnabled && webUiChoice === 'custom' ? webUiCustomUrl : undefined,
         mihomoPerProxyTun: perProxyTun,
@@ -5613,6 +5713,12 @@ document.getElementById('btnPolicyAdd').addEventListener('click', () => {
   addPolicyCard(preset);
 });
 updateExcludeFilterVisibility();
+// Идентичность устройства (#156): селектор + явное «Новое устройство».
+renderDeviceIdentitySelect();
+document.getElementById('deviceIdentitySelect').addEventListener('change', (e) => {
+  setActiveDeviceIdentity(e.target.value);
+});
+document.getElementById('btnDeviceIdentityNew').addEventListener('click', createNewDeviceIdentity);
 updateSubModeHint();
 updateWebUiVisibility();
 updateMihomoOptionStates();
