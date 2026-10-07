@@ -224,6 +224,9 @@ jobs:
       - name: Mihomo runtime node import regression (#159)
         run: node tests/mihomo-runtime-import.cjs
 
+      - name: Physical Topology UI regression (#149)
+        run: node tests/physical-topology-browser.cjs
+
       - name: Domain Coverage Checker browser regression
         run: node tests/domain-coverage.cjs
       - name: Health-check URL browser regression

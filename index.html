@@ -173,6 +173,14 @@
   .wg-rejected-file{font-weight:bold}
   .wg-rejected-human{display:block;margin:2px 0}
   .wg-rejected-tech{display:block;color:var(--muted);font-size:.72rem;font-family:monospace}
+  .pt-node-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0;padding:6px 10px;border:1px solid var(--border);background:rgba(255,255,255,.45);font-size:.85rem}
+  .pt-node-row.pt-down{opacity:.55;border-style:dashed}
+  .pt-node-label{word-break:break-word}
+  .pt-role-badge{font-size:.68rem;font-weight:bold;padding:1px 6px;border:1px solid var(--border);background:rgba(0,0,0,.05);white-space:nowrap}
+  .pt-node-meta{color:var(--muted);font-size:.72rem}
+  .pt-hop{color:var(--muted);font-size:.72rem;margin:2px 0 2px 14px}
+  .pt-boundary{color:var(--muted);font-size:.8rem;margin:4px 0 4px 2px}
+  .pt-toggle{font-size:.72rem;padding:2px 8px}
   button:disabled{opacity:.55;cursor:not-allowed}
   input:disabled,select:disabled{background:#f0efe6;color:#8a8a80;border-color:#b8b4a4}
   .validation-box{margin-top:12px;padding:10px 12px;border:1px solid var(--field-border);border-radius:0;font-size:.85rem;color:var(--text);background:var(--field)}
@@ -600,6 +608,24 @@
         </div>
         <div class="hint" id="tieredTrace" style="margin-top:6px;white-space:pre-line"></div>
       </div>
+      <details id="physicalTopologyPanel" class="advanced-panel" style="margin-top:12px">
+        <summary style="cursor:pointer"><span>▶</span> <span class="advanced-badge">EXPERIMENTAL · v1.11-dev</span> <span>Physical Topology (только чтение)</span></summary>
+        <div class="hint">Каноническая модель физической цепочки (#149, v1.11): Client → ENTRY → TRANSIT(0..N) → EXIT [→ FINAL OVERLAY] → Internet. Только чтение и диагностика: не меняет генерируемый YAML, не участвует в Build/fingerprint, состояние живёт только в памяти вкладки. Демо — синтетическая reference-фикстура (никаких реальных адресов). Все выводы — о <em>сконфигурированной</em> (intended) топологии; наблюдаемая топология NOT_MEASURED, пока не подключены runtime-измерения. Local routing policy узла — отдельный уровень: транспортные кандидаты политики не создают новых физических узлов/рёбер.</div>
+        <textarea id="ptSpecInput" rows="10" aria-label="Спецификация физической топологии (JSON)" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder='{"nodes":[{"id":"entry-1","label":"…","role":"entry"}],"links":[{"from":"entry-1","to":"exit-1"}],"localPolicies":[]}'></textarea>
+        <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
+          <button type="button" class="btn btn-gray" id="ptDemoBtn">Загрузить демо-топологию</button>
+          <button type="button" class="btn btn-gray" id="ptAnalyzeBtn">Проанализировать</button>
+          <button type="button" class="btn btn-gray" id="ptClearBtn">Очистить</button>
+        </div>
+        <div id="ptDiagOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+        <div id="ptGraphBox" style="display:none;margin-top:8px">
+          <div class="label" style="font-weight:bold;margin-bottom:4px">Configured (intended) physical path</div>
+          <div id="ptGraph"></div>
+          <div class="hint" style="margin-top:4px">Кнопки доступности — what-if (pure-симуляция на модели, без мутаций): недоступный узел разрывает цепочку; альтернативная физическая топология не подставляется никогда (automatic topology failover — not promised в v1.11).</div>
+          <div id="ptWhatIfOut" class="hint" style="margin-top:4px;white-space:pre-line"></div>
+        </div>
+        <div id="ptTraceOut" class="hint" style="margin-top:8px;white-space:pre-line"></div>
+      </details>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN Interface">?</button><span class="ctx-help-pop" role="note">Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo».</span></span></label>
         <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: MIPS stack">?</button><span class="ctx-help-pop" role="note">TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor.</span></span></label>
@@ -5863,7 +5889,7 @@ bindTieredUI();
 // чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
 // ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
 // но визуально помечен как previous Build.
-const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'rtControllerInput', 'rtSecretInput']);
+const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'rtControllerInput', 'rtSecretInput', 'ptSpecInput']);
 let lastBuildFingerprint = null;
 
 function buildStateFingerprint() {
@@ -6000,6 +6026,134 @@ function runRoutingInspector() {
 document.addEventListener('click', (e) => {
   if (e.target && e.target.id === 'rdTestBtn') { e.preventDefault(); runRoutingInspector(); }
   if (e.target && e.target.id === 'dcRunBtn') { e.preventDefault(); runDomainCoverage(); }
+});
+
+// === Physical Topology UI (v1.11 PHASE 10): read-only вертикальный срез ===
+// Состояние — только память вкладки (никакого localStorage); панель вне
+// build-fingerprint (ptSpecInput в BUILD_STALE_EXCLUDED_IDS); YAML не меняется.
+let ptLastModel = null;
+let ptUnavailableNodes = new Set();
+
+function renderPhysicalTopologyGraph() {
+  const graph = document.getElementById('ptGraph');
+  const box = document.getElementById('ptGraphBox');
+  if (!graph || !box) return;
+  graph.textContent = '';
+  if (!ptLastModel) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const boundary = text => {
+    const d = document.createElement('div');
+    d.className = 'pt-boundary';
+    d.textContent = text;
+    return d;
+  };
+  graph.append(boundary('⌂ Client'));
+  for (let i = 0; i < ptLastModel.nodes.length; i++) {
+    const n = ptLastModel.nodes[i];
+    const prev = i === 0 ? null : ptLastModel.nodes[i - 1];
+    const hopKind = i === 0 ? 'ingress' : (n.role === 'final-overlay' ? 'overlay hop' : 'physical hop');
+    const hop = document.createElement('div');
+    hop.className = 'pt-hop';
+    hop.textContent = '↓ ' + hopKind + (prev ? ' · ' + prev.label + ' → ' + n.label : ' · Client → ' + n.label);
+    graph.append(hop);
+    const row = document.createElement('div');
+    row.className = 'pt-node-row' + (ptUnavailableNodes.has(n.id) ? ' pt-down' : '');
+    row.dataset.ptNodeRow = n.id;
+    const badge = document.createElement('span');
+    badge.className = 'pt-role-badge';
+    badge.textContent = ptRoleLabel(n.role);
+    const label = document.createElement('span');
+    label.className = 'pt-node-label';
+    label.textContent = n.label;
+    row.append(badge, label);
+    if (n.engine || n.transport) {
+      const meta = document.createElement('span');
+      meta.className = 'pt-node-meta';
+      meta.textContent = [n.engine, n.transport].filter(Boolean).join(' · ');
+      row.append(meta);
+    }
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'btn btn-gray pt-toggle';
+    toggle.dataset.ptNode = n.id;
+    toggle.setAttribute('aria-pressed', ptUnavailableNodes.has(n.id) ? 'true' : 'false');
+    toggle.setAttribute('aria-label', 'What-if: доступность узла ' + n.label);
+    toggle.textContent = ptUnavailableNodes.has(n.id) ? '✕ недоступен' : '◉ доступен';
+    row.append(toggle);
+    graph.append(row);
+  }
+  const last = ptLastModel.nodes[ptLastModel.nodes.length - 1];
+  const exitHop = document.createElement('div');
+  exitHop.className = 'pt-hop';
+  exitHop.textContent = '↓ egress · ' + last.label + ' → Internet';
+  graph.append(exitHop, boundary('🌐 Internet'));
+  renderPhysicalTopologyWhatIf();
+}
+
+function renderPhysicalTopologyWhatIf() {
+  const out = document.getElementById('ptWhatIfOut');
+  if (!out || !ptLastModel) return;
+  const sim = ptSimulateTopology(ptLastModel, { unavailableNodeIds: Array.from(ptUnavailableNodes) });
+  out.textContent = (sim.status === 'INTACT' ? '✔ ' : '✖ ') + sim.message;
+}
+
+function runPhysicalTopology() {
+  const input = document.getElementById('ptSpecInput');
+  const diagOut = document.getElementById('ptDiagOut');
+  const traceOut = document.getElementById('ptTraceOut');
+  if (!input || !diagOut || !traceOut) return;
+  ptLastModel = null;
+  ptUnavailableNodes = new Set();
+  renderPhysicalTopologyGraph(); // сбрасывает бокс и убирает устаревший рендер
+  traceOut.textContent = '';
+  let spec;
+  try {
+    spec = JSON.parse(input.value);
+  } catch (e) {
+    diagOut.textContent = '✖ Спецификация — не корректный JSON: ' + String(e && e.message ? e.message : e);
+    return;
+  }
+  const res = ptAnalyzeTopology(spec);
+  const lines = res.diagnostics.map(d => (d.severity === 'error' ? '✖ ' : d.severity === 'warning' ? '⚠ ' : 'ℹ ') + d.message);
+  diagOut.textContent = lines.join('\n') || '—';
+  if (res.ok && res.model) {
+    ptLastModel = res.model;
+    renderPhysicalTopologyGraph();
+    const trace = ptTraceTopology(ptLastModel);
+    traceOut.textContent = trace ? trace.text : '';
+  } else {
+    traceOut.textContent = 'Топология не валидна — trace/визуализация строятся только для валидной линейной цепочки (no silent-fix).';
+  }
+}
+
+function clearPhysicalTopology() {
+  const input = document.getElementById('ptSpecInput');
+  if (input) input.value = '';
+  ptLastModel = null;
+  ptUnavailableNodes = new Set();
+  const diagOut = document.getElementById('ptDiagOut');
+  const traceOut = document.getElementById('ptTraceOut');
+  if (diagOut) diagOut.textContent = '';
+  if (traceOut) traceOut.textContent = '';
+  document.getElementById('ptGraphBox').style.display = 'none';
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target) return;
+  if (e.target.id === 'ptDemoBtn') {
+    e.preventDefault();
+    document.getElementById('ptSpecInput').value = JSON.stringify(ptDemoTopologySpec(), null, 2);
+    runPhysicalTopology();
+  }
+  if (e.target.id === 'ptAnalyzeBtn') { e.preventDefault(); runPhysicalTopology(); }
+  if (e.target.id === 'ptClearBtn') { e.preventDefault(); clearPhysicalTopology(); }
+  const nodeToggle = e.target.closest && e.target.closest('.pt-toggle[data-pt-node]');
+  if (nodeToggle) {
+    e.preventDefault();
+    const id = nodeToggle.getAttribute('data-pt-node');
+    if (ptUnavailableNodes.has(id)) ptUnavailableNodes.delete(id); else ptUnavailableNodes.add(id);
+    renderPhysicalTopologyGraph();
+  }
 });
 
 // Domain Coverage UI (v1.9 PHASE 5): первый consumer Config Dependency Graph.
