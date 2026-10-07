@@ -275,6 +275,49 @@ const ok = name => { passed++; console.log('  ok —', name); };
   await page.waitForTimeout(40);
   ok('race #165 (продукт): select → re-render → выбор сохранён → Add добавляет его');
 
+  // 15. P2 UX v1.11 (#160): явная «＋ Добавить» + hint «выбор ещё не добавляет»
+  {
+    const p2 = await page.evaluate(() => {
+      const btn = document.querySelector('#tierCards .tier-card .tier-add-member');
+      const hint = document.querySelector('#tierCards .tier-card .hint');
+      return { addText: btn ? btn.textContent : '', hintText: hint ? hint.textContent : '' };
+    });
+    assert.equal(p2.addText, '＋ Добавить', 'явная текстовая кнопка добавления: ' + JSON.stringify(p2.addText));
+    assert.ok(p2.hintText.includes('ещё не добавляет'), 'hint про то, что выбор сам не добавляет: ' + JSON.stringify(p2.hintText));
+    ok('P2 UX: текстовая «＋ Добавить» + hint');
+  }
+
+  // 16. P2 UX v1.11 (#160): дубликат выхода между эшелонами → warning-lint, не build-ошибка
+  {
+    await page.evaluate(() => {
+      window.__tierCardsState = [
+        { name: 'DupA', strategy: 'url-test', members: ['probe-target-x'] },
+        { name: 'DupB', strategy: 'url-test', members: ['probe-target-x'] }
+      ];
+      renderTierCards();
+    });
+    const dup = await page.evaluate(() => {
+      const b = document.getElementById('tierDupWarn');
+      return { visible: !!b && b.style.display !== 'none', text: b ? b.textContent : '' };
+    });
+    assert.equal(dup.visible, true, 'дубликат-линт показан');
+    assert.ok(dup.text.includes('DupA') && dup.text.includes('DupB'), 'линт называет оба эшелона: ' + JSON.stringify(dup.text));
+    assert.ok(dup.text.includes('допустимо'), 'линт помечает конфигурацию легальной (не ERROR)');
+    await page.evaluate(() => { window.__tierCardsState[1].members = []; renderTierCards(); });
+    assert.equal(await page.evaluate(() => document.getElementById('tierDupWarn').style.display === 'none'), true, 'без дубликатов линт скрыт');
+    ok('P2 UX: дубликат выхода между эшелонами → warning-lint');
+  }
+
+  // 17. P2 UX v1.11 (#160): дефолтные имена эшелонов («Резервные выходы» вместо «Personal»)
+  {
+    await page.evaluate(() => { window.__tierCardsState = []; });
+    await page.locator('#cfgTieredFailover').uncheck();
+    await page.locator('#cfgTieredFailover').check();
+    const names = await page.evaluate(() => (window.__tierCardsState || []).map(t => t.name));
+    assert.deepEqual(names, ['WARP', 'Резервные выходы'], 'дефолтные имена: ' + JSON.stringify(names));
+    ok('P2 UX: дефолт «Резервные выходы»');
+  }
+
   assert.deepEqual(errors, [], 'no page errors');
   passed += 1;
 

@@ -232,6 +232,13 @@ const fx = n => path.join(__dirname, 'fixtures', n);
     assert.equal(wgNames(r.yaml).length, 4, 'валидные 4 профиля в сборке');
     ok('4 valid + 1 server-like: partial batch success');
 
+    // P2 UX v1.11 (#160): «× Скрыть» одной отклонённой записи; валидные бины не тронуты
+    await page.locator('#wgRejected .wg-rejected-dismiss').first().click();
+    await page.waitForFunction(() => document.getElementById('wgRejected').hidden === true);
+    assert.equal(await page.evaluate(() => wgRejected.length), 0, 'запись скрыта');
+    assert.equal(await page.evaluate(() => wgBeans.length), 4, 'валидные профили не затронуты скрытием');
+    ok('P2 UX: «× Скрыть» убирает одну отклонённую запись, бины не тронуты');
+
     // missing PrivateKey -> человекочитаемая причина
     await page.locator('#wgFile').setInputFiles(fx('wg-missing-privatekey.conf'));
     await page.waitForFunction(() => wgUploadPending === false && wgRejected.length === 1);
@@ -271,6 +278,13 @@ const fx = n => path.join(__dirname, 'fixtures', n);
     assert.ok(await page.locator('#wgRejected').isVisible(), 'rejected-блок виден');
     assert.match(await page.locator('#wgRejected').innerText(), /Не загружено: 2/);
     ok('все невалидные: 0 загружено, обе причины в списке');
+
+    // P2 UX v1.11 (#160): «Очистить отклонённые» — массовое скрытие; бины (пустые) не тронуты
+    await page.locator('#wgRejected .wg-rejected-clear').click();
+    await page.waitForFunction(() => document.getElementById('wgRejected').hidden === true);
+    assert.equal(await page.evaluate(() => wgRejected.length), 0, 'все отклонённые скрыты');
+    assert.equal(await page.evaluate(() => wgBeans.length), 0, 'состояние бинов не изменилось');
+    ok('P2 UX: «Очистить отклонённые» — массовое скрытие');
 
     // clear сбрасывает rejected
     await page.locator('#wgClear').click();
