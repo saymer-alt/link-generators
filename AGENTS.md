@@ -393,6 +393,37 @@ fallback is `Saymer Link Generators Preview`. HWID contract (#156): the
 active logical-device identity, shared by preview and all providers,
 never random-per-request and never rotated by rebuilds.
 
+### Mihomo Runtime Node Import (#159)
+
+Second name source for the SAME exclude-filter model: the actual provider
+nodes loaded by the running Mihomo, from `GET /providers/proxies` (never
+`/proxies` alone). Three inputs share one canonical parser
+`parseMihomoRuntimeProviders`, which retains ONLY safe minimum fields
+(provider/proxy names, `type`, `alive`, last `delay`) and discards
+server/port/UUID/password/keys/URLs at parse time. Inputs:
+
+- direct controller fetch (address `host:port` or `http(s)://…` normalized,
+  optional Bearer secret) — explicit click only, no auto-scan; the request
+  goes browser → controller DIRECTLY and must NEVER be routed through the
+  project fallback worker (controller credentials and runtime JSON do not
+  touch project infrastructure);
+- paste JSON; upload `.json`.
+
+Security invariants: controller address and API secret are memory-only for
+the tab lifetime (never localStorage/sessionStorage/URLs/diagnostics; the
+401 message names auth failure without echoing the secret); runtime JSON is
+not persisted; a generic browser network TypeError is reported honestly
+with a checklist (listen address / CORS / private-network permission /
+secret / do-not-expose-WAN) and must NOT be fabricated as CORS_DENIED or
+PERMISSION_DENIED — precise claims only for real HTTP statuses. The importer
+is strictly read-only diagnostics: no Mihomo mutations, no API writes, no
+YAML rewrites; import alone does not mark the build STALE (controller/secret
+inputs are excluded from the build fingerprint), STALE comes only from an
+actual filter-selection change. Runtime-only names are tagged in the list;
+with both sources present a reconciliation line shows ∩ / preview-only /
+runtime-only (evidence for #158; see docs/research/PREVIEW-RUNTIME-PARITY.md).
+Regression: `tests/mihomo-runtime-import.cjs`.
+
 ### AWG stability policy (#137)
 
 Two explicit user-visible toggles in the WG/AWG section (Builder tab), applied to build-time

@@ -459,6 +459,30 @@
           </div>
           <div id="subListStatus" class="hint" style="display:none;margin-top:4px" aria-live="polite"></div>
           <div id="subListPrivacyHint" class="hint" style="margin-top:4px">Браузер запросит подписку напрямую; при CORS-блокировке — через проектный fallback-воркер (URL подписки при этом виден его инфраструктуре). Список, URL и содержимое не сохраняются; локально хранится только реестр идентичностей устройства.</div>
+          <details id="runtimeImportDetails" style="margin-top:6px">
+            <summary>📡 Импорт узлов из работающего Mihomo (runtime)</summary>
+            <div style="margin-top:6px">
+              <div class="hint">Работающий Mihomo знает фактический список узлов провайдеров — он может отличаться от browser-preview (#158). Импортер только читает <code>GET /providers/proxies</code> ради имён узлов для Exclude Filter: он не меняет running Mihomo, не делает API-мутаций и не перезаписывает YAML.</div>
+              <div class="tier-add-row" style="margin-top:6px">
+                <input type="text" id="rtControllerInput" placeholder="10.0.6.78:9090 или http://10.0.6.78:9090" style="flex:1 1 200px;min-width:0;padding:4px 8px" aria-label="Адрес Mihomo external-controller">
+                <input type="password" id="rtSecretInput" placeholder="API secret (необязательно)" style="flex:1 1 140px;min-width:0;padding:4px 8px" aria-label="API secret контроллера (только память)" autocomplete="off">
+                <button type="button" class="btn btn-gray" id="rtFetchBtn">📥 Получить узлы из Mihomo</button>
+              </div>
+              <div class="hint">Адрес и secret не сохраняются (только память вкладки, до перезагрузки страницы). Запрос идёт из браузера напрямую в контроллер — через проектный воркер он не передаётся никогда. Если браузер не пускает (CORS / разрешение локальной сети / listen-адрес) — используйте «Вставить JSON» или «Загрузить .json» ниже: откройте <code>http://&lt;контроллер&gt;/providers/proxies</code> в соседней вкладке и скопируйте ответ.</div>
+              <div class="tier-add-row">
+                <button type="button" class="btn btn-gray" id="rtPasteBtn">📋 Вставить JSON</button>
+                <button type="button" class="btn btn-gray" id="rtUploadBtn">📄 Загрузить .json</button>
+                <input type="file" id="rtFile" accept=".json,application/json" hidden>
+                <button type="button" class="btn btn-gray" id="rtClearBtn">✖ Очистить runtime-список</button>
+              </div>
+              <div id="rtStatus" class="hint" style="display:none;margin-top:4px" aria-live="polite"></div>
+              <div id="rtSummary" class="hint" style="display:none;margin-top:4px"></div>
+              <div id="rtReconciliation" class="hint" style="display:none;margin-top:4px"></div>
+              <details id="rtHelpDetails" style="margin-top:4px"><summary>Почему прямой запрос может не пройти</summary>
+                <div class="hint">Чтобы браузер смог обратиться к контроллеру напрямую: (1) <code>external-controller</code> Mihomo должен слушать адрес, доступный из вашей сети, а не только 127.0.0.1; (2) CORS-настройки контроллера должны разрешать origin генератора; (3) браузер может спросить разрешение на доступ к локальной сети (Private Network Access); (4) secret должен совпадать; (5) не выставляйте контроллер в WAN. Ошибку так же может дать обычная сетевая недоступность — в этом случае точную причину браузер не раскрывает.</div>
+              </details>
+            </div>
+          </details>
           <div id="subListControls" style="display:none;margin-top:6px">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <input type="text" id="subListSearch" placeholder="поиск по имени…" style="flex:1;min-width:160px;padding:4px 8px">
@@ -3549,6 +3573,17 @@ function renderServerList() {
     const text = document.createElement('span');
     text.textContent = name; // только display name: никаких URI/UUID/кредов
     label.append(box, text);
+    // Происхождение имени (#159): runtime-only имена помечаются — это прямая
+    // диагностика preview/runtime паритета (#158), без секретов и endpoints.
+    const origin = serverListNameOrigin(name);
+    if (origin === 'runtime-only') {
+      const tag = document.createElement('span');
+      tag.textContent = 'ℹ только в runtime';
+      tag.className = 'hint';
+      tag.style.cssText = 'margin-left:auto;white-space:nowrap';
+      tag.title = 'Есть в Mihomo runtime, отсутствует в browser preview';
+      label.appendChild(tag);
+    }
     list.appendChild(label);
   }
   if (!subscriptionListNames.length) {
@@ -3578,8 +3613,18 @@ function applyServerListFromSummary(summary) {
   // Честные счётчики: nodes = все узлы, names = уникальные имена (exclude-filter
   // в Mihomo работает по именам, поэтому выбор name-based; дубликаты имён
   // означают исключение всех совпадающих узлов).
+  // Свежая сводка должна быть видна merge/reconciliation уже здесь: вызывается
+  // ДО renderSubscriptionPreview, который раньше перезатирал её (порядок в fetchServerList).
+  if (summary) lastPreviewSummary = summary;
   subscriptionListNodes = summary.found;
   subscriptionListNames = Array.from(new Set(summary.names));
+  serverListSource = 'preview';
+  if (runtimeProviderModel.providers.length) {
+    // Живой runtime-источник: пересобираем union + reconciliation (#159/D6).
+    applyMergedSourceList();
+    return;
+  }
+  serverListNameOrigins = null;
   // Selection переживает refresh для существующих имён; исчезнувшие удаляются.
   const alive = new Set(subscriptionListNames);
   for (const name of Array.from(subscriptionSelection)) {
@@ -3713,6 +3758,231 @@ function initServerList() {
   });
 }
 initServerList();
+
+// === РАНТАЙМ-ИМПОРТ УЗЛОВ ИЗ MIHOMO (#159) ===
+// Второй источник имён для ТОЙ ЖЕ exclude-модели: фактические provider-узлы
+// работающего Mihomo (GET /providers/proxies). Диагностика/выбор фильтра —
+// больше ничего: никаких API-мутаций, никаких перезаписей YAML, никаких
+// fallback-воркеров для controller-запросов. Retain только безопасный минимум
+// (имена провайдеров/узлов + alive/delay/type); server/port/UUID/пароли/ключи/
+// URL отбрасываются при парсинге. Controller URL/secret — только память
+// вкладки; raw runtime JSON не хранится нигде.
+let serverListSource = null;          // null | 'preview' | 'runtime'
+let serverListNameOrigins = null;     // Map(name → 'both'|'preview-only'|'runtime-only') | null
+let runtimeProviderModel = { providers: [], fetchedAt: null };
+let rtControllerMemory = '';          // session-only, никогда не localStorage
+
+// Канонический парсер ответа GET /providers/proxies. Минимальная безопасная
+// модель; чувствительные поля игнорируются; повреждённый/чужой JSON — явная
+// ошибка (fail closed, без «лучшей догадки»).
+function parseMihomoRuntimeProviders(rawJson) {
+  let doc;
+  try { doc = JSON.parse(String(rawJson || '')); }
+  catch (_) { throw new Error('runtime JSON: не является корректным JSON'); }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc) || !doc.providers || typeof doc.providers !== 'object' || Array.isArray(doc.providers)) {
+    throw new Error('runtime JSON: ожидается объект {providers: {...}} из GET /providers/proxies');
+  }
+  const providers = [];
+  for (const [name, value] of Object.entries(doc.providers)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const proxies = Array.isArray(value.proxies) ? value.proxies : [];
+    const safeProxies = [];
+    for (const p of proxies) {
+      // Имя узла — единственное обязательное поле (exclude-filter name-based).
+      if (!p || typeof p !== 'object' || typeof p.name !== 'string' || !p.name.trim()) continue;
+      const safe = { name: p.name };
+      if (typeof p.type === 'string' && p.type) safe.type = p.type;
+      if (typeof p.alive === 'boolean') safe.alive = p.alive;
+      if (typeof p.history === 'object' && Array.isArray(p.history) && p.history.length) {
+        const last = p.history[p.history.length - 1];
+        if (last && typeof last.delay === 'number') safe.delay = last.delay;
+      } else if (typeof p.delay === 'number') {
+        safe.delay = p.delay;
+      }
+      safeProxies.push(safe); // server/port/uuid/password/ключи/URL сознательно не копируются
+    }
+    const safeProvider = { name: String(name), proxies: safeProxies };
+    if (typeof value.vehicleType === 'string' && value.vehicleType) safeProvider.vehicleType = value.vehicleType;
+    if (typeof value.updatedAt === 'string' && value.updatedAt) safeProvider.updatedAt = value.updatedAt;
+    providers.push(safeProvider);
+  }
+  return { providers };
+}
+
+function serverListNameOrigin(name) {
+  if (!serverListNameOrigins) return null;
+  return serverListNameOrigins.get(name) || null;
+}
+
+// Объединение источников в ОДНУ модель списка: union имён, происхождение на
+// каждое имя, выбор переживает (ограничен существующими именами).
+function applyMergedSourceList() {
+  const previewNames = lastPreviewSummary ? Array.from(new Set(lastPreviewSummary.names)) : [];
+  const runtimeNames = runtimeProviderModel.providers.flatMap(p => p.proxies.map(x => x.name));
+  const originMap = new Map();
+  for (const n of previewNames) originMap.set(n, 'preview-only');
+  for (const n of runtimeNames) originMap.set(n, originMap.has(n) ? 'both' : 'runtime-only');
+  const merged = Array.from(originMap.keys());
+  // Сохраняем порядок предпросмотра, затем runtime-only в конце (детерминировано).
+  merged.sort((a, b) => {
+    const oa = originMap.get(a) === 'runtime-only' ? 1 : 0;
+    const ob = originMap.get(b) === 'runtime-only' ? 1 : 0;
+    return oa - ob;
+  });
+  subscriptionListNodes = (lastPreviewSummary ? lastPreviewSummary.found : 0) + runtimeNames.length;
+  subscriptionListNames = merged;
+  serverListNameOrigins = originMap;
+  const alive = new Set(merged);
+  for (const name of Array.from(subscriptionSelection)) {
+    if (!alive.has(name)) subscriptionSelection.delete(name);
+  }
+  renderRuntimeSummary();
+  updateServerListStats();
+  updateSubSelectionNote();
+  renderServerList();
+  updateServerListVisibility();
+}
+
+function renderRuntimeSummary() {
+  const sum = document.getElementById('rtSummary');
+  const rec = document.getElementById('rtReconciliation');
+  if (!sum || !rec) return;
+  if (!runtimeProviderModel.providers.length) { sum.style.display = 'none'; rec.style.display = 'none'; return; }
+  const runtimeNames = runtimeProviderModel.providers.flatMap(p => p.proxies.map(x => x.name));
+  const nodes = runtimeNames.length;
+  const unique = new Set(runtimeNames).size;
+  const bits = ['Источник: Mihomo runtime', 'Провайдеров: ' + runtimeProviderModel.providers.length,
+    'Узлов: ' + nodes, 'Уникальных имён: ' + unique];
+  if (runtimeProviderModel.fetchedAt) bits.push('Обновлено: ' + runtimeProviderModel.fetchedAt);
+  sum.textContent = bits.join(' · ');
+  sum.style.display = '';
+  // Reconciliation Preview ↔ Runtime (#159/D6) — только если есть preview.
+  if (lastPreviewSummary && lastPreviewSummary.names.length) {
+    const previewSet = new Set(lastPreviewSummary.names);
+    const runtimeSet = new Set(runtimeNames);
+    const runtimeOnly = Array.from(runtimeSet).filter(n => !previewSet.has(n));
+    const previewOnly = Array.from(previewSet).filter(n => !runtimeSet.has(n));
+    const parts = [];
+    parts.push('∩ оба источника: ' + (previewSet.size - previewOnly.length));
+    parts.push('только preview: ' + previewOnly.length + (previewOnly.length ? ' — ' + previewOnly.slice(0, 8).join(', ') + (previewOnly.length > 8 ? '…' : '') : ''));
+    parts.push('только runtime: ' + runtimeOnly.length + (runtimeOnly.length ? ' — ' + runtimeOnly.slice(0, 8).join(', ') + (runtimeOnly.length > 8 ? '…' : '') : ''));
+    rec.textContent = parts.join(' · ');
+    rec.style.display = '';
+  } else {
+    rec.style.display = 'none';
+  }
+}
+
+// Нормализация controller-адреса: голый host:port → http://host:port;
+// http(s):// — как есть; прочие схемы/мусор — явная ошибка. Никакого
+// авто-сканирования и запросов на ввод: запрос только по явному клику.
+function normalizeRuntimeController(input) {
+  let value = String(input || '').trim().replace(/\/+$/, '');
+  if (!value) throw new Error('Укажите адрес контроллера (например 10.0.6.78:9090)');
+  if (!/^https?:\/\//i.test(value)) {
+    if (!/^[a-z0-9.-]+(?::\d+)?$/i.test(value) || !/:\d+$/.test(value)) {
+      throw new Error('Адрес контроллера: ожидается host:port или http(s)://host:port');
+    }
+    value = 'http://' + value;
+  }
+  let u;
+  try { u = new URL(value); } catch (_) { throw new Error('Адрес контроллера: некорректный URL'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Адрес контроллера: только http/https');
+  if (!u.hostname) throw new Error('Адрес контроллера: нет host');
+  // Сохраняем path, если пользователь указал базу с префиксом; отсекаем query/hash.
+  return u.origin + (u.pathname && u.pathname !== '/' ? u.pathname.replace(/\/+$/, '') : '');
+}
+
+async function fetchRuntimeProviders() {
+  const status = document.getElementById('rtStatus');
+  const say = (text) => { status.textContent = text; status.style.display = text ? '' : 'none'; };
+  let base;
+  try { base = normalizeRuntimeController(document.getElementById('rtControllerInput').value); }
+  catch (e) { say('❌ ' + e.message); return; }
+  rtControllerMemory = base; // только память вкладки
+  const secret = (document.getElementById('rtSecretInput').value || '').trim();
+  const headers = { Accept: 'application/json' };
+  if (secret) headers.Authorization = 'Bearer ' + secret;
+  say('Загрузка…');
+  try {
+    // Прямой браузер → контроллер. Никаких fallback-воркеров для controller
+    // credentials/runtime JSON — принципиально (security contract #159).
+    const resp = await fetch(base + '/providers/proxies', { headers, cache: 'no-store' });
+    if (!resp.ok) {
+      // HTTP-ответ — можно утверждать точно.
+      const label = resp.status === 401 ? 'HTTP 401: секрет не принят (auth failed)'
+        : resp.status === 403 ? 'HTTP 403: доступ запрещён (forbidden)'
+        : 'HTTP ' + resp.status;
+      say('❌ ' + label);
+      return;
+    }
+    const text = await resp.text();
+    applyRuntimePayload(text, 'fetch');
+    say('✔ Список узлов получен из Mihomo runtime.');
+  } catch (e) {
+    // Generic TypeError браузера не раскрывает причину: не выдумываем
+    // «CORS_DENIED»/«LOCAL_NETWORK_PERMISSION_DENIED» без доказательств.
+    say('❌ Не удалось обратиться к Mihomo controller. Причиной может быть адрес/listen, CORS, разрешение браузера на локальную сеть или обычная сетевая недоступность. Используйте «Вставить JSON»/«Загрузить .json» — ответ откройте в соседней вкладке http://<контроллер>/providers/proxies.');
+  }
+}
+
+function applyRuntimePayload(rawJson, how) {
+  const status = document.getElementById('rtStatus');
+  const say = (text) => { status.textContent = text; status.style.display = text ? '' : 'none'; };
+  let model;
+  try { model = parseMihomoRuntimeProviders(rawJson); }
+  catch (e) { say('❌ ' + e.message); return; }
+  if (!model.providers.length) { say('❌ runtime JSON: ни одного провайдера в /providers/proxies'); return; }
+  runtimeProviderModel = { providers: model.providers, fetchedAt: new Date().toLocaleTimeString() };
+  applyMergedSourceList();
+  document.getElementById('subListControls').style.display = subscriptionListNames.length ? '' : 'none';
+  say(how === 'paste' ? '✔ Runtime JSON разобран (paste).' : '✔ Runtime JSON разобран.');
+}
+
+function clearRuntimeList() {
+  runtimeProviderModel = { providers: [], fetchedAt: null };
+  serverListNameOrigins = null;
+  renderRuntimeSummary();
+  if (lastPreviewSummary) {
+    applyServerListFromSummary(lastPreviewSummary);
+  } else {
+    subscriptionListNames = [];
+    subscriptionListNodes = 0;
+    subscriptionSelection.clear();
+    updateServerListStats();
+    renderServerList();
+    updateSubSelectionNote();
+    document.getElementById('subListControls').style.display = 'none';
+  }
+  const status = document.getElementById('rtStatus');
+  status.textContent = 'Runtime-список очищен.';
+  status.style.display = '';
+}
+
+function initRuntimeImport() {
+  const fetchBtn = document.getElementById('rtFetchBtn');
+  if (!fetchBtn) return;
+  fetchBtn.addEventListener('click', fetchRuntimeProviders);
+  document.getElementById('rtPasteBtn').addEventListener('click', async () => {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch (_) {}
+    if (!text) text = window.prompt('Вставьте JSON из GET /providers/proxies:', '') || '';
+    if (!text) return;
+    applyRuntimePayload(text, 'paste');
+  });
+  document.getElementById('rtUploadBtn').addEventListener('click', () => document.getElementById('rtFile').click());
+  document.getElementById('rtFile').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => applyRuntimePayload(String(reader.result || ''), 'upload');
+    reader.onerror = () => {};
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+  document.getElementById('rtClearBtn').addEventListener('click', clearRuntimeList);
+}
+initRuntimeImport();
 
 // Обе визуальные сводки (верхняя subListStats и нижняя subscriptionPreviewStats)
 // считаются ОДНОЙ моделью: исключено = union (ручной regex ИЛИ выбор галочками),
@@ -5184,7 +5454,7 @@ bindTieredUI();
 // чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
 // ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
 // но визуально помечен как previous Build.
-const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput']);
+const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'rtControllerInput', 'rtSecretInput']);
 let lastBuildFingerprint = null;
 
 function buildStateFingerprint() {
