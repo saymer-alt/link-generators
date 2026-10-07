@@ -405,6 +405,11 @@
         <input type="text" id="webUiCustomUrl" placeholder="https://example.com/dashboard.zip" style="display:none;margin-left:8px">
         <div class="hint">Архив дашборда, который Mihomo скачает в каталог external-ui. MetaCubeXD — по умолчанию. Custom: абсолютный http/https URL архива (.zip/.tgz); URL только генерируется в конфиг, не проверяется из браузера.</div>
       </div>
+      <div id="deviceModelRow" style="margin-top:10px">
+        <label for="deviceModelInput">📱 Device Model — имя устройства для панели подписки (необязательно)</label>
+        <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
+        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>Home-Router</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
+      </div>
       <div id="excludeFilterRow" style="margin-top:10px">
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
         <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
@@ -415,6 +420,7 @@
             <button type="button" class="btn btn-gray" id="subListFetchBtn">📋 Получить список</button>
             <span id="subListStats" class="hint" style="margin:0">Список ещё не получен.</span>
           </div>
+          <div id="subListStatus" class="hint" style="display:none;margin-top:4px" aria-live="polite"></div>
           <div id="subListPrivacyHint" class="hint" style="margin-top:4px">Браузер запросит подписку напрямую; при CORS-блокировке — через проектный fallback-воркер (URL подписки при этом виден его инфраструктуре). Список, URL и содержимое не сохраняются; локально хранится только стабильный идентификатор генератора.</div>
           <div id="subListControls" style="display:none;margin-top:6px">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -434,11 +440,6 @@
           </details>
         </div>
         <div class="hint" id="subSelectionNote" style="display:none;color:var(--warn)">Выбранные для исключения серверы продолжают действовать (объединяются с ручным фильтром через ИЛИ). Очистить — кнопкой «Снять все» в списке серверов.</div>
-      </div>
-      <div id="deviceModelRow" style="margin-top:10px">
-        <label for="deviceModelInput">📱 Device Model — имя устройства для панели подписки (необязательно)</label>
-        <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
-        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>Home-Router</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
       </div>
       <div id="realityModernRow" style="margin-top:10px">
         <label for="realityModernInput">🌐 Modern REALITY / Post-Quantum (X25519MLKEM768) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Modern REALITY">?</button><span class="ctx-help-pop" role="note">Опционально только для VLESS + REALITY узлов с подтверждённой поддержкой X25519MLKEM768. Поддержка появилась в Xray-core 25.5.16, но одна только версия Xray не гарантирует совместимость конкретного сервера/клиента. Укажите host или host:port нужных REALITY-серверов — генератор применит modern override только к ним; обычные VLESS/TLS и остальные узлы не изменяются.</span></span></label>
@@ -3139,11 +3140,13 @@ function subscriptionLinkName(api, link) {
 }
 
 function emptySubscriptionPreviewSummary() {
-  return { subscriptions: 0, found: 0, excluded: 0, names: [], warnings: [] };
+  return { subscriptions: 0, subscriptionsSucceeded: 0, subscriptionsFailed: 0, found: 0, excluded: 0, names: [], warnings: [] };
 }
 
 function mergeSubscriptionPreviewSummary(target, source) {
   target.subscriptions += source.subscriptions;
+  target.subscriptionsSucceeded += source.subscriptionsSucceeded;
+  target.subscriptionsFailed += source.subscriptionsFailed;
   target.found += source.found;
   target.excluded += source.excluded;
   target.names.push(...source.names);
@@ -3151,9 +3154,43 @@ function mergeSubscriptionPreviewSummary(target, source) {
   return target;
 }
 
-async function inspectSubscriptionInput(api, raw, options) {
+// Подписка, чей transport-запрос завершился, но не вернул ни одного
+// поддерживаемого узла — это УСПЕШНО прочитанная пустая подписка
+// (found = 0 честный ноль), а не ошибка сети. Классификация по сообщениям
+// runtime-классификатора: тело получено, валидных ссылок нет.
+function isSubscriptionEmptyBodyError(reason) {
+  return /^(Empty response|Subscription returned no valid links)\b/i.test(String(reason || ''));
+}
+
+// Общий бюджет preview-операции (#152): per-attempt timeout 15s относится
+// к ОДНОЙ попытке, а полный chain (direct → retry → fallback POST/GET ×
+// retries × подписки) может визуально занимать минуты. Кнопка «Получить
+// список» — опциональный UX-путь: ограничиваем всю операцию дедлайном.
+// Обязательный Sub Mode=OFF fetch (развёртывание при Build) бюджетом
+// сознательно не ограничен и не смешивается с этим путём.
+let SUBSCRIPTION_PREVIEW_BUDGET_MS = 60000;
+
+function fetchSubscriptionWithBudget(api, url, headers, deadline) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    return Promise.reject(new Error('превышен общий бюджет preview (' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — сократите число подписок или повторите позже'));
+  }
+  const fetchPromise = api.fetchSubscription(url, { headers });
+  let budgetTimer;
+  const budgetPromise = new Promise((_, reject) => {
+    budgetTimer = setTimeout(() => {
+      reject(new Error('превышен общий бюджет preview (' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — запрос остановлен'));
+    }, remaining);
+  });
+  return Promise.race([fetchPromise, budgetPromise]).finally(() => {
+    clearTimeout(budgetTimer);
+    // Проигравшая гонке fetch-промиса не должна стать unhandled rejection.
+    fetchPromise.catch(() => {});
+  });
+}async function inspectSubscriptionInput(api, raw, options) {
   const expand = !!(options && options.expand);
   const filterRegex = options && options.filterRegex ? options.filterRegex : null;
+  const deadline = options && options.budgetDeadline ? options.budgetDeadline : null;
   const entries = splitSubscriptionInputForPreview(raw);
   const output = [];
   const summary = emptySubscriptionPreviewSummary();
@@ -3166,9 +3203,12 @@ async function inspectSubscriptionInput(api, raw, options) {
     ordinal++;
     summary.subscriptions++;
     try {
-      const body = await api.fetchSubscription(entry.url, { headers: subscriptionPreviewHeaders() });
+      const body = await (deadline
+        ? fetchSubscriptionWithBudget(api, entry.url, subscriptionPreviewHeaders(), deadline)
+        : api.fetchSubscription(entry.url, { headers: subscriptionPreviewHeaders() }));
       const links = String(body || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if (!links.length) throw new Error('подписка не вернула поддерживаемых proxy-ссылок');
+      summary.subscriptionsSucceeded++;
       for (const link of links) {
         const name = subscriptionLinkName(api, link);
         summary.found++;
@@ -3180,6 +3220,14 @@ async function inspectSubscriptionInput(api, raw, options) {
       if (!expand) output.push(entry.line);
     } catch (e) {
       const reason = String(e && e.message ? e.message : e).replace(/https?:\/\/\S+/gi, '[URL hidden]');
+      if (isSubscriptionEmptyBodyError(reason)) {
+        // Пустая, но успешно прочитанная подписка: found = 0 — доказанный
+        // ноль, UNKNOWN-семантика не нужна.
+        summary.subscriptionsSucceeded++;
+        if (!expand) output.push(entry.line);
+        continue;
+      }
+      summary.subscriptionsFailed++;
       if (expand) throw new Error('Не удалось прочитать подписку #' + ordinal + ': ' + reason);
       summary.warnings.push('Не удалось получить preview подписки #' + ordinal + ': ' + reason + '. Provider YAML будет собран без preview.');
       output.push(entry.line);
@@ -3189,6 +3237,7 @@ async function inspectSubscriptionInput(api, raw, options) {
 }
 
 function clearSubscriptionPreview() {
+  lastPreviewSummary = null; // очищенная сводка не может «воскреснуть» live-пересчётом
   const box = document.getElementById('subscriptionPreviewBox');
   if (box) box.style.display = 'none';
 }
@@ -3202,6 +3251,13 @@ let subscriptionPreviewSeq = 0;            // stale-guard сетевых list/pr
 let subscriptionListNames = [];            // уникальные имена (порядок появления)
 let subscriptionListNodes = 0;             // честное число узлов (без дедупликации)
 let subscriptionSelection = new Set();     // выбранные для исключения имена
+// Явная state-модель preview-операции (#152): stale/ошибка/повторный клик
+// ВСЕГДА завершают loading-state — кнопка никогда не остаётся в «Загрузка…»
+// без активного запроса, stale-результат никогда не пишет данные.
+const SERVER_LIST_STATE = { IDLE: 'idle', LOADING: 'loading', STALE: 'stale', SUCCESS: 'success', PARTIAL: 'partial', FAILED: 'failed' };
+let serverListState = SERVER_LIST_STATE.IDLE;
+let serverListLoadSeq = 0;                 // seq запроса, владеющего кнопкой
+let lastPreviewSummary = null;             // последняя применённая сводка (live-пересчёт)
 
 function escapeRegExpText(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -3277,6 +3333,7 @@ function renderServerList() {
       else subscriptionSelection.delete(name);
       updateServerListStats();
       updateSubSelectionNote();
+      refreshSubscriptionPreviewStats();
     });
     const text = document.createElement('span');
     text.textContent = name; // только display name: никаких URI/UUID/кредов
@@ -3336,6 +3393,31 @@ function updateServerListVisibility() {
   updateSubSelectionNote();
 }
 
+const SERVER_LIST_BTN_LABEL = '📋 Обновить список';
+
+function setSubListStatus(text) {
+  const el = document.getElementById('subListStatus');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.display = text ? '' : 'none';
+}
+
+function resetServerListButton() {
+  const btn = document.getElementById('subListFetchBtn');
+  if (btn && btn.textContent === 'Загрузка…') btn.textContent = SERVER_LIST_BTN_LABEL;
+}
+
+// Инвалидация летящего preview-запроса слушателями ввода (seq уже
+// инкрементирован ими): кнопка немедленно возвращается в idle, состояние —
+// STALE. Автоматический повторный запрос не выполняется (no hidden refetch).
+function invalidateServerListFetch() {
+  if (serverListState === SERVER_LIST_STATE.LOADING) {
+    resetServerListButton();
+    serverListState = SERVER_LIST_STATE.STALE;
+    setSubListStatus('Список устарел — нажмите «Обновить список».');
+  }
+}
+
 function fetchServerList() {
   const api = globalThis.web4core;
   const btn = document.getElementById('subListFetchBtn');
@@ -3355,26 +3437,37 @@ function fetchServerList() {
   }
   subscriptionPreviewSeq++;
   const previewSeq = subscriptionPreviewSeq;
+  serverListLoadSeq = previewSeq;
+  serverListState = SERVER_LIST_STATE.LOADING;
   btn.textContent = 'Загрузка…';
+  setSubListStatus('');
+  // Общий бюджет на ВСЮ операцию (обе подписки, все попытки), а не на
+  // отдельную попытку — см. SUBSCRIPTION_PREVIEW_BUDGET_MS.
+  const deadline = Date.now() + SUBSCRIPTION_PREVIEW_BUDGET_MS;
   const task = (async () => {
     const summary = emptySubscriptionPreviewSummary();
-    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: false, filterRegex: null });
+    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: false, filterRegex: null, budgetDeadline: deadline });
     if (previewSeq !== subscriptionPreviewSeq) return;
     mergeSubscriptionPreviewSummary(summary, mainInspected.summary);
     if (whitelistRaw !== null) {
-      const fallbackInspected = await inspectSubscriptionInput(api, whitelistRaw, { expand: false, filterRegex: null });
+      const fallbackInspected = await inspectSubscriptionInput(api, whitelistRaw, { expand: false, filterRegex: null, budgetDeadline: deadline });
       if (previewSeq !== subscriptionPreviewSeq) return;
       mergeSubscriptionPreviewSummary(summary, fallbackInspected.summary);
     }
+    // Итог операции — по факту чтения подписок, не по числу узлов:
+    // пустая, но прочитанная подписка = SUCCESS с честным нулём.
+    serverListState = summary.subscriptionsFailed === 0 ? SERVER_LIST_STATE.SUCCESS
+      : (summary.subscriptionsSucceeded > 0 ? SERVER_LIST_STATE.PARTIAL : SERVER_LIST_STATE.FAILED);
     applyServerListFromSummary(summary);
-    renderSubscriptionPreview(summary); // per-build статистика (подписки/узлы/исключено дубликатов имён)
+    renderSubscriptionPreview(summary);
+    setSubListStatus(serverListState === SERVER_LIST_STATE.PARTIAL
+      ? 'Часть подписок недоступна — итог по узлам неполный.'
+      : (serverListState === SERVER_LIST_STATE.FAILED ? 'Получить список не удалось — нажмите «Обновить список» для повтора.' : ''));
   })();
   task.catch(() => {}).finally(() => {
-    // Кнопка не блокируется: seq-guard предотвращает stale-запись, а повторный
-    // клик во время полёта просто инкрементирует seq и запускает новую загрузку.
-    if (previewSeq === subscriptionPreviewSeq && btn.textContent === 'Загрузка…') {
-      btn.textContent = '📋 Обновить список';
-    }
+    // Кнопку в idle возвращает только владелец загрузки: его операция
+    // завершилась и не была инвалидирована (инвалидация уже вернула кнопку).
+    if (previewSeq === serverListLoadSeq) resetServerListButton();
   });
 }
 
@@ -3384,6 +3477,7 @@ function initServerList() {
   if (!toggle || !btn) return;
   toggle.addEventListener('change', () => {
     subscriptionPreviewSeq++; // toggle меняет эпоху preview-запросов
+    invalidateServerListFetch();
     updateServerListVisibility();
   });
   btn.addEventListener('click', fetchServerList);
@@ -3397,24 +3491,45 @@ function initServerList() {
     renderServerList();
     updateServerListStats();
     updateSubSelectionNote();
+    refreshSubscriptionPreviewStats();
   });
   document.getElementById('subListNone').addEventListener('click', () => {
     subscriptionSelection.clear();
     renderServerList();
     updateServerListStats();
     updateSubSelectionNote();
+    refreshSubscriptionPreviewStats();
   });
 }
 initServerList();
 
+// Обе визуальные сводки (верхняя subListStats и нижняя subscriptionPreviewStats)
+// считаются ОДНОЙ моделью: исключено = union (ручной regex ИЛИ выбор галочками),
+// один узел считается один раз; пересчёт live при любом изменении выбора/фильтра.
 function renderSubscriptionPreview(summary) {
   const box = document.getElementById('subscriptionPreviewBox');
   if (!box) return;
-  if (!summary || !summary.subscriptions) { clearSubscriptionPreview(); return; }
-  const remaining = Math.max(0, summary.found - summary.excluded);
-  document.getElementById('subscriptionPreviewStats').textContent =
-    'Подписок: ' + summary.subscriptions + ' · найдено узлов: ' + summary.found +
-    ' · после фильтра: ' + remaining + ' · исключено: ' + summary.excluded;
+  if (!summary || !summary.subscriptions) { lastPreviewSummary = null; clearSubscriptionPreview(); return; }
+  lastPreviewSummary = summary;
+  const total = summary.subscriptions;
+  const succeeded = summary.subscriptionsSucceeded || 0;
+  const statsEl = document.getElementById('subscriptionPreviewStats');
+  // UNKNOWN ≠ 0: при непрочитанных подписках количество узлов неизвестно,
+  // доказанный ноль — только когда все подписки успешно прочитаны и пусты.
+  if (succeeded === total) {
+    const excluded = serverListCountExcluded(summary.names);
+    const remaining = Math.max(0, summary.found - excluded);
+    statsEl.textContent = 'Подписок: ' + total + ' · preview: ' + succeeded + '/' + total +
+      ' · найдено узлов: ' + summary.found +
+      ' · после фильтра: ' + remaining + ' · исключено: ' + excluded;
+  } else if (succeeded === 0) {
+    statsEl.textContent = 'Подписок: ' + total + ' · preview: 0/' + total + ' · количество узлов: неизвестно';
+  } else {
+    const excluded = serverListCountExcluded(summary.names);
+    statsEl.textContent = 'Подписок: ' + total + ' · preview: ' + succeeded + '/' + total +
+      ' · найдено в доступных подписках: ' + summary.found +
+      ' · исключено (доступные): ' + excluded + ' · общий итог неизвестен';
+  }
   const warning = document.getElementById('subscriptionPreviewWarning');
   warning.textContent = summary.warnings.join(' ');
   warning.style.display = summary.warnings.length ? '' : 'none';
@@ -3423,9 +3538,19 @@ function renderSubscriptionPreview(summary) {
   box.style.display = '';
 }
 
+// Live-пересчёт нижней сводки от последней применённой сводки (выбор
+// галочками / «Снять все» / правка ручного фильтра). Без сети, без rebuild.
+function refreshSubscriptionPreviewStats() {
+  if (lastPreviewSummary) renderSubscriptionPreview(lastPreviewSummary);
+}
+
 function updateExcludeFilterVisibility() {
   document.getElementById('excludeFilterRow').style.display = '';
-  document.getElementById('deviceModelRow').style.display = document.getElementById('cfgSubMode').checked ? '' : 'none';
+  // Device Model относится к слою запросов списка серверов/подписок и
+  // используется в ОБОИХ режимах (x-device-model уходит с каждым preview,
+  // включая server-list в Sub Mode OFF) — виден всегда, до первого
+  // действия, отправляющего такой запрос (#152).
+  document.getElementById('deviceModelRow').style.display = '';
 }
 
 function updateSubModeHint() {
@@ -5459,15 +5584,23 @@ for (const id of ['mihomoInput', 'whitelistInput', 'excludeFilterInput']) {
     lastInspectedBuildInput = null;
     lastInspectedFallbackInput = null;
     subscriptionPreviewSeq++;
-    clearSubscriptionPreview();
-    // Смена подписок/фильтра: старый список серверов и выбор инвалидируются
-    // (контракт §10 issue #100: URL изменился — старые имена невалидны).
-    subscriptionListNames = [];
-    subscriptionListNodes = 0;
-    subscriptionSelection.clear();
-    updateServerListStats();
-    renderServerList();
-    updateSubSelectionNote();
+    if (id === 'excludeFilterInput') {
+      // Имена узлов от фильтра НЕ зависят: список и выбор сохраняются,
+      // счётчики обеих сводок пересчитываются live (union regex + выбор).
+      updateServerListStats();
+      refreshSubscriptionPreviewStats();
+    } else {
+      // Изменение подписок: старый список серверов и выбор инвалидируются
+      // (контракт §10 issue #100: URL изменился — старые имена невалидны).
+      clearSubscriptionPreview();
+      subscriptionListNames = [];
+      subscriptionListNodes = 0;
+      subscriptionSelection.clear();
+      updateServerListStats();
+      renderServerList();
+      updateSubSelectionNote();
+    }
+    invalidateServerListFetch();
   });
 }
 document.getElementById('cfgWebUI').addEventListener('change', updateWebUiVisibility);
@@ -5511,6 +5644,7 @@ document.addEventListener('change', (e) => {
     lastInspectedBuildInput = null;
     lastInspectedFallbackInput = null;
     subscriptionPreviewSeq++;
+    invalidateServerListFetch();
   }
 }, true);
 document.addEventListener('change', (e) => {

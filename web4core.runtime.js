@@ -4155,6 +4155,7 @@
     const providers = {};
     const providerNames = [];
     const usedProviderNames = /* @__PURE__ */ new Set();
+    const deviceHwid = typeof opts?.deviceHwid === "string" && /^[A-Za-z0-9=-]{10,64}$/.test(opts.deviceHwid.trim()) ? opts.deviceHwid.trim() : "";
     subscriptionUrls.forEach((url, index) => {
       const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames);
       const deviceModel = typeof opts?.deviceModel === "string" ? opts.deviceModel.trim() : "";
@@ -4162,7 +4163,7 @@
         type: "http",
         proxy: "DIRECT",
         header: {
-          "x-hwid": [generateSecretHex32()],
+          "x-hwid": [deviceHwid || generateSecretHex32()],
           ...deviceModel ? { "x-device-model": [deviceModel] } : {}
         },
         url,
@@ -4340,7 +4341,7 @@
     const providerTargets = [];
     const probe = { url: getUrlTest(opts), interval: PROXY_FETCH_INTERVAL, lazy: false };
     for (const [name, side] of [["PRIMARY", primary], ["FALLBACK", fallback]]) {
-      const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter, modernHosts: opts?.modernHosts, deviceModel: opts?.deviceModel }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
+      const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter, modernHosts: opts?.modernHosts, deviceModel: opts?.deviceModel, deviceHwid: opts?.deviceHwid }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
       const names = [];
       const renameMap = /* @__PURE__ */ new Map();
       const sideProxies = [];
@@ -5099,6 +5100,11 @@
       if (!isBrowser) {
         throw new Error(classifyError(direct.error || new Error("Fetch failed")));
       }
+      let lastFallbackError = null;
+      const recordFallbackOutcome = (result) => {
+        if (result && result.error) lastFallbackError = result.error;
+        else if (result && typeof result.text === "string") lastFallbackError = new Error("Subscription returned no valid links");
+      };
       if (direct.error) {
         if (/^HTTP\s+(403|429|5\d\d)/.test(String(direct.error.message || ""))) {
           await sleep(350);
@@ -5127,6 +5133,7 @@
               const result = await tryFetch(makeUrl(u), attempt.attemptFor(u));
               const resolved = await consumeFetchResult(result);
               if (resolved) return resolved;
+              recordFallbackOutcome(result);
               if (attempt.kind === "post" && result.error && /^HTTP\s+4(0[05])\b/.test(String(result.error.message || ""))) break;
               if (result.error && retry < maxRetries) {
                 await sleep(500);
@@ -5135,7 +5142,9 @@
           }
         }
       }
-      throw new Error(classifyError(direct.error));
+      const directLabel = classifyError(direct.error);
+      const fallbackLabel = lastFallbackError ? classifyError(lastFallbackError) : null;
+      throw new Error(fallbackLabel && fallbackLabel !== directLabel ? "Direct: " + directLabel + "; Fallback: " + fallbackLabel : directLabel);
     }
     let body = await fetchWithFallback(url, 0);
     if (!body) throw new Error("Empty response");
@@ -5431,7 +5440,7 @@
       extraBeans.forEach(validateBean);
       assertCoreSupports(extraBeans, core, "Mihomo", options);
       applyRealityModernHosts(extraBeans, modernHosts);
-      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter, modernHosts, deviceModel: options.deviceModel, domainPolicy: options.domainPolicy });
+      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter, modernHosts, deviceModel: options.deviceModel, deviceHwid: options.deviceHwid, domainPolicy: options.domainPolicy });
       const yaml2 = buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, cfg2.listeners, {
         addSocks,
         webUI,
