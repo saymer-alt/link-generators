@@ -72,6 +72,25 @@
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
   .hint{font-size:.75rem;color:var(--muted);margin-top:4px}
   .policy-card{background:rgba(255,255,255,.5);border:1px solid var(--border);border-radius:0;min-width:0}
+  /* === Tiered Failover cards (#165): компактная проектная визуальная система ===
+     Кардиналы: name/strategy — визуально главное; reorder/delete — компактные
+     иконки; destructive отличён цветом; ↑/↓ disabled на краях (не no-op). */
+  .tier-card{padding:10px 12px}
+  .tier-title{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .tier-title .tier-name{flex:1 1 160px;font-weight:bold;min-width:0}
+  .tier-btn{padding:2px 8px;font-size:.85rem;line-height:1.2;min-width:28px;flex:0 0 auto}
+  .tier-btn.tier-del{color:#8c2f2f;border-color:#8c2f2f;background:linear-gradient(180deg,#f7e8e8,#eed8d8)}
+  .tier-btn.tier-del:hover{box-shadow:inset 0 0 0 2px #f3bcbc}
+  .tier-btn:disabled{opacity:.45;cursor:default}
+  .tier-btn:disabled:hover{box-shadow:none}
+  .tier-member{list-style:none;margin:4px 0;padding:0}
+  .tier-member li{display:flex;gap:6px;align-items:center;margin:2px 0;padding:1px 4px;background:rgba(255,255,255,.55);border:1px solid var(--border)}
+  .tier-member li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tier-member-rm{padding:0 7px;font-size:.8rem;line-height:1.4;min-width:22px}
+  .tier-add-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center}
+  .tier-add-row .tier-member-select{flex:1 1 150px;min-width:0;padding:4px 6px}
+  .resizable-node-list{resize:vertical;min-height:140px;max-height:70vh;overflow:auto} /* #166 */
+  /* === конец Tiered/#165 === */
   .policy-domains{width:100%;padding:6px 8px;box-sizing:border-box;font-family:monospace;font-size:.85rem}
   .policy-target{padding:5px 8px;font-size:.85rem}
   .policy-target-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
@@ -446,7 +465,7 @@
               <button type="button" class="btn btn-gray" id="subListAll" style="padding:2px 10px">Выбрать все</button>
               <button type="button" class="btn btn-gray" id="subListNone" style="padding:2px 10px">Снять все</button>
             </div>
-            <div id="subscriptionPreviewNames" style="max-height:220px;overflow:auto;margin-top:5px"></div>
+            <div id="subscriptionPreviewNames" class="resizable-node-list" style="height:220px;margin-top:5px"></div>
           </div>
         </div>
         <div id="subscriptionPreviewBox" class="hint" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)" aria-live="polite">
@@ -454,7 +473,7 @@
           <div id="subscriptionPreviewWarning" style="display:none;color:var(--warn);margin-top:4px"></div>
           <details id="subscriptionPreviewDetails" style="margin-top:6px">
             <summary>Найденные имена узлов</summary>
-            <div id="subscriptionPreviewNamesLegacy" style="max-height:220px;overflow:auto;margin-top:5px;white-space:pre-wrap;font-family:monospace"></div>
+            <div id="subscriptionPreviewNamesLegacy" class="resizable-node-list" style="height:220px;margin-top:5px;white-space:pre-wrap;font-family:monospace"></div>
           </details>
         </div>
         <div class="hint" id="subSelectionNote" style="display:none;color:var(--warn)">Выбранные для исключения серверы продолжают действовать (объединяются с ручным фильтром через ИЛИ). Очистить — кнопкой «Снять все» в списке серверов.</div>
@@ -551,7 +570,7 @@
         <div class="hint">Эшелоны проверяются по порядку; финальное правило MATCH направляет трафик в корневую группу «🪜 TIERED-AUTO». Участники — из текущей сборки (прокси, WG/AWG-профили, провайдеры). Health-семантика и границы: <a href="https://github.com/saymer-alt/link-generators/blob/main/docs/TIERED-FAILOVER.md">docs/TIERED-FAILOVER.md</a> (HTTP-пробы; UDP не заявлен).</div>
         <div id="tierCards"></div>
         <div style="margin-top:8px">
-          <button class="btn btn-gray" id="btnTierAdd" type="button">➕ Добавить уровень</button>
+          <button class="btn btn-gray" id="btnTierAdd" type="button">＋ Добавить эшелон</button>
         </div>
         <div class="hint" id="tieredTrace" style="margin-top:6px;white-space:pre-line"></div>
       </div>
@@ -4995,9 +5014,25 @@ function renderTierCards() {
   if (!wrap) return;
   // ВАЖНО: render не пересохраняет DOM-состояние — единственный источник истины
   // window.__tierCardsState; обработчики мутируют его ДО вызова render.
+  // Незафиксированный выбор .tier-member-select живёт в состоянии карточки
+  // (pendingSelect) и переживает перерисовку (#165: debounced
+  // refreshWgTargetSelectors больше не теряет выбор пользователя).
   wrap.textContent = '';
   const options = tierMemberOptions();
   (window.__tierCardsState || []).forEach((t, i) => wrap.appendChild(tierCardDom(t, i, options)));
+}
+
+// Компактная иконка-кнопка карточки (#165): единый размер, aria-label/title
+// сохранены; destructive (🗑) визуально отличён классом tier-del.
+function tierIconBtn(className, text, ariaLabel, title, disabled) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'btn btn-gray tier-btn ' + className;
+  b.textContent = text;
+  b.setAttribute('aria-label', ariaLabel);
+  b.title = title || ariaLabel;
+  if (disabled) b.disabled = true;
+  return b;
 }
 
 function tierCardDom(t, index, options) {
@@ -5005,29 +5040,28 @@ function tierCardDom(t, index, options) {
   card.className = 'tier-card policy-card';
   card.dataset.index = index;
   const title = document.createElement('div');
-  title.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  title.className = 'tier-title';
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
   nameInput.className = 'tier-name';
   nameInput.value = t.name || ('Эшелон ' + (index + 1));
   nameInput.placeholder = 'Имя эшелона (например WARP)';
   nameInput.setAttribute('aria-label', 'Имя эшелона ' + (index + 1));
-  const up = document.createElement('button');
-  up.type = 'button'; up.className = 'btn btn-gray tier-up'; up.textContent = '↑';
-  up.setAttribute('aria-label', 'Эшелон выше');
-  const down = document.createElement('button');
-  down.type = 'button'; down.className = 'btn btn-gray tier-down'; down.textContent = '↓';
-  down.setAttribute('aria-label', 'Эшелон ниже');
-  const del = document.createElement('button');
-  del.type = 'button'; del.className = 'btn btn-gray tier-del'; del.textContent = '✕ Удалить';
-  title.append(nameInput, up, down, del);
+  const count = (window.__tierCardsState || []).length;
+  title.append(
+    nameInput,
+    tierIconBtn('tier-up', '↑', 'Эшелон выше', 'Поднять эшелон (приоритет выше)', index === 0),
+    tierIconBtn('tier-down', '↓', 'Эшелон ниже', 'Опустить эшелон (приоритет ниже)', index === count - 1),
+    tierIconBtn('tier-del', '🗑', 'Удалить эшелон', 'Удалить эшелон')
+  );
   const strategyRow = document.createElement('div');
   strategyRow.className = 'policy-target-row';
   const strategyLabel = document.createElement('label');
   strategyLabel.className = 'label';
-  strategyLabel.textContent = 'Стратегия внутри эшелона:';
+  strategyLabel.textContent = 'Стратегия:';
   const strategySel = document.createElement('select');
   strategySel.className = 'tier-strategy';
+  strategySel.setAttribute('aria-label', 'Стратегия внутри эшелона');
   for (const [v, txt] of [['url-test', '⚡ Fastest / url-test'], ['fallback', 'Ordered fallback']]) {
     const o = document.createElement('option'); o.value = v; o.textContent = txt; strategySel.appendChild(o);
   }
@@ -5036,12 +5070,12 @@ function tierCardDom(t, index, options) {
   const membersLabel = document.createElement('label');
   membersLabel.className = 'label';
   membersLabel.style.cssText = 'display:block;margin-top:8px';
-  membersLabel.textContent = 'Участники (в порядке приоритета внутри эшелона):';
+  membersLabel.textContent = 'Выходы (в порядке приоритета):';
   const memberList = document.createElement('ul');
   memberList.className = 'tier-member';
   (t.members || []).forEach(v => memberList.appendChild(tierMemberItem(v, options)));
   const addRow = document.createElement('div');
-  addRow.style.cssText = 'display:flex;gap:8px;margin-top:6px;flex-wrap:wrap';
+  addRow.className = 'tier-add-row';
   const memberSel = document.createElement('select');
   memberSel.className = 'tier-member-select';
   memberSel.setAttribute('aria-label', 'Добавить участника в эшелон');
@@ -5051,12 +5085,13 @@ function tierCardDom(t, index, options) {
   options.forEach(o => {
     const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; memberSel.appendChild(opt);
   });
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button'; addBtn.className = 'btn btn-gray tier-add-member'; addBtn.textContent = '➕ Добавить выход';
+  // pendingSelect (#165): выбор переживает внешние перерисовки.
+  if (t.pendingSelect && options.some(o => o.value === t.pendingSelect)) memberSel.value = t.pendingSelect;
+  const addBtn = tierIconBtn('tier-add-member', '＋', 'Добавить выход в эшелон', 'Добавить выбранный выход');
   addRow.append(memberSel, addBtn);
   const hint = document.createElement('div');
   hint.className = 'hint';
-  hint.textContent = 'Порядок участников важен для Ordered fallback; для url-test порядок — приоритет при равной скорости.';
+  hint.textContent = 'Порядок важен для Ordered fallback; для url-test порядок — приоритет при равной скорости.';
   card.append(title, strategyRow, membersLabel, memberList, addRow, hint);
   return card;
 }
@@ -5064,23 +5099,25 @@ function tierCardDom(t, index, options) {
 function tierMemberItem(value, options) {
   const li = document.createElement('li');
   li.dataset.value = value;
-  li.style.cssText = 'display:flex;gap:6px;align-items:center;margin:2px 0';
   const opt = (options || []).find(o => o.value === value);
   const span = document.createElement('span');
   span.textContent = opt ? opt.label : value;
-  span.style.flex = '1';
+  span.title = value;
   const rm = document.createElement('button');
-  rm.type = 'button'; rm.className = 'btn btn-gray tier-member-rm'; rm.textContent = '✕';
+  rm.type = 'button'; rm.className = 'btn btn-gray tier-btn tier-member-rm'; rm.textContent = '×';
   rm.setAttribute('aria-label', 'Убрать участника');
+  rm.title = 'Убрать участника';
   li.append(span, rm);
   return li;
 }
 
 function saveTierCardsState() {
-  // DOM → состояние (переживает перерисовку)
+  // DOM → состояние (переживает перерисовку). pendingSelect — незафиксированный
+  // выбор селекта добавления: рендер обязан его восстанавливать (#165).
   window.__tierCardsState = Array.from(document.querySelectorAll('#tierCards .tier-card')).map(card => ({
     name: card.querySelector('.tier-name').value,
     strategy: card.querySelector('.tier-strategy').value,
+    pendingSelect: card.querySelector('.tier-member-select').value || '',
     members: Array.from(card.querySelectorAll('.tier-member li')).map(li => li.dataset.value)
   }));
 }
@@ -5098,30 +5135,38 @@ function bindTieredUI() {
   document.getElementById('tierCards').addEventListener('click', e => {
     const card = e.target.closest('.tier-card');
     saveTierCardsState();
-    if (e.target.classList.contains('tier-del')) { window.__tierCardsState.splice(Number(card.dataset.index), 1); renderTierCards(); return; }
+    const idx = Number(card.dataset.index);
+    if (e.target.classList.contains('tier-del')) { window.__tierCardsState.splice(idx, 1); renderTierCards(); return; }
     if (e.target.classList.contains('tier-up') || e.target.classList.contains('tier-down')) {
-      const i = Number(card.dataset.index), j = e.target.classList.contains('tier-up') ? i - 1 : i + 1;
+      const j = e.target.classList.contains('tier-up') ? idx - 1 : idx + 1;
       if (j < 0 || j >= window.__tierCardsState.length) return;
-      const arr = window.__tierCardsState; [arr[i], arr[j]] = [arr[j], arr[i]];
+      const arr = window.__tierCardsState; [arr[idx], arr[j]] = [arr[j], arr[idx]];
       renderTierCards(); return;
     }
     if (e.target.classList.contains('tier-add-member')) {
-      const sel = card.querySelector('.tier-member-select');
-      if (!sel.value) return;
-      if (!window.__tierCardsState[Number(card.dataset.index)].members.includes(sel.value)) {
-        window.__tierCardsState[Number(card.dataset.index)].members.push(sel.value);
+      // Значение берём из канонического состояния (pendingSelect), а не только
+      // из текущего DOM: внешние перерисовки не теряют выбор пользователя (#165).
+      const pending = window.__tierCardsState[idx].pendingSelect || card.querySelector('.tier-member-select').value;
+      if (!pending) return;
+      if (!window.__tierCardsState[idx].members.includes(pending)) {
+        window.__tierCardsState[idx].members.push(pending);
       }
+      window.__tierCardsState[idx].pendingSelect = ''; // выбор потреблён
       renderTierCards(); return;
     }
     if (e.target.classList.contains('tier-member-rm')) {
       const li = e.target.closest('li');
-      const members = window.__tierCardsState[Number(card.dataset.index)].members;
-      const idx = members.indexOf(li.dataset.value);
-      if (idx !== -1) members.splice(idx, 1);
+      const members = window.__tierCardsState[idx].members;
+      const mIdx = members.indexOf(li.dataset.value);
+      if (mIdx !== -1) members.splice(mIdx, 1);
       renderTierCards();
     }
   });
-  document.getElementById('tierCards').addEventListener('input', saveTierCardsState);
+  document.getElementById('tierCards').addEventListener('input', e => {
+    // saveTierCardsState коммитит и pendingSelect селекта добавления: выбор
+    // фиксируется в состоянии немедленно — debounced-перерисовка его не теряет (#165).
+    saveTierCardsState();
+  });
   document.getElementById('btnTierAdd').addEventListener('click', () => {
     saveTierCardsState();
     window.__tierCardsState.push({ name: 'Эшелон ' + (window.__tierCardsState.length + 1), strategy: 'url-test', members: [] });

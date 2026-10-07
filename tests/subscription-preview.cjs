@@ -304,6 +304,27 @@ async function listedCount(page) {
   await page.setViewportSize({ width: 1280, height: 850 });
   ok('360/412/480: панель серверов без overflow');
 
+  // === 12b. Resizable node list (#166): resize visual-only ===
+  const rz = await page.evaluate(() => {
+    for (const id of ['subscriptionPreviewNames', 'subscriptionPreviewNamesLegacy']) {
+      const el = document.getElementById(id);
+      const st = getComputedStyle(el);
+      if (st.resize !== 'vertical' || st.overflow !== 'auto') return { id, fail: 'resize/overflow', resize: st.resize, overflow: st.overflow };
+      if (parseInt(st.minHeight, 10) < 130 || parseInt(st.minHeight, 10) > 150) return { id, fail: 'min-height', mh: st.minHeight };
+      // getComputedStyle резолвит 70vh в px на текущем вьюпорте — проверяем величину
+      const maxPx = parseInt(st.maxHeight, 10);
+      if (!(String(st.maxHeight).includes('vh') || (maxPx >= 400 && maxPx <= 1200))) return { id, fail: 'max-height', mh: st.maxHeight };
+    }
+    // изменение высоты — чисто визуальное: fingerprint/YAML не меняются
+    const before = buildStateFingerprint();
+    document.getElementById('subscriptionPreviewNames').style.height = '400px';
+    const after = buildStateFingerprint();
+    document.getElementById('subscriptionPreviewNames').style.height = '';
+    return { fail: before !== after ? 'fingerprint changed' : null };
+  });
+  assert.equal(rz.fail, null, 'resizable list contract: ' + JSON.stringify(rz));
+  ok('resizable node list (#166): resize:vertical 140px..70vh, visual-only (fingerprint не меняется)');
+
   // === 13. privacy: localStorage ===
   const store = await page.evaluate(() => ({ keys: Object.keys(localStorage), dump: JSON.stringify(localStorage) }));
   const IDENTITY_KEYS = ['link-generators.device-identities.v1', 'link-generators.subscription-preview-hwid.v1'];

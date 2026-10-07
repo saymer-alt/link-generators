@@ -201,13 +201,79 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.ok(!privacyProbe.includes('private-key'), 'trace/панель не содержат ключевых слов секретов');
   ok('privacy: панель/trace содержат только имена');
 
-  // 12. 360px: панель эшелонов без overflow
-  await page.setViewportSize({ width: 360, height: 900 });
-  await page.waitForTimeout(150);
-  const o = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
-  assert.ok(o.sw <= o.iw + 1, '360px: нет горизонтального overflow (' + o.sw + ' vs ' + o.iw + ')');
+  // 12. 360px: панель эшелонов без overflow (+ 320/412/480 мобильная сетка #165)
+  for (const w of [320, 360, 412, 480]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.waitForTimeout(120);
+    const o = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    assert.ok(o.sw <= o.iw + 1, w + 'px: нет горизонтального overflow (' + o.sw + ' vs ' + o.iw + ')');
+  }
   await page.setViewportSize({ width: 1280, height: 900 });
-  ok('360px layout: без overflow');
+  ok('320/360/412/480 layout: без overflow');
+
+  // 13. UX-контракт #165: компактные контролы, disabled ↑/↓ на краях, destructive-стиль,
+  //     единый «＋ Добавить эшелон», стратегия/имя — визуально главное
+  const ux = await page.evaluate(() => {
+    const cards = Array.from(document.querySelectorAll('#tierCards .tier-card'));
+    const up0 = cards[0].querySelector('.tier-up');
+    const downLast = cards[cards.length - 1].querySelector('.tier-down');
+    const del = cards[0].querySelector('.tier-del');
+    const styleOf = el => getComputedStyle(el);
+    return {
+      cardCount: cards.length,
+      up0Disabled: up0.disabled,
+      downLastDisabled: downLast.disabled,
+      upAria: up0.getAttribute('aria-label'),
+      delAria: del.getAttribute('aria-label'),
+      delBg: styleOf(del).backgroundImage,
+      upBg: styleOf(up0).backgroundImage,
+      addLevel: document.getElementById('btnTierAdd').textContent,
+      delDistinct: styleOf(del).backgroundImage !== styleOf(up0).backgroundImage,
+      compact: styleOf(up0).paddingTop
+    };
+  });
+  assert.equal(ux.cardCount >= 2, true, 'карточки на месте');
+  assert.equal(ux.up0Disabled, true, 'первый эшелон: ↑ disabled');
+  assert.equal(ux.downLastDisabled, true, 'последний эшелон: ↓ disabled');
+  assert.ok(ux.upAria && ux.delAria, 'aria-labels сохранены');
+  assert.equal(ux.addLevel.includes('Добавить эшелон'), true, 'единый «＋ Добавить эшелон»: ' + ux.addLevel);
+  assert.equal(ux.delDistinct, true, 'destructive delete визуально отличён от neutral');
+  assert.notEqual(ux.delBg, ux.upBg, 'destructive delete: другой background');
+  assert.match(ux.compact, /^2px$/, 'компактные контролы (padding-top ' + ux.compact + ')');
+  ok('UX #165: disabled ↑/↓ на краях, destructive-стиль, единый add-контрол, compact');
+
+  // 14. ПРОДУКТ-ФИКС race #165: select участника → debounced re-render → выбор сохранён → Add работает
+  await page.locator('#tierCards .tier-card').nth(1).locator('.tier-name').fill('RaceTier');
+  // выбираем значение программно (как пользовательский select)
+  await page.evaluate(() => {
+    const sel = document.querySelectorAll('#tierCards .tier-card')[1].querySelector('.tier-member-select');
+    const v = sel.options[1] ? sel.options[1].value : '';
+    sel.value = v;
+    sel.dispatchEvent(new Event('input', { bubbles: true })); // как реальный выбор пользователя
+    window.__raceProbe = v;
+  });
+  // внеочередной re-render (то, что делает debounced refreshWgTargetSelectors)
+  await page.evaluate(() => renderTierCards());
+  const raceSel = await page.evaluate(() => {
+    const sel = document.querySelectorAll('#tierCards .tier-card')[1].querySelector('.tier-member-select');
+    return { value: sel.value, expected: window.__raceProbe };
+  });
+  assert.equal(raceSel.value, raceSel.expected, 'pendingSelect пережил re-render: ' + JSON.stringify(raceSel));
+  await page.locator('#tierCards .tier-card').nth(1).locator('.tier-add-member').click();
+  await page.waitForTimeout(40);
+  const raceMember = await page.evaluate(() => {
+    const card = document.querySelectorAll('#tierCards .tier-card')[1];
+    const v = window.__raceProbe;
+    return Array.from(card.querySelectorAll('.tier-member li')).some(li => li.dataset.value === v);
+  });
+  assert.equal(raceMember, true, 'Add добавил именно сохранённое значение');
+  // чистка: убрать добавленного участника, чтобы не влиял на следующие сценарии
+  await page.evaluate(() => {
+    const card = document.querySelectorAll('#tierCards .tier-card')[1];
+    card.querySelector('.tier-member li .tier-member-rm').click();
+  });
+  await page.waitForTimeout(40);
+  ok('race #165 (продукт): select → re-render → выбор сохранён → Add добавляет его');
 
   assert.deepEqual(errors, [], 'no page errors');
   passed += 1;
