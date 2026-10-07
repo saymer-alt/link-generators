@@ -666,9 +666,9 @@
 <script>
 // === GENERATOR META (единственный production source-of-truth версии/канала) ===
 // channel — metadata конкретной сборки, НЕ определение git-ветки в рантайме:
-// development build = 1.9.0-dev / main; release promotion (main → stable) отдельно
-// переводит её на 1.9.0 / stable. UI (бейдж) читает только эти значения.
-const GENERATOR_META = Object.freeze({ version: '1.10.0-dev', channel: 'main' });
+// development build = X.Y.Z-dev / main; release promotion (main → stable) отдельно
+// переводит её на X.Y.Z / stable. UI (бейдж) читает только эти значения.
+const GENERATOR_META = Object.freeze({ version: '1.11.0-dev', channel: 'main' });
 (function renderGeneratorMeta() {
   const el = document.getElementById('genVersionBadge');
   if (!el) return;
