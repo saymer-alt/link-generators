@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-07
+
 ### Added
 
 - **WG/AWG generation detector + профильные бейджи (#157)**: канонический детектор `web4core.detectWireGuardGeneration(bean)` (runtime, web4core PR #17) разделяет family / generation / validity / математические ограничения / целевую совместимость. Матрица на источниках по приоритету: amneziawg-go `uapi.go` (проверено напрямую), официальная документация AmneziaWG, локальный реестр совместимости #136, Mihomo source; Any-Tech-ARCHITECT — только UPSTREAM-OBSERVED reference. Поколения честно: WireGuard (exact) / AWG 1.x legacy (range) / AWG 1.5–2.x (compatible range — 1.5 vs 2.x по конфигу неразличимы, false exact запрещён) / AWG 3.x (lower bound 3.0; 3.1-конфиг может не включать 3.1-only flags) / AWG 3.1 (exact — `random-trailers`/`disable-cookies`) / AWG ? (CONFLICT: `version: 3` без v3-маркеров — версию не выдумываем). `j1–j3/itime` — non-discriminating. Evidence содержит только имена capability-маркеров — никаких значений/ключей. Ограничения (S вне uint16 — SOURCE-PROVEN; H/Jc-лимиты — UPSTREAM-OBSERVED #136) — diagnostics-only заметки, YAML не меняют. Бейдж в карточке профиля (WG / AWG 1.x / 1.5–2.x / 3.x / 3.1 / AWG ?) + tooltip/строки с label, confidence, compatible-диапазоном, маркерами, конфликтами и целевыми заметками (v3 требует Mihomo ≥ 1.19.30); бейдж не путает поколение протокола с версией Mihomo/opkg/генератора. RUNTIME-PROVEN: детектор-классифицированные профили проходят `mihomo -t` на 1.19.31 и 1.19.32. Regression: tests/wg-generation-badge.cjs (8 групп, в CI) + форк tools/tests/wg-generation-detect.test.mjs (11). Matrix: docs/WG-GENERATIONS.md.

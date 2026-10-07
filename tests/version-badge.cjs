@@ -14,7 +14,7 @@ let cases = 0;
 {
   assert.equal((html.match(/const GENERATOR_META = Object\.freeze/g) || []).length, 1, 'GENERATOR_META определяется ровно один раз');
   assert.equal((html.match(/version:\s*'1\.10\.0-dev'/g) || []).length, 1, 'version-литерал живёт только в GENERATOR_META');
-  assert.equal((html.match(/channel:\s*'main'/g) || []).length, 1, 'channel-литерал живёт только в GENERATOR_META');
+  assert.equal((html.match(/channel:\s*'stable'/g) || []).length, 1, 'channel-литерал живёт только в GENERATOR_META');
   assert.match(html, /<span id="genVersionBadge"[^>]*><\/span>/, 'бейдж пуст в HTML — текст приходит из GENERATOR_META');
   assert.ok(!/https:\/\/google\.com\/generate_204/.test(html), 'в production index.html нет legacy google fallback');
   cases += 5;
@@ -34,7 +34,7 @@ let cases = 0;
   // Badge visible immediately + derives from GENERATOR_META
   const badge = page.locator('#genVersionBadge');
   assert.equal(await badge.isVisible(), true, 'badge visible после загрузки'); cases += 1;
-  assert.equal(await badge.textContent(), 'v1.10.0-dev · MAIN'); cases += 1;
+  assert.equal(await badge.textContent(), 'v1.10.0 · MAIN'); cases += 1;
   const meta = await page.evaluate(() => ({
     // const в classic script не создаёт свойство globalThis — читаем глобальный lexical binding
     present: typeof GENERATOR_META !== 'undefined',
@@ -46,10 +46,10 @@ let cases = 0;
   }));
   assert.equal(meta.present, true, 'GENERATOR_META доступен странице');
   assert.equal(meta.frozen, true, 'GENERATOR_META frozen');
-  assert.equal(meta.version, '1.10.0-dev');
+  assert.equal(meta.version, '1.10.0');
   assert.equal(meta.channel, 'main');
   assert.equal(meta.derived, await badge.textContent(), 'badge text derives from GENERATOR_META');
-  assert.equal(meta.title, 'Generator version 1.10.0-dev, channel main', 'accessible title из GENERATOR_META');
+  assert.equal(meta.title, 'Generator version 1.10.0, channel main', 'accessible title из GENERATOR_META');
   cases += 5;
 
   // Narrow viewport: no horizontal overflow, badge still visible
@@ -71,7 +71,7 @@ let cases = 0;
   await badge.hover();
   const yaml2 = await page.evaluate(() => document.getElementById('mihomoOutput').value);
   assert.equal(yaml2, yaml1, 'badge click/hover не меняет generated YAML');
-  assert.equal(await badge.textContent(), 'v1.10.0-dev · MAIN', 'badge не меняется от клика');
+  assert.equal(await badge.textContent(), 'v1.10.0 · MAIN', 'badge не меняется от клика');
   cases += 2;
 
   // Fallback: forced empty #pingSelect → Build → gstatic (не legacy google)
