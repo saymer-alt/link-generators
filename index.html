@@ -409,12 +409,24 @@
         <label for="deviceModelInput">📱 Device Model — имя устройства для панели подписки (необязательно)</label>
         <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
         <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>Home-Router</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На идентификатор устройства (HWID) не влияет и нигде не сохраняется.</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
-          <label for="deviceIdentitySelect" style="margin:0">🔑 Идентификатор устройства:</label>
-          <select id="deviceIdentitySelect" style="flex:0 1 auto;min-width:200px"></select>
-          <button type="button" class="btn btn-gray" id="btnDeviceIdentityNew">➕ Новое устройство</button>
-        </div>
-        <div class="hint">Один логический объект (роутер/конфиг) = один стабильный HWID: он одинаков для preview-запросов и для всех proxy-providers конфига, не меняется при пересборках и переименовании Device Model. «➕ Новое устройство» создаёт отдельную идентичность (например, для второго роутера, собранного из этого же браузера) и переключает на неё будущие сборки. Сам HWID нигде не отображается и в диагностику не попадает; локально хранится только реестр идентичностей.</div>
+        <details id="deviceIdentityDetails" style="margin-top:6px">
+          <summary>🔑 Идентичность подписки: <span id="deviceIdentityCurrentLabel">Устройство 1</span></summary>
+          <div style="margin-top:8px">
+            <div class="hint" style="margin-bottom:6px"><strong>Обычно ничего менять не нужно.</strong> Один логический роутер/конфиг получает один стабильный HWID: preview и все proxy-providers используют его повторно при каждой пересборке.</div>
+            <div class="hint" style="margin-bottom:8px">Дополнительный ID нужен только если из этого браузера создаются конфиги для нескольких разных роутеров/устройств. Для обычной пересборки текущего устройства новый ID создавать не нужно.</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <label for="deviceIdentitySelect" style="margin:0">Текущая идентичность:</label>
+              <select id="deviceIdentitySelect" style="flex:0 1 auto;min-width:200px"></select>
+              <button type="button" class="btn btn-gray" id="btnDeviceIdentityRename">✏️ Переименовать</button>
+              <button type="button" class="btn btn-gray" id="btnDeviceIdentityRegenerate">🎲 Сменить ID</button>
+              <button type="button" class="btn btn-gray" id="btnDeviceIdentityDelete">🗑 Удалить</button>
+            </div>
+            <div style="margin-top:8px">
+              <button type="button" class="btn btn-gray" id="btnDeviceIdentityNew">➕ ID для другого устройства</button>
+            </div>
+            <div class="hint" style="margin-top:6px">Локальное имя нужно только для удобства и не меняет <code>x-device-model</code>. «Сменить ID» создаёт новый случайный HWID только по явной команде и может быть воспринят сервисом подписки как новое устройство. Удаление удаляет запись только из этого браузера: уже созданные конфиги и записи на стороне сервиса не меняются. Сам HWID нигде не отображается и в диагностику не попадает.</div>
+          </div>
+        </details>
       </div>
       <div id="excludeFilterRow" style="margin-top:10px">
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
@@ -3148,14 +3160,36 @@ function renderDeviceIdentitySelect() {
     sel.appendChild(opt);
   }
   sel.value = reg.activeId;
+  const active = reg.devices.find(d => d.id === reg.activeId);
+  const current = document.getElementById('deviceIdentityCurrentLabel');
+  if (current) current.textContent = active && active.label ? active.label : 'Устройство';
+  const del = document.getElementById('btnDeviceIdentityDelete');
+  if (del) {
+    del.disabled = reg.devices.length <= 1;
+    del.title = reg.devices.length <= 1 ? 'Нельзя удалить единственную идентичность' : 'Удалить выбранную локальную идентичность';
+  }
+}
+
+function invalidatePreviewForDeviceIdentityChange() {
+  if (typeof subscriptionPreviewSeq !== 'undefined') subscriptionPreviewSeq++;
+  if (typeof invalidateServerListFetch === 'function') invalidateServerListFetch();
 }
 
 function setActiveDeviceIdentity(id) {
   const reg = loadDeviceIdentityRegistry();
-  if (!reg.devices.some(d => d.id === id)) return;
+  if (!reg.devices.some(d => d.id === id) || reg.activeId === id) return;
   reg.activeId = id;
   persistDeviceIdentityRegistry();
   renderDeviceIdentitySelect();
+  invalidatePreviewForDeviceIdentityChange();
+  showToast('Выбрана идентичность «' + (getActiveDeviceIdentity().label || 'Устройство') + '».');
+}
+
+function nextDeviceIdentityLabel(reg) {
+  const used = new Set(reg.devices.map(d => String(d.label || '').trim()));
+  let n = 1;
+  while (used.has('Устройство ' + n)) n++;
+  return 'Устройство ' + n;
 }
 
 // Явная операция: новая идентичность для ДРУГОГО логического устройства
@@ -3165,14 +3199,73 @@ function createNewDeviceIdentity() {
   const device = {
     id: 'dev-' + deviceIdentityRandomHex32().slice(0, 16),
     hwid: deviceIdentityRandomHex32(),
-    label: 'Устройство ' + (reg.devices.length + 1),
+    label: nextDeviceIdentityLabel(reg),
     createdAt: new Date().toISOString()
   };
   reg.devices.push(device);
   reg.activeId = device.id;
   persistDeviceIdentityRegistry();
   renderDeviceIdentitySelect();
-  showToast('Создана идентичность «' + device.label + '» — будущие сборки и preview-запросы используют её HWID.');
+  invalidatePreviewForDeviceIdentityChange();
+  showToast('Создан ID для другого устройства: «' + device.label + '». Обычная пересборка текущего роутера нового ID не требует.');
+}
+
+function renameActiveDeviceIdentity() {
+  const reg = loadDeviceIdentityRegistry();
+  const device = reg.devices.find(d => d.id === reg.activeId);
+  if (!device) return;
+  const value = prompt('Локальное имя идентичности:', device.label || 'Устройство');
+  if (value === null) return;
+  const label = String(value).trim();
+  if (!label) {
+    showToast('Имя не изменено: пустое значение недопустимо.');
+    return;
+  }
+  device.label = label;
+  persistDeviceIdentityRegistry();
+  renderDeviceIdentitySelect();
+  showToast('Идентичность переименована в «' + label + '». HWID не изменён.');
+}
+
+function regenerateActiveDeviceIdentity() {
+  const reg = loadDeviceIdentityRegistry();
+  const device = reg.devices.find(d => d.id === reg.activeId);
+  if (!device) return;
+  const confirmed = confirm(
+    'Сменить ID для «' + (device.label || 'Устройство') + '»?\n\n' +
+    'Будет создан новый случайный HWID. Сервис подписки может воспринять его как новое устройство. ' +
+    'Старая запись на стороне сервиса и уже созданные конфиги автоматически не изменятся.'
+  );
+  if (!confirmed) return;
+  device.hwid = deviceIdentityRandomHex32();
+  persistDeviceIdentityRegistry();
+  renderDeviceIdentitySelect();
+  invalidatePreviewForDeviceIdentityChange();
+  showToast('ID для «' + (device.label || 'Устройство') + '» заменён. Следующие preview-запросы и сборки используют новый HWID.');
+}
+
+function deleteActiveDeviceIdentity() {
+  const reg = loadDeviceIdentityRegistry();
+  if (reg.devices.length <= 1) {
+    showToast('Нельзя удалить единственную идентичность устройства.');
+    renderDeviceIdentitySelect();
+    return;
+  }
+  const index = reg.devices.findIndex(d => d.id === reg.activeId);
+  if (index < 0) return;
+  const device = reg.devices[index];
+  const confirmed = confirm(
+    'Удалить локальную идентичность «' + (device.label || 'Устройство') + '»?\n\n' +
+    'Она исчезнет только из этого браузера. Уже созданные конфиги и записи на стороне сервиса подписки не изменятся.'
+  );
+  if (!confirmed) return;
+  const fallback = reg.devices[index - 1] || reg.devices[index + 1];
+  reg.devices.splice(index, 1);
+  reg.activeId = fallback.id;
+  persistDeviceIdentityRegistry();
+  renderDeviceIdentitySelect();
+  invalidatePreviewForDeviceIdentityChange();
+  showToast('Локальная идентичность «' + (device.label || 'Устройство') + '» удалена. Активна «' + (getActiveDeviceIdentity().label || 'Устройство') + '».');
 }
 
 function subscriptionPreviewHeaders() {
@@ -5713,12 +5806,15 @@ document.getElementById('btnPolicyAdd').addEventListener('click', () => {
   addPolicyCard(preset);
 });
 updateExcludeFilterVisibility();
-// Идентичность устройства (#156): селектор + явное «Новое устройство».
+// Идентичность устройства (#156/#163): стабильный HWID + явное управление локальным реестром.
 renderDeviceIdentitySelect();
 document.getElementById('deviceIdentitySelect').addEventListener('change', (e) => {
   setActiveDeviceIdentity(e.target.value);
 });
 document.getElementById('btnDeviceIdentityNew').addEventListener('click', createNewDeviceIdentity);
+document.getElementById('btnDeviceIdentityRename').addEventListener('click', renameActiveDeviceIdentity);
+document.getElementById('btnDeviceIdentityRegenerate').addEventListener('click', regenerateActiveDeviceIdentity);
+document.getElementById('btnDeviceIdentityDelete').addEventListener('click', deleteActiveDeviceIdentity);
 updateSubModeHint();
 updateWebUiVisibility();
 updateMihomoOptionStates();

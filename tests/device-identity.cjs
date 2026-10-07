@@ -119,14 +119,18 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.deepEqual(providerHwids(r3.yaml), hwids2a, 'Device Model — только подпись, HWID не меняется');
   ok('reload и смена Device Model не меняют идентичность');
 
-  // === 5. «➕ Новое устройство» → новая идентичность; переключение туда-обратно ===
+  // === 5. «ID для другого устройства» → новая идентичность; переключение туда-обратно ===
+  await page.locator('#deviceIdentityDetails').evaluate(el => { el.open = true; });
+  assert.match(await page.locator('#deviceIdentityDetails').innerText(), /Для обычной пересборки текущего устройства новый ID создавать не нужно/i);
+  assert.match(await page.locator('#btnDeviceIdentityNew').innerText(), /ID для другого устройства/i);
   await page.locator('#btnDeviceIdentityNew').click();
   const newHwid = await activeHwid();
-  assert.notEqual(newHwid, previewHwid, 'явная операция сменила HWID');
+  assert.notEqual(newHwid, previewHwid, 'явная операция создала другой HWID');
   reg = await registry();
   assert.equal(reg.devices.length, 2, 'в реестре два устройства');
   assert.equal(new Set(reg.devices.map(d => d.hwid)).size, 2, 'HWID двух устройств не коллидируют');
   assert.equal(new Set(reg.devices.map(d => d.id)).size, 2, 'id двух устройств не коллидируют');
+  const secondDeviceHwid = reg.devices[1].hwid;
   const r4 = await build();
   assert.deepEqual(providerHwids(r4.yaml), [newHwid, newHwid], 'новая сборка использует новую идентичность');
   // переключение обратно через селектор
@@ -136,9 +140,61 @@ const ok = name => { passed++; console.log('  ok —', name); };
     sel.dispatchEvent(new Event('change', { bubbles: true }));
   }, reg.devices);
   assert.equal(await activeHwid(), previewHwid, 'переключение селектором возвращает старую идентичность');
-  ok('«Новое устройство» и переключение: разные объекты — разные идентичности, без коллизий');
+  ok('другой роутер получает отдельный ID; обычная пересборка явно не требует нового ID');
 
-  // === 6. Приватность: HWID не светится в UI/диагностике; storage не хранит данные ===
+  // === 6. Локальное переименование сохраняется и НЕ меняет HWID ===
+  await page.evaluate(() => { window.prompt = () => 'Дом NC-1812'; });
+  const beforeRenameHwid = await activeHwid();
+  await page.locator('#btnDeviceIdentityRename').click();
+  assert.equal(await activeHwid(), beforeRenameHwid, 'переименование не меняет HWID');
+  reg = await registry();
+  assert.equal(reg.devices.find(d => d.id === reg.activeId).label, 'Дом NC-1812', 'локальная метка переименована');
+  assert.equal(reg.devices[1].hwid, secondDeviceHwid, 'переименование первого устройства не меняет второе');
+  await page.reload();
+  await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
+  assert.match(await page.locator('#deviceIdentityCurrentLabel').innerText(), /Дом NC-1812/);
+  assert.equal(await activeHwid(), beforeRenameHwid, 'переименование переживает reload без смены HWID');
+  ok('переименование: локальная метка сохраняется, HWID не меняется');
+
+  // === 7. «Сменить ID» — только явная random-ротация с подтверждением ===
+  await page.locator('#deviceIdentityDetails').evaluate(el => { el.open = true; });
+  await page.evaluate(() => { window.confirm = () => true; });
+  const beforeRegenerate = await activeHwid();
+  reg = await registry();
+  const deviceCountBeforeRegenerate = reg.devices.length;
+  await page.locator('#btnDeviceIdentityRegenerate').click();
+  const afterRegenerate = await activeHwid();
+  assert.notEqual(afterRegenerate, beforeRegenerate, 'явная смена ID генерирует новый HWID');
+  reg = await registry();
+  assert.equal(reg.devices.length, deviceCountBeforeRegenerate, 'смена ID не создаёт новый локальный device record');
+  assert.equal(reg.devices.find(d => d.id === reg.activeId).label, 'Дом NC-1812', 'локальная метка сохранена при смене ID');
+  assert.equal(reg.devices[1].hwid, secondDeviceHwid, 'смена ID первого устройства не меняет второе');
+  ok('«Сменить ID»: явная ротация HWID без создания лишней записи');
+
+  // === 8. Удаление активной identity → детерминированный fallback; last identity удалить нельзя ===
+  await page.locator('#deviceModelInput').fill('Keep-Device-Model');
+  reg = await registry();
+  const secondId = reg.devices[1].id;
+  await page.evaluate(id => {
+    const sel = document.getElementById('deviceIdentitySelect');
+    sel.value = id;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }, secondId);
+  assert.equal(await activeHwid(), secondDeviceHwid, 'перед удалением выбрана вторая identity');
+  await page.locator('#btnDeviceIdentityDelete').click();
+  reg = await registry();
+  assert.equal(reg.devices.length, 1, 'выбранная identity удалена из локального реестра');
+  assert.equal(reg.activeId, reg.devices[0].id, 'после удаления активна оставшаяся identity');
+  assert.equal(await page.locator('#deviceModelInput').inputValue(), 'Keep-Device-Model', 'удаление identity не меняет Device Model');
+  assert.equal(await page.locator('#btnDeviceIdentityDelete').isDisabled(), true, 'последнюю identity удалить через UI нельзя');
+  const onlyHwid = reg.devices[0].hwid;
+  await page.evaluate(() => deleteActiveDeviceIdentity());
+  const regAfterLastDeleteAttempt = await registry();
+  assert.equal(regAfterLastDeleteAttempt.devices.length, 1, 'защита функции не удаляет последнюю identity');
+  assert.equal(regAfterLastDeleteAttempt.devices[0].hwid, onlyHwid, 'последний HWID не изменён');
+  ok('удаление: local-only, deterministic fallback, последний ID защищён');
+
+  // === 9. Приватность: HWID не светится в UI/диагностике; storage не хранит данные ===
   const uiText = await page.evaluate(() => {
     const ids = ['subListStats', 'subscriptionPreviewStats', 'subscriptionPreviewWarning', 'subListStatus', 'subModeHint', 'mihomoOutput'];
     return ids.map(id => (document.getElementById(id) || {}).textContent || '').join(' | ') + ' | ' + String(window.__lastToast || '');
@@ -151,7 +207,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.ok(!/\bID-ONE\b|\bID-TWO\b/.test(storeDump), 'имена узлов не сохраняются');
   ok('приватность: HWID только в реестре; URL/имена/Device Model не хранятся');
 
-  // === 7. Sub Mode OFF: build без провайдеров не пишет лишнего в реестр ===
+  // === 10. Sub Mode OFF: build без провайдеров не пишет лишнего в реестр ===
   const regBefore = await registry();
   await page.locator('#cfgSubMode').uncheck();
   await build();
@@ -161,6 +217,6 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.deepEqual(errors, [], 'no page errors');
   passed += 1;
 
-  console.log('Device identity (#156): ' + passed + ' cases passed');
+  console.log('Device identity (#156/#163): ' + passed + ' cases passed');
   await browser.close();
 })().catch(e => { console.error('FAIL:', e.message); console.error('AT:', (e.stack || '').split(String.fromCharCode(10)).slice(0, 3).join(' | ')); process.exit(1); });
