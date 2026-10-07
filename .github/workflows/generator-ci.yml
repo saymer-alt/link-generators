@@ -218,6 +218,9 @@ jobs:
       - name: Subscription device identity regression (#156)
         run: node tests/device-identity.cjs
 
+      - name: Mihomo runtime node import regression (#159)
+        run: node tests/mihomo-runtime-import.cjs
+
       - name: Domain Coverage Checker browser regression
         run: node tests/domain-coverage.cjs
       - name: Health-check URL browser regression
