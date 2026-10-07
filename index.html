@@ -464,7 +464,7 @@
             <div style="margin-top:6px">
               <div class="hint">Работающий Mihomo знает фактический список узлов провайдеров — он может отличаться от browser-preview (#158). Импортер только читает <code>GET /providers/proxies</code> ради имён узлов для Exclude Filter: он не меняет running Mihomo, не делает API-мутаций и не перезаписывает YAML.</div>
               <div class="tier-add-row" style="margin-top:6px">
-                <input type="text" id="rtControllerInput" placeholder="10.0.6.78:9090 или http://10.0.6.78:9090" style="flex:1 1 200px;min-width:0;padding:4px 8px" aria-label="Адрес Mihomo external-controller">
+                <input type="text" id="rtControllerInput" placeholder="10.0.0.2:9090 или http://10.0.0.2:9090" style="flex:1 1 200px;min-width:0;padding:4px 8px" aria-label="Адрес Mihomo external-controller">
                 <input type="password" id="rtSecretInput" placeholder="API secret (необязательно)" style="flex:1 1 140px;min-width:0;padding:4px 8px" aria-label="API secret контроллера (только память)" autocomplete="off">
                 <button type="button" class="btn btn-gray" id="rtFetchBtn">📥 Получить узлы из Mihomo</button>
               </div>
@@ -3878,7 +3878,7 @@ function renderRuntimeSummary() {
 // авто-сканирования и запросов на ввод: запрос только по явному клику.
 function normalizeRuntimeController(input) {
   let value = String(input || '').trim().replace(/\/+$/, '');
-  if (!value) throw new Error('Укажите адрес контроллера (например 10.0.6.78:9090)');
+  if (!value) throw new Error('Укажите адрес контроллера (например 10.0.0.2:9090)');
   if (!/^https?:\/\//i.test(value)) {
     if (!/^[a-z0-9.-]+(?::\d+)?$/i.test(value) || !/:\d+$/.test(value)) {
       throw new Error('Адрес контроллера: ожидается host:port или http(s)://host:port');
