@@ -98,7 +98,7 @@ const root = path.resolve(__dirname, '..');
     await page.locator('#cfgProfile').selectOption('router');
     await page.evaluate(() => buildMihomo());
     await page.waitForTimeout(300);
-    const scrub = (s) => s.replace(/^\s+- [0-9a-f]{32}$/gm, 'HWID');
+    const scrub = (s) => s.replace(/^\s+- "?[0-9a-f]{32}"?\s*$/gm, 'HWID');
     const routerYamlScrubbed = scrub(await page.locator('#mihomoOutput').inputValue());
     ok(!routerYamlScrubbed.includes('sniffer:') && !routerYamlScrubbed.includes('dns-hijack'), 'router output has no package keys');
     ok(routerYamlScrubbed.includes('store-fake-ip: true'), 'router keeps legacy runtime template store-fake-ip (untouched by package)');

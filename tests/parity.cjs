@@ -73,7 +73,7 @@ async function runScenario(browser, root, candRoot, name, actions, checkContract
   return yaml
     .replace(/^[ \t]*persistent-keepalive: 25\n/gm, '')
     .replace(/^[ \t]*ip-version: ipv4\n/gm, '')
-    .replace(/^[ \t]+- [0-9a-f]{32}$/gm, 'XHWID');
+    .replace(/^[ \t]+- "?[0-9a-f]{32}"?\s*$/gm, 'XHWID');
 }
 
 (async () => {
