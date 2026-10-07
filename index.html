@@ -155,6 +155,8 @@
   li.wg-card{padding:8px 10px}
   .wg-card-head{display:flex;align-items:center;gap:6px}
   .wg-card-head .wg-list-name{flex:1;font-weight:bold}
+  .wg-gen-badge{padding:0 7px;border:1px solid #7a7a6e;border-radius:3px;font-size:.72rem;line-height:1.5;background:linear-gradient(180deg,#fdfdfa,#e8e5d6);white-space:nowrap;cursor:help}
+  .wg-gen-badge-conflict{color:#8c2f2f;border-color:#8c2f2f;background:linear-gradient(180deg,#f7e8e8,#eed8d8)}
   .wg-card-info{margin:3px 0 6px;color:var(--muted);font-size:.78rem;word-break:break-all}
   .wg-card-mode{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .wg-card-mode label{margin:0;color:var(--text);font-size:.8rem}
@@ -2123,10 +2125,49 @@ function renderWgList() {
     del.textContent = '✕';
     del.setAttribute('aria-label', 'Удалить ' + (p.filename || bean.name || 'профиль'));
     del.addEventListener('click', () => removeWgProfile(i));
-    head.append(mark, name, tag, del);
-
     const info = document.createElement('div');
     info.className = 'wg-card-info';
+
+    // Поколение WG/AWG (#157): канонический детектор web4core, diagnostics-only.
+    // Бейдж не путает поколения протокола с версией Mihomo/opkg/генератора.
+    // Детали/конфликты/заметки стэшатся в wgGenExtras и аппендятся в конце карточки:
+    // MTU/policy-блоки ниже пишут info.textContent += и стёрли бы дочерние элементы.
+    const wgGenExtras = [];
+    if (typeof web4core.detectWireGuardGeneration === 'function') {
+      const gen = web4core.detectWireGuardGeneration(bean);
+      const badgeText = gen.family === 'wg' ? 'WG'
+        : gen.confidence === 'conflict' ? 'AWG ?'
+        : 'AWG ' + (gen.generation || '?');
+      const badge = document.createElement('span');
+      badge.className = 'wg-gen-badge' + (gen.confidence === 'conflict' ? ' wg-gen-badge-conflict' : '');
+      badge.textContent = badgeText;
+      badge.title = 'Поколение протокола (' + gen.confidence + ')';
+      const details = document.createElement('div');
+      details.className = 'wg-mtu-note';
+      const bits = ['Протокол: ' + gen.label, 'уверенность: ' + gen.confidence];
+      if (gen.compatible && gen.compatible.length) bits.push('совместимо: ' + gen.compatible.join('/'));
+      details.textContent = 'ℹ ' + bits.join(' · ');
+      if (gen.evidence && gen.evidence.length) details.title += ' · маркеры: ' + gen.evidence.join(', ');
+      if (gen.conflicts && gen.conflicts.length) {
+        for (const c of gen.conflicts) {
+          const cEl = document.createElement('div');
+          cEl.className = 'wg-mtu-note wg-mtu-note-warn';
+          cEl.textContent = '⚠ ' + c;
+          wgGenExtras.push(cEl);
+        }
+      }
+      for (const n of (gen.notes || [])) {
+        const nEl = document.createElement('div');
+        nEl.className = 'wg-mtu-note' + (n.level === 'UPSTREAM-OBSERVED' ? '' : '');
+        nEl.textContent = 'ℹ [' + n.level + '] ' + n.text;
+        wgGenExtras.push(nEl);
+      }
+      head.append(mark, name, tag, badge, del);
+      wgGenExtras.push(details);
+    } else {
+      head.append(mark, name, tag, del);
+    }
+
     const ep = wgProfileEndpoint(bean);
     const bits = [];
     if (bean.name) bits.push('proxy: ' + bean.name);
@@ -2219,6 +2260,7 @@ function renderWgList() {
     fillWgTargetSelect(targetSel, p, i);
 
     li.append(head, info, modeRow, targetRow);
+    for (const extra of wgGenExtras) info.appendChild(extra); // после всех textContent-записей (#157)
     list.appendChild(li);
   });
   list.hidden = wgProfiles.length === 0;
@@ -3443,8 +3485,19 @@ function fetchSubscriptionWithBudget(api, url, headers, deadline) {
         : api.fetchSubscription(entry.url, { headers: subscriptionPreviewHeaders() }));
       const links = String(body || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if (!links.length) throw new Error('подписка не вернула поддерживаемых proxy-ссылок');
+      // #158 (честный preview): маркер preview-partial от runtime — часть payload
+      // отброшена парсером (схемы, которых нет в web4core, но которые может грузить
+      // реальный Mihomo). Показываем честное предупреждение, направляем в Runtime
+      // Import (#159). Сам маркер ни в счётчик, ни в YAML не попадает.
+      const partialMarker = links.find(l => l.startsWith('# link-generators: preview-partial ('));
+      const usableLinks = links.filter(l => !l.startsWith('#'));
+      if (!usableLinks.length && !partialMarker) throw new Error('подписка не вернула поддерживаемых proxy-ссылок');
+      if (partialMarker) {
+        const m = partialMarker.match(/preview-partial \((\d+) skipped; schemes: ([^)]*)\)/);
+        if (m) summary.warnings.push('⚠ Preview неполный: ' + m[1] + ' элемент(ов) имеют формат, который browser-preview не разбирает (' + m[2] + '). Для фактического списка используйте «📡 Импорт узлов из Mihomo».');
+      }
       summary.subscriptionsSucceeded++;
-      for (const link of links) {
+      for (const link of usableLinks) {
         const name = subscriptionLinkName(api, link);
         summary.found++;
         summary.names.push(name);
@@ -3455,6 +3508,14 @@ function fetchSubscriptionWithBudget(api, url, headers, deadline) {
       if (!expand) output.push(entry.line);
     } catch (e) {
       const reason = String(e && e.message ? e.message : e).replace(/https?:\/\/\S+/gi, '[URL hidden]');
+      if (/Clash YAML subscription is not supported here/i.test(reason)) {
+        // #158 (R2): не маскируем под generic network/error — формат назван прямо.
+        summary.subscriptionsFailed++;
+        if (expand) throw new Error('Не удалось прочитать подписку #' + ordinal + ': подписка возвращена в Clash/Mihomo YAML — browser-preview этого формата не анализирует. Используйте «Импорт узлов из Mihomo».');
+        summary.warnings.push('⚠ Подписка #' + ordinal + ' возвращена в Clash/Mihomo YAML. Browser-preview этого формата не анализирует. Используйте «📡 Импорт узлов из Mihomo».');
+        output.push(entry.line);
+        continue;
+      }
       if (isSubscriptionEmptyBodyError(reason)) {
         // Пустая, но успешно прочитанная подписка: found = 0 — доказанный
         // ноль, UNKNOWN-семантика не нужна.

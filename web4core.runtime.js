@@ -3254,6 +3254,98 @@
     const out = profiles.map((p) => plan(p.name));
     return { profiles: out, note: "diagnostics-only: YAML/mtu \u043D\u0435 \u0438\u0437\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F" };
   }
+  var WG_GENERATION_MARKERS = {
+    classic: ["jc", "jmin", "jmax", "s1", "s2", "h1", "h2", "h3", "h4"],
+    premium: ["s3", "s4", "i1", "i2", "i3", "i4", "i5"],
+    v3: ["header-protection-key", "content-padding-addition", "rekey-after-time", "rekey-timeout", "reject-after-time", "keepalive-timeout", "max-handshake-attempts"],
+    v31: ["random-trailers", "disable-cookies"],
+    nonDiscriminating: ["j1", "j2", "j3", "itime"]
+  };
+  function detectWireGuardGeneration(bean) {
+    const src = bean && bean.wireguard && typeof bean.wireguard === "object" ? bean.wireguard : bean || {};
+    const awg = src["amnezia-wg-option"] && typeof src["amnezia-wg-option"] === "object" ? src["amnezia-wg-option"] : {};
+    const present = (k) => awg[k] !== void 0 && awg[k] !== null && String(awg[k]).trim() !== "";
+    const inSet = (set) => set.filter(present);
+    const classic = inSet(WG_GENERATION_MARKERS.classic);
+    const premium = inSet(WG_GENERATION_MARKERS.premium);
+    const v3 = inSet(WG_GENERATION_MARKERS.v3);
+    const v31 = inSet(WG_GENERATION_MARKERS.v31);
+    const extra = inSet(WG_GENERATION_MARKERS.nonDiscriminating);
+    const anyMarker = classic.length + premium.length + v3.length + v31.length + extra.length > 0 || present("version");
+    if (!anyMarker) {
+      return { family: "wg", label: "WireGuard", generation: null, confidence: "exact", compatible: ["wg"], evidence: [], conflicts: [], notes: [] };
+    }
+    const evidence = [...v31, ...v3, ...premium, ...classic, ...extra];
+    const notes = [];
+    const conflicts = [];
+    const uint16 = ["s1", "s2", "s3", "s4"];
+    for (const k of uint16) {
+      const v = awg[k];
+      if (typeof v === "number" && v > 65535) {
+        notes.push({ level: "SOURCE-PROVEN", text: k.toUpperCase() + " \u0432\u043D\u0435 uint16 (amneziawg-go ParseUint 16) \u2014 \u0446\u0435\u043B\u0435\u0432\u043E\u0439 \u0434\u0432\u0438\u0436\u043E\u043A \u043E\u0442\u0432\u0435\u0440\u0433\u043D\u0435\u0442 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435" });
+      }
+    }
+    for (const k of ["h1", "h2", "h3", "h4"]) {
+      const v = awg[k];
+      if (typeof v === "string" && /^\d+$/.test(v.trim()) && Number(v) > 4294967295) {
+        notes.push({ level: "UPSTREAM-OBSERVED", text: k.toUpperCase() + " \u0432\u043D\u0435 uint32 (\u0440\u0435\u0435\u0441\u0442\u0440 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u0438 #136) \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F \u0446\u0435\u043B\u0435\u0432\u044B\u043C \u0434\u0432\u0438\u0436\u043A\u043E\u043C" });
+      }
+    }
+    if (typeof awg.jc === "number" && awg.jc > 10) {
+      notes.push({ level: "UPSTREAM-OBSERVED", text: "Jc > 10 \u2014 \u0432\u044B\u0448\u0435 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u043D\u043E\u0433\u043E \u043A\u043B\u0438\u0435\u043D\u0442\u0441\u043A\u043E\u0433\u043E \u043B\u0438\u043C\u0438\u0442\u0430 mihomo (\u0440\u0435\u0435\u0441\u0442\u0440 #136); \u043F\u0440\u043E\u0442\u043E\u043A\u043E\u043B uint32, \u043B\u0438\u043C\u0438\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442 \u0446\u0435\u043B\u0435\u0432\u043E\u0439 \u0434\u0432\u0438\u0436\u043E\u043A" });
+    }
+    if (present("header-protection-key")) {
+      notes.push({ level: "SOURCE-PROVEN", text: "header-protection \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u044B\u0445 S3/S4 \u0438 \u043D\u0435\u043F\u0435\u0440\u0435\u0441\u0435\u043A\u0430\u044E\u0449\u0438\u0445\u0441\u044F H1\u2013H4 \u2014 \u0442\u043E\u0447\u043D\u0430\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u0446\u0435\u043B\u0435\u0432\u044B\u043C \u0434\u0432\u0438\u0436\u043A\u043E\u043C (amneziawg-go: \xABS%d must be more then \u2026\xBB)" });
+    }
+    notes.push(targetCompatibilityNote({ hasV3: v3.length + v31.length > 0 }));
+    let generation, label, confidence, compatible;
+    if (v31.length) {
+      generation = "3.1";
+      label = "AmneziaWG 3.1";
+      confidence = "exact";
+      compatible = ["3.1"];
+    } else if (v3.length) {
+      generation = "3.x";
+      label = "AmneziaWG 3.x (3.0\u20133.1 compatible)";
+      confidence = "range";
+      compatible = ["3.0", "3.1"];
+    } else if (premium.length) {
+      generation = "1.5\u20132.x";
+      label = "AmneziaWG 1.5\u20132.x";
+      confidence = "range";
+      compatible = ["1.5", "2.x"];
+    } else {
+      generation = "1.x";
+      label = "AmneziaWG 1.x (legacy)";
+      confidence = "range";
+      compatible = ["1.x"];
+    }
+    if (present("version")) {
+      const v = String(awg.version);
+      const claimsV3 = v === "3";
+      if (claimsV3 && v3.length + v31.length === 0) {
+        conflicts.push("version: 3 \u0437\u0430\u044F\u0432\u043B\u0435\u043D, \u043D\u043E v3/v3.1 capability-\u043C\u0430\u0440\u043A\u0435\u0440\u043E\u0432 \u0432 \u043F\u0440\u043E\u0444\u0438\u043B\u0435 \u043D\u0435\u0442");
+      } else if (!claimsV3 && v3.length + v31.length > 0) {
+        conflicts.push("v3/v3.1 capability-\u043C\u0430\u0440\u043A\u0435\u0440\u044B \u043F\u0440\u0438\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u044E\u0442, \u043D\u043E version=" + v);
+      }
+    }
+    if (conflicts.length) {
+      return { family: "awg", label: "AmneziaWG ?", generation: null, confidence: "conflict", compatible: [], evidence, conflicts, notes };
+    }
+    return { family: "awg", label, generation, confidence, compatible, evidence, conflicts, notes };
+  }
+  function targetCompatibilityNote({ hasV3 }) {
+    if (hasV3) {
+      return {
+        level: "SOURCE-PROVEN",
+        text: "v3-\u0441\u0435\u043C\u0430\u043D\u0442\u0438\u043A\u0430 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 Mihomo \u2265 1.19.30 (\u0434\u0432\u0438\u0436\u043E\u043A amneziav3); \u043F\u0440\u043E\u0435\u043A\u0442\u043D\u044B\u0439 \u043C\u0438\u043D\u0438\u043C\u0443\u043C 1.19.31, \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0443\u0435\u043C\u044B\u0439 1.19.32 \u2014 \u043D\u0430 \u0441\u0442\u0430\u0440\u044B\u0445 \u044F\u0434\u0440\u0430\u0445 3.1-\u043F\u043E\u043B\u044F \u043C\u043E\u043B\u0447\u0430 \u0438\u0433\u043D\u043E\u0440\u0438\u0440\u0443\u044E\u0442\u0441\u044F"
+      };
+    }
+    return {
+      level: "SOURCE-PROVEN",
+      text: "legacy/1.x/1.5\u20132.x \u043D\u0430\u0431\u043E\u0440 \u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442 \u043D\u0430 legacy-\u0434\u0432\u0438\u0436\u043A\u0435 \u0432\u0441\u0435\u0445 \u043F\u043E\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u043C\u044B\u0445 \u0432\u0435\u0440\u0441\u0438\u0439 Mihomo (\u0431\u0435\u0437 3.1-\u043F\u043E\u043B\u0435\u0439 version: 3 \u043D\u0435 \u043F\u0440\u043E\u0441\u0442\u0430\u0432\u043B\u044F\u0435\u0442\u0441\u044F)"
+    };
+  }
 
   // src/core/mihomo.js
   var FASTEST_GROUP_NAME = "\u26A1 Fastest";
@@ -5080,6 +5172,9 @@
         if (dec) probe = dec;
         const htmlPass2 = await resolveHtmlProbe();
         if (htmlPass2) return htmlPass2;
+        if (/\bproxies\s*:/i.test(probe) && !looksLikeLinksList(probe) && !hasRealSubscriptionLinks(probe)) {
+          throw new Error("Clash YAML subscription is not supported here");
+        }
         if (hasRealSubscriptionLinks(probe)) return probe;
         const extractedGeneric = extractLinksFromText(probe);
         if (extractedGeneric.length) return extractedGeneric.join("\n");
@@ -5157,6 +5252,19 @@
     if (/\bproxies\s*:/i.test(body) && !looksLikeLinksList(body)) throw new Error("Clash YAML subscription is not supported here");
     const lines = splitLines2(body);
     const filtered = lines.filter((line) => allowedSchemes.has((line.split(":", 1)[0] || "").toLowerCase()));
+    const dropped = lines.length - filtered.length;
+    if (dropped > 0) {
+      const unknownSchemes = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const line of lines) {
+        const scheme = (line.split(":", 1)[0] || "").toLowerCase();
+        if (!allowedSchemes.has(scheme) && !seen.has(scheme)) {
+          seen.add(scheme);
+          unknownSchemes.push(scheme || "(empty)");
+        }
+      }
+      return filtered.join("\n") + "\n# link-generators: preview-partial (" + dropped + " skipped; schemes: " + unknownSchemes.join(",") + ")";
+    }
     return filtered.join("\n");
   }
 
@@ -5492,6 +5600,7 @@
     computeAmneziaTagJunkSize,
     analyzeWireGuardProfile,
     planWireGuardMtu,
+    detectWireGuardGeneration,
     fetchSubscription,
     buildFromRequest
   });

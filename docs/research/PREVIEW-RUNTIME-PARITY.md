@@ -67,3 +67,19 @@ exclude-filter; reconciliation ∩/only показывает расхожден�
    решения владельца (новый код на пути данных).
 3. Полевой захват payload (preview vs Mihomo) на Geodema для перевода R3 из HYPOTHESIS в
    PROVEN/REFUTED.
+
+## v1.10 closure (DAY-03, 2026-10-07)
+
+- R1 реализован как честный контракт: runtime возвращает детерминированный маркер
+  ``# link-generators: preview-partial (N skipped; schemes: …)`` (web4core PR #18), UI
+  показывает «⚠ Preview неполный: N элемент(ов)…» с направлением в Runtime Import #159;
+  содержимое отброшенных строк не показывается (только count+категории схем).
+- R2 реализован: Clash YAML детектится внутри handleResponse (web4core PR #19) —
+  и direct, и worker-путь дают точную ошибку формата; UI показывает «⚠ Подписка #N
+  возвращена в Clash/Mihomo YAML…» вместо generic network/error. Опциональный
+  names-only extraction из YAML в v1.10 сознательно НЕ сделан (scope control).
+- R3 остаётся HYPOTHESIS; UA-подмена не делалась (запрещено контрактом итерации).
+- Причина кейса AEZA остаётся UNKNOWN до полевого захвата; authoritative escape hatch
+  — Runtime Import (#159, DAY-02).
+- Итог v1.10: preview больше НЕ выглядит authoritative там, где парсер знает о
+  неполноте. Issue #158 закрывается как v1.10 contract completed.

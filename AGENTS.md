@@ -356,6 +356,17 @@ Subscription inspection privacy/identity contract (binding):
   Failed fetch chains report BOTH stages honestly: «Direct: <reason>;
   Fallback: <reason>» (web4core#16) — the fallback-stage cause is never silently
   replaced by the direct one; messages contain no URLs or secrets.
+- Honest-partial preview contract (#158, v1.10 closure): (R1) lines whose URI
+  scheme the parser does not know are dropped by the runtime, but the loss is
+  reported via the deterministic marker `# link-generators: preview-partial
+  (N skipped; schemes: …)` (web4core#18) and the UI shows «⚠ Preview неполный…»
+  pointing to the Runtime Import (#159); only counts and scheme CATEGORY names
+  are reported — never dropped content. (R2) a Clash/Mihomo YAML payload is
+  detected inside `handleResponse` (web4core#19) and rejected with the explicit
+  format error; the UI names the format and directs to the Runtime Import
+  instead of a generic network error. The optional names-only Clash YAML
+  extraction was deliberately NOT implemented in v1.10 (scope control); see
+  docs/research/PREVIEW-RUNTIME-PARITY.md.
 - Network only on explicit user action (Build for Sub OFF expansion; the list-fetch button for Sub ON preview); no background polling, no telemetry;
   subscription URLs, bodies and proxy credentials are never stored or logged.
   The server-list preview operation has a bounded budget (60 s total, test-

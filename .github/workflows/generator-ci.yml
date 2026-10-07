@@ -238,6 +238,9 @@ jobs:
       - name: WG/AWG profile manager browser regression
         run: node tests/wg-profiles-browser.cjs
 
+      - name: WG generation badge regression (#157)
+        run: node tests/wg-generation-badge.cjs
+
       - name: AWG stability policy regression
         run: node tests/awg-stability.cjs
 
