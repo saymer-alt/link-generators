@@ -72,6 +72,25 @@
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
   .hint{font-size:.75rem;color:var(--muted);margin-top:4px}
   .policy-card{background:rgba(255,255,255,.5);border:1px solid var(--border);border-radius:0;min-width:0}
+  /* === Tiered Failover cards (#165): компактная проектная визуальная система ===
+     Кардиналы: name/strategy — визуально главное; reorder/delete — компактные
+     иконки; destructive отличён цветом; ↑/↓ disabled на краях (не no-op). */
+  .tier-card{padding:10px 12px}
+  .tier-title{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .tier-title .tier-name{flex:1 1 160px;font-weight:bold;min-width:0}
+  .tier-btn{padding:2px 8px;font-size:.85rem;line-height:1.2;min-width:28px;flex:0 0 auto}
+  .tier-btn.tier-del{color:#8c2f2f;border-color:#8c2f2f;background:linear-gradient(180deg,#f7e8e8,#eed8d8)}
+  .tier-btn.tier-del:hover{box-shadow:inset 0 0 0 2px #f3bcbc}
+  .tier-btn:disabled{opacity:.45;cursor:default}
+  .tier-btn:disabled:hover{box-shadow:none}
+  .tier-member{list-style:none;margin:4px 0;padding:0}
+  .tier-member li{display:flex;gap:6px;align-items:center;margin:2px 0;padding:1px 4px;background:rgba(255,255,255,.55);border:1px solid var(--border)}
+  .tier-member li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tier-member-rm{padding:0 7px;font-size:.8rem;line-height:1.4;min-width:22px}
+  .tier-add-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center}
+  .tier-add-row .tier-member-select{flex:1 1 150px;min-width:0;padding:4px 6px}
+  .resizable-node-list{resize:vertical;min-height:140px;max-height:70vh;overflow:auto} /* #166 */
+  /* === конец Tiered/#165 === */
   .policy-domains{width:100%;padding:6px 8px;box-sizing:border-box;font-family:monospace;font-size:.85rem}
   .policy-target{padding:5px 8px;font-size:.85rem}
   .policy-target-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
@@ -136,6 +155,8 @@
   li.wg-card{padding:8px 10px}
   .wg-card-head{display:flex;align-items:center;gap:6px}
   .wg-card-head .wg-list-name{flex:1;font-weight:bold}
+  .wg-gen-badge{padding:0 7px;border:1px solid #7a7a6e;border-radius:3px;font-size:.72rem;line-height:1.5;background:linear-gradient(180deg,#fdfdfa,#e8e5d6);white-space:nowrap;cursor:help}
+  .wg-gen-badge-conflict{color:#8c2f2f;border-color:#8c2f2f;background:linear-gradient(180deg,#f7e8e8,#eed8d8)}
   .wg-card-info{margin:3px 0 6px;color:var(--muted);font-size:.78rem;word-break:break-all}
   .wg-card-mode{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .wg-card-mode label{margin:0;color:var(--text);font-size:.8rem}
@@ -390,8 +411,8 @@
         <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Доступно только в профиле «Роутер / обычный TUN»; в обоих VPS-профилях отключено.</span></span></label>
         <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
         <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090. На VPS controller доступен только локально (127.0.0.1:9090); для удалённого управления используйте SSH-туннель (локальный forwarded-порт — свой на каждый VPS).</span></span></label>
-        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется отдельный стабильный HWID генератора, а не HWID Mihomo/Keenetic.</span></span></label>
-        <label><input type="checkbox" id="cfgServerList"> 📋 Показать серверы подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Показать серверы подписки">?</button><span class="ctx-help-pop" role="note">Позволяет браузеру получить имена узлов подписки для просмотра и выбора исключений. По умолчанию выключено — без этого генератор не запрашивает подписку браузером. Отдельная функция просмотра: работает в обоих режимах «Использовать URL-подписки», список и выбор исключений появляются в разделе Exclude Filter. При CORS может использоваться проектный fallback-воркер; список и URL не сохраняются, локально хранится только стабильный идентификатор генератора.</span></span></label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется стабильный HWID логического устройства (#156), общий для preview и всех провайдеров конфига, — не HWID Mihomo/Keenetic.</span></span></label>
+        <label><input type="checkbox" id="cfgServerList"> 📋 Показать серверы подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Показать серверы подписки">?</button><span class="ctx-help-pop" role="note">Позволяет браузеру получить имена узлов подписки для просмотра и выбора исключений. По умолчанию выключено — без этого генератор не запрашивает подписку браузером. Отдельная функция просмотра: работает в обоих режимах «Использовать URL-подписки», список и выбор исключений появляются в разделе Exclude Filter. При CORS может использоваться проектный fallback-воркер; список и URL не сохраняются, локально хранится только реестр идентичностей устройства (#156).</span></span></label>
       </div>
       <div id="subModeHint" class="hint"></div>
       <div id="webUiRow" style="margin-top:10px">
@@ -405,6 +426,29 @@
         <input type="text" id="webUiCustomUrl" placeholder="https://example.com/dashboard.zip" style="display:none;margin-left:8px">
         <div class="hint">Архив дашборда, который Mihomo скачает в каталог external-ui. MetaCubeXD — по умолчанию. Custom: абсолютный http/https URL архива (.zip/.tgz); URL только генерируется в конфиг, не проверяется из браузера.</div>
       </div>
+      <div id="deviceModelRow" style="margin-top:10px">
+        <label for="deviceModelInput">📱 Device Model — имя устройства для панели подписки (необязательно)</label>
+        <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
+        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>Home-Router</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На идентификатор устройства (HWID) не влияет и нигде не сохраняется.</div>
+        <details id="deviceIdentityDetails" style="margin-top:6px">
+          <summary>🔑 Идентичность подписки: <span id="deviceIdentityCurrentLabel">Устройство 1</span></summary>
+          <div style="margin-top:8px">
+            <div class="hint" style="margin-bottom:6px"><strong>Обычно ничего менять не нужно.</strong> Один логический роутер/конфиг получает один стабильный HWID: preview и все proxy-providers используют его повторно при каждой пересборке.</div>
+            <div class="hint" style="margin-bottom:8px">Дополнительный ID нужен только если из этого браузера создаются конфиги для нескольких разных роутеров/устройств. Для обычной пересборки текущего устройства новый ID создавать не нужно.</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <label for="deviceIdentitySelect" style="margin:0">Текущая идентичность:</label>
+              <select id="deviceIdentitySelect" style="flex:0 1 auto;min-width:200px"></select>
+              <button type="button" class="btn btn-gray" id="btnDeviceIdentityRename">✏️ Переименовать</button>
+              <button type="button" class="btn btn-gray" id="btnDeviceIdentityRegenerate">🎲 Сменить ID</button>
+              <button type="button" class="btn btn-gray" id="btnDeviceIdentityDelete">🗑 Удалить</button>
+            </div>
+            <div style="margin-top:8px">
+              <button type="button" class="btn btn-gray" id="btnDeviceIdentityNew">➕ ID для другого устройства</button>
+            </div>
+            <div class="hint" style="margin-top:6px">Локальное имя нужно только для удобства и не меняет <code>x-device-model</code>. «Сменить ID» создаёт новый случайный HWID только по явной команде и может быть воспринят сервисом подписки как новое устройство. Удаление удаляет запись только из этого браузера: уже созданные конфиги и записи на стороне сервиса не меняются. Сам HWID нигде не отображается и в диагностику не попадает.</div>
+          </div>
+        </details>
+      </div>
       <div id="excludeFilterRow" style="margin-top:10px">
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
         <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
@@ -415,14 +459,39 @@
             <button type="button" class="btn btn-gray" id="subListFetchBtn">📋 Получить список</button>
             <span id="subListStats" class="hint" style="margin:0">Список ещё не получен.</span>
           </div>
-          <div id="subListPrivacyHint" class="hint" style="margin-top:4px">Браузер запросит подписку напрямую; при CORS-блокировке — через проектный fallback-воркер (URL подписки при этом виден его инфраструктуре). Список, URL и содержимое не сохраняются; локально хранится только стабильный идентификатор генератора.</div>
+          <div id="subListStatus" class="hint" style="display:none;margin-top:4px" aria-live="polite"></div>
+          <div id="subListPrivacyHint" class="hint" style="margin-top:4px">Браузер запросит подписку напрямую; при CORS-блокировке — через проектный fallback-воркер (URL подписки при этом виден его инфраструктуре). Список, URL и содержимое не сохраняются; локально хранится только реестр идентичностей устройства.</div>
+          <details id="runtimeImportDetails" style="margin-top:6px">
+            <summary>📡 Импорт узлов из работающего Mihomo (runtime)</summary>
+            <div style="margin-top:6px">
+              <div class="hint">Работающий Mihomo знает фактический список узлов провайдеров — он может отличаться от browser-preview (#158). Импортер только читает <code>GET /providers/proxies</code> ради имён узлов для Exclude Filter: он не меняет running Mihomo, не делает API-мутаций и не перезаписывает YAML.</div>
+              <div class="tier-add-row" style="margin-top:6px">
+                <input type="text" id="rtControllerInput" placeholder="10.0.0.2:9090 или http://10.0.0.2:9090" style="flex:1 1 200px;min-width:0;padding:4px 8px" aria-label="Адрес Mihomo external-controller">
+                <input type="password" id="rtSecretInput" placeholder="API secret (необязательно)" style="flex:1 1 140px;min-width:0;padding:4px 8px" aria-label="API secret контроллера (только память)" autocomplete="off">
+                <button type="button" class="btn btn-gray" id="rtFetchBtn">📥 Получить узлы из Mihomo</button>
+              </div>
+              <div class="hint">Адрес и secret не сохраняются (только память вкладки, до перезагрузки страницы). Запрос идёт из браузера напрямую в контроллер — через проектный воркер он не передаётся никогда. Если браузер не пускает (CORS / разрешение локальной сети / listen-адрес) — используйте «Вставить JSON» или «Загрузить .json» ниже: откройте <code>http://&lt;контроллер&gt;/providers/proxies</code> в соседней вкладке и скопируйте ответ.</div>
+              <div class="tier-add-row">
+                <button type="button" class="btn btn-gray" id="rtPasteBtn">📋 Вставить JSON</button>
+                <button type="button" class="btn btn-gray" id="rtUploadBtn">📄 Загрузить .json</button>
+                <input type="file" id="rtFile" accept=".json,application/json" hidden>
+                <button type="button" class="btn btn-gray" id="rtClearBtn">✖ Очистить runtime-список</button>
+              </div>
+              <div id="rtStatus" class="hint" style="display:none;margin-top:4px" aria-live="polite"></div>
+              <div id="rtSummary" class="hint" style="display:none;margin-top:4px"></div>
+              <div id="rtReconciliation" class="hint" style="display:none;margin-top:4px"></div>
+              <details id="rtHelpDetails" style="margin-top:4px"><summary>Почему прямой запрос может не пройти</summary>
+                <div class="hint">Чтобы браузер смог обратиться к контроллеру напрямую: (1) <code>external-controller</code> Mihomo должен слушать адрес, доступный из вашей сети, а не только 127.0.0.1; (2) CORS-настройки контроллера должны разрешать origin генератора; (3) браузер может спросить разрешение на доступ к локальной сети (Private Network Access); (4) secret должен совпадать; (5) не выставляйте контроллер в WAN. Ошибку так же может дать обычная сетевая недоступность — в этом случае точную причину браузер не раскрывает.</div>
+              </details>
+            </div>
+          </details>
           <div id="subListControls" style="display:none;margin-top:6px">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <input type="text" id="subListSearch" placeholder="поиск по имени…" style="flex:1;min-width:160px;padding:4px 8px">
               <button type="button" class="btn btn-gray" id="subListAll" style="padding:2px 10px">Выбрать все</button>
               <button type="button" class="btn btn-gray" id="subListNone" style="padding:2px 10px">Снять все</button>
             </div>
-            <div id="subscriptionPreviewNames" style="max-height:220px;overflow:auto;margin-top:5px"></div>
+            <div id="subscriptionPreviewNames" class="resizable-node-list" style="height:220px;margin-top:5px"></div>
           </div>
         </div>
         <div id="subscriptionPreviewBox" class="hint" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)" aria-live="polite">
@@ -430,15 +499,10 @@
           <div id="subscriptionPreviewWarning" style="display:none;color:var(--warn);margin-top:4px"></div>
           <details id="subscriptionPreviewDetails" style="margin-top:6px">
             <summary>Найденные имена узлов</summary>
-            <div id="subscriptionPreviewNamesLegacy" style="max-height:220px;overflow:auto;margin-top:5px;white-space:pre-wrap;font-family:monospace"></div>
+            <div id="subscriptionPreviewNamesLegacy" class="resizable-node-list" style="height:220px;margin-top:5px;white-space:pre-wrap;font-family:monospace"></div>
           </details>
         </div>
         <div class="hint" id="subSelectionNote" style="display:none;color:var(--warn)">Выбранные для исключения серверы продолжают действовать (объединяются с ручным фильтром через ИЛИ). Очистить — кнопкой «Снять все» в списке серверов.</div>
-      </div>
-      <div id="deviceModelRow" style="margin-top:10px">
-        <label for="deviceModelInput">📱 Device Model — имя устройства для панели подписки (необязательно)</label>
-        <input type="text" id="deviceModelInput" placeholder="например: Keenetic Giga KN-1012">
-        <div class="hint">Понятное имя/модель устройства, которое панель подписки увидит как заголовок <code>x-device-model</code> в запросах списка серверов — например: <code>Keenetic Giga KN-1012</code>, <code>Home-Router</code>, <code>Windows-PC</code>, <code>Android-Phone</code>. Если пусто, в таких запросах используется служебное <code>Saymer Link Generators Preview</code>. На стабильный идентификатор генератора (HWID) не влияет и нигде не сохраняется.</div>
       </div>
       <div id="realityModernRow" style="margin-top:10px">
         <label for="realityModernInput">🌐 Modern REALITY / Post-Quantum (X25519MLKEM768) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Modern REALITY">?</button><span class="ctx-help-pop" role="note">Опционально только для VLESS + REALITY узлов с подтверждённой поддержкой X25519MLKEM768. Поддержка появилась в Xray-core 25.5.16, но одна только версия Xray не гарантирует совместимость конкретного сервера/клиента. Укажите host или host:port нужных REALITY-серверов — генератор применит modern override только к ним; обычные VLESS/TLS и остальные узлы не изменяются.</span></span></label>
@@ -526,6 +590,17 @@
         </details>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label><input type="checkbox" id="cfgTieredFailover"> 🪜 Приоритетные эшелоны выходов (Tiered Failover) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Tiered Failover">?</button><span class="ctx-help-pop" role="note">Строгий приоритет эшелонов (#148, runtime-proven на Mihomo 1.19.31/1.19.32): трафик идёт через первый эшелон, где есть живой выход; следующий используется, только когда весь предыдущий недоступен. Внутри эшелона — url-test (быстрейший) или ordered fallback. Финальное правило MATCH уходит в корневую группу эшелонов; GLOBAL получает её первым участником (ручное переключение в дашборде остаётся возможным). Выключено — вывод без изменений.</span></span></label>
+      </div>
+      <div id="tieredPanel" style="display:none">
+        <div class="hint">Эшелоны проверяются по порядку; финальное правило MATCH направляет трафик в корневую группу «🪜 TIERED-AUTO». Участники — из текущей сборки (прокси, WG/AWG-профили, провайдеры). Health-семантика и границы: <a href="https://github.com/saymer-alt/link-generators/blob/main/docs/TIERED-FAILOVER.md">docs/TIERED-FAILOVER.md</a> (HTTP-пробы; UDP не заявлен).</div>
+        <div id="tierCards"></div>
+        <div style="margin-top:8px">
+          <button class="btn btn-gray" id="btnTierAdd" type="button">＋ Добавить эшелон</button>
+        </div>
+        <div class="hint" id="tieredTrace" style="margin-top:6px;white-space:pre-line"></div>
+      </div>
+      <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN Interface">?</button><span class="ctx-help-pop" role="note">Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo».</span></span></label>
         <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: MIPS stack">?</button><span class="ctx-help-pop" role="note">TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor.</span></span></label>
       </div>
@@ -593,7 +668,7 @@
 // channel — metadata конкретной сборки, НЕ определение git-ветки в рантайме:
 // development build = 1.9.0-dev / main; release promotion (main → stable) отдельно
 // переводит её на 1.9.0 / stable. UI (бейдж) читает только эти значения.
-const GENERATOR_META = Object.freeze({ version: '1.9.0', channel: 'stable' });
+const GENERATOR_META = Object.freeze({ version: '1.10.0', channel: 'stable' });
 (function renderGeneratorMeta() {
   const el = document.getElementById('genVersionBadge');
   if (!el) return;
@@ -1515,6 +1590,7 @@ function computeDialerTargetsSync() {
 
 function refreshWgTargetSelectors() {
   dialerTargetsCache = computeDialerTargetsSync();
+  if (typeof renderTierCards === 'function' && document.getElementById('tieredPanel') && document.getElementById('tieredPanel').style.display !== 'none') renderTierCards();
   const valid = new Set(dialerTargetsCache.map(t => t.value));
   wgProfiles.forEach((p, idx) => {
     // Сброс выбора, если цель исчезла из конфигурации ИЛИ стала итоговым именем
@@ -2049,10 +2125,49 @@ function renderWgList() {
     del.textContent = '✕';
     del.setAttribute('aria-label', 'Удалить ' + (p.filename || bean.name || 'профиль'));
     del.addEventListener('click', () => removeWgProfile(i));
-    head.append(mark, name, tag, del);
-
     const info = document.createElement('div');
     info.className = 'wg-card-info';
+
+    // Поколение WG/AWG (#157): канонический детектор web4core, diagnostics-only.
+    // Бейдж не путает поколения протокола с версией Mihomo/opkg/генератора.
+    // Детали/конфликты/заметки стэшатся в wgGenExtras и аппендятся в конце карточки:
+    // MTU/policy-блоки ниже пишут info.textContent += и стёрли бы дочерние элементы.
+    const wgGenExtras = [];
+    if (typeof web4core.detectWireGuardGeneration === 'function') {
+      const gen = web4core.detectWireGuardGeneration(bean);
+      const badgeText = gen.family === 'wg' ? 'WG'
+        : gen.confidence === 'conflict' ? 'AWG ?'
+        : 'AWG ' + (gen.generation || '?');
+      const badge = document.createElement('span');
+      badge.className = 'wg-gen-badge' + (gen.confidence === 'conflict' ? ' wg-gen-badge-conflict' : '');
+      badge.textContent = badgeText;
+      badge.title = 'Поколение протокола (' + gen.confidence + ')';
+      const details = document.createElement('div');
+      details.className = 'wg-mtu-note';
+      const bits = ['Протокол: ' + gen.label, 'уверенность: ' + gen.confidence];
+      if (gen.compatible && gen.compatible.length) bits.push('совместимо: ' + gen.compatible.join('/'));
+      details.textContent = 'ℹ ' + bits.join(' · ');
+      if (gen.evidence && gen.evidence.length) details.title += ' · маркеры: ' + gen.evidence.join(', ');
+      if (gen.conflicts && gen.conflicts.length) {
+        for (const c of gen.conflicts) {
+          const cEl = document.createElement('div');
+          cEl.className = 'wg-mtu-note wg-mtu-note-warn';
+          cEl.textContent = '⚠ ' + c;
+          wgGenExtras.push(cEl);
+        }
+      }
+      for (const n of (gen.notes || [])) {
+        const nEl = document.createElement('div');
+        nEl.className = 'wg-mtu-note' + (n.level === 'UPSTREAM-OBSERVED' ? '' : '');
+        nEl.textContent = 'ℹ [' + n.level + '] ' + n.text;
+        wgGenExtras.push(nEl);
+      }
+      head.append(mark, name, tag, badge, del);
+      wgGenExtras.push(details);
+    } else {
+      head.append(mark, name, tag, del);
+    }
+
     const ep = wgProfileEndpoint(bean);
     const bits = [];
     if (bean.name) bits.push('proxy: ' + bean.name);
@@ -2145,6 +2260,7 @@ function renderWgList() {
     fillWgTargetSelect(targetSel, p, i);
 
     li.append(head, info, modeRow, targetRow);
+    for (const extra of wgGenExtras) info.appendChild(extra); // после всех textContent-записей (#157)
     list.appendChild(li);
   });
   list.hidden = wgProfiles.length === 0;
@@ -3037,11 +3153,30 @@ function onWhitelistChange() {
 // родителе (MIPS и «TUN на каждый прокси» — при TUN; «SOCKS-порт на каждый
 // прокси» — при Mixed Port); выключение родителя сбрасывает зависимую опцию.
 // В БС-режиме Per-Proxy принудительно недоступны (плюс кламп в buildMihomo).
-const SUBSCRIPTION_PREVIEW_STORAGE_KEY = 'link-generators.subscription-preview-hwid.v1';
 const SUBSCRIPTION_PREVIEW_DEVICE_MODEL = 'Saymer Link Generators Preview';
-let subscriptionPreviewMemoryHwid = '';
 
-function subscriptionPreviewRandomHwid() {
+// === ИДЕНТИЧНОСТЬ ЛОГИЧЕСКОГО УСТРОЙСТВА (#156) ===
+// Один логический генерируемый объект (роутер/конфиг) = одна стабильная
+// идентичность: preview-запросы и ВСЕ proxy-providers конфига несут один и
+// тот же x-hwid (runtime-опция deviceHwid, web4core#16); пересборка того же
+// объекта молча её не меняет; другое устройство из того же браузера получает
+// свою идентичность только явным «➕ Новое устройство». Device Model —
+// человекочитаемая подпись, на идентичность не влияет. HWID не отображается
+// и в диагностику/trace не попадает. Хранилище:
+// link-generators.device-identities.v1 — единственное новое персистентное
+// значение (документировано в AGENTS.md). Миграция: валидный HWID из
+// legacy-ключа link-generators.subscription-preview-hwid.v1 становится
+// идентичностью первого устройства; сам legacy-ключ не удаляется и больше
+// не пишется.
+const DEVICE_IDENTITY_STORAGE_KEY = 'link-generators.device-identities.v1';
+const LEGACY_PREVIEW_HWID_STORAGE_KEY = 'link-generators.subscription-preview-hwid.v1';
+let deviceIdentityRegistry = null; // кэш реестра (RAM, если localStorage недоступен)
+
+function isValidDeviceHwid(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9=-]{10,64}$/.test(value);
+}
+
+function deviceIdentityRandomHex32() {
   const bytes = new Uint8Array(16);
   try {
     (globalThis.crypto || window.crypto).getRandomValues(bytes);
@@ -3051,17 +3186,171 @@ function subscriptionPreviewRandomHwid() {
   return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function getSubscriptionPreviewHwid() {
-  if (/^[A-Za-z0-9=-]{10,64}$/.test(subscriptionPreviewMemoryHwid)) return subscriptionPreviewMemoryHwid;
-  let stored = '';
-  try { stored = localStorage.getItem(SUBSCRIPTION_PREVIEW_STORAGE_KEY) || ''; } catch (_) {}
-  if (/^[A-Za-z0-9=-]{10,64}$/.test(stored)) {
-    subscriptionPreviewMemoryHwid = stored;
-    return stored;
+function persistDeviceIdentityRegistry() {
+  try {
+    localStorage.setItem(DEVICE_IDENTITY_STORAGE_KEY, JSON.stringify(deviceIdentityRegistry));
+  } catch (_) {} // file:///приватные контексты: реестр живёт только в RAM
+}
+
+function loadDeviceIdentityRegistry() {
+  if (deviceIdentityRegistry) return deviceIdentityRegistry;
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(DEVICE_IDENTITY_STORAGE_KEY) || 'null'); } catch (_) {}
+  const shapeOk = stored && typeof stored.activeId === 'string'
+    && Array.isArray(stored.devices) && stored.devices.length
+    && stored.devices.every(d => d && typeof d.id === 'string' && isValidDeviceHwid(d.hwid))
+    && new Set(stored.devices.map(d => d.id)).size === stored.devices.length
+    && stored.devices.some(d => d.id === stored.activeId);
+  if (shapeOk) {
+    deviceIdentityRegistry = stored;
+    return deviceIdentityRegistry;
   }
-  subscriptionPreviewMemoryHwid = subscriptionPreviewRandomHwid();
-  try { localStorage.setItem(SUBSCRIPTION_PREVIEW_STORAGE_KEY, subscriptionPreviewMemoryHwid); } catch (_) {}
-  return subscriptionPreviewMemoryHwid;
+  // Первое использование (или повреждённое хранилище): реестр с одним
+  // устройством. Миграция: валидный HWID legacy-ключа сохраняется как
+  // идентичность первого устройства (панель не получает лишний device-слот
+  // после обновления генератора).
+  let legacyHwid = '';
+  try { legacyHwid = localStorage.getItem(LEGACY_PREVIEW_HWID_STORAGE_KEY) || ''; } catch (_) {}
+  if (!isValidDeviceHwid(legacyHwid)) legacyHwid = deviceIdentityRandomHex32();
+  const firstDevice = {
+    id: 'dev-' + deviceIdentityRandomHex32().slice(0, 16),
+    hwid: legacyHwid,
+    label: 'Устройство 1',
+    createdAt: new Date().toISOString()
+  };
+  deviceIdentityRegistry = {
+    version: 1,
+    activeId: firstDevice.id,
+    devices: [firstDevice]
+  };
+  persistDeviceIdentityRegistry();
+  return deviceIdentityRegistry;
+}
+
+function getActiveDeviceIdentity() {
+  const reg = loadDeviceIdentityRegistry();
+  return reg.devices.find(d => d.id === reg.activeId);
+}
+
+function renderDeviceIdentitySelect() {
+  const sel = document.getElementById('deviceIdentitySelect');
+  if (!sel) return;
+  const reg = loadDeviceIdentityRegistry();
+  sel.textContent = '';
+  for (const d of reg.devices) {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    const date = (d.createdAt || '').slice(0, 10);
+    opt.textContent = (d.label || 'Устройство') + (date ? ' · с ' + date : '');
+    sel.appendChild(opt);
+  }
+  sel.value = reg.activeId;
+  const active = reg.devices.find(d => d.id === reg.activeId);
+  const current = document.getElementById('deviceIdentityCurrentLabel');
+  if (current) current.textContent = active && active.label ? active.label : 'Устройство';
+  const del = document.getElementById('btnDeviceIdentityDelete');
+  if (del) {
+    del.disabled = reg.devices.length <= 1;
+    del.title = reg.devices.length <= 1 ? 'Нельзя удалить единственную идентичность' : 'Удалить выбранную локальную идентичность';
+  }
+}
+
+function invalidatePreviewForDeviceIdentityChange() {
+  if (typeof subscriptionPreviewSeq !== 'undefined') subscriptionPreviewSeq++;
+  if (typeof invalidateServerListFetch === 'function') invalidateServerListFetch();
+}
+
+function setActiveDeviceIdentity(id) {
+  const reg = loadDeviceIdentityRegistry();
+  if (!reg.devices.some(d => d.id === id) || reg.activeId === id) return;
+  reg.activeId = id;
+  persistDeviceIdentityRegistry();
+  renderDeviceIdentitySelect();
+  invalidatePreviewForDeviceIdentityChange();
+  showToast('Выбрана идентичность «' + (getActiveDeviceIdentity().label || 'Устройство') + '».');
+}
+
+function nextDeviceIdentityLabel(reg) {
+  const used = new Set(reg.devices.map(d => String(d.label || '').trim()));
+  let n = 1;
+  while (used.has('Устройство ' + n)) n++;
+  return 'Устройство ' + n;
+}
+
+// Явная операция: новая идентичность для ДРУГОГО логического устройства
+// (например, второго роутера, собранного из этого же браузера).
+function createNewDeviceIdentity() {
+  const reg = loadDeviceIdentityRegistry();
+  const device = {
+    id: 'dev-' + deviceIdentityRandomHex32().slice(0, 16),
+    hwid: deviceIdentityRandomHex32(),
+    label: nextDeviceIdentityLabel(reg),
+    createdAt: new Date().toISOString()
+  };
+  reg.devices.push(device);
+  reg.activeId = device.id;
+  persistDeviceIdentityRegistry();
+  renderDeviceIdentitySelect();
+  invalidatePreviewForDeviceIdentityChange();
+  showToast('Создан ID для другого устройства: «' + device.label + '». Обычная пересборка текущего роутера нового ID не требует.');
+}
+
+function renameActiveDeviceIdentity() {
+  const reg = loadDeviceIdentityRegistry();
+  const device = reg.devices.find(d => d.id === reg.activeId);
+  if (!device) return;
+  const value = prompt('Локальное имя идентичности:', device.label || 'Устройство');
+  if (value === null) return;
+  const label = String(value).trim();
+  if (!label) {
+    showToast('Имя не изменено: пустое значение недопустимо.');
+    return;
+  }
+  device.label = label;
+  persistDeviceIdentityRegistry();
+  renderDeviceIdentitySelect();
+  showToast('Идентичность переименована в «' + label + '». HWID не изменён.');
+}
+
+function regenerateActiveDeviceIdentity() {
+  const reg = loadDeviceIdentityRegistry();
+  const device = reg.devices.find(d => d.id === reg.activeId);
+  if (!device) return;
+  const confirmed = confirm(
+    'Сменить ID для «' + (device.label || 'Устройство') + '»?\n\n' +
+    'Будет создан новый случайный HWID. Сервис подписки может воспринять его как новое устройство. ' +
+    'Старая запись на стороне сервиса и уже созданные конфиги автоматически не изменятся.'
+  );
+  if (!confirmed) return;
+  device.hwid = deviceIdentityRandomHex32();
+  persistDeviceIdentityRegistry();
+  renderDeviceIdentitySelect();
+  invalidatePreviewForDeviceIdentityChange();
+  showToast('ID для «' + (device.label || 'Устройство') + '» заменён. Следующие preview-запросы и сборки используют новый HWID.');
+}
+
+function deleteActiveDeviceIdentity() {
+  const reg = loadDeviceIdentityRegistry();
+  if (reg.devices.length <= 1) {
+    showToast('Нельзя удалить единственную идентичность устройства.');
+    renderDeviceIdentitySelect();
+    return;
+  }
+  const index = reg.devices.findIndex(d => d.id === reg.activeId);
+  if (index < 0) return;
+  const device = reg.devices[index];
+  const confirmed = confirm(
+    'Удалить локальную идентичность «' + (device.label || 'Устройство') + '»?\n\n' +
+    'Она исчезнет только из этого браузера. Уже созданные конфиги и записи на стороне сервиса подписки не изменятся.'
+  );
+  if (!confirmed) return;
+  const fallback = reg.devices[index - 1] || reg.devices[index + 1];
+  reg.devices.splice(index, 1);
+  reg.activeId = fallback.id;
+  persistDeviceIdentityRegistry();
+  renderDeviceIdentitySelect();
+  invalidatePreviewForDeviceIdentityChange();
+  showToast('Локальная идентичность «' + (device.label || 'Устройство') + '» удалена. Активна «' + (getActiveDeviceIdentity().label || 'Устройство') + '».');
 }
 
 function subscriptionPreviewHeaders() {
@@ -3070,10 +3359,11 @@ function subscriptionPreviewHeaders() {
   // подпись устройства). Больше ничего не отправляем.
   // Device Model: значение пользователя (📱 Device Model), если заполнено —
   // именно его видит панель подписки; иначе подпись web-генератора.
-  // HWID от Device Model не зависит (стабильный localStorage-идентификатор).
+  // HWID: идентичность активного логического устройства (#156) — та же,
+  // что уходит во все proxy-providers конфига (options.deviceHwid).
   const userModel = (document.getElementById('deviceModelInput').value || '').trim();
   return {
-    'x-hwid': getSubscriptionPreviewHwid(),
+    'x-hwid': getActiveDeviceIdentity().hwid,
     'x-device-model': userModel || SUBSCRIPTION_PREVIEW_DEVICE_MODEL
   };
 }
@@ -3127,11 +3417,13 @@ function subscriptionLinkName(api, link) {
 }
 
 function emptySubscriptionPreviewSummary() {
-  return { subscriptions: 0, found: 0, excluded: 0, names: [], warnings: [] };
+  return { subscriptions: 0, subscriptionsSucceeded: 0, subscriptionsFailed: 0, found: 0, excluded: 0, names: [], warnings: [] };
 }
 
 function mergeSubscriptionPreviewSummary(target, source) {
   target.subscriptions += source.subscriptions;
+  target.subscriptionsSucceeded += source.subscriptionsSucceeded;
+  target.subscriptionsFailed += source.subscriptionsFailed;
   target.found += source.found;
   target.excluded += source.excluded;
   target.names.push(...source.names);
@@ -3139,9 +3431,43 @@ function mergeSubscriptionPreviewSummary(target, source) {
   return target;
 }
 
-async function inspectSubscriptionInput(api, raw, options) {
+// Подписка, чей transport-запрос завершился, но не вернул ни одного
+// поддерживаемого узла — это УСПЕШНО прочитанная пустая подписка
+// (found = 0 честный ноль), а не ошибка сети. Классификация по сообщениям
+// runtime-классификатора: тело получено, валидных ссылок нет.
+function isSubscriptionEmptyBodyError(reason) {
+  return /^(Empty response|Subscription returned no valid links)\b/i.test(String(reason || ''));
+}
+
+// Общий бюджет preview-операции (#152): per-attempt timeout 15s относится
+// к ОДНОЙ попытке, а полный chain (direct → retry → fallback POST/GET ×
+// retries × подписки) может визуально занимать минуты. Кнопка «Получить
+// список» — опциональный UX-путь: ограничиваем всю операцию дедлайном.
+// Обязательный Sub Mode=OFF fetch (развёртывание при Build) бюджетом
+// сознательно не ограничен и не смешивается с этим путём.
+let SUBSCRIPTION_PREVIEW_BUDGET_MS = 60000;
+
+function fetchSubscriptionWithBudget(api, url, headers, deadline) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    return Promise.reject(new Error('превышен общий бюджет preview (' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — сократите число подписок или повторите позже'));
+  }
+  const fetchPromise = api.fetchSubscription(url, { headers });
+  let budgetTimer;
+  const budgetPromise = new Promise((_, reject) => {
+    budgetTimer = setTimeout(() => {
+      reject(new Error('превышен общий бюджет preview (' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — запрос остановлен'));
+    }, remaining);
+  });
+  return Promise.race([fetchPromise, budgetPromise]).finally(() => {
+    clearTimeout(budgetTimer);
+    // Проигравшая гонке fetch-промиса не должна стать unhandled rejection.
+    fetchPromise.catch(() => {});
+  });
+}async function inspectSubscriptionInput(api, raw, options) {
   const expand = !!(options && options.expand);
   const filterRegex = options && options.filterRegex ? options.filterRegex : null;
+  const deadline = options && options.budgetDeadline ? options.budgetDeadline : null;
   const entries = splitSubscriptionInputForPreview(raw);
   const output = [];
   const summary = emptySubscriptionPreviewSummary();
@@ -3154,10 +3480,24 @@ async function inspectSubscriptionInput(api, raw, options) {
     ordinal++;
     summary.subscriptions++;
     try {
-      const body = await api.fetchSubscription(entry.url, { headers: subscriptionPreviewHeaders() });
+      const body = await (deadline
+        ? fetchSubscriptionWithBudget(api, entry.url, subscriptionPreviewHeaders(), deadline)
+        : api.fetchSubscription(entry.url, { headers: subscriptionPreviewHeaders() }));
       const links = String(body || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if (!links.length) throw new Error('подписка не вернула поддерживаемых proxy-ссылок');
-      for (const link of links) {
+      // #158 (честный preview): маркер preview-partial от runtime — часть payload
+      // отброшена парсером (схемы, которых нет в web4core, но которые может грузить
+      // реальный Mihomo). Показываем честное предупреждение, направляем в Runtime
+      // Import (#159). Сам маркер ни в счётчик, ни в YAML не попадает.
+      const partialMarker = links.find(l => l.startsWith('# link-generators: preview-partial ('));
+      const usableLinks = links.filter(l => !l.startsWith('#'));
+      if (!usableLinks.length && !partialMarker) throw new Error('подписка не вернула поддерживаемых proxy-ссылок');
+      if (partialMarker) {
+        const m = partialMarker.match(/preview-partial \((\d+) skipped; schemes: ([^)]*)\)/);
+        if (m) summary.warnings.push('⚠ Preview неполный: ' + m[1] + ' элемент(ов) имеют формат, который browser-preview не разбирает (' + m[2] + '). Для фактического списка используйте «📡 Импорт узлов из Mihomo».');
+      }
+      summary.subscriptionsSucceeded++;
+      for (const link of usableLinks) {
         const name = subscriptionLinkName(api, link);
         summary.found++;
         summary.names.push(name);
@@ -3168,6 +3508,22 @@ async function inspectSubscriptionInput(api, raw, options) {
       if (!expand) output.push(entry.line);
     } catch (e) {
       const reason = String(e && e.message ? e.message : e).replace(/https?:\/\/\S+/gi, '[URL hidden]');
+      if (/Clash YAML subscription is not supported here/i.test(reason)) {
+        // #158 (R2): не маскируем под generic network/error — формат назван прямо.
+        summary.subscriptionsFailed++;
+        if (expand) throw new Error('Не удалось прочитать подписку #' + ordinal + ': подписка возвращена в Clash/Mihomo YAML — browser-preview этого формата не анализирует. Используйте «Импорт узлов из Mihomo».');
+        summary.warnings.push('⚠ Подписка #' + ordinal + ' возвращена в Clash/Mihomo YAML. Browser-preview этого формата не анализирует. Используйте «📡 Импорт узлов из Mihomo».');
+        output.push(entry.line);
+        continue;
+      }
+      if (isSubscriptionEmptyBodyError(reason)) {
+        // Пустая, но успешно прочитанная подписка: found = 0 — доказанный
+        // ноль, UNKNOWN-семантика не нужна.
+        summary.subscriptionsSucceeded++;
+        if (!expand) output.push(entry.line);
+        continue;
+      }
+      summary.subscriptionsFailed++;
       if (expand) throw new Error('Не удалось прочитать подписку #' + ordinal + ': ' + reason);
       summary.warnings.push('Не удалось получить preview подписки #' + ordinal + ': ' + reason + '. Provider YAML будет собран без preview.');
       output.push(entry.line);
@@ -3177,6 +3533,7 @@ async function inspectSubscriptionInput(api, raw, options) {
 }
 
 function clearSubscriptionPreview() {
+  lastPreviewSummary = null; // очищенная сводка не может «воскреснуть» live-пересчётом
   const box = document.getElementById('subscriptionPreviewBox');
   if (box) box.style.display = 'none';
 }
@@ -3190,6 +3547,13 @@ let subscriptionPreviewSeq = 0;            // stale-guard сетевых list/pr
 let subscriptionListNames = [];            // уникальные имена (порядок появления)
 let subscriptionListNodes = 0;             // честное число узлов (без дедупликации)
 let subscriptionSelection = new Set();     // выбранные для исключения имена
+// Явная state-модель preview-операции (#152): stale/ошибка/повторный клик
+// ВСЕГДА завершают loading-state — кнопка никогда не остаётся в «Загрузка…»
+// без активного запроса, stale-результат никогда не пишет данные.
+const SERVER_LIST_STATE = { IDLE: 'idle', LOADING: 'loading', STALE: 'stale', SUCCESS: 'success', PARTIAL: 'partial', FAILED: 'failed' };
+let serverListState = SERVER_LIST_STATE.IDLE;
+let serverListLoadSeq = 0;                 // seq запроса, владеющего кнопкой
+let lastPreviewSummary = null;             // последняя применённая сводка (live-пересчёт)
 
 function escapeRegExpText(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -3265,10 +3629,22 @@ function renderServerList() {
       else subscriptionSelection.delete(name);
       updateServerListStats();
       updateSubSelectionNote();
+      refreshSubscriptionPreviewStats();
     });
     const text = document.createElement('span');
     text.textContent = name; // только display name: никаких URI/UUID/кредов
     label.append(box, text);
+    // Происхождение имени (#159): runtime-only имена помечаются — это прямая
+    // диагностика preview/runtime паритета (#158), без секретов и endpoints.
+    const origin = serverListNameOrigin(name);
+    if (origin === 'runtime-only') {
+      const tag = document.createElement('span');
+      tag.textContent = 'ℹ только в runtime';
+      tag.className = 'hint';
+      tag.style.cssText = 'margin-left:auto;white-space:nowrap';
+      tag.title = 'Есть в Mihomo runtime, отсутствует в browser preview';
+      label.appendChild(tag);
+    }
     list.appendChild(label);
   }
   if (!subscriptionListNames.length) {
@@ -3298,8 +3674,18 @@ function applyServerListFromSummary(summary) {
   // Честные счётчики: nodes = все узлы, names = уникальные имена (exclude-filter
   // в Mihomo работает по именам, поэтому выбор name-based; дубликаты имён
   // означают исключение всех совпадающих узлов).
+  // Свежая сводка должна быть видна merge/reconciliation уже здесь: вызывается
+  // ДО renderSubscriptionPreview, который раньше перезатирал её (порядок в fetchServerList).
+  if (summary) lastPreviewSummary = summary;
   subscriptionListNodes = summary.found;
   subscriptionListNames = Array.from(new Set(summary.names));
+  serverListSource = 'preview';
+  if (runtimeProviderModel.providers.length) {
+    // Живой runtime-источник: пересобираем union + reconciliation (#159/D6).
+    applyMergedSourceList();
+    return;
+  }
+  serverListNameOrigins = null;
   // Selection переживает refresh для существующих имён; исчезнувшие удаляются.
   const alive = new Set(subscriptionListNames);
   for (const name of Array.from(subscriptionSelection)) {
@@ -3324,6 +3710,31 @@ function updateServerListVisibility() {
   updateSubSelectionNote();
 }
 
+const SERVER_LIST_BTN_LABEL = '📋 Обновить список';
+
+function setSubListStatus(text) {
+  const el = document.getElementById('subListStatus');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.display = text ? '' : 'none';
+}
+
+function resetServerListButton() {
+  const btn = document.getElementById('subListFetchBtn');
+  if (btn && btn.textContent === 'Загрузка…') btn.textContent = SERVER_LIST_BTN_LABEL;
+}
+
+// Инвалидация летящего preview-запроса слушателями ввода (seq уже
+// инкрементирован ими): кнопка немедленно возвращается в idle, состояние —
+// STALE. Автоматический повторный запрос не выполняется (no hidden refetch).
+function invalidateServerListFetch() {
+  if (serverListState === SERVER_LIST_STATE.LOADING) {
+    resetServerListButton();
+    serverListState = SERVER_LIST_STATE.STALE;
+    setSubListStatus('Список устарел — нажмите «Обновить список».');
+  }
+}
+
 function fetchServerList() {
   const api = globalThis.web4core;
   const btn = document.getElementById('subListFetchBtn');
@@ -3343,26 +3754,37 @@ function fetchServerList() {
   }
   subscriptionPreviewSeq++;
   const previewSeq = subscriptionPreviewSeq;
+  serverListLoadSeq = previewSeq;
+  serverListState = SERVER_LIST_STATE.LOADING;
   btn.textContent = 'Загрузка…';
+  setSubListStatus('');
+  // Общий бюджет на ВСЮ операцию (обе подписки, все попытки), а не на
+  // отдельную попытку — см. SUBSCRIPTION_PREVIEW_BUDGET_MS.
+  const deadline = Date.now() + SUBSCRIPTION_PREVIEW_BUDGET_MS;
   const task = (async () => {
     const summary = emptySubscriptionPreviewSummary();
-    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: false, filterRegex: null });
+    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: false, filterRegex: null, budgetDeadline: deadline });
     if (previewSeq !== subscriptionPreviewSeq) return;
     mergeSubscriptionPreviewSummary(summary, mainInspected.summary);
     if (whitelistRaw !== null) {
-      const fallbackInspected = await inspectSubscriptionInput(api, whitelistRaw, { expand: false, filterRegex: null });
+      const fallbackInspected = await inspectSubscriptionInput(api, whitelistRaw, { expand: false, filterRegex: null, budgetDeadline: deadline });
       if (previewSeq !== subscriptionPreviewSeq) return;
       mergeSubscriptionPreviewSummary(summary, fallbackInspected.summary);
     }
+    // Итог операции — по факту чтения подписок, не по числу узлов:
+    // пустая, но прочитанная подписка = SUCCESS с честным нулём.
+    serverListState = summary.subscriptionsFailed === 0 ? SERVER_LIST_STATE.SUCCESS
+      : (summary.subscriptionsSucceeded > 0 ? SERVER_LIST_STATE.PARTIAL : SERVER_LIST_STATE.FAILED);
     applyServerListFromSummary(summary);
-    renderSubscriptionPreview(summary); // per-build статистика (подписки/узлы/исключено дубликатов имён)
+    renderSubscriptionPreview(summary);
+    setSubListStatus(serverListState === SERVER_LIST_STATE.PARTIAL
+      ? 'Часть подписок недоступна — итог по узлам неполный.'
+      : (serverListState === SERVER_LIST_STATE.FAILED ? 'Получить список не удалось — нажмите «Обновить список» для повтора.' : ''));
   })();
   task.catch(() => {}).finally(() => {
-    // Кнопка не блокируется: seq-guard предотвращает stale-запись, а повторный
-    // клик во время полёта просто инкрементирует seq и запускает новую загрузку.
-    if (previewSeq === subscriptionPreviewSeq && btn.textContent === 'Загрузка…') {
-      btn.textContent = '📋 Обновить список';
-    }
+    // Кнопку в idle возвращает только владелец загрузки: его операция
+    // завершилась и не была инвалидирована (инвалидация уже вернула кнопку).
+    if (previewSeq === serverListLoadSeq) resetServerListButton();
   });
 }
 
@@ -3372,6 +3794,7 @@ function initServerList() {
   if (!toggle || !btn) return;
   toggle.addEventListener('change', () => {
     subscriptionPreviewSeq++; // toggle меняет эпоху preview-запросов
+    invalidateServerListFetch();
     updateServerListVisibility();
   });
   btn.addEventListener('click', fetchServerList);
@@ -3385,24 +3808,270 @@ function initServerList() {
     renderServerList();
     updateServerListStats();
     updateSubSelectionNote();
+    refreshSubscriptionPreviewStats();
   });
   document.getElementById('subListNone').addEventListener('click', () => {
     subscriptionSelection.clear();
     renderServerList();
     updateServerListStats();
     updateSubSelectionNote();
+    refreshSubscriptionPreviewStats();
   });
 }
 initServerList();
 
+// === РАНТАЙМ-ИМПОРТ УЗЛОВ ИЗ MIHOMO (#159) ===
+// Второй источник имён для ТОЙ ЖЕ exclude-модели: фактические provider-узлы
+// работающего Mihomo (GET /providers/proxies). Диагностика/выбор фильтра —
+// больше ничего: никаких API-мутаций, никаких перезаписей YAML, никаких
+// fallback-воркеров для controller-запросов. Retain только безопасный минимум
+// (имена провайдеров/узлов + alive/delay/type); server/port/UUID/пароли/ключи/
+// URL отбрасываются при парсинге. Controller URL/secret — только память
+// вкладки; raw runtime JSON не хранится нигде.
+let serverListSource = null;          // null | 'preview' | 'runtime'
+let serverListNameOrigins = null;     // Map(name → 'both'|'preview-only'|'runtime-only') | null
+let runtimeProviderModel = { providers: [], fetchedAt: null };
+let rtControllerMemory = '';          // session-only, никогда не localStorage
+
+// Канонический парсер ответа GET /providers/proxies. Минимальная безопасная
+// модель; чувствительные поля игнорируются; повреждённый/чужой JSON — явная
+// ошибка (fail closed, без «лучшей догадки»).
+function parseMihomoRuntimeProviders(rawJson) {
+  let doc;
+  try { doc = JSON.parse(String(rawJson || '')); }
+  catch (_) { throw new Error('runtime JSON: не является корректным JSON'); }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc) || !doc.providers || typeof doc.providers !== 'object' || Array.isArray(doc.providers)) {
+    throw new Error('runtime JSON: ожидается объект {providers: {...}} из GET /providers/proxies');
+  }
+  const providers = [];
+  for (const [name, value] of Object.entries(doc.providers)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const proxies = Array.isArray(value.proxies) ? value.proxies : [];
+    const safeProxies = [];
+    for (const p of proxies) {
+      // Имя узла — единственное обязательное поле (exclude-filter name-based).
+      if (!p || typeof p !== 'object' || typeof p.name !== 'string' || !p.name.trim()) continue;
+      const safe = { name: p.name };
+      if (typeof p.type === 'string' && p.type) safe.type = p.type;
+      if (typeof p.alive === 'boolean') safe.alive = p.alive;
+      if (typeof p.history === 'object' && Array.isArray(p.history) && p.history.length) {
+        const last = p.history[p.history.length - 1];
+        if (last && typeof last.delay === 'number') safe.delay = last.delay;
+      } else if (typeof p.delay === 'number') {
+        safe.delay = p.delay;
+      }
+      safeProxies.push(safe); // server/port/uuid/password/ключи/URL сознательно не копируются
+    }
+    const safeProvider = { name: String(name), proxies: safeProxies };
+    if (typeof value.vehicleType === 'string' && value.vehicleType) safeProvider.vehicleType = value.vehicleType;
+    if (typeof value.updatedAt === 'string' && value.updatedAt) safeProvider.updatedAt = value.updatedAt;
+    providers.push(safeProvider);
+  }
+  return { providers };
+}
+
+function serverListNameOrigin(name) {
+  if (!serverListNameOrigins) return null;
+  return serverListNameOrigins.get(name) || null;
+}
+
+// Объединение источников в ОДНУ модель списка: union имён, происхождение на
+// каждое имя, выбор переживает (ограничен существующими именами).
+function applyMergedSourceList() {
+  const previewNames = lastPreviewSummary ? Array.from(new Set(lastPreviewSummary.names)) : [];
+  const runtimeNames = runtimeProviderModel.providers.flatMap(p => p.proxies.map(x => x.name));
+  const originMap = new Map();
+  for (const n of previewNames) originMap.set(n, 'preview-only');
+  for (const n of runtimeNames) originMap.set(n, originMap.has(n) ? 'both' : 'runtime-only');
+  const merged = Array.from(originMap.keys());
+  // Сохраняем порядок предпросмотра, затем runtime-only в конце (детерминировано).
+  merged.sort((a, b) => {
+    const oa = originMap.get(a) === 'runtime-only' ? 1 : 0;
+    const ob = originMap.get(b) === 'runtime-only' ? 1 : 0;
+    return oa - ob;
+  });
+  subscriptionListNodes = (lastPreviewSummary ? lastPreviewSummary.found : 0) + runtimeNames.length;
+  subscriptionListNames = merged;
+  serverListNameOrigins = originMap;
+  const alive = new Set(merged);
+  for (const name of Array.from(subscriptionSelection)) {
+    if (!alive.has(name)) subscriptionSelection.delete(name);
+  }
+  renderRuntimeSummary();
+  updateServerListStats();
+  updateSubSelectionNote();
+  renderServerList();
+  updateServerListVisibility();
+}
+
+function renderRuntimeSummary() {
+  const sum = document.getElementById('rtSummary');
+  const rec = document.getElementById('rtReconciliation');
+  if (!sum || !rec) return;
+  if (!runtimeProviderModel.providers.length) { sum.style.display = 'none'; rec.style.display = 'none'; return; }
+  const runtimeNames = runtimeProviderModel.providers.flatMap(p => p.proxies.map(x => x.name));
+  const nodes = runtimeNames.length;
+  const unique = new Set(runtimeNames).size;
+  const bits = ['Источник: Mihomo runtime', 'Провайдеров: ' + runtimeProviderModel.providers.length,
+    'Узлов: ' + nodes, 'Уникальных имён: ' + unique];
+  if (runtimeProviderModel.fetchedAt) bits.push('Обновлено: ' + runtimeProviderModel.fetchedAt);
+  sum.textContent = bits.join(' · ');
+  sum.style.display = '';
+  // Reconciliation Preview ↔ Runtime (#159/D6) — только если есть preview.
+  if (lastPreviewSummary && lastPreviewSummary.names.length) {
+    const previewSet = new Set(lastPreviewSummary.names);
+    const runtimeSet = new Set(runtimeNames);
+    const runtimeOnly = Array.from(runtimeSet).filter(n => !previewSet.has(n));
+    const previewOnly = Array.from(previewSet).filter(n => !runtimeSet.has(n));
+    const parts = [];
+    parts.push('∩ оба источника: ' + (previewSet.size - previewOnly.length));
+    parts.push('только preview: ' + previewOnly.length + (previewOnly.length ? ' — ' + previewOnly.slice(0, 8).join(', ') + (previewOnly.length > 8 ? '…' : '') : ''));
+    parts.push('только runtime: ' + runtimeOnly.length + (runtimeOnly.length ? ' — ' + runtimeOnly.slice(0, 8).join(', ') + (runtimeOnly.length > 8 ? '…' : '') : ''));
+    rec.textContent = parts.join(' · ');
+    rec.style.display = '';
+  } else {
+    rec.style.display = 'none';
+  }
+}
+
+// Нормализация controller-адреса: голый host:port → http://host:port;
+// http(s):// — как есть; прочие схемы/мусор — явная ошибка. Никакого
+// авто-сканирования и запросов на ввод: запрос только по явному клику.
+function normalizeRuntimeController(input) {
+  let value = String(input || '').trim().replace(/\/+$/, '');
+  if (!value) throw new Error('Укажите адрес контроллера (например 10.0.0.2:9090)');
+  if (!/^https?:\/\//i.test(value)) {
+    if (!/^[a-z0-9.-]+(?::\d+)?$/i.test(value) || !/:\d+$/.test(value)) {
+      throw new Error('Адрес контроллера: ожидается host:port или http(s)://host:port');
+    }
+    value = 'http://' + value;
+  }
+  let u;
+  try { u = new URL(value); } catch (_) { throw new Error('Адрес контроллера: некорректный URL'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Адрес контроллера: только http/https');
+  if (!u.hostname) throw new Error('Адрес контроллера: нет host');
+  // Сохраняем path, если пользователь указал базу с префиксом; отсекаем query/hash.
+  return u.origin + (u.pathname && u.pathname !== '/' ? u.pathname.replace(/\/+$/, '') : '');
+}
+
+async function fetchRuntimeProviders() {
+  const status = document.getElementById('rtStatus');
+  const say = (text) => { status.textContent = text; status.style.display = text ? '' : 'none'; };
+  let base;
+  try { base = normalizeRuntimeController(document.getElementById('rtControllerInput').value); }
+  catch (e) { say('❌ ' + e.message); return; }
+  rtControllerMemory = base; // только память вкладки
+  const secret = (document.getElementById('rtSecretInput').value || '').trim();
+  const headers = { Accept: 'application/json' };
+  if (secret) headers.Authorization = 'Bearer ' + secret;
+  say('Загрузка…');
+  try {
+    // Прямой браузер → контроллер. Никаких fallback-воркеров для controller
+    // credentials/runtime JSON — принципиально (security contract #159).
+    const resp = await fetch(base + '/providers/proxies', { headers, cache: 'no-store' });
+    if (!resp.ok) {
+      // HTTP-ответ — можно утверждать точно.
+      const label = resp.status === 401 ? 'HTTP 401: секрет не принят (auth failed)'
+        : resp.status === 403 ? 'HTTP 403: доступ запрещён (forbidden)'
+        : 'HTTP ' + resp.status;
+      say('❌ ' + label);
+      return;
+    }
+    const text = await resp.text();
+    applyRuntimePayload(text, 'fetch');
+    say('✔ Список узлов получен из Mihomo runtime.');
+  } catch (e) {
+    // Generic TypeError браузера не раскрывает причину: не выдумываем
+    // «CORS_DENIED»/«LOCAL_NETWORK_PERMISSION_DENIED» без доказательств.
+    say('❌ Не удалось обратиться к Mihomo controller. Причиной может быть адрес/listen, CORS, разрешение браузера на локальную сеть или обычная сетевая недоступность. Используйте «Вставить JSON»/«Загрузить .json» — ответ откройте в соседней вкладке http://<контроллер>/providers/proxies.');
+  }
+}
+
+function applyRuntimePayload(rawJson, how) {
+  const status = document.getElementById('rtStatus');
+  const say = (text) => { status.textContent = text; status.style.display = text ? '' : 'none'; };
+  let model;
+  try { model = parseMihomoRuntimeProviders(rawJson); }
+  catch (e) { say('❌ ' + e.message); return; }
+  if (!model.providers.length) { say('❌ runtime JSON: ни одного провайдера в /providers/proxies'); return; }
+  runtimeProviderModel = { providers: model.providers, fetchedAt: new Date().toLocaleTimeString() };
+  applyMergedSourceList();
+  document.getElementById('subListControls').style.display = subscriptionListNames.length ? '' : 'none';
+  say(how === 'paste' ? '✔ Runtime JSON разобран (paste).' : '✔ Runtime JSON разобран.');
+}
+
+function clearRuntimeList() {
+  runtimeProviderModel = { providers: [], fetchedAt: null };
+  serverListNameOrigins = null;
+  renderRuntimeSummary();
+  if (lastPreviewSummary) {
+    applyServerListFromSummary(lastPreviewSummary);
+  } else {
+    subscriptionListNames = [];
+    subscriptionListNodes = 0;
+    subscriptionSelection.clear();
+    updateServerListStats();
+    renderServerList();
+    updateSubSelectionNote();
+    document.getElementById('subListControls').style.display = 'none';
+  }
+  const status = document.getElementById('rtStatus');
+  status.textContent = 'Runtime-список очищен.';
+  status.style.display = '';
+}
+
+function initRuntimeImport() {
+  const fetchBtn = document.getElementById('rtFetchBtn');
+  if (!fetchBtn) return;
+  fetchBtn.addEventListener('click', fetchRuntimeProviders);
+  document.getElementById('rtPasteBtn').addEventListener('click', async () => {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch (_) {}
+    if (!text) text = window.prompt('Вставьте JSON из GET /providers/proxies:', '') || '';
+    if (!text) return;
+    applyRuntimePayload(text, 'paste');
+  });
+  document.getElementById('rtUploadBtn').addEventListener('click', () => document.getElementById('rtFile').click());
+  document.getElementById('rtFile').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => applyRuntimePayload(String(reader.result || ''), 'upload');
+    reader.onerror = () => {};
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+  document.getElementById('rtClearBtn').addEventListener('click', clearRuntimeList);
+}
+initRuntimeImport();
+
+// Обе визуальные сводки (верхняя subListStats и нижняя subscriptionPreviewStats)
+// считаются ОДНОЙ моделью: исключено = union (ручной regex ИЛИ выбор галочками),
+// один узел считается один раз; пересчёт live при любом изменении выбора/фильтра.
 function renderSubscriptionPreview(summary) {
   const box = document.getElementById('subscriptionPreviewBox');
   if (!box) return;
-  if (!summary || !summary.subscriptions) { clearSubscriptionPreview(); return; }
-  const remaining = Math.max(0, summary.found - summary.excluded);
-  document.getElementById('subscriptionPreviewStats').textContent =
-    'Подписок: ' + summary.subscriptions + ' · найдено узлов: ' + summary.found +
-    ' · после фильтра: ' + remaining + ' · исключено: ' + summary.excluded;
+  if (!summary || !summary.subscriptions) { lastPreviewSummary = null; clearSubscriptionPreview(); return; }
+  lastPreviewSummary = summary;
+  const total = summary.subscriptions;
+  const succeeded = summary.subscriptionsSucceeded || 0;
+  const statsEl = document.getElementById('subscriptionPreviewStats');
+  // UNKNOWN ≠ 0: при непрочитанных подписках количество узлов неизвестно,
+  // доказанный ноль — только когда все подписки успешно прочитаны и пусты.
+  if (succeeded === total) {
+    const excluded = serverListCountExcluded(summary.names);
+    const remaining = Math.max(0, summary.found - excluded);
+    statsEl.textContent = 'Подписок: ' + total + ' · preview: ' + succeeded + '/' + total +
+      ' · найдено узлов: ' + summary.found +
+      ' · после фильтра: ' + remaining + ' · исключено: ' + excluded;
+  } else if (succeeded === 0) {
+    statsEl.textContent = 'Подписок: ' + total + ' · preview: 0/' + total + ' · количество узлов: неизвестно';
+  } else {
+    const excluded = serverListCountExcluded(summary.names);
+    statsEl.textContent = 'Подписок: ' + total + ' · preview: ' + succeeded + '/' + total +
+      ' · найдено в доступных подписках: ' + summary.found +
+      ' · исключено (доступные): ' + excluded + ' · общий итог неизвестен';
+  }
   const warning = document.getElementById('subscriptionPreviewWarning');
   warning.textContent = summary.warnings.join(' ');
   warning.style.display = summary.warnings.length ? '' : 'none';
@@ -3411,9 +4080,19 @@ function renderSubscriptionPreview(summary) {
   box.style.display = '';
 }
 
+// Live-пересчёт нижней сводки от последней применённой сводки (выбор
+// галочками / «Снять все» / правка ручного фильтра). Без сети, без rebuild.
+function refreshSubscriptionPreviewStats() {
+  if (lastPreviewSummary) renderSubscriptionPreview(lastPreviewSummary);
+}
+
 function updateExcludeFilterVisibility() {
   document.getElementById('excludeFilterRow').style.display = '';
-  document.getElementById('deviceModelRow').style.display = document.getElementById('cfgSubMode').checked ? '' : 'none';
+  // Device Model относится к слою запросов списка серверов/подписок и
+  // используется в ОБОИХ режимах (x-device-model уходит с каждым preview,
+  // включая server-list в Sub Mode OFF) — виден всегда, до первого
+  // действия, отправляющего такой запрос (#152).
+  document.getElementById('deviceModelRow').style.display = '';
 }
 
 function updateSubModeHint() {
@@ -4559,6 +5238,274 @@ function cdgDomainCoverage(doc, domainsText, opts) {
 /* === CONFIG DEPENDENCY GRAPH CORE — CDG-CORE-END === */
 /* === ROUTING DIAGNOSTICS CORE — RD-CORE-END === */
 
+// === TIERED FAILOVER (#148, v1.10; runtime-proven: docs/research/TIERED-FAILOVER-RUNTIME.md) ===
+// Явная user-visible feature, DEFAULT OFF: выключена — вывод байт-в-байт прежний.
+// Модель: TieredStrategy = упорядоченные эшелоны; ROOT fallback обходит эшелоны
+// по порядку, внутри эшелона — url-test (быстрейший) или fallback (по порядку).
+// Участники эшелона ссылаются на имена текущей сборки (прокси/WG/AWG) или
+// провайдеры (__provider__:NAME → use:). Никаких секретов в модели — только имена.
+let tierSeq = 0;
+
+function tieredEnabled() {
+  const el = document.getElementById('cfgTieredFailover');
+  return !!(el && el.checked);
+}
+
+function readTierCards() {
+  const tiers = [];
+  document.querySelectorAll('#tierCards .tier-card').forEach(card => {
+    const val = sel => { const el = card.querySelector(sel); return el ? el.value.trim() : ''; };
+    const members = Array.from(card.querySelectorAll('.tier-member li')).map(li => li.dataset.value).filter(Boolean);
+    tiers.push({ name: val('.tier-name'), strategy: val('.tier-strategy') || 'url-test', members });
+  });
+  return tiers;
+}
+
+// Канонические имена групп: «🪜 <order> <name>», deterministic при том же вводе;
+// коллизии с существующими именами гасятся детерминированным суффиксом -N.
+function tierGroupName(base, taken) {
+  let name = base, n = 2;
+  while (taken.has(name)) name = base + '-' + (n++);
+  taken.add(name);
+  return name;
+}
+
+// Валидация + генерация групп. Бросает явные ошибки (пустое имя/эшелон,
+// неизвестный участник, дубликаты имён) — buildMihomo показывает их как ❌.
+// Возвращает {groups, rootName, tiers} — groups ДОБАВЛЯЮТСЯ к doc в applyTieredFailover.
+function buildTieredGroups(tiers, existingNames) {
+  if (!tiers.length) throw Error('Tiered Failover: включён, но не создан ни один эшелон — добавьте уровень или выключите настройку');
+  const taken = new Set(existingNames);
+  const seenNames = new Map();
+  const out = [];
+  const health = { url: 'https://www.gstatic.com/generate_204', interval: 300, timeout: 5000, lazy: false, 'expected-status': 204 };
+  const tierRefs = [];
+  tiers.forEach((t, i) => {
+    const name = t.name.trim();
+    if (!name) throw Error('Tiered Failover: у эшелона #' + (i + 1) + ' пустое имя');
+    if (seenNames.has(name.toLowerCase())) throw Error('Tiered Failover: дубликат имени эшелона «' + name + '»');
+    seenNames.set(name.toLowerCase(), true);
+    if (!t.members.length) throw Error('Tiered Failover: эшелон «' + name + '» пуст — добавьте хотя бы один выход');
+    const gname = tierGroupName('🪜 ' + (i + 1) + ' ' + name, taken);
+    const proxies = [], use = [];
+    t.members.forEach(m => {
+      if (m.startsWith('__provider__:')) use.push(m.slice('__provider__:'.length));
+      else {
+        if (!existingNames.has(m)) throw Error('Tiered Failover: выход «' + m + '» не найден в текущей сборке — пересоберите или уберите его из эшелона «' + name + '»');
+        proxies.push(m);
+      }
+    });
+    const g = Object.assign({ name: gname, type: t.strategy === 'fallback' ? 'fallback' : 'url-test' }, health);
+    if (t.strategy === 'url-test') g.tolerance = 50;
+    if (proxies.length) g.proxies = proxies;
+    if (use.length) g.use = use;
+    if (!g.proxies && !g.use) throw Error('Tiered Failover: эшелон «' + name + '» не содержит участников');
+    out.push(g);
+    tierRefs.push(gname);
+  });
+  const rootName = tierGroupName('🪜 TIERED-AUTO', taken);
+  out.push(Object.assign({ name: rootName, type: 'fallback', proxies: tierRefs }, health));
+  return { groups: out, rootName, tiers };
+}
+
+// Post-build патч: doc → +tier groups, GLOBAL получает root первым участником,
+// MATCH,GLOBAL → MATCH,<root>. Только при включённой настройке; выключена —
+// yaml возвращается без изменений (ALL PARITY).
+function applyTieredFailover(yaml, tiersOverride) {
+  if (!tieredEnabled() && !tiersOverride) return yaml;
+  const doc = jsyaml.load(yaml);
+  const tiers = Array.isArray(tiersOverride) ? tiersOverride : readTierCards();
+  const existingNames = new Set([
+    ...(Array.isArray(doc.proxies) ? doc.proxies : []).map(p => p && p.name).filter(Boolean),
+    ...(Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []).map(g => g && g.name).filter(Boolean)
+  ]);
+  const { groups, rootName } = buildTieredGroups(tiers, existingNames);
+  doc['proxy-groups'] = [...(Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []), ...groups];
+  const global = doc['proxy-groups'].find(g => g.name === 'GLOBAL');
+  if (!global || !Array.isArray(global.proxies)) throw Error('Tiered Failover: группа GLOBAL не найдена в сборке');
+  global.proxies.unshift(rootName);
+  doc.rules = (Array.isArray(doc.rules) ? doc.rules : []).map(r => (r === 'MATCH,GLOBAL' ? 'MATCH,' + rootName : r));
+  const summary = 'Tiered Failover: ' + tiers.length + ' эшелон(ов), строгий приоритет → ' +
+    tiers.map((t, i) => (i + 1) + ' ' + t.name.trim() + ' [' + t.strategy + ' × ' + t.members.length + ']').join(' → ');
+  const traceEl = document.getElementById('tieredTrace');
+  if (traceEl) traceEl.textContent = 'ℹ ' + summary;
+  return jsyaml.dump(doc, { lineWidth: -1 });
+}
+
+function tierMemberOptions() {
+  // Реестр целей как у dialer: имена прокси/WG + провайдеры (__provider__:NAME).
+  // MANUAL/прочее исключается самим кэшем (он его не содержит).
+  return dialerTargetsCache
+    .filter(t => t.value && t.value !== '__manual__')
+    .map(t => ({ value: t.value, label: t.label || t.value }));
+}
+
+function renderTierCards() {
+  const wrap = document.getElementById('tierCards');
+  if (!wrap) return;
+  // ВАЖНО: render не пересохраняет DOM-состояние — единственный источник истины
+  // window.__tierCardsState; обработчики мутируют его ДО вызова render.
+  // Незафиксированный выбор .tier-member-select живёт в состоянии карточки
+  // (pendingSelect) и переживает перерисовку (#165: debounced
+  // refreshWgTargetSelectors больше не теряет выбор пользователя).
+  wrap.textContent = '';
+  const options = tierMemberOptions();
+  (window.__tierCardsState || []).forEach((t, i) => wrap.appendChild(tierCardDom(t, i, options)));
+}
+
+// Компактная иконка-кнопка карточки (#165): единый размер, aria-label/title
+// сохранены; destructive (🗑) визуально отличён классом tier-del.
+function tierIconBtn(className, text, ariaLabel, title, disabled) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'btn btn-gray tier-btn ' + className;
+  b.textContent = text;
+  b.setAttribute('aria-label', ariaLabel);
+  b.title = title || ariaLabel;
+  if (disabled) b.disabled = true;
+  return b;
+}
+
+function tierCardDom(t, index, options) {
+  const card = document.createElement('div');
+  card.className = 'tier-card policy-card';
+  card.dataset.index = index;
+  const title = document.createElement('div');
+  title.className = 'tier-title';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'tier-name';
+  nameInput.value = t.name || ('Эшелон ' + (index + 1));
+  nameInput.placeholder = 'Имя эшелона (например WARP)';
+  nameInput.setAttribute('aria-label', 'Имя эшелона ' + (index + 1));
+  const count = (window.__tierCardsState || []).length;
+  title.append(
+    nameInput,
+    tierIconBtn('tier-up', '↑', 'Эшелон выше', 'Поднять эшелон (приоритет выше)', index === 0),
+    tierIconBtn('tier-down', '↓', 'Эшелон ниже', 'Опустить эшелон (приоритет ниже)', index === count - 1),
+    tierIconBtn('tier-del', '🗑', 'Удалить эшелон', 'Удалить эшелон')
+  );
+  const strategyRow = document.createElement('div');
+  strategyRow.className = 'policy-target-row';
+  const strategyLabel = document.createElement('label');
+  strategyLabel.className = 'label';
+  strategyLabel.textContent = 'Стратегия:';
+  const strategySel = document.createElement('select');
+  strategySel.className = 'tier-strategy';
+  strategySel.setAttribute('aria-label', 'Стратегия внутри эшелона');
+  for (const [v, txt] of [['url-test', '⚡ Fastest / url-test'], ['fallback', 'Ordered fallback']]) {
+    const o = document.createElement('option'); o.value = v; o.textContent = txt; strategySel.appendChild(o);
+  }
+  strategySel.value = t.strategy === 'fallback' ? 'fallback' : 'url-test';
+  strategyRow.append(strategyLabel, strategySel);
+  const membersLabel = document.createElement('label');
+  membersLabel.className = 'label';
+  membersLabel.style.cssText = 'display:block;margin-top:8px';
+  membersLabel.textContent = 'Выходы (в порядке приоритета):';
+  const memberList = document.createElement('ul');
+  memberList.className = 'tier-member';
+  (t.members || []).forEach(v => memberList.appendChild(tierMemberItem(v, options)));
+  const addRow = document.createElement('div');
+  addRow.className = 'tier-add-row';
+  const memberSel = document.createElement('select');
+  memberSel.className = 'tier-member-select';
+  memberSel.setAttribute('aria-label', 'Добавить участника в эшелон');
+  const placeholder = document.createElement('option');
+  placeholder.value = ''; placeholder.textContent = options.length ? '— выберите выход —' : 'Реестр целей ещё не построен — выполните Build или загрузите WG/AWG';
+  memberSel.appendChild(placeholder);
+  options.forEach(o => {
+    const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; memberSel.appendChild(opt);
+  });
+  // pendingSelect (#165): выбор переживает внешние перерисовки.
+  if (t.pendingSelect && options.some(o => o.value === t.pendingSelect)) memberSel.value = t.pendingSelect;
+  const addBtn = tierIconBtn('tier-add-member', '＋', 'Добавить выход в эшелон', 'Добавить выбранный выход');
+  addRow.append(memberSel, addBtn);
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = 'Порядок важен для Ordered fallback; для url-test порядок — приоритет при равной скорости.';
+  card.append(title, strategyRow, membersLabel, memberList, addRow, hint);
+  return card;
+}
+
+function tierMemberItem(value, options) {
+  const li = document.createElement('li');
+  li.dataset.value = value;
+  const opt = (options || []).find(o => o.value === value);
+  const span = document.createElement('span');
+  span.textContent = opt ? opt.label : value;
+  span.title = value;
+  const rm = document.createElement('button');
+  rm.type = 'button'; rm.className = 'btn btn-gray tier-btn tier-member-rm'; rm.textContent = '×';
+  rm.setAttribute('aria-label', 'Убрать участника');
+  rm.title = 'Убрать участника';
+  li.append(span, rm);
+  return li;
+}
+
+function saveTierCardsState() {
+  // DOM → состояние (переживает перерисовку). pendingSelect — незафиксированный
+  // выбор селекта добавления: рендер обязан его восстанавливать (#165).
+  window.__tierCardsState = Array.from(document.querySelectorAll('#tierCards .tier-card')).map(card => ({
+    name: card.querySelector('.tier-name').value,
+    strategy: card.querySelector('.tier-strategy').value,
+    pendingSelect: card.querySelector('.tier-member-select').value || '',
+    members: Array.from(card.querySelectorAll('.tier-member li')).map(li => li.dataset.value)
+  }));
+}
+
+function bindTieredUI() {
+  const enable = document.getElementById('cfgTieredFailover');
+  if (!enable) return;
+  enable.addEventListener('change', () => {
+    document.getElementById('tieredPanel').style.display = enable.checked ? 'block' : 'none';
+    if (enable.checked && !(window.__tierCardsState || []).length) {
+      window.__tierCardsState = [{ name: 'WARP', strategy: 'url-test', members: [] }, { name: 'Personal', strategy: 'fallback', members: [] }];
+    }
+    renderTierCards();
+  });
+  document.getElementById('tierCards').addEventListener('click', e => {
+    const card = e.target.closest('.tier-card');
+    saveTierCardsState();
+    const idx = Number(card.dataset.index);
+    if (e.target.classList.contains('tier-del')) { window.__tierCardsState.splice(idx, 1); renderTierCards(); return; }
+    if (e.target.classList.contains('tier-up') || e.target.classList.contains('tier-down')) {
+      const j = e.target.classList.contains('tier-up') ? idx - 1 : idx + 1;
+      if (j < 0 || j >= window.__tierCardsState.length) return;
+      const arr = window.__tierCardsState; [arr[idx], arr[j]] = [arr[j], arr[idx]];
+      renderTierCards(); return;
+    }
+    if (e.target.classList.contains('tier-add-member')) {
+      // Значение берём из канонического состояния (pendingSelect), а не только
+      // из текущего DOM: внешние перерисовки не теряют выбор пользователя (#165).
+      const pending = window.__tierCardsState[idx].pendingSelect || card.querySelector('.tier-member-select').value;
+      if (!pending) return;
+      if (!window.__tierCardsState[idx].members.includes(pending)) {
+        window.__tierCardsState[idx].members.push(pending);
+      }
+      window.__tierCardsState[idx].pendingSelect = ''; // выбор потреблён
+      renderTierCards(); return;
+    }
+    if (e.target.classList.contains('tier-member-rm')) {
+      const li = e.target.closest('li');
+      const members = window.__tierCardsState[idx].members;
+      const mIdx = members.indexOf(li.dataset.value);
+      if (mIdx !== -1) members.splice(mIdx, 1);
+      renderTierCards();
+    }
+  });
+  document.getElementById('tierCards').addEventListener('input', e => {
+    // saveTierCardsState коммитит и pendingSelect селекта добавления: выбор
+    // фиксируется в состоянии немедленно — debounced-перерисовка его не теряет (#165).
+    saveTierCardsState();
+  });
+  document.getElementById('btnTierAdd').addEventListener('click', () => {
+    saveTierCardsState();
+    window.__tierCardsState.push({ name: 'Эшелон ' + (window.__tierCardsState.length + 1), strategy: 'url-test', members: [] });
+    renderTierCards();
+  });
+}
+bindTieredUI();
+
 // === STALE BUILD DIAGNOSTICS CONTRACT (v1.9 4B, Explainability) ===
 // Snapshot-модель Inspector/Provider-диагностики остаётся (скрытый Build не
 // выполняется), но она обязана быть честной: после изменения любого input,
@@ -4568,7 +5515,7 @@ function cdgDomainCoverage(doc, domainsText, opts) {
 // чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
 // ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
 // но визуально помечен как previous Build.
-const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput']);
+const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'rtControllerInput', 'rtSecretInput']);
 let lastBuildFingerprint = null;
 
 function buildStateFingerprint() {
@@ -5078,6 +6025,7 @@ async function buildMihomo() {
         mihomoSubscriptionMode: subMode,
         excludeFilter: (subMode && combinedExclude.filter) ? combinedExclude.filter : undefined,
         deviceModel: subMode ? document.getElementById('deviceModelInput').value : undefined,
+        deviceHwid: subMode ? getActiveDeviceIdentity().hwid : undefined,
         webUiDashboard: webUiEnabled ? webUiChoice : undefined,
         webUiCustomUrl: webUiEnabled && webUiChoice === 'custom' ? webUiCustomUrl : undefined,
         mihomoPerProxyTun: perProxyTun,
@@ -5096,6 +6044,9 @@ async function buildMihomo() {
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
     yaml = applyProviderDialerTargets(yaml);
+
+    // PATCH: Tiered Failover (#148) — только при явном включении; OFF = байт-в-байт.
+    if (tieredEnabled()) yaml = applyTieredFailover(yaml);
 
     // PATCH: Deployment profile — только при профиле vps-gateway.
     // При router/vps-local пост-патч не выполняется вовсе (инвариант byte-for-byte).
@@ -5202,15 +6153,23 @@ for (const id of ['mihomoInput', 'whitelistInput', 'excludeFilterInput']) {
     lastInspectedBuildInput = null;
     lastInspectedFallbackInput = null;
     subscriptionPreviewSeq++;
-    clearSubscriptionPreview();
-    // Смена подписок/фильтра: старый список серверов и выбор инвалидируются
-    // (контракт §10 issue #100: URL изменился — старые имена невалидны).
-    subscriptionListNames = [];
-    subscriptionListNodes = 0;
-    subscriptionSelection.clear();
-    updateServerListStats();
-    renderServerList();
-    updateSubSelectionNote();
+    if (id === 'excludeFilterInput') {
+      // Имена узлов от фильтра НЕ зависят: список и выбор сохраняются,
+      // счётчики обеих сводок пересчитываются live (union regex + выбор).
+      updateServerListStats();
+      refreshSubscriptionPreviewStats();
+    } else {
+      // Изменение подписок: старый список серверов и выбор инвалидируются
+      // (контракт §10 issue #100: URL изменился — старые имена невалидны).
+      clearSubscriptionPreview();
+      subscriptionListNames = [];
+      subscriptionListNodes = 0;
+      subscriptionSelection.clear();
+      updateServerListStats();
+      renderServerList();
+      updateSubSelectionNote();
+    }
+    invalidateServerListFetch();
   });
 }
 document.getElementById('cfgWebUI').addEventListener('change', updateWebUiVisibility);
@@ -5223,6 +6182,15 @@ document.getElementById('btnPolicyAdd').addEventListener('click', () => {
   addPolicyCard(preset);
 });
 updateExcludeFilterVisibility();
+// Идентичность устройства (#156/#163): стабильный HWID + явное управление локальным реестром.
+renderDeviceIdentitySelect();
+document.getElementById('deviceIdentitySelect').addEventListener('change', (e) => {
+  setActiveDeviceIdentity(e.target.value);
+});
+document.getElementById('btnDeviceIdentityNew').addEventListener('click', createNewDeviceIdentity);
+document.getElementById('btnDeviceIdentityRename').addEventListener('click', renameActiveDeviceIdentity);
+document.getElementById('btnDeviceIdentityRegenerate').addEventListener('click', regenerateActiveDeviceIdentity);
+document.getElementById('btnDeviceIdentityDelete').addEventListener('click', deleteActiveDeviceIdentity);
 updateSubModeHint();
 updateWebUiVisibility();
 updateMihomoOptionStates();
@@ -5254,6 +6222,7 @@ document.addEventListener('change', (e) => {
     lastInspectedBuildInput = null;
     lastInspectedFallbackInput = null;
     subscriptionPreviewSeq++;
+    invalidateServerListFetch();
   }
 }, true);
 document.addEventListener('change', (e) => {

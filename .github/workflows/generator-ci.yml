@@ -209,6 +209,18 @@ jobs:
       - name: Mobile tabs regression (#142)
         run: node tests/mobile-tabs.cjs
 
+      - name: Tiered Failover regression (#148)
+        run: node tests/tiered-failover.cjs
+
+      - name: Subscription preview hardening regression (#152)
+        run: node tests/subscription-preview.cjs
+
+      - name: Subscription device identity regression (#156)
+        run: node tests/device-identity.cjs
+
+      - name: Mihomo runtime node import regression (#159)
+        run: node tests/mihomo-runtime-import.cjs
+
       - name: Domain Coverage Checker browser regression
         run: node tests/domain-coverage.cjs
       - name: Health-check URL browser regression
@@ -225,6 +237,9 @@ jobs:
 
       - name: WG/AWG profile manager browser regression
         run: node tests/wg-profiles-browser.cjs
+
+      - name: WG generation badge regression (#157)
+        run: node tests/wg-generation-badge.cjs
 
       - name: AWG stability policy regression
         run: node tests/awg-stability.cjs
@@ -300,6 +315,9 @@ jobs:
 
       - name: Deterministic AWL priority integration
         run: node tests/mihomo-awl-priority.cjs
+
+      - name: Tiered Failover runtime lab (#148)
+        run: node tests/tiered-failover-runtime.cjs
 
       - name: Explicit manual/live exclusion guard
         shell: bash

@@ -332,18 +332,52 @@ the build with a clear error; in ON mode the preview is non-fatal.
 
 Subscription inspection privacy/identity contract (binding):
 
-- Preview identity: `x-hwid` = random 32-hex from
-  `localStorage['link-generators.subscription-preview-hwid.v1']` (memory-only fallback),
-  stable across builds; `x-device-model` = the user's `📱 Device Model` value when
+- Device identity (#156): ONE logical generated device = ONE stable identity.
+  The active device's `x-hwid` (random 32-hex, cryptographic) is used by browser
+  preview AND by every `proxy-provider` header of the generated config (runtime
+  option `deviceHwid`, web4core#16). Rebuilding the same logical device keeps the
+  identity; a page reload keeps it; renaming Device Model never changes it. A
+  different logical device from the same browser gets a different identity only
+  through the explicit «➕ Новое устройство» button (registry of devices, switchable
+  via `#deviceIdentitySelect`). The HWID value itself is never rendered in the UI,
+  toasts, trace or diagnostics. Storage: `localStorage['link-generators.device-identities.v1']`
+  (memory-only fallback) — the ONLY new persistent value; migration: the legacy
+  `link-generators.subscription-preview-hwid.v1` value becomes the first device's
+  identity, the legacy key is never written anymore and is not deleted.
+- Preview headers: `x-device-model` = the user's `📱 Device Model` value when
   filled, falling back to `Saymer Link Generators Preview`; the provider-level
-  Device Model option is unaffected (same field, different transport).
+  Device Model option is unaffected (same field, different transport). Device
+  Model is a human-readable label, never the identity key.
 - Header allowlist is exactly `x-hwid` + `x-device-model`, enforced in the runtime and
   again in the worker; arbitrary headers never leave the caller.
 - CORS fallback `sub.saymer-87.workers.dev` (owner-controlled, deployed via GitHub Actions): POST JSON `{url, headers}` contract with its
   own allowlist, redirect/timeout/size caps and `Cache-Control: no-store`; legacy
   `GET ?url=` preserved; the runtime degrades POST → GET on legacy deployments.
+  Failed fetch chains report BOTH stages honestly: «Direct: <reason>;
+  Fallback: <reason>» (web4core#16) — the fallback-stage cause is never silently
+  replaced by the direct one; messages contain no URLs or secrets.
+- Honest-partial preview contract (#158, v1.10 closure): (R1) lines whose URI
+  scheme the parser does not know are dropped by the runtime, but the loss is
+  reported via the deterministic marker `# link-generators: preview-partial
+  (N skipped; schemes: …)` (web4core#18) and the UI shows «⚠ Preview неполный…»
+  pointing to the Runtime Import (#159); only counts and scheme CATEGORY names
+  are reported — never dropped content. (R2) a Clash/Mihomo YAML payload is
+  detected inside `handleResponse` (web4core#19) and rejected with the explicit
+  format error; the UI names the format and directs to the Runtime Import
+  instead of a generic network error. The optional names-only Clash YAML
+  extraction was deliberately NOT implemented in v1.10 (scope control); see
+  docs/research/PREVIEW-RUNTIME-PARITY.md.
 - Network only on explicit user action (Build for Sub OFF expansion; the list-fetch button for Sub ON preview); no background polling, no telemetry;
   subscription URLs, bodies and proxy credentials are never stored or logged.
+  The server-list preview operation has a bounded budget (60 s total, test-
+  overridable `SUBSCRIPTION_PREVIEW_BUDGET_MS`); the mandatory Sub Mode=OFF build
+  fetch is deliberately not budgeted.
+- Server-list preview operation state model (explicit): IDLE / LOADING / STALE /
+  SUCCESS / PARTIAL / FAILED. Loading always terminates (input edits invalidate
+  and restore the button immediately); failed subscriptions mean UNKNOWN node
+  counts, never a proven 0; a successfully read but empty subscription is an
+  empty SUCCESS. Both visual summaries compute one live model: union of the
+  manual regex and checkbox selections, counted once.
 - `buildMihomo()` is async since inspection: it sets `VALIDATING` before the first await;
   tests must wait for VALID/INVALID, not for state ≠ VALIDATING right after the click.
 
@@ -363,10 +397,43 @@ selectable checkbox list (search, select all/clear all, counters) that
 feeds exact-match exclusions into the combined Exclude Filter (OR with
 the manual expression, regex-escaped). Selection persists across refresh
 (pruned to existing names); changing subscription input invalidates list
-and selection. Device Model: user value (if filled) is sent as
-x-device-model on preview fetches; fallback is
-the user's Device Model value when filled (fallback `Saymer Link Generators Preview`); HWID is unaffected. HWID contract
-unchanged: stable per-browser identity, never random-per-request.
+and selection (editing the manual filter deliberately does NOT — node
+names do not depend on it; both summaries recompute live). Device Model:
+user value (if filled) is sent as x-device-model on preview fetches;
+fallback is `Saymer Link Generators Preview`. HWID contract (#156): the
+active logical-device identity, shared by preview and all providers,
+never random-per-request and never rotated by rebuilds.
+
+### Mihomo Runtime Node Import (#159)
+
+Second name source for the SAME exclude-filter model: the actual provider
+nodes loaded by the running Mihomo, from `GET /providers/proxies` (never
+`/proxies` alone). Three inputs share one canonical parser
+`parseMihomoRuntimeProviders`, which retains ONLY safe minimum fields
+(provider/proxy names, `type`, `alive`, last `delay`) and discards
+server/port/UUID/password/keys/URLs at parse time. Inputs:
+
+- direct controller fetch (address `host:port` or `http(s)://…` normalized,
+  optional Bearer secret) — explicit click only, no auto-scan; the request
+  goes browser → controller DIRECTLY and must NEVER be routed through the
+  project fallback worker (controller credentials and runtime JSON do not
+  touch project infrastructure);
+- paste JSON; upload `.json`.
+
+Security invariants: controller address and API secret are memory-only for
+the tab lifetime (never localStorage/sessionStorage/URLs/diagnostics; the
+401 message names auth failure without echoing the secret); runtime JSON is
+not persisted; a generic browser network TypeError is reported honestly
+with a checklist (listen address / CORS / private-network permission /
+secret / do-not-expose-WAN) and must NOT be fabricated as CORS_DENIED or
+PERMISSION_DENIED — precise claims only for real HTTP statuses. The importer
+is strictly read-only diagnostics: no Mihomo mutations, no API writes, no
+YAML rewrites; import alone does not mark the build STALE (controller/secret
+inputs are excluded from the build fingerprint), STALE comes only from an
+actual filter-selection change. Runtime-only names are tagged in the list;
+with both sources present a reconciliation line shows ∩ / preview-only /
+runtime-only (evidence for #158; see docs/research/PREVIEW-RUNTIME-PARITY.md).
+Regression: `tests/mihomo-runtime-import.cjs`.
 
 ### AWG stability policy (#137)
 
@@ -500,11 +567,17 @@ Automated regressions: `node tests/runtime.cjs` and the external Playwright run
   by Build, never background polling. Direct browser fetch is preferred; when CORS/direct fetch
   fails the runtime may fall back to the owner-controlled proxy `sub.saymer-87.workers.dev`, which necessarily
   discloses the subscription URL to that proxy.
-- The only persistent browser value introduced for inspection is a random preview identity HWID
-  (`link-generators.subscription-preview-hwid.v1`). It is not a key and is deliberately stable so
-  device-limited subscription panels do not register a new device on every Build. The preview uses
-  a recognizable generator `x-device-model`; it never reuses the generated Mihomo/Keenetic identity.
-  If storage is unavailable (including some `file://` contexts), keep the HWID in memory only.
+- The only persistent browser values introduced for inspection are the device-identity
+  registry (`link-generators.device-identities.v1`, #156) and the legacy read-only
+  `link-generators.subscription-preview-hwid.v1` key kept from pre-#156 versions (not
+  written anymore, not deleted). The registry is not a key store: it holds one stable
+  random 32-hex HWID per logical generated device so that device-limited subscription
+  panels see ONE device for preview + all providers of that config, rebuilds do not
+  rotate the identity, and genuinely different routers generated from the same browser
+  can get distinct identities only via the explicit «➕ Новое устройство» action. The
+  preview uses a recognizable generator `x-device-model`; the identity is never derived
+  from Device Model. If storage is unavailable (including some `file://` contexts), the
+  registry lives in memory only.
 - User input is untrusted (bot YAML, links, files): parse inside try/catch and show
   a clear toast error, as currently implemented.
 - Treat user-derived WARP values as untrusted text. `generateWarp()` may clear its output

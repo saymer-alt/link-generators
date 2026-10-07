@@ -30,7 +30,7 @@ const POLICIES = [
 const build = (input, options, extra) => engine.buildFromRequest({
   core: 'mihomo', input, wgBeans: [], ...(extra || {}), options,
 });
-const scrubHwid = (s) => s.replace(/^\s+- [0-9a-f]{32}$/gm, 'HWID');
+const scrubHwid = (s) => s.replace(/^\s+- "?[0-9a-f]{32}"?\s*$/gm, 'HWID');
 
 let cases = 0;
 
