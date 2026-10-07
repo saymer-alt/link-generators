@@ -325,6 +325,31 @@ async function listedCount(page) {
   assert.equal(rz.fail, null, 'resizable list contract: ' + JSON.stringify(rz));
   ok('resizable node list (#166): resize:vertical 140px..70vh, visual-only (fingerprint не меняется)');
 
+  // === 12c. #158 R1: preview-partial marker — честное «Preview неполный» ===
+  await setup();
+  await page.route(SUB1, r => r.fulfill({ status: 200, headers: CORS, body: links(3, 'Main') + '\nsnell://203.0.113.60:6160?psk=TESTPSK#SnellNode\nssr://dGVzdA' }));
+  await page.route(SUB2, r => r.fulfill({ status: 200, headers: CORS, body: links(1, 'Alt') }));
+  await page.locator('#subListFetchBtn').click();
+  await page.waitForFunction(() => document.getElementById('subscriptionPreviewWarning').textContent.includes('Preview неполный'), null, { timeout: 20000 });
+  const w158 = await warningText(page);
+  assert.match(w158, /Preview неполный: 2 элемент/, 'R1 warning: ' + w158);
+  assert.match(w158, /snell,ssr/);
+  assert.ok(!w158.includes('TESTPSK') && !w158.includes('dGVzdA'), 'содержимое отброшенных строк не светится');
+  assert.equal(await listedCount(page), 4, 'поддержанные узлы в списке');
+  ok('#158 R1: preview-partial маркер → честное «Preview неполный», контент не утекает');
+
+  // === 12d. #158 R2: Clash YAML — явное сообщение, не generic error ===
+  await setup();
+  await page.route(SUB1, r => r.fulfill({ status: 200, headers: CORS, body: 'proxies:\n  - name: clash-node\n    type: ss\n    server: 203.0.113.70\n    port: 8388\n    cipher: aes-128-gcm\n    password: CLASHPASS\n' }));
+  await page.route(SUB2, r => r.fulfill({ status: 200, headers: CORS, body: links(2, 'Alt') }));
+  await page.locator('#subListFetchBtn').click();
+  await page.waitForFunction(() => document.getElementById('subscriptionPreviewWarning').textContent.includes('Clash/Mihomo YAML'), null, { timeout: 20000 });
+  const w158b = await warningText(page);
+  assert.match(w158b, /Подписка #1 возвращена в Clash\/Mihomo YAML/, 'R2 explicit: ' + w158b);
+  assert.match(w158b, /Импорт узлов из Mihomo/, 'R2 направляет в Runtime Import');
+  assert.ok(!w158b.includes('CLASHPASS') && !w158b.includes('203.0.113.70'), 'YAML-содержимое не светится');
+  ok('#158 R2: Clash YAML назван прямо, направление в Runtime Import, без содержимого');
+
   // === 13. privacy: localStorage ===
   const store = await page.evaluate(() => ({ keys: Object.keys(localStorage), dump: JSON.stringify(localStorage) }));
   const IDENTITY_KEYS = ['link-generators.device-identities.v1', 'link-generators.subscription-preview-hwid.v1'];
