@@ -276,13 +276,16 @@ const root = path.resolve(__dirname, '..');
     const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k); }
     return { keys: Object.keys(localStorage), dump: JSON.stringify(ls), cookies: document.cookie };
   });
-  // HWID создаётся лениво — только реальным preview-запросом; build/storage-free build
-  // может оставить localStorage пустым, но никогда не пишет ничего кроме HWID-ключа.
-  assert.ok(storageDump.keys.every(k => k === 'link-generators.subscription-preview-hwid.v1'), 'localStorage: не более чем stable preview HWID');
+  // Идентичность создаётся лениво — только реальным preview/identity-доступом;
+  // build/storage-free build может оставить localStorage пустым, но никогда
+  // не пишет ничего кроме identity-ключей (#156: реестр устройств + legacy
+  // preview-HWID, который после миграции больше не пишется).
+  const IDENTITY_KEYS = ['link-generators.device-identities.v1', 'link-generators.subscription-preview-hwid.v1'];
+  assert.ok(storageDump.keys.every(k => IDENTITY_KEYS.includes(k)), 'localStorage: только identity-ключи (#156); фактические: ' + storageDump.keys.join(','));
   assert.doesNotMatch(storageDump.dump, /PRIVACY-PROBE-DEVICE|privacy-probe\.example|NEVER-STORED-NODE/, 'в storage нет device model/URL/имён узлов');
   assert.equal(storageDump.cookies, '', 'cookies пусты');
   await page3.close();
-  ok('privacy: после build+reload сохраняется только стабильный HWID (без Device Model/URL/имён)');
+  ok('privacy: после build+reload сохраняется только identity-хранилище (без Device Model/URL/имён)');
 
   assert.deepEqual(errors, [], 'нет pageerror');
   console.log(`Profile-matrix: ${passed} проверок — PASS`);

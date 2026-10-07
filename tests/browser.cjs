@@ -327,8 +327,13 @@ const expectedAwg = {
       // повторно применить disabled-состояния профиля
       document.getElementById('cfgProfile').dispatchEvent(new Event('change', { bubbles: true }));
     }, st);
-    const storedHwid = await page.evaluate(() => localStorage.getItem('link-generators.subscription-preview-hwid.v1'));
-    assert.equal(storedHwid, firstHwid, 'HWID сохранён в localStorage');
+    const storedHwid = await page.evaluate(() => {
+      // #156: единственное место хранения идентичности — реестр устройств;
+      // legacy preview-ключ после миграции только читается, не пишется.
+      const reg = JSON.parse(localStorage.getItem('link-generators.device-identities.v1') || 'null');
+      return reg && reg.devices.find(d => d.id === reg.activeId)?.hwid;
+    });
+    assert.equal(storedHwid, firstHwid, 'HWID хранится в реестре идентичностей');
     const stateBeforeReload = await snapshotUiState();
     await page.reload();
     await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
@@ -371,7 +376,7 @@ const expectedAwg = {
       web4core.fetchSubscription = globalThis.__subscriptionFetchOriginal;
       delete globalThis.__subscriptionFetchOriginal;
       delete globalThis.__subscriptionFetchCalls;
-      localStorage.removeItem('link-generators.subscription-preview-hwid.v1');
+      localStorage.removeItem('link-generators.device-identities.v1'); // #156: реестр — единственное identity-хранилище
       // далее по сюите — автономная заглушка вместо сетевого fetch (см. INDEP)
       web4core.fetchSubscription = async (url) => {
         if (String(url).includes('keep.example.example')) {
