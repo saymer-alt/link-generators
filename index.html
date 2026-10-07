@@ -474,7 +474,7 @@
             <div style="margin-top:6px">
               <div class="hint">Работающий Mihomo знает фактический список узлов провайдеров — он может отличаться от browser-preview (#158). Импортер только читает <code>GET /providers/proxies</code> ради имён узлов для Exclude Filter: он не меняет running Mihomo, не делает API-мутаций и не перезаписывает YAML.</div>
               <div class="tier-add-row" style="margin-top:6px">
-                <input type="text" id="rtControllerInput" placeholder="10.0.0.2:9090 или http://10.0.0.2:9090" style="flex:1 1 200px;min-width:0;padding:4px 8px" aria-label="Адрес Mihomo external-controller">
+                <input type="text" id="rtControllerInput" placeholder="192.168.1.1:9090 или http://192.168.1.1:9090" style="flex:1 1 200px;min-width:0;padding:4px 8px" aria-label="Адрес Mihomo external-controller">
                 <input type="password" id="rtSecretInput" placeholder="API secret (необязательно)" style="flex:1 1 140px;min-width:0;padding:4px 8px" aria-label="API secret контроллера (только память)" autocomplete="off">
                 <button type="button" class="btn btn-gray" id="rtFetchBtn">📥 Получить узлы из Mihomo</button>
               </div>
@@ -603,6 +603,7 @@
       <div id="tieredPanel" style="display:none">
         <div class="hint">Эшелоны проверяются по порядку; финальное правило MATCH направляет трафик в корневую группу «🪜 TIERED-AUTO». Участники — из текущей сборки (прокси, WG/AWG-профили, провайдеры). Health-семантика и границы: <a href="https://github.com/saymer-alt/link-generators/blob/main/docs/TIERED-FAILOVER.md">docs/TIERED-FAILOVER.md</a> (HTTP-пробы; UDP не заявлен).</div>
         <div id="tierCards"></div>
+        <div id="tierDupWarn" class="hint" style="display:none;margin-top:6px"></div>
         <div style="margin-top:8px">
           <button class="btn btn-gray" id="btnTierAdd" type="button">＋ Добавить эшелон</button>
         </div>
@@ -1935,7 +1936,22 @@ function renderWgRejected() {
   title.className = 'wg-rejected-title';
   title.textContent = '⚠ Не загружено: ' + wgRejected.length;
   box.appendChild(title);
-  for (const item of wgRejected) {
+  // P2 UX (v1.11, field-test #160): индивидуальное «× Скрыть» и «Очистить
+  // отклонённые» — отклонённые записи — это диагностика последней загрузки,
+  // их скрытие не трогает валидные wgBeans.
+  box.onclick = e => {
+    const btn = e.target && e.target.closest ? e.target.closest('button') : null;
+    if (!btn) return;
+    if (btn.dataset.wgRejectedDismiss !== undefined) {
+      const idx = Number(btn.dataset.wgRejectedDismiss);
+      if (idx >= 0 && idx < wgRejected.length) wgRejected.splice(idx, 1);
+      renderWgRejected();
+    } else if (btn.classList.contains('wg-rejected-clear')) {
+      wgRejected = [];
+      renderWgRejected();
+    }
+  };
+  wgRejected.forEach((item, i) => {
     const row = document.createElement('div');
     row.className = 'wg-rejected-item';
     const file = document.createElement('span');
@@ -1944,7 +1960,14 @@ function renderWgRejected() {
     const human = document.createElement('span');
     human.className = 'wg-rejected-human';
     human.textContent = item.human;
-    row.append(file, human);
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'btn btn-gray tier-btn wg-rejected-dismiss';
+    dismiss.textContent = '× Скрыть';
+    dismiss.dataset.wgRejectedDismiss = String(i);
+    dismiss.setAttribute('aria-label', 'Скрыть отклонение: ' + item.filename);
+    dismiss.title = 'Скрыть эту запись (профили не затрагиваются)';
+    row.append(file, dismiss, human);
     if (item.technical && item.technical !== item.human) {
       const tech = document.createElement('span');
       tech.className = 'wg-rejected-tech';
@@ -1952,7 +1975,14 @@ function renderWgRejected() {
       row.appendChild(tech);
     }
     box.appendChild(row);
-  }
+  });
+  const clearAll = document.createElement('button');
+  clearAll.type = 'button';
+  clearAll.className = 'btn btn-gray wg-rejected-clear';
+  clearAll.textContent = 'Очистить отклонённые (' + wgRejected.length + ')';
+  clearAll.setAttribute('aria-label', 'Очистить все отклонённые записи');
+  clearAll.title = 'Скрыть все отклонённые записи (валидные профили не затрагиваются)';
+  box.appendChild(clearAll);
   box.hidden = false;
 }
 
@@ -3965,7 +3995,7 @@ function renderRuntimeSummary() {
 // авто-сканирования и запросов на ввод: запрос только по явному клику.
 function normalizeRuntimeController(input) {
   let value = String(input || '').trim().replace(/\/+$/, '');
-  if (!value) throw new Error('Укажите адрес контроллера (например 10.0.0.2:9090)');
+  if (!value) throw new Error('Укажите адрес контроллера (например 192.168.1.1:9090)');
   if (!/^https?:\/\//i.test(value)) {
     if (!/^[a-z0-9.-]+(?::\d+)?$/i.test(value) || !/:\d+$/.test(value)) {
       throw new Error('Адрес контроллера: ожидается host:port или http(s)://host:port');
@@ -5659,7 +5689,7 @@ function buildTieredGroups(tiers, existingNames) {
     if (!name) throw Error('Tiered Failover: у эшелона #' + (i + 1) + ' пустое имя');
     if (seenNames.has(name.toLowerCase())) throw Error('Tiered Failover: дубликат имени эшелона «' + name + '»');
     seenNames.set(name.toLowerCase(), true);
-    if (!t.members.length) throw Error('Tiered Failover: эшелон «' + name + '» пуст — добавьте хотя бы один выход');
+    if (!t.members.length) throw Error('Tiered Failover: эшелон «' + name + '» пуст — выбранный в списке выход ещё не добавлен; нажмите «＋ Добавить»');
     const gname = tierGroupName('🪜 ' + (i + 1) + ' ' + name, taken);
     const proxies = [], use = [];
     t.members.forEach(m => {
@@ -5725,6 +5755,29 @@ function renderTierCards() {
   wrap.textContent = '';
   const options = tierMemberOptions();
   (window.__tierCardsState || []).forEach((t, i) => wrap.appendChild(tierCardDom(t, i, options)));
+  renderTierDuplicatesWarn();
+}
+
+// P2 UX (v1.11, field-test #160): один и тот же выход в нескольких эшелонах —
+// легально (приоритет эшелонов отдельный), но подозрительно. Warning-lint в
+// панели, НЕ build-ошибка: runtime-конфиг остаётся валидным.
+function renderTierDuplicatesWarn() {
+  const box = document.getElementById('tierDupWarn');
+  if (!box) return;
+  const tiers = window.__tierCardsState || [];
+  const seen = new Map();
+  tiers.forEach(t => (t.members || []).forEach(m => {
+    if (!seen.has(m)) seen.set(m, []);
+    seen.get(m).push(t.name || 'эшелон');
+  }));
+  const dups = [];
+  seen.forEach((names, m) => { if (names.length > 1) dups.push([m, names]); });
+  if (!dups.length) { box.style.display = 'none'; box.textContent = ''; return; }
+  const label = m => String(m).replace('__provider__:', 'provider:');
+  box.style.display = 'block';
+  box.textContent = '⚠ Один и тот же выход используется в нескольких эшелонах: ' +
+    dups.map(([m, names]) => '«' + label(m) + '» → ' + names.map(n => '«' + n + '»').join(', ')).join('; ') +
+    '. Это допустимо (у каждого эшелона свой приоритет), но проверьте, что так и задумано.';
 }
 
 // Компактная иконка-кнопка карточки (#165): единый размер, aria-label/title
@@ -5792,11 +5845,18 @@ function tierCardDom(t, index, options) {
   });
   // pendingSelect (#165): выбор переживает внешние перерисовки.
   if (t.pendingSelect && options.some(o => o.value === t.pendingSelect)) memberSel.value = t.pendingSelect;
-  const addBtn = tierIconBtn('tier-add-member', '＋', 'Добавить выход в эшелон', 'Добавить выбранный выход');
+  // P2 UX (v1.11, field-test #160): явная текстовая кнопка — выбор в списке сам
+  // по себе участника не добавляет (FIELD-OBSERVED на v1.10).
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn btn-gray tier-add-member';
+  addBtn.textContent = '＋ Добавить';
+  addBtn.setAttribute('aria-label', 'Добавить выбранный выход в эшелон');
+  addBtn.title = 'Добавить выбранный выход';
   addRow.append(memberSel, addBtn);
   const hint = document.createElement('div');
   hint.className = 'hint';
-  hint.textContent = 'Порядок важен для Ordered fallback; для url-test порядок — приоритет при равной скорости.';
+  hint.textContent = 'Выбор в списке ещё не добавляет выход в эшелон — нажмите «＋ Добавить». Порядок важен для Ordered fallback; для url-test порядок — приоритет при равной скорости.';
   card.append(title, strategyRow, membersLabel, memberList, addRow, hint);
   return card;
 }
@@ -5833,7 +5893,7 @@ function bindTieredUI() {
   enable.addEventListener('change', () => {
     document.getElementById('tieredPanel').style.display = enable.checked ? 'block' : 'none';
     if (enable.checked && !(window.__tierCardsState || []).length) {
-      window.__tierCardsState = [{ name: 'WARP', strategy: 'url-test', members: [] }, { name: 'Personal', strategy: 'fallback', members: [] }];
+      window.__tierCardsState = [{ name: 'WARP', strategy: 'url-test', members: [] }, { name: 'Резервные выходы', strategy: 'fallback', members: [] }];
     }
     renderTierCards();
   });
