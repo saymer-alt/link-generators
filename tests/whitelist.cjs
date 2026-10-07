@@ -257,9 +257,10 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.deepEqual(exEmpty.vals, [undefined, undefined], 'exEmpty: без exclude-filter ' + JSON.stringify(exEmpty));
     await page.locator('#cfgSubMode').uncheck();
     // v1.6.2+subscription: Exclude Filter виден всегда (OFF-режим применяет его
-    // браузером до сборки); Device Model — только в режиме подписок.
+    // браузером до сборки); #152: Device Model виден в ОБОИХ режимах —
+    // x-device-model уходит с каждым server-list/preview запросом.
     assert.equal(await page.locator('#excludeFilterRow').isVisible(), true, 'exclude filter виден и в OFF-режиме');
-    assert.equal(await page.locator('#deviceModelRow').isVisible(), false, 'device model скрыт в OFF-режиме');
+    assert.equal(await page.locator('#deviceModelRow').isVisible(), true, 'device model виден и в OFF-режиме (#152)');
     await page.locator('#cfgSubMode').check();
     assert.equal(await page.locator('#excludeFilterRow').isVisible(), true);
     assert.equal(await page.locator('#deviceModelRow').isVisible(), true, 'device model виден в ON-режиме');
