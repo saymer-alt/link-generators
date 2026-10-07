@@ -5238,6 +5238,354 @@ function cdgDomainCoverage(doc, domainsText, opts) {
 /* === CONFIG DEPENDENCY GRAPH CORE — CDG-CORE-END === */
 /* === ROUTING DIAGNOSTICS CORE — RD-CORE-END === */
 
+// === PHYSICAL TOPOLOGY CORE (pure, deterministic; v1.11 #149/#177) — PT-CORE-START ===
+// Canonical model «физической цепочки» (Physical Topology ≠ Local Routing Policy).
+// Дизайн-контракт: docs/research/PHYSICAL-MULTIHOP-ARCHITECTURE.md. Ядро не зависит
+// от DOM/сети/YAML; ничего не мутирует; никаких секретов в модели и диагностиках
+// (адреса/ключи/URL в модель не входят по построению). INTENDED ≠ RUNTIME-OBSERVED:
+// до multi-controller evidence наблюдаемая топология = NOT_MEASURED, формулировок
+// «трафик сейчас идёт через …» здесь нет и быть не может.
+const PT_SCHEMA_VERSION = 1;
+const PT_ROLES = ['entry', 'transit', 'exit', 'final-overlay'];
+// Client и Internet — границы цепочки, не узлы (нет ID, нет ссылок).
+// final-overlay — узел с ролью overlay: ровно один, строго последний (решение
+// задокументировано в ARCHITECTURE §3.1).
+
+function ptDiag(severity, code, message, refs) {
+  const d = { severity, code, message };
+  if (refs !== undefined) d.refs = refs;
+  return d;
+}
+function ptRoleLabel(role) {
+  return { entry: 'ENTRY', transit: 'TRANSIT', exit: 'EXIT', 'final-overlay': 'FINAL OVERLAY' }[role] || String(role);
+}
+// Неизвестные значения (могут быть чем угодно во вводе) попадают в диагностики
+// только в безопасной форме: без URL и не длиннее 64 символов — диагностику
+// можно копировать куда угодно без утечек (прецедент «[URL hidden]» #152).
+function ptRedact(v) {
+  return String(v).replace(/https?:\/\/\S+/gi, '[URL hidden]').slice(0, 64);
+}
+
+// Разбор и валидация спецификации → { schemaVersion, ok, model, diagnostics }.
+// model — только для ok-спецификаций (мусор не канонизируется); frozen, в порядке
+// цепочки. Диагностики детерминированы: фазы schema → identity → links → graph →
+// roles → policies, затем INFO; цепочные проверки (walk/roles/disconnected/overlay)
+// выполняются только при отсутствии структурных ошибок (CYCLE/BRANCH/MERGE/…),
+// чтобы не плодить каскад.
+function ptAnalyzeTopology(spec) {
+  const diagnostics = [];
+  const err = (code, message, refs) => diagnostics.push(ptDiag('error', code, message, refs));
+  const warn = (code, message, refs) => diagnostics.push(ptDiag('warning', code, message, refs));
+  const info = (code, message, refs) => diagnostics.push(ptDiag('info', code, message, refs));
+
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+    return { schemaVersion: PT_SCHEMA_VERSION, ok: false, model: null,
+      diagnostics: [ptDiag('error', 'PT-SCHEMA', 'Спецификация топологии должна быть JSON-объектом {nodes, links, localPolicies}.')] };
+  }
+  if (!Array.isArray(spec.nodes) || !spec.nodes.length) {
+    return { schemaVersion: PT_SCHEMA_VERSION, ok: false, model: null,
+      diagnostics: [ptDiag('error', 'PT-SCHEMA-NODES', 'nodes: ожидается непустой массив узлов.')] };
+  }
+
+  // === Pass 1: nodes (identity + roles) ===
+  const byId = new Map();
+  const inputOrder = [];
+  const labelDefaultIds = [];
+  for (const raw of spec.nodes) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { err('PT-BAD-ID', 'узел: ожидается объект {id, role}.'); continue; }
+    const id = typeof raw.id === 'string' ? raw.id.trim() : '';
+    if (!id) { err('PT-BAD-ID', 'узел без непустого строкового id (display label не может быть identity).'); continue; }
+    const role = raw.role;
+    if (!PT_ROLES.includes(role)) { err('PT-BAD-ROLE', 'узел «' + id + '»: неизвестная роль ' + JSON.stringify(role === undefined ? null : role) + ' (ожидается entry|transit|exit|final-overlay).', [id]); continue; }
+    if (byId.has(id)) { err('PT-DUP-ID', 'дубликат стабильного ID «' + id + '» — identity должна быть уникальной.', [id]); continue; }
+    const label = (typeof raw.label === 'string' && raw.label.trim()) ? raw.label.trim() : null;
+    if (!label) labelDefaultIds.push(id);
+    const node = { id, label: label || id, role };
+    if (typeof raw.engine === 'string' && raw.engine.trim()) node.engine = raw.engine.trim();
+    if (typeof raw.transport === 'string' && raw.transport.trim()) node.transport = raw.transport.trim();
+    byId.set(id, node);
+    inputOrder.push(id);
+  }
+
+  // === Pass 2: links ===
+  const links = [];
+  const seenLinks = new Set();
+  const rawLinks = Array.isArray(spec.links) ? spec.links : [];
+  for (const raw of rawLinks) {
+    if (!raw || typeof raw !== 'object') { err('PT-LINK-DANGLING', 'link: ожидается объект {from, to}.'); continue; }
+    const from = typeof raw.from === 'string' ? raw.from.trim() : '';
+    const to = typeof raw.to === 'string' ? raw.to.trim() : '';
+    if (!byId.has(from) || !byId.has(to)) {
+      const unknown = ptRedact(byId.has(from) ? to : from);
+      err('PT-LINK-DANGLING', 'физический link ссылается на неизвестный узел («' + unknown + '»).', [unknown]);
+      continue;
+    }
+    if (from === to) { err('PT-LINK-SELF', 'self-link «' + from + '» → «' + to + '» запрещён.', [from]); continue; }
+    const key = from + '→' + to;
+    if (seenLinks.has(key)) { err('PT-LINK-DUP', 'дубликат физического link «' + from + '» → «' + to + '».', [from, to]); continue; }
+    seenLinks.add(key);
+    links.push({ from, to });
+  }
+
+  // === Pass 3: graph shape ===
+  const out = new Map(), inn = new Map();
+  inputOrder.forEach(id => { out.set(id, []); inn.set(id, []); });
+  for (const l of links) { out.get(l.from).push(l.to); inn.get(l.to).push(l.from); }
+  let structuralError = diagnostics.some(d => d.severity === 'error');
+  let cycleNodes = null;
+  if (!structuralError) {
+    // DFS-детектор циклов (порядок обхода — input order → детерминизм)
+    const color = new Map(inputOrder.map(id => [id, 0]));
+    const stack = [];
+    let found = null;
+    const dfs = v => {
+      color.set(v, 1); stack.push(v);
+      for (const w of out.get(v)) {
+        if (color.get(w) === 1) { const at = stack.indexOf(w); found = stack.slice(at); return true; }
+        if (color.get(w) === 0 && dfs(w)) return true;
+      }
+      color.set(v, 2); stack.pop(); return false;
+    };
+    for (const id of inputOrder) { if (color.get(id) === 0 && dfs(id)) break; }
+    if (found) {
+      cycleNodes = found.slice().sort();
+      err('PT-CYCLE', 'цикл в физической цепочке: ' + found.concat([found[0]]).map(id => '«' + id + '»').join(' → ') + ' — цепочка не может быть построена.', cycleNodes);
+      structuralError = true;
+    }
+    for (const id of inputOrder) {
+      if (out.get(id).length > 1) { err('PT-LINK-BRANCH', 'узел «' + id + '» имеет более одного исходящего физического link — линейная цепочка невозможна.', [id]); structuralError = true; }
+      if (inn.get(id).length > 1) { err('PT-LINK-MERGE', 'в узел «' + id + '» входит более одного физического link — линейная цепочка невозможна.', [id]); structuralError = true; }
+    }
+  }
+
+  // === Роли: количества (проверяются всегда, walk не требуется) ===
+  const roleIds = role => inputOrder.filter(id => byId.get(id).role === role);
+  const entries = roleIds('entry'), exits = roleIds('exit'), overlays = roleIds('final-overlay');
+  if (!entries.length) err('PT-ENTRY-MISSING', 'нет узла роли entry — цепочке необходим ровно один вход.');
+  if (entries.length > 1) err('PT-ENTRY-MULTIPLE', 'узлов роли entry несколько (' + entries.map(id => '«' + id + '»').join(', ') + ') — линейная цепочка допускает ровно один вход.', entries);
+  if (!exits.length) err('PT-EXIT-MISSING', 'нет узла роли exit — цепочке необходим ровно один выход.');
+  if (exits.length > 1) err('PT-EXIT-MULTIPLE', 'узлов роли exit несколько (' + exits.map(id => '«' + id + '»').join(', ') + ') — v1.11 поддерживает ровно один выход.', exits);
+  if (overlays.length > 1) err('PT-OVERLAY-COUNT', 'узлов роли final-overlay несколько — финальный overlay должен быть ровно один.', overlays);
+
+  // === Цепочка (walk) — только без структурных ошибок ===
+  let path = null;
+  if (!structuralError && entries.length === 1) {
+    const entry = entries[0];
+    path = [entry];
+    const onPath = new Set([entry]);
+    let current = entry;
+    while (out.get(current).length === 1) {
+      const next = out.get(current)[0];
+      if (onPath.has(next)) break; // защита; без циклов недостижимо
+      path.push(next); onPath.add(next); current = next;
+    }
+    const endRole = byId.get(current).role;
+    if (endRole !== 'exit' && endRole !== 'final-overlay') {
+      err('PT-EXIT-UNREACHABLE', 'цепочка обрывается на «' + current + '» [' + ptRoleLabel(endRole) + '] — exit недостижим по физическим link\'ам.', [current]);
+    }
+    // overlay не в конце
+    path.forEach((id, i) => {
+      if (byId.get(id).role === 'final-overlay' && i !== path.length - 1) {
+        err('PT-OVERLAY-POSITION', 'финальный overlay «' + id + '» находится в середине цепочки — допустимо только строго последним узлом (после exit).', [id]);
+      }
+    });
+    // порядок ролей вдоль пути: [entry, transit…, exit] + overlay?
+    if (overlays.length <= 1) {
+      const transitCount = roleIds('transit').length;
+      const expected = ['entry'];
+      for (let i = 0; i < transitCount; i++) expected.push('transit');
+      expected.push('exit');
+      if (overlays.length === 1) expected.push('final-overlay');
+      if (path.length < expected.length) {
+        if (!diagnostics.some(d => d.code === 'PT-EXIT-UNREACHABLE')) {
+          err('PT-EXIT-UNREACHABLE', 'цепочка короче ожидаемой роли-последовательности — exit/overlay недостижим по физическим link\'ам.');
+        }
+      } else {
+        for (let i = 0; i < expected.length; i++) {
+          const actual = byId.get(path[i]).role;
+          if (actual !== expected[i]) {
+            err('PT-ROLE-ORDER', 'порядок ролей нарушен в позиции ' + (i + 1) + ' пути: ожидалась ' + expected[i] + ', найдена ' + actual + ' («' + path[i] + '»).', [path[i]]);
+            break;
+          }
+        }
+      }
+    }
+    // disconnected/orphan
+    for (const id of inputOrder) {
+      if (!onPath.has(id)) err('PT-DISCONNECTED', 'узел «' + id + '» [' + ptRoleLabel(byId.get(id).role) + '] не входит в цепочку entry→exit — orphan/disconnected.', [id]);
+    }
+  }
+
+  // === Pass 4: local routing policy (отдельный уровень, Physical ≠ Local) ===
+  const policies = [];
+  const rawPolicies = Array.isArray(spec.localPolicies) ? spec.localPolicies : [];
+  for (const raw of rawPolicies) {
+    if (!raw || typeof raw !== 'object') { err('PT-POLICY-DANGLING', 'localPolicy: ожидается объект {nodeId, targetNodeId, candidates}.'); continue; }
+    const nodeId = typeof raw.nodeId === 'string' ? raw.nodeId.trim() : '';
+    const targetNodeId = typeof raw.targetNodeId === 'string' ? raw.targetNodeId.trim() : '';
+    if (!byId.has(nodeId) || !byId.has(targetNodeId)) {
+      const unknown = ptRedact(byId.has(nodeId) ? targetNodeId : nodeId);
+      err('PT-POLICY-DANGLING', 'локальная политика ссылается на неизвестный узел («' + unknown + '»).', [unknown]);
+      continue;
+    }
+    if (nodeId === targetNodeId) { err('PT-POLICY-SELF', 'локальная политика узла «' + nodeId + '» не может указывать на сам этот узел.', [nodeId]); continue; }
+    const targetRole = byId.get(targetNodeId).role;
+    if (targetRole === 'final-overlay') { err('PT-POLICY-TARGET-ROLE', 'цель локальной политики «' + nodeId + '» — final-overlay «' + targetNodeId + '»: политика описывает достижение физического узла, overlay — не физическая цель.', [nodeId, targetNodeId]); continue; }
+    const candSeen = new Set(); const candDup = [];
+    const candidates = [];
+    for (const c of (Array.isArray(raw.candidates) ? raw.candidates : [])) {
+      const cid = (c && typeof c === 'object') ? (typeof c.id === 'string' ? c.id.trim() : '') : '';
+      if (!cid) { warn('PT-POLICY-EMPTY', 'локальная политика «' + nodeId + '» → «' + targetNodeId + '»: кандидат без id отброшен.', [nodeId]); continue; }
+      if (candSeen.has(cid)) { candDup.push(cid); continue; }
+      candSeen.add(cid);
+      const cand = { id: cid };
+      if (c && typeof c.label === 'string' && c.label.trim()) cand.label = c.label.trim();
+      candidates.push(cand);
+    }
+    if (!candidates.length) warn('PT-POLICY-EMPTY', 'локальная политика «' + nodeId + '» → «' + targetNodeId + '» не содержит транспортных кандидатов.', [nodeId]);
+    if (candDup.length) warn('PT-POLICY-CANDIDATE-DUP', 'локальная политика «' + nodeId + '»: дубликаты кандидатов (' + candDup.map(x => '«' + x + '»').join(', ') + ') — оставлен первый.', [nodeId]);
+    policies.push({ nodeId, targetNodeId, candidates });
+    if (path && !structuralError && out.get(nodeId).length === 1 && out.get(nodeId)[0] !== targetNodeId) {
+      warn('PT-POLICY-TARGET-MISMATCH', 'цель локальной политики «' + nodeId + '» («' + targetNodeId + '») не совпадает с физическим следующим hop\'ом («' + out.get(nodeId)[0] + '»). Это не ошибка структуры, но физическая цепочка и локальная политика расходятся.', [nodeId]);
+    }
+  }
+
+  // === INFO ===
+  for (const id of labelDefaultIds) info('PT-INFO-LABEL-DEFAULT', 'узел «' + id + '»: display label не задан — используется id.', [id]);
+  if (!diagnostics.some(d => d.severity === 'error') && path) {
+    const hops = path.length - 1;
+    info('PT-INFO-CHAIN', 'Цепочка валидна: ' + path.map(id => byId.get(id).label + ' [' + ptRoleLabel(byId.get(id).role) + ']').join(' → ') + ' · физических hop\'ов: ' + hops + '.');
+  }
+
+  const ok = !diagnostics.some(d => d.severity === 'error');
+  let model = null;
+  if (ok && path) {
+    const chainNodes = path.map(id => {
+      const n = byId.get(id);
+      const c = { id: n.id, label: n.label, role: n.role };
+      if (n.engine) c.engine = n.engine;
+      if (n.transport) c.transport = n.transport;
+      return c;
+    });
+    const chainLinks = [];
+    for (let i = 0; i + 1 < path.length; i++) chainLinks.push({ from: path[i], to: path[i + 1] });
+    model = Object.freeze({
+      schemaVersion: PT_SCHEMA_VERSION,
+      nodes: Object.freeze(chainNodes.map(n => Object.freeze(n))),
+      links: Object.freeze(chainLinks.map(l => Object.freeze(l))),
+      localPolicies: Object.freeze(policies.map(p => Object.freeze({
+        nodeId: p.nodeId, targetNodeId: p.targetNodeId,
+        candidates: Object.freeze(p.candidates.map(c => Object.freeze(c)))
+      })))
+    });
+  }
+  return { schemaVersion: PT_SCHEMA_VERSION, ok, model, diagnostics };
+}
+
+// Каноническая сериализация: узлы/links в порядке цепочки, фиксированный порядок
+// ключей. Две спецификации, описывающие одну цепочку с разным порядком массива
+// nodes, дают байт-равную форму. Для не-ok модели сериализации нет.
+function ptSerialize(model) {
+  if (!model || model.schemaVersion !== PT_SCHEMA_VERSION) return null;
+  return JSON.stringify(model, null, 2);
+}
+
+// Детерминированный физический trace. Только INTENDED: поле observed всегда
+// NOT_MEASURED до появления multi-controller evidence (контракт §7 ARCHITECTURE).
+// Local policy — отдельные секции; физический путь и локальные политики
+// сознательно не сплющиваются в один путь.
+function ptTraceTopology(model) {
+  if (!model || model.schemaVersion !== PT_SCHEMA_VERSION || !Array.isArray(model.nodes) || !model.nodes.length) return null;
+  const nodes = model.nodes;
+  const parts = [];
+  parts.push({ kind: 'boundary', label: 'Client' });
+  for (const n of nodes) parts.push({ kind: 'node', id: n.id, label: n.label, role: n.role });
+  parts.push({ kind: 'boundary', label: 'Internet' });
+  const hops = [];
+  for (let i = 0; i + 1 < parts.length; i++) {
+    const a = parts[i], b = parts[i + 1];
+    let kind = 'physical';
+    if (a.kind === 'boundary') kind = 'ingress';
+    else if (b.role === 'final-overlay') kind = 'overlay';
+    else if (b.kind === 'boundary') kind = 'egress';
+    hops.push({ from: a.kind === 'boundary' ? a.label : a.id, to: b.kind === 'boundary' ? b.label : b.id, kind });
+  }
+  const pathLine = nodes.map(n => n.label + ' [' + ptRoleLabel(n.role) + ']').join(' → ');
+  const lines = [];
+  lines.push('Configured (intended) physical path:');
+  lines.push('Client → ' + pathLine + ' → Internet');
+  lines.push('Наблюдаемая топология: NOT_MEASURED (runtime evidence не подключён; формулировки о фактическом трафике не выдаются).');
+  const policies = Array.isArray(model.localPolicies) ? model.localPolicies : [];
+  if (!policies.length) {
+    lines.push('Локальные политики: не заданы (local routing policy в модели отсутствует).');
+  } else {
+    for (const p of policies) {
+      const node = nodes.find(n => n.id === p.nodeId);
+      const target = nodes.find(n => n.id === p.targetNodeId);
+      lines.push('Local policy at ' + (node ? node.label : p.nodeId) + ':');
+      lines.push('  физическая цель: ' + (target ? target.label : p.targetNodeId));
+      lines.push('  транспортные кандидаты: ' + (p.candidates.length ? p.candidates.map(c => (c.label || c.id) + ' (' + c.id + ')').join(', ') : '—'));
+    }
+  }
+  return Object.freeze({
+    observed: 'NOT_MEASURED',
+    intendedPath: Object.freeze(parts.map(p => Object.freeze(p))),
+    hops: Object.freeze(hops.map(h => Object.freeze(h))),
+    localPolicies: Object.freeze(policies.map(p => Object.freeze(p))),
+    text: lines.join('\n')
+  });
+}
+
+// What-if (pure): недоступная вершина/ребро цепочки ⇒ CHAIN_UNAVAILABLE.
+// Альтернативная физическая топология НЕ подставляется никогда — её нет в модели
+// (automatic topology failover — not promised, #177). Реальная модель не мутируется.
+function ptSimulateTopology(model, opts) {
+  const unavailableNodes = new Set((opts && Array.isArray(opts.unavailableNodeIds)) ? opts.unavailableNodeIds.filter(id => model && model.nodes.some(n => n.id === id)) : []);
+  const unavailableLinks = new Set((opts && Array.isArray(opts.unavailableLinkIndexes)) ? opts.unavailableLinkIndexes.filter(i => model && model.links && i >= 0 && i < model.links.length) : []);
+  if (!model || model.schemaVersion !== PT_SCHEMA_VERSION) {
+    return { status: 'NO_MODEL', broken: null, message: 'Нет валидной модели топологии — симуляция недоступна.' };
+  }
+  const labelOf = id => { const n = model.nodes.find(x => x.id === id); return n ? n.label : id; };
+  const brokenLink = model.links.findIndex((l, i) => unavailableLinks.has(i) || unavailableNodes.has(l.from) || unavailableNodes.has(l.to));
+  const brokenNode = model.nodes.find(n => unavailableNodes.has(n.id));
+  if (brokenNode) {
+    return { status: 'CHAIN_UNAVAILABLE',
+      broken: { kind: 'node', nodeId: brokenNode.id, label: brokenNode.label, role: brokenNode.role },
+      message: 'Physical chain broken: узел «' + brokenNode.label + '» [' + ptRoleLabel(brokenNode.role) + '] недоступен. Альтернативный физический путь не сконфигурирован (automatic topology failover не входит в модель v1.11).' };
+  }
+  if (brokenLink !== -1) {
+    const l = model.links[brokenLink];
+    return { status: 'CHAIN_UNAVAILABLE',
+      broken: { kind: 'link', index: brokenLink, from: l.from, to: l.to, fromLabel: labelOf(l.from), toLabel: labelOf(l.to) },
+      message: 'Physical chain broken: физический hop «' + labelOf(l.from) + '» → «' + labelOf(l.to) + '» недоступен. Альтернативный физический путь не сконфигурирован (automatic topology failover не входит в модель v1.11).' };
+  }
+  return { status: 'INTACT', broken: null,
+    message: 'Физическая цепочка intact: все ' + model.links.length + ' hop(ов) доступны. Симуляция — статическая модель, не измерение.' };
+}
+
+// Санитизированная историческая reference-топология (фикстура-демо): только
+// синтетика — городов-меток/ролей достаточно, никаких адресов/ключей/URL/HWID.
+function ptDemoTopologySpec() {
+  return {
+    nodes: [
+      { id: 'msk-entry', label: 'Moscow · ENTRY', role: 'entry', engine: 'mihomo' },
+      { id: 'est-transit', label: 'Estonia · TRANSIT', role: 'transit', engine: 'mihomo' },
+      { id: 'swe-exit', label: 'Sweden · EXIT', role: 'exit', engine: 'mihomo' },
+      { id: 'warp-overlay', label: 'WARP · FINAL OVERLAY', role: 'final-overlay' }
+    ],
+    links: [
+      { from: 'msk-entry', to: 'est-transit' },
+      { from: 'est-transit', to: 'swe-exit' },
+      { from: 'swe-exit', to: 'warp-overlay' }
+    ],
+    localPolicies: [
+      { nodeId: 'est-transit', targetNodeId: 'swe-exit',
+        candidates: [ { id: 'candidate-a', label: 'AWG' }, { id: 'candidate-b', label: 'Mieru' } ] }
+    ]
+  };
+}
+// === PHYSICAL TOPOLOGY CORE — PT-CORE-END ===
+
 // === TIERED FAILOVER (#148, v1.10; runtime-proven: docs/research/TIERED-FAILOVER-RUNTIME.md) ===
 // Явная user-visible feature, DEFAULT OFF: выключена — вывод байт-в-байт прежний.
 // Модель: TieredStrategy = упорядоченные эшелоны; ROOT fallback обходит эшелоны
