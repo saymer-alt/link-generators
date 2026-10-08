@@ -230,6 +230,9 @@ jobs:
       - name: Physical Topology UI regression (#149)
         run: node tests/physical-topology-browser.cjs
 
+      - name: Config Studio browser regression (#176)
+        run: node tests/config-studio-browser.cjs
+
       - name: Domain Coverage Checker browser regression
         run: node tests/domain-coverage.cjs
       - name: Health-check URL browser regression
