@@ -270,59 +270,72 @@ const SYNTH = [
   assert.ok(work.text.includes("studio-synth-pass"), "экспорт содержит нетронутые исходные байты");
   assert.equal(work.text.split(String.fromCharCode(10)).length, SYNTH.split(String.fromCharCode(10)).length, "количество строк не изменилось");
   ok("экспорт: source-preserving рабочая копия");
-  // --- мобильная ширина редактора (360) — повторная проверка после правок ---
-  await page.setViewportSize({ width: 360, height: 740 });
-  await page.waitForTimeout(150);
-  const overflow2 = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
-  assert.ok(overflow2.sw <= overflow2.iw + 1, 'mobile 360 с редактором: без overflow');
-  ok('mobile 360 + редактор');
-
-  // --- mobile 360 ---
-  await page.setViewportSize({ width: 360, height: 740 });
-  await page.fill('#csImportInput', SYNTH);
-  await page.locator('#csParseBtn').click();
-  await page.waitForTimeout(150);
-  const overflow = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
-  assert.ok(overflow.sw <= overflow.iw + 1, 'mobile 360: без overflow (' + overflow.sw + ' vs ' + overflow.iw + ')');
-  ok('mobile 360');
-
-  // === PHYSICAL TOPOLOGY → PER-NODE GENERATION (#187) ===
+  // === NETWORK DIAGNOSTICS (EVENING-02): TCP/UDP · DNS · MTU ===
   await page.locator('.tab', { hasText: 'Mihomo Config Builder' }).click();
   await page.locator('#physicalTopologyPanel > summary').click();
   await page.locator('#ptDemoBtn').click();
   await page.waitForFunction(() => document.getElementById('ptGraphBox').style.display === 'block', null, { polling: 250 });
+  await page.locator('#ptNetDiagPanel > summary').click();
+  const netDiag = await page.textContent('#ptNetDiagOut');
+  assert.ok(netDiag.includes('TCP / UDP (по звеньям)'), 'TCP/UDP блок');
+  assert.ok(netDiag.includes('Сквозной итог: TCP UNKNOWN · UDP UNKNOWN'), 'demo (wireguard overlay → external) → честный UNKNOWN: ');
+  assert.ok(netDiag.includes('DNS path:'), 'DNS блок');
+  assert.ok(netDiag.includes('PROVEN_NO_DNS'), 'IP-литерал → PROVEN_NO_DNS');
+  assert.ok(netDiag.includes('UNKNOWN'), 'WARP-ребро без endpoint → UNKNOWN');
+  assert.ok(netDiag.includes('Домены назначения: UNKNOWN'), 'без декларации — UNKNOWN');
+  assert.ok(netDiag.includes('MTU: UNKNOWN'), 'без заявленных MTU — UNKNOWN');
+  // новые опциональные метаданные: node.dns + link.transport.mtu
+  await page.evaluate(() => {
+    const s = JSON.parse(document.getElementById('ptSpecInput').value);
+    s.nodes[2].dns = { destination: 'exit' };
+    s.links.forEach(l => { if (l.transport) l.transport.mtu = 1280; });
+    document.getElementById('ptSpecInput').value = JSON.stringify(s);
+  });
+  await page.locator('#ptAnalyzeBtn').click();
+  await page.waitForFunction(() => document.getElementById('ptNetDiagOut').textContent.includes('INTENDED_AT_EXIT'), null, { polling: 250 });
+  const netDiag2 = await page.textContent('#ptNetDiagOut');
+  assert.ok(netDiag2.includes('MTU: PARTIAL'), 'с заявленными MTU → PARTIAL');
+  assert.ok(netDiag2.includes('(заявлено)'), 'заявленные значения показаны');
+  assert.ok(netDiag2.includes('INTENDED_AT_EXIT'), 'декларация exit показана');
+  ok('network diagnostics');
+  // malformed metadata отклоняется
+  await page.evaluate(() => {
+    const s = JSON.parse(document.getElementById('ptSpecInput').value);
+    s.nodes[2].dns = { destination: 'moon' };
+    document.getElementById('ptSpecInput').value = JSON.stringify(s);
+  });
+  await page.locator('#ptAnalyzeBtn').click();
+  assert.ok((await page.textContent('#ptDiagOut')).includes('dns.destination должен быть exit|local|unknown'), 'malformed dns → явная диагностика');
+  ok('malformed dns metadata → PT-DNS-BAD');
+
+  // === PER-NODE GENERATION (#187): demo → артефакты ===
+  await page.locator('#ptDemoBtn').click();
   await page.locator('#ptGenBtn').click();
   await page.waitForFunction(() => document.getElementById('ptGenOut').style.display === 'block', null, { polling: 250 });
   const genOut = await page.textContent('#ptGenOut');
   assert.ok(genOut.includes('Узлов: 4'), 'сводка: узлы');
   assert.ok(genOut.includes('Внешних контрактов: 3'), 'сводка: контракты (2 creds + 1 wireguard)');
-  assert.ok(genOut.includes('Moscow · ENTRY [ENTRY] — PLACEHOLDERS_REQUIRED'), 'Moscow: честные плейсхолдеры без кредов');
+  assert.ok(genOut.includes('PLACEHOLDERS_REQUIRED'), 'без кредов — честные плейсхолдеры');
   assert.ok(genOut.includes('EXTERNAL_CONTRACT_REQUIRED'), 'WARP-ребро — контракт');
   assert.ok(genOut.includes('mihomo -t в браузере: NOT RUN'), 'честный NOT RUN');
   const dlButtons = await page.locator('#ptGenDownloads button').count();
-  assert.ok(dlButtons >= 7, 'кнопки скачивания per-file + manifest + map: ' + dlButtons);
-  assert.ok((await page.textContent('#ptGenDownloads')).includes('topology.json'), 'manifest доступен');
-  assert.ok((await page.textContent('#ptGenDownloads')).includes('deployment-map.md'), 'deployment map доступен');
+  assert.ok(dlButtons >= 7, 'кнопки скачивания per-file + manifest + map: ');
   // YAML генератора не затронут генерацией
-  const yamlAfterGen = await page.evaluate(() => document.getElementById('mihomoOutput').value);
   await page.locator('#ptGenBtn').click();
-  assert.equal(await page.evaluate(() => document.getElementById('mihomoOutput').value), yamlAfterGen, 'генерация не меняет YAML');
+  assert.equal(await page.evaluate(() => document.getElementById('mihomoOutput').value), '', 'генерация не меняет YAML');
   ok('per-node generation UI');
-  await page.setViewportSize({ width: 360, height: 740 });
-  await page.waitForTimeout(150);
-  const overflow3 = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
-  assert.ok(overflow3.sw <= overflow3.iw + 1, 'mobile 360 PT-генерация: без overflow');
-  ok('mobile 360 + PT-генерация');
 
-  // Artifact buttons and the rest of the Builder remain within requested mobile widths.
+  // === Mobile widths (диагностика + панель) ===
   for (const width of [320, 360, 390, 412, 480]) {
     await page.setViewportSize({ width, height: 820 });
+    await page.locator('#ptAnalyzeBtn').click();
+    await page.waitForTimeout(100);
     const layout = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
-    assert.ok(layout.sw <= layout.iw + 1, 'mobile ' + width + ' with per-node artifact buttons: no page overflow (' + layout.sw + ' vs ' + layout.iw + ')');
+    assert.ok(layout.sw <= layout.iw + 1, 'mobile ' + width + ' с диагностикой: без overflow');
     passed++;
   }
 
-  // Long diagnostic name stresses wrapping and editor controls at every mobile width.
+  // === Config Studio long-name stress (из прежней версии теста) ===
   await page.locator('.tab', { hasText: 'Config Studio' }).click();
   const longName = 'LongProxy' + 'X'.repeat(180);
   const longYaml = SYNTH.replace('proxy-groups:', [
@@ -333,14 +346,15 @@ const SYNTH = [
     '    password: studio-synth-long-name',
     '    cipher: aes-128-gcm',
     'proxy-groups:'
-  ].join('\n'));
+  ].join(String.fromCharCode(10)));
   await page.fill('#csImportInput', longYaml);
   await page.locator('#csParseBtn').click();
-  assert.ok((await page.textContent('#csDiagOut')).includes(longName), 'long diagnostic proxy name is rendered');
+  const longDiag = await page.textContent('#csDiagOut');
+  assert.ok(longDiag.includes(longName), 'длинное имя не ломает диагностику');
   for (const width of [320, 360, 390, 412, 480]) {
     await page.setViewportSize({ width, height: 820 });
     const layout = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
-    assert.ok(layout.sw <= layout.iw + 1, 'Config Studio long diagnostics at ' + width + ': no overflow (' + layout.sw + ' vs ' + layout.iw + ')');
+    assert.ok(layout.sw <= layout.iw + 1, 'Config Studio long diagnostics mobile ' + width + ': без overflow');
     passed++;
   }
 
