@@ -149,6 +149,9 @@ jobs:
       - name: Physical Topology runtime evidence core regression (#188)
         run: node tests/pt-runtime-evidence.cjs
 
+      - name: Physical Topology network diagnostics core regression (#177)
+        run: node tests/pt-network-diagnostics.cjs
+
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 

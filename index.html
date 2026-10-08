@@ -644,6 +644,10 @@
           <div id="ptWhatIfOut" class="hint" style="margin-top:4px;white-space:pre-line"></div>
         </div>
         <div id="ptTraceOut" class="hint" style="margin-top:8px;white-space:pre-line"></div>
+        <details id="ptNetDiagPanel" style="margin-top:8px">
+          <summary style="cursor:pointer">🌐 Сеть: TCP / UDP · DNS · MTU</summary>
+          <div id="ptNetDiagOut" class="hint" style="margin-top:6px;white-space:pre-line;font-size:.78rem"></div>
+        </details>
         <div class="btn-group" style="margin-top:10px">
           <button type="button" class="btn btn-gray" id="ptGenBtn">📦 Подготовить артефакты узлов</button>
         </div>
@@ -5502,6 +5506,16 @@ function ptAnalyzeTopology(spec) {
     const node = { id, label: label || id, role };
     if (typeof raw.engine === 'string' && raw.engine.trim()) node.engine = raw.engine.trim();
     if (typeof raw.transport === 'string' && raw.transport.trim()) node.transport = raw.transport.trim();
+    // Опциональный DNS-профиль назначения (#177 EVENING-02): node.dns.destination.
+    if (raw.dns !== undefined) {
+      const d = raw.dns;
+      if (!d || typeof d !== 'object' || Array.isArray(d)) { err('PT-DNS-BAD', 'узел «' + id + '»: dns должен быть объектом {destination}.', [id]); }
+      else {
+        const dest = d.destination;
+        if (!['exit', 'local', 'unknown'].includes(dest)) err('PT-DNS-BAD', 'узел «' + id + '»: dns.destination должен быть exit|local|unknown.', [id]);
+        else node.dns = { destination: dest };
+      }
+    }
     byId.set(id, node);
     inputOrder.push(id);
   }
@@ -5523,7 +5537,17 @@ function ptAnalyzeTopology(spec) {
     const key = from + '→' + to;
     if (seenLinks.has(key)) { err('PT-LINK-DUP', 'дубликат физического link «' + from + '» → «' + to + '».', [from, to]); continue; }
     seenLinks.add(key);
-    links.push({ from, to });
+    const link = { from, to };
+    // Опциональный MTU (#177 EVENING-02): link.transport.mtu — заявленное значение.
+    const tr = raw.transport && typeof raw.transport === 'object' ? raw.transport : null;
+    if (tr && tr.mtu !== undefined) {
+      const m = tr.mtu;
+      const isInt = typeof m === 'number' ? Number.isInteger(m) : (typeof m === 'string' && /^\d+$/.test(m.trim()));
+      const v = isInt ? Number(m) : NaN;
+      if (!isInt || v < 576 || v > 65535) err('PT-MTU-BAD', 'link «' + from + '» → «' + to + '»: mtu должен быть целым 576..65535.', [from, to]);
+      else link.mtu = v;
+    }
+    links.push(link);
   }
 
   // === Pass 3: graph shape ===
@@ -5664,6 +5688,7 @@ function ptAnalyzeTopology(spec) {
       const c = { id: n.id, label: n.label, role: n.role };
       if (n.engine) c.engine = n.engine;
       if (n.transport) c.transport = n.transport;
+      if (n.dns) c.dns = n.dns;
       return c;
     });
     const chainLinks = [];
@@ -6124,6 +6149,195 @@ function ptIsStale(evidence, fingerprintNow) {
   return evidence.fingerprint !== fingerprintNow;
 }
 // === PHYSICAL TOPOLOGY RUNTIME EVIDENCE CORE — PT-RUNTIME-END ===
+
+// === PHYSICAL TOPOLOGY NETWORK DIAGNOSTICS (#177, v1.11 EVENING-02) — PT-DIAG-START ===
+// Статические TCP/UDP · DNS · MTU диагностики поверх canonical PT-модели.
+// Уровни доказательности честно разделяются: STATIC/DECLARED — производные
+// конфигурации и протокольных контрактов; PACKET PATH — никогда не утверждается.
+// Ядро pure: без DOM/сети/storage; ничего не мутирует; секретов в модели нет.
+const PT_DIAG_CAPS = {
+  ss: {
+    tcp: 'SUPPORTED', udp: 'SUPPORTED',
+    udpEvidence: 'SOURCE-PROVEN (v1.19.32: ss outbound udp/udp-over-tcp опции; shadowsocks inbound UDP: true)',
+    notes: 'сквозной UDP требует поддержки на каждом звене и на выходном узле'
+  },
+  socks: {
+    tcp: 'SUPPORTED', udp: 'SUPPORTED',
+    udpEvidence: 'SOURCE-PROVEN (v1.19.32: socks5 outbound udp + CmdUDPAssociate; socks inbound UDP-опция)',
+    notes: 'UDP через SOCKS5 UDP ASSOCIATE; сервер обязан поддерживать ассоциацию'
+  },
+  http: {
+    tcp: 'SUPPORTED', udp: 'UNSUPPORTED',
+    udpEvidence: 'SOURCE-PROVEN (v1.19.32: HTTPOption не содержит UDP-поля; HTTP CONNECT — только TCP)',
+    notes: 'HTTP-туннель переносит только TCP-поток'
+  }
+};
+const PT_DIAG_IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+function ptDiagIsIpLiteral(host) {
+  const m = PT_DIAG_IPV4.exec(String(host || ''));
+  if (!m) return false;
+  for (let i = 1; i <= 4; i++) if (Number(m[i]) > 255) return false;
+  return true;
+}
+// self-contained endpoint-парсер (дублирует PT-GEN ptEndpointParts; блоки не связаны)
+function ptDiagEndpointParts(spec, ref) {
+  const raw = spec && spec.endpoints && typeof spec.endpoints === 'object' ? spec.endpoints[ref] : null;
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const m = raw.trim().match(/^\[?([A-Za-z0-9._\-]+)\]?:(\d{1,5})$/);
+  if (!m) return null;
+  const port = Number(m[2]);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+  return { host: m[1], port: String(port) };
+}
+function ptDiagCaps(kind) {
+  // Первоклассные транспорты — из PT_TRANSPORTS-контрактов генератора;
+  // всё прочее (внешний контракт) — UNKNOWN: возможности не доказаны генератором.
+  if (kind && PT_DIAG_CAPS[kind]) return Object.assign({ kind, level: 'SOURCE-PROVEN' }, PT_DIAG_CAPS[kind]);
+  return { kind: kind || null, tcp: 'UNKNOWN', udp: 'UNKNOWN', level: 'UNKNOWN',
+    notes: kind ? 'внешний контракт («' + kind + '») — возможности не доказаны генератором' : 'транспорт не задан' };
+}
+// TCP/UDP по звеньям + сквозной вердикт. opts.unavailableNodeIds учитывает what-if.
+function ptTcpUdpDiagnostics(spec, model, opts) {
+  const unavailable = new Set((opts && opts.unavailableNodeIds) || []);
+  const down = (id) => unavailable.has(id);
+  const links = [];
+  const rawLinks = Array.isArray(spec.links) ? spec.links : [];
+  const nodeById = id => model.nodes.find(n => n.id === id);
+  const planOf = (from, to) => rawLinks.find(l => l && l.from === from && l.to === to) || null;
+  const entries = [];
+  // client → ENTRY
+  const cl = spec.clientLink && spec.clientLink.transport && typeof spec.clientLink.transport === 'object' ? spec.clientLink.transport : null;
+  if (model.nodes.length && model.nodes[0].role === 'entry') {
+    const entry = model.nodes[0];
+    const kind = cl && typeof cl.kind === 'string' ? cl.kind : null;
+    entries.push({ from: 'Client', to: entry.id, toLabel: entry.label, kind, caps: ptDiagCaps(kind), down: down(entry.id), broken: down(entry.id) });
+  }
+  for (let i = 0; i + 1 < model.nodes.length; i++) {
+    const a = model.nodes[i], b = model.nodes[i + 1];
+    const raw = planOf(a.id, b.id);
+    const kind = raw && raw.transport && typeof raw.transport === 'object' ? (typeof raw.transport.kind === 'string' ? raw.transport.kind : null) : null;
+    entries.push({ from: a.id, to: b.id, toLabel: b.label, kind, caps: ptDiagCaps(kind), down: down(a.id) || down(b.id), broken: down(a.id) || down(b.id) });
+  }
+  for (const e of entries) {
+    e.tcp = e.broken ? 'CHAIN_UNAVAILABLE' : e.caps.tcp;
+    e.udp = e.broken ? 'CHAIN_UNAVAILABLE' : e.caps.udp;
+    e.evidence = e.broken ? 'CHAIN UNAVAILABLE (what-if)' : e.caps.level;
+    if (e.broken) e.notes = 'звено недоступно (what-if): «' + (e.kind || '—') + '» — сквозная оценка недоступна';
+    else e.notes = e.caps.notes || '';
+    links.push(e);
+  }
+  const aggregate = list => {
+    if (!list.length) return 'UNKNOWN';
+    if (list.some(x => x === 'CHAIN_UNAVAILABLE')) return 'CHAIN_UNAVAILABLE';
+    if (list.some(x => x === 'UNSUPPORTED')) return 'UNSUPPORTED';
+    if (list.some(x => x === 'UNKNOWN')) return 'UNKNOWN';
+    return 'SUPPORTED';
+  };
+  return {
+    links,
+    endToEnd: {
+      tcp: aggregate(links.map(l => l.tcp)),
+      udp: aggregate(links.map(l => l.udp)),
+      note: 'SUPPORTED означает: статически доказано на каждом звене; это НЕ измерение сквозного UDP/TCP-трафика.'
+    }
+  };
+}
+// DNS-диагностика: next-hop (где резолвится hostname следующего узла) и
+// destination (где резолвятся домены назначения) — по evidence-уровням.
+function ptDnsDiagnostics(spec, model, opts) {
+  const rawLinks = Array.isArray(spec.links) ? spec.links : [];
+  const planOf = (from, to) => rawLinks.find(l => l && l.from === from && l.to === to) || null;
+  const nextHops = [];
+  const nodeById = id => model.nodes.find(n => n.id === id);
+  const addHop = (fromLabel, fromNodeId, toLabel, toNodeId, transportOverride) => {
+    let tr = null;
+    if (transportOverride) tr = transportOverride;
+    else {
+      const raw = planOf(fromNodeId, toNodeId);
+      tr = raw && raw.transport && typeof raw.transport === 'object' ? raw.transport : null;
+    }
+    const epRef = tr && typeof tr.endpoint === 'string' ? tr.endpoint : null;
+    const ep = epRef ? ptDiagEndpointParts(spec, epRef) : null;
+    if (!ep) { nextHops.push({ from: fromLabel, to: toLabel, verdict: 'UNKNOWN', reason: 'endpoint не задан или не host:port' }); return; }
+    if (ptDiagIsIpLiteral(ep.host)) {
+      nextHops.push({ from: fromLabel, to: toLabel, verdict: 'PROVEN_NO_DNS', reason: 'адрес следующего узла — IP-литерал («' + ep.host + '»), DNS-резолвинг не требуется', host: ep.host });
+      return;
+    }
+    const where = fromNodeId ? fromLabel + ' (локальный proxy-server DNS Mihomo — ProxyServerHostResolver)' : 'Client (локальный DNS устройства)';
+    nextHops.push({ from: fromLabel, to: toLabel, verdict: 'SOURCE-PROVEN_AT_SOURCE', where, host: ep.host,
+      reason: 'Mihomo резолвит адрес proxy-server через свой proxy-server DNS на исходящем узле' });
+  };
+  if (model.nodes.length && model.nodes[0].role === 'entry') {
+    const cl = spec.clientLink && spec.clientLink.transport && typeof spec.clientLink.transport === 'object' ? spec.clientLink.transport : null;
+    addHop('Client', null, model.nodes[0].label, model.nodes[0].id, cl);
+  }
+  for (let i = 0; i + 1 < model.nodes.length; i++) addHop(model.nodes[i].label, model.nodes[i].id, model.nodes[i + 1].label, model.nodes[i + 1].id);
+  // destination resolution: декларации node.dns.destination
+  const declared = model.nodes.filter(n => n.dns && n.dns.destination && n.dns.destination !== 'unknown')
+    .map(n => ({ nodeId: n.id, label: n.label, destination: n.dns.destination }));
+  const exit = model.nodes[model.nodes.length - 1];
+  let destination;
+  if (!declared.length) destination = { verdict: 'UNKNOWN', reason: 'per-node DNS configuration not provided (node.dns.destination не задан ни на одном узле)' };
+  else if (declared.some(d => d.destination === 'exit')) {
+    destination = { verdict: 'INTENDED_AT_EXIT', reason: 'владелец объявил: домены назначения туннелируются до выходного узла «' + exit.label + '» и резолвятся там (INTENDED, не измерение)', declared };
+  } else {
+    destination = { verdict: 'INTENDED_DIVERTED', reason: 'владелец объявил локальный резолвинг на узлах: ' + declared.map(d => d.label + '→local').join(', ') + ' — DNS path расходится с data path по декларации', declared };
+  }
+  return {
+    nextHops,
+    destination,
+    dataPathNote: 'DNS path vs data path: совпадение возможно только если destination-резолвинг объявлен на выходном узле; это декларация владельца, НЕ измерение.'
+  };
+}
+// MTU/fragmentation: заявленные значения + качественная evidence по транспортам.
+// Без арифметики по цепочке и без auto-MTU.
+function ptMtuDiagnostics(spec, model) {
+  const rawLinks = Array.isArray(spec.links) ? spec.links : [];
+  const planOf = (from, to) => rawLinks.find(l => l && l.from === from && l.to === to) || null;
+  const hops = [];
+  let knownDeclared = 0;
+  for (let i = 0; i + 1 < model.nodes.length; i++) {
+    const a = model.nodes[i], b = model.nodes[i + 1];
+    const raw = planOf(a.id, b.id);
+    const tr = raw && raw.transport && typeof raw.transport === 'object' ? raw.transport : null;
+    const kind = tr && typeof tr.kind === 'string' ? tr.kind : null;
+    const declared = tr && tr.mtu !== undefined ? Number(tr.mtu) : null;
+    let overhead;
+    if (kind === 'ss' || kind === 'socks' || kind === 'http') {
+      overhead = { level: 'PARTIAL', reason: 'потоковый TCP-транспорт: фиксированного IP-уровня overhead нет; при AEAD шифровании полезная нагрузка сегмента уменьшается на тег/заголовок фрейма — точная модель зависит от шифра/плагина' };
+    } else if (kind === 'wireguard') {
+      overhead = { level: 'PARTIAL', reason: 'WireGuard: известный внешний overhead (60 байт IPv4 / 80 IPv6 — docs/research/WG-MTU-MIHOMO.md), но сквозное значение зависит от пути' };
+    } else if (kind) {
+      overhead = { level: 'UNKNOWN', reason: 'внешний контракт («' + kind + '») — overhead не доказан генератором' };
+    } else {
+      overhead = { level: 'UNKNOWN', reason: 'транспорт не задан' };
+    }
+    hops.push({ from: a.label, to: b.label, transport: kind || '—', mtuConfigured: declared,
+      evidence: declared !== null ? 'DECLARED' : overhead.level, overhead,
+      fragmentationRisk: declared !== null ? (declared <= 1280 ? 'LOW (по декларации: ≤1280)' : 'UNKNOWN (значение >1280 — риск фрагментации зависит от пути)') : 'UNKNOWN' });
+    if (declared !== null) knownDeclared++;
+  }
+  const declaredTotal = hops.filter(h => h.mtuConfigured !== null).length;
+  const overall = declaredTotal ? 'PARTIAL' : 'UNKNOWN';
+  return {
+    hops,
+    overall,
+    note: overall === 'PARTIAL'
+      ? 'заявленные MTU известны (' + declaredTotal + ' звеньев), физический path MTU не измерялся — значение и риск по декларации, не по измерению'
+      : 'ни одно звено не имеет заявленного MTU; overhead неизвестен или частичен; автоматического подбора нет (auto-MTU запрещён политикой v1.11)'
+  };
+}
+// Умбрелла: все три диагностики + доступность цепочки (what-if).
+function ptNetworkDiagnostics(spec, model, opts) {
+  const sim = ptSimulateTopology(model, { unavailableNodeIds: (opts && opts.unavailableNodeIds) || [] });
+  const tcpUdp = ptTcpUdpDiagnostics(spec, model, opts);
+  return {
+    chainAvailability: sim.status === 'INTACT' ? 'INTACT' : 'CHAIN_UNAVAILABLE',
+    chainNote: sim.status === 'INTACT' ? null : sim.message,
+    tcpUdp, dns: ptDnsDiagnostics(spec, model, opts), mtu: ptMtuDiagnostics(spec, model)
+  };
+}
+// === PHYSICAL TOPOLOGY NETWORK DIAGNOSTICS — PT-DIAG-END ===
 // === CONFIG STUDIO CORE (pure, deterministic; v1.11 #176/#178/#177) — CS-CORE-START ===
 // Анализ импортированного Mihomo-конфига. Дизайн: docs/research/CONFIG-STUDIO.md.
 // Ключевое переиспользование: импортированный doc после jsyaml.load скармливается
@@ -7396,11 +7610,46 @@ function runPhysicalTopology() {
     renderPhysicalTopologyGraph();
     const trace = ptTraceTopology(ptLastModel);
     traceOut.textContent = trace ? trace.text : '';
+    renderPtNetDiagnostics();
     ptRuntimeEnsureProfiles();
     ptRuntimeRender();
   } else {
     traceOut.textContent = 'Топология не валидна — trace/визуализация строятся только для валидной линейной цепочки (no silent-fix).';
+    const nd = document.getElementById('ptNetDiagOut');
+    if (nd) nd.textContent = '';
   }
+}
+
+// === PT Network Diagnostics UI (#177, EVENING-02) ===
+// Диагностики — только отображение результатов ядра (PT-DIAG); топология/YAML не меняются.
+function renderPtNetDiagnostics() {
+  const out = document.getElementById('ptNetDiagOut');
+  if (!out) return;
+  if (!ptLastModel) { out.textContent = ''; return; }
+  const spec = (() => { try { return JSON.parse(document.getElementById('ptSpecInput').value); } catch (_) { return null; } })();
+  if (!spec) { out.textContent = 'Спецификация не читается — диагностика недоступна.'; return; }
+  const r = ptNetworkDiagnostics(spec, ptLastModel, { unavailableNodeIds: Array.from(ptUnavailableNodes) });
+  const L = [];
+  if (r.chainNote) L.push('⚠ ' + r.chainNote);
+  L.push('TCP / UDP (по звеньям):');
+  for (const l of r.tcpUdp.links) {
+    L.push('  ' + l.from + ' → ' + l.toLabel + ' [' + (l.kind || '—') + ']: TCP ' + l.tcp + ' · UDP ' + l.udp + ' (' + l.evidence + ')');
+    if (l.notes) L.push('    ' + l.notes);
+  }
+  L.push('  Сквозной итог: TCP ' + r.tcpUdp.endToEnd.tcp + ' · UDP ' + r.tcpUdp.endToEnd.udp + ' — ' + r.tcpUdp.endToEnd.note);
+  L.push('');
+  L.push('DNS path:');
+  for (const h of r.dns.nextHops) {
+    L.push('  ' + h.from + ' → ' + h.to + ': ' + h.verdict + ' — ' + h.reason);
+  }
+  L.push('  Домены назначения: ' + r.dns.destination.verdict + ' — ' + r.dns.destination.reason);
+  L.push('  ' + r.dns.dataPathNote);
+  L.push('');
+  L.push('MTU: ' + r.mtu.overall.toUpperCase() + ' — ' + r.mtu.note);
+  for (const h of r.mtu.hops) {
+    L.push('  ' + h.from + ' → ' + h.to + ' [' + h.transport + ']: MTU ' + (h.mtuConfigured !== null ? h.mtuConfigured + ' (заявлено)' : 'не задан') + ' · overhead ' + h.evidence + ' · риск фрагментации: ' + h.fragmentationRisk);
+  }
+  out.textContent = L.join('\n');
 }
 
 function clearPhysicalTopology() {
