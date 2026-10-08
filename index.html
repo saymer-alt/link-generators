@@ -755,6 +755,8 @@
       <textarea id="csImportInput" rows="12" aria-label="Mihomo config YAML для анализа" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="Вставьте содержимое config.yaml…"></textarea>
       <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
         <button type="button" class="btn btn-gray" id="csParseBtn">🔎 Разобрать</button>
+        <button type="button" class="btn btn-gray" id="csRestoreBtn" title="Восстановить состояние Builder из разобранного конфига (Reverse Build). Честный отчёт обратимости — см. панель ниже" style="display:none">🔁 Восстановить в Builder</button>
+        <div id="csRestoreOut" class="hint" style="display:none;margin-top:6px;white-space:pre-line;border:1px solid var(--border);padding:6px"></div>
         <label class="btn btn-gray" style="margin:0" for="csImportFile">📂 Загрузить .yaml / .yml</label>
         <input type="file" id="csImportFile" accept=".yaml,.yml" hidden>
         <button type="button" class="btn btn-gray" id="csClearBtn">Очистить</button>
@@ -6645,6 +6647,248 @@ function rbParseProjectText(text) {
 }
 // === REVERSE BUILD CORE — RB-CORE-END ===
 
+// === REVERSE BUILD YAML ENGINE (OWNER-REVERSE-01, PR C) — RBY-CORE-START ===
+// YAML → CanonicalProject (v1) + findings. Только детерминированные маркеры
+// (REVERSE-BUILD-RECOVERABILITY.md §2): никакого угадывания галочек по
+// «похожим структурам». Границы честны:
+//  - развёрнутые подписки (Sub OFF): URL — MISSING (NOT RECOVERABLE);
+//  - прямые прокси-узлы (не wireguard): link-emitter'а нет — passthrough
+//    (переносятся через «Расширенное редактирование YAML»), silent loss запрещён;
+//  - dialer-ГРУППА (кастомное имя): маркеров недостаточно — finding, не restore.
+const RB_GENERATOR_TOP_KEYS = new Set(['mixed-port', 'port', 'socks-port', 'allow-lan', 'bind-address', 'mode', 'log-level', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url', 'secret', 'tun', 'dns', 'sniffer', 'profile', 'proxies', 'proxy-groups', 'proxy-providers', 'rule-providers', 'rules']);
+
+// computeProviderName — точный порт web4core (mihomo.js:31/42) для CONFLICT-детекта.
+function rbSanitizeProviderName(name) {
+  const raw = String(name || '').trim().toLowerCase();
+  if (!raw) return '';
+  return raw
+    .replace(/^www\./, '')
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/[._-]{2,}/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 48);
+}
+function rbComputeProviderName(url, index, total, used) {
+  let base = '';
+  try { base = rbSanitizeProviderName(new URL(String(url || '').trim()).hostname || ''); } catch (_) {}
+  if (!base) base = total === 1 ? 'my_subscription' : `subscription_${index + 1}`;
+  let name = base;
+  let i = 2;
+  while (used.has(name)) name = `${base}-${i++}`;
+  used.add(name);
+  return name;
+}
+
+function rbYamlToProject(doc) {
+  const findings = [];
+  const passthrough = {};
+  const project = {
+    schemaVersion: RB_PROJECT_SCHEMA_VERSION,
+    meta: { app: 'link-generators', created: new Date().toISOString(), generatorVersion: String((globalThis.GENERATOR_META && GENERATOR_META.version) || ''), origin: 'yaml-reverse', wgProfileSeq: 0 },
+    sources: { subMode: false, mainInput: '', fallbackInput: '', autoWhitelist: false },
+    wgProfiles: [],
+    options: {
+      profile: 'router', addTun: false, tunMips: false, tunStackAdvanced: false, tunStackEx: 'gvisor',
+      addSocks: false, lan: false, perProxyMaster: false, perProxyTun: false, perProxySocks: false,
+      webUI: false, webUiDashboard: 'metacubexd', webUiCustomUrl: '',
+      urlTestPreset: 'https://www.gstatic.com/generate_204', urlTestCustomUrl: '',
+      excludeFilter: '', serverList: { names: [], nodes: 0, selected: [] },
+      realityModern: '', deviceModel: '', wgCustomDns: '', awgKeepalive: false, awgRtDiag: false,
+      vpsDnsEnabled: true, vpsDevice: '', vpsMtu: '', vpsFakeIp: '', vpsDnsListen: '', vpsDnsNs: '', vpsProxyNs: ''
+    },
+    dialer: { name: '', members: '', providers: '' },
+    domainPolicy: { enabled: false, cards: [] },
+    tiered: { enabled: false, cards: [] },
+    passthrough: null
+  };
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    return { project, findings: [{ field: 'document', state: 'INVALID', note: 'не YAML-объект' }] };
+  }
+
+  // --- источники: proxy-providers → URL-подписки (порядок ключей = порядок ввода) ---
+  const providers = (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object' && !Array.isArray(doc['proxy-providers'])) ? doc['proxy-providers'] : null;
+  const urls = [];
+  let excludeFilters = new Set();
+  let urlTests = new Set();
+  if (providers) {
+    const used = new Set();
+    let idx = 0;
+    for (const [name, prov] of Object.entries(providers)) {
+      if (!prov || typeof prov !== 'object' || prov.type !== 'http' || typeof prov.url !== 'string' || !/^https?:\/\//i.test(prov.url)) {
+        findings.push({ field: 'proxy-providers.' + name, state: 'UNSUPPORTED', note: 'не http-провайдер генератора — passthrough' });
+        passthrough['proxy-providers.' + name] = prov;
+        continue;
+      }
+      urls.push(prov.url);
+      // CONFLICT-детект: имя провайдера ≠ пересчёт из URL+порядка
+      const expected = rbComputeProviderName(prov.url, idx, Object.keys(providers).length, used);
+      if (name !== expected) findings.push({ field: 'proxy-providers.' + name, state: 'CONFLICT', note: 'имя провайдера «' + name + '» ≠ пересчёту «' + expected + '» — YAML правился вручную; после Restore имя будет пересчитано' });
+      idx++;
+      if (prov['exclude-filter'] !== undefined) excludeFilters.add(String(prov['exclude-filter']));
+      const hc = prov['health-check'];
+      if (hc && typeof hc.url === 'string') urlTests.add(hc.url);
+    }
+  }
+  project.sources.subMode = urls.length > 0;
+  project.sources.mainInput = urls.join('\n');
+  if (!urls.length) {
+    findings.push({ field: 'sources.mainInput', state: 'MISSING', note: 'URL развёрнутых подписок в YAML отсутствуют (Sub OFF) — NOT RECOVERABLE; узлы восстанавливаются как passthrough' });
+  }
+  if (excludeFilters.size === 1) project.options.excludeFilter = [...excludeFilters][0];
+  else if (excludeFilters.size > 1) findings.push({ field: 'excludeFilter', state: 'CONFLICT', note: 'у провайдеров разные exclude-filter (' + excludeFilters.size + ' шт.) — в Builder одно общее поле; не восстановлено' });
+
+  // urlTest: health-check провайдеров + url-test групп; согласованные → restore.
+  const groups = Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : [];
+  for (const g of groups) {
+    if (g && typeof g.url === 'string') urlTests.add(g.url);
+  }
+  const URLTEST_KNOWN = ['https://www.gstatic.com/generate_204', 'https://cp.cloudflare.com/generate_204', 'https://connectivitycheck.platform.hicloud.com/generate_204'];
+  if (urlTests.size === 1) {
+    const u = [...urlTests][0];
+    project.options.urlTestPreset = u;
+    if (!URLTEST_KNOWN.includes(u)) project.options.urlTestCustomUrl = u;
+  } else if (urlTests.size > 1) {
+    findings.push({ field: 'urlTest', state: 'CONFLICT', note: 'разные health-check URL (' + urlTests.size + ' шт.) — восстановлен дефолт' });
+  }
+
+  // --- AWL-режим ---
+  const proxies = Array.isArray(doc.proxies) ? doc.proxies : [];
+  const globalGroup = groups.find(g => g && g.name === 'GLOBAL') || null;
+  const awlProxy = proxies.some(p => p && /^(PRIMARY|FALLBACK)-\d+: /.test(String(p.name || '')));
+  if ((globalGroup && globalGroup.filter === '^(PRIMARY-|primary-)`^(FALLBACK-|fallback-)') || awlProxy) {
+    project.sources.autoWhitelist = true;
+    findings.push({ field: 'sources.fallbackInput', state: 'MISSING', note: 'URL fallback-подписок (AWL) развёрнуты — NOT RECOVERABLE' });
+  }
+
+  // socks/mixed-port: генератор эмитит mixed-port при addSocks (SOURCE-PROVEN emitter)
+  project.options.addSocks = !!(doc['mixed-port'] || doc['socks-port'] || doc.port);
+
+  // --- deployment-профиль (маркеры) ---
+  const tun = (doc.tun && typeof doc.tun === 'object') ? doc.tun : null;
+  const hasTun = !!(tun && (tun.enable === true || tun.device));
+  const hijack = !!(tun && Array.isArray(tun['dns-hijack']) && tun['dns-hijack'].some(h => String(h).includes('any:53')));
+  const storeFakeIp = !!(doc.profile && typeof doc.profile === 'object' && doc.profile['store-fake-ip'] === true);
+  const controller = String(doc['external-controller'] || '');
+  if (hijack && storeFakeIp) {
+    project.options.profile = 'vps-gateway';
+    project.options.addTun = true;
+    project.options.vpsDnsEnabled = !!(doc.dns && typeof doc.dns === 'object');
+    findings.push({ field: 'options.vpsDns*', state: 'DERIVED', note: 'VPS-DNS поля (listen/nameservers) восстанавливаются из dns:-секции частично; сверить после Restore' });
+  } else if (!hasTun && controller === '127.0.0.1:9090') {
+    project.options.profile = 'vps-local';
+    project.options.addSocks = true;
+  } else if (!hasTun && !controller) {
+    findings.push({ field: 'options.profile', state: 'UNKNOWN', note: 'нет маркеров профиля — восстановлен router (умолчание); проверьте вручную' });
+  } else {
+    project.options.profile = 'router';
+    if (hasTun) project.options.addTun = true;
+  }
+  if (hasTun) {
+    if (tun.stack === 'mips') project.options.tunMips = true;
+    else if (tun.stack === 'system' || tun.stack === 'mixed') { project.options.tunStackAdvanced = true; project.options.tunStackEx = tun.stack; }
+  }
+  if (doc['allow-lan'] === true) project.options.lan = true;
+  if (doc['external-ui']) {
+    project.options.webUI = true;
+    const dash = String(doc['external-ui'] || '');
+    const known = ['metacubexd', 'yacd-meta', 'zashboard'];
+    const match = known.find(k => dash.includes(k));
+    if (match) project.options.webUiDashboard = match;
+    else if (doc['external-ui-url']) { project.options.webUiDashboard = 'custom'; project.options.webUiCustomUrl = String(doc['external-ui-url']); }
+  }
+
+  // --- WG/AWG профили ---
+  let wgDnsSeen = new Set();
+  let seq = 0;
+  for (const p of proxies) {
+    if (!p || p.type !== 'wireguard') continue;
+    const restored = rbWgProxyToBean(p);
+    if (!restored) { findings.push({ field: 'proxies.' + (p && p.name), state: 'UNSUPPORTED', note: 'wireguard-узел без обязательных полей — passthrough' }); continue; }
+    seq++;
+    project.wgProfiles.push({ id: seq, filename: 'UNKNOWN', bean: restored.bean, mode: p['dialer-proxy'] ? 'proxy' : 'direct', target: p['dialer-proxy'] ? String(p['dialer-proxy']) : '' });
+    if (Array.isArray(restored.bean.wireguard.dns) && restored.bean.wireguard.dns.length) wgDnsSeen.add(restored.bean.wireguard.dns.join(','));
+    findings.push({ field: 'wg:' + restored.bean.name, state: 'EXACT', note: 'исходное имя файла: UNKNOWN, форматирование: NOT RECOVERABLE' + (restored.keepaliveRawLost ? '; raw-диапазон keepalive NOT RECOVERABLE (восстановлено эффективное значение)' : '') });
+  }
+  project.meta.wgProfileSeq = seq;
+  if (wgDnsSeen.size === 1) project.options.wgCustomDns = [...wgDnsSeen][0];
+  else if (wgDnsSeen.size > 1) findings.push({ field: 'wgCustomDns', state: 'CONFLICT', note: 'разные dns на WG-узлах — в Builder поле общее; не восстановлено' });
+
+  // --- прямые прокси (не wireguard): link-emitter отсутствует — passthrough ---
+  const direct = proxies.filter(p => p && p.type !== 'wireguard');
+  if (direct.length) {
+    passthrough['proxies:direct'] = direct;
+    findings.push({ field: 'proxies (прямые узлы)', state: 'UNSUPPORTED', note: direct.length + ' узл(ов) без link-emitter не переносятся в поле ввода Builder; доступны через «Расширенное редактирование YAML» — НЕ теряются' });
+  }
+
+  // --- DPR ---
+  const rps = (doc['rule-providers'] && typeof doc['rule-providers'] === 'object' && !Array.isArray(doc['rule-providers'])) ? doc['rule-providers'] : {};
+  const dprSlugs = Object.keys(rps).filter(n => /^policy-/.test(n));
+  const rules = Array.isArray(doc.rules) ? doc.rules : [];
+  if (dprSlugs.length) {
+    project.domainPolicy.enabled = true;
+    for (const slug of dprSlugs) {
+      const rp = rps[slug] || {};
+      const payload = Array.isArray(rp.payload) ? rp.payload.join('\n') : String(rp.payload || '');
+      const target = rules.map(r => String(r).split(',')).filter(pp => pp[0] === 'RULE-SET' && pp[1] === slug).map(pp => pp[2])[0] || 'SELECT';
+      project.domainPolicy.cards.push({ name: slug.slice('policy-'.length), domains: payload, target: ['GLOBAL', 'DIRECT', 'REJECT'].includes(target) ? target : 'SELECT' });
+      if (!['GLOBAL', 'DIRECT', 'REJECT'].includes(target)) findings.push({ field: 'domainPolicy.' + slug, state: 'DERIVED', note: 'цель «' + target + '» — группа; в карточке восстановлена SELECT-семантика, сверьте вручную' });
+    }
+  }
+
+  // --- Tiered ---
+  const tieredGroups = groups.filter(g => g && /^🪜 /.test(String(g.name || '')));
+  if (tieredGroups.some(g => g.name === '🪜 TIERED-AUTO')) {
+    project.tiered.enabled = true;
+    for (const g of tieredGroups) {
+      if (g.name === '🪜 TIERED-AUTO') continue;
+      project.tiered.cards.push({
+        name: String(g.name).replace(/^🪜\s+\d+\s+/, ''),
+        strategy: ['url-test', 'fallback', 'load-balance'].includes(g.type) ? g.type : 'url-test',
+        members: Array.isArray(g.proxies) ? g.proxies.slice() : []
+      });
+    }
+  }
+
+  // --- dialer-ГРУППА: маркеров недостаточно (кастомное имя) — честный finding ---
+  if (groups.some(g => g && Array.isArray(g.use) && g.use.length && !/^🪜 /.test(String(g.name || '')))) {
+    findings.push({ field: 'dialer.name/members/providers', state: 'UNKNOWN', note: 'dialer-группа не различима от прочих select-групп с use: — восстановите вручную при необходимости' });
+  }
+
+  // --- passthrough: верхнеуровневые ключи вне модели генератора ---
+  const unknownKeys = Object.keys(doc).filter(k => !RB_GENERATOR_TOP_KEYS.has(k));
+  for (const k of unknownKeys) passthrough[k] = doc[k];
+  if (unknownKeys.length) findings.push({ field: 'top-level', state: 'UNSUPPORTED', note: unknownKeys.length + ' ключ(ей) вне модели Builder сохранены в passthrough — при пересборке НЕ переносятся автоматически' });
+  project.passthrough = Object.keys(passthrough).length ? passthrough : null;
+  return { project, findings };
+}
+
+// YAML wireguard-узел → bean (форма parseWireGuardConf, camelCase).
+// SOURCE-PROVEN по фактическому emit (см. research-фикстуры PR A).
+function rbWgProxyToBean(p) {
+  if (!p || typeof p.server !== 'string' || typeof p['private-key'] !== 'string') return null;
+  const wg = {
+    ip: String(p.ip || ''), ipv6: String(p.ipv6 || ''),
+    addresses: [p.ip, p.ipv6].filter(Boolean),
+    privateKey: String(p['private-key']),
+    publicKey: String(p['public-key'] || ''),
+    preSharedKey: String(p['pre-shared-key'] || ''),
+    allowedIPs: Array.isArray(p['allowed-ips']) ? p['allowed-ips'].slice() : [],
+    dns: Array.isArray(p.dns) ? p.dns.slice() : [],
+    remoteDnsResolve: !!p['remote-dns-resolve']
+  };
+  let keepaliveRawLost = false;
+  if (p.mtu !== undefined) wg.mtu = p.mtu;
+  if (p['persistent-keepalive'] !== undefined) wg.persistentKeepalive = p['persistent-keepalive'];
+  if (p.reserved !== undefined) wg.reserved = p.reserved;
+  const awg = (p['amnezia-wg-option'] && typeof p['amnezia-wg-option'] === 'object') ? p['amnezia-wg-option'] : null;
+  if (awg) wg['amnezia-wg-option'] = Object.assign({}, awg);
+  return {
+    keepaliveRawLost: p['persistent-keepalive'] !== undefined,
+    bean: { proto: 'wireguard', name: String(p.name || ''), host: p.server, port: p.port, ipVersion: p['ip-version'] || 'ipv4', wireguard: wg }
+  };
+}
+// === REVERSE BUILD YAML ENGINE — RBY-CORE-END ===
+
 // === CONFIG STUDIO CORE (pure, deterministic; v1.11 #176/#178/#177) — CS-CORE-START ===
 // Анализ импортированного Mihomo-конфига. Дизайн: docs/research/CONFIG-STUDIO.md.
 // Ключевое переиспользование: импортированный doc после jsyaml.load скармливается
@@ -8385,6 +8629,8 @@ function csRunAnalysis(sourceText) {
   ptRuntimeRender();
   if (csCurrentDoc) vrgRenderInto('csVrgSvgWrap', csCurrentDoc, false, 'csVrgTextAltOut', l => csRedactText(l, csCurrentDoc));
   status.textContent = '✓ Разобрано: анализ готов (локально, без сети).';
+  const rb = document.getElementById('csRestoreBtn');
+  if (rb) rb.style.display = '';
 }
 
 // Покрытие доменов по ИМПОРТИРОВАННОМУ конфигу (cdgDomainCoverage — то же ядро,
@@ -8445,6 +8691,10 @@ function csClearStudio() {
   document.getElementById('csEditorCard').style.display = 'none';
   const csVrg = document.getElementById('csVrgSvgWrap');
   if (csVrg) csVrg.textContent = '';
+  const rbBtn = document.getElementById('csRestoreBtn');
+  if (rbBtn) rbBtn.style.display = 'none';
+  const rbOut = document.getElementById('csRestoreOut');
+  if (rbOut) { rbOut.style.display = 'none'; rbOut.textContent = ''; }
   const csVrgAlt = document.getElementById('csVrgTextAltOut');
   if (csVrgAlt) csVrgAlt.textContent = '';
   document.getElementById('csStatus').textContent = '';
@@ -9773,6 +10023,43 @@ document.getElementById('rbProjectFile').addEventListener('change', (e) => {
   e.target.value = '';
   if (f) rbLoadProject(f);
 });
+
+function rbRestoreFromStudio() {
+  const text = document.getElementById('csImportInput').value;
+  if (!text.trim()) return showToast('Сначала вставьте и разберите config.yaml', true);
+  let doc;
+  try { doc = jsyaml.load(text); } catch (e) { return showToast('❌ YAML не разбирается: ' + String(e && e.message ? e.message : e).slice(0, 100), true); }
+  const res = rbYamlToProject(doc);
+  // Отчёт обратимости: только отображение; секреты в находках не фигурируют,
+  // но текст прогоняется через csRedactText как вся студия.
+  const lines = res.findings.map(f => {
+    const icon = f.state === 'EXACT' ? '✓' : f.state === 'MISSING' ? '∅' : f.state === 'CONFLICT' ? '⚠' : f.state === 'UNSUPPORTED' ? '✖' : 'ℹ';
+    return icon + ' [' + f.state + '] ' + f.field + ' — ' + f.note;
+  });
+  const out = document.getElementById('csRestoreOut');
+  if (out) {
+    out.style.display = 'block';
+    out.textContent = csRedactText('Отчёт обратимости (' + res.findings.length + '):\n' + (lines.join('\n') || 'находок нет'), res.project);
+  }
+  const hasState = document.getElementById('mihomoInput').value.trim() || wgProfiles.length;
+  if (hasState && !confirm('Восстановить Builder из этого конфига? Текущее состояние можно вернуть через «↩︎ Отменить восстановление».')) {
+    return showToast('Восстановление отменено.');
+  }
+  rbUndoProjectState = rbCollectProject();
+  rbApplyProject(res.project);
+  const undoBtn = document.getElementById('rbUndoBtn');
+  if (undoBtn) undoBtn.style.display = '';
+  showToast('🔁 Восстановлено: ' + res.project.wgProfiles.length + ' WG/AWG, ' + (res.findings.filter(f => f.state === 'MISSING' || f.state === 'UNSUPPORTED').length) + ' пунктов требуют внимания (отчёт в Studio). Перейдите в Builder и нажмите ⚡ Build.');
+  switchTab(null, 'mihomo');
+}
+document.addEventListener('click', (e) => {
+  if (!e.target) return;
+  if (e.target.id === 'csRestoreBtn') {
+    e.preventDefault();
+    rbRestoreFromStudio();
+  }
+});
+
 // === REVERSE BUILD UI — RB-UI-END ===
 
 // === INIT ===
