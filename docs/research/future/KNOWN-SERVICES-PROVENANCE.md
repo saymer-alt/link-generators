@@ -63,3 +63,5 @@
 4. Review-due просрочен → пометка, не удаление.
 5. Нормализация домена (punycode/case).
 6. CIDR-нормализация и проверка маски.
+
+**Обновлено (NIGHT-MEGA-01 B5)**: все 6 пунктов реализованы — `research/poc/known-services/provenance.mjs` (validate/enforceConfidence/lookup/merge/isReviewDue; lookup: exact/suffix/keyword/cidr/asn, сортировка по confidence; merge: слабый источник не перезаписывает сильный, любая замена регистрируется в conflicts — молчаливых разрешений нет) + `provenance.test.mjs` (9 проверок node --test, включая punycode через URL API и голый IPv4 как /32). PoC, никакая база не встроена.

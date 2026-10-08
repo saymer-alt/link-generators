@@ -1,0 +1,7 @@
+example.com
++.google.com
+*.openai.com
+www.youtube.com
+github.com
+cloudflare-dns.com
+dns.google

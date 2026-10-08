@@ -90,6 +90,8 @@
 6. Маскирование egressIp/secret при сериализации для публикации.
 7. WG/MASQUE-H2/H3 не смешиваются в агрегате профиля.
 
+**Обновлено (NIGHT-MEGA-01 B4)**: все 7 пунктов реализованы — `research/poc/warpscout-engine/engine.mjs` (validate/aggregate/freshness/dedup/maskForPublication; ENGINEERING-дополнение: смена ключа видна только если observation записал `profileFingerprint`) + `engine.test.mjs` (10 проверок node --test, включая «review-interval — напоминание, не деградация» и «endpoint мёртв только при L1 FAIL»). PoC, не production.
+
 ## 9. Не делать
 
 - Никаких сканирований реальных сетей владельца этим инструментом из CI.

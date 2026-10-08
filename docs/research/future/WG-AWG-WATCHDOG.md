@@ -75,6 +75,8 @@ date; uptime                                # привязка ко времен
 
 Один файл `incident-YYYYMMDD-HHMMSS.txt` с заголовком-разделителем на секцию; приложение к issue владельцем вручную после ручной проверки на секреты. Коллектор — отдельный shell-скрипт (read-only, без set-команд) — **кандидат отдельной задачи, не часть v1.11**.
 
+**Обновлено (NIGHT-MEGA-01 B3)**: PoC-реализация коллектора существует — `research/poc/wg-awg-collector/collect-awg-incident.sh` (read-only, маскирование private key/PSK до записи — поле 1 интерфейсной строки dump и поле 2 пир-строк, SKIPPED при отсутствии инструмента; offline-тесты `collector.test.sh`, 14 проверок, стабы на PATH). Это PoC в research/, не production keenetic-auto-setup; живой запуск — только по operator-задаче при реальном инциденте.
+
 ### 4.4 Критерии безопасного auto-restart (НЕ для реализации сейчас)
 
 Auto-restart допустим только если ВСЕ условия подтверждены FIELD-OBSERVED на реальном инциденте:
