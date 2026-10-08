@@ -15,6 +15,7 @@ on:
     branches:
       - main
       - stable
+      - fix/v1.11-release-polish-audit
   schedule:
     - cron: '17 4 * * 1'
 

@@ -94,7 +94,7 @@ const credsOf = ids => Object.fromEntries([{ k: 'cr-c' }, ...ids.slice(0, -1).ma
   const r = api.ptGenerateArtifacts(spec, credsOf([['e', 'entry'], ['x', 'exit']]));
   const e = r.artifacts[0];
   assert.ok(e.blockers.some(b => b.code === 'PT-GEN-INBOUND'));
-  assert.equal(e.status, 'EXTERNAL_CONTRACT_REQUIRED');
+  assert.equal(e.status, 'PLACEHOLDERS_REQUIRED');
   ok();
 }
 
@@ -191,7 +191,7 @@ const credsOf = ids => Object.fromEntries([{ k: 'cr-c' }, ...ids.slice(0, -1).ma
     const spec = specOf([['e', 'entry'], ['x', 'exit']]);
     spec.endpoints['ep-c'] = '192.0.2.1:' + port;
     const r = api.ptGenerateArtifacts(spec, credsOf([['e', 'entry'], ['x', 'exit']]));
-    assert.equal(r.artifacts[0].status, 'EXTERNAL_CONTRACT_REQUIRED', 'invalid port ' + port + ' blocks artifact');
+    assert.equal(r.artifacts[0].status, 'PLACEHOLDERS_REQUIRED', 'invalid port ' + port + ' blocks artifact');
     assert.equal(r.artifacts[0].files['config.yaml'], undefined, 'invalid port is never emitted');
   }
   const leadingZero = specOf([['e', 'entry'], ['x', 'exit']]);

@@ -1,5 +1,13 @@
 # Mihomo Config Studio: аудит импорта и дизайн source-preserving editing (v1.11)
 
+CODEX-02 (2026-10-08): import теперь проходит bounded parser/shape/alias guards;
+rejected import сохраняет рабочий документ. Загруженный файл сохраняет CRLF.
+Структурные mutations с aliases, anchored scalar edits и неподдерживаемые flow-reference
+deletions блокируются; независимые scalar edits и no-op сохраняют исходный текст.
+Mutated export при static FAIL блокирован. Diagnostics/coverage/probe/diff используют
+document-aware redaction. Лимиты, measured evidence и field-test checklist:
+[V1.11-RELEASE-CANDIDATE-AUDIT.md](V1.11-RELEASE-CANDIDATE-AUDIT.md).
+
 Документ цикла v1.11 (#177): #176 (import/inspector) + #178 (dependency-aware editor).
 Дата: 2026-10-08. Базис: main `6a389c0` (Physical Topology foundation из NIGHT-01).
 

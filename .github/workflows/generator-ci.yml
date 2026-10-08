@@ -3,7 +3,7 @@ name: Generator CI
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, stable]
+    branches: [main, stable, 'fix/v1.11-release-polish-audit']
   push:
     branches: [main, stable]
 
@@ -134,6 +134,9 @@ jobs:
       - name: Config Studio import core regression (#176)
         run: node tests/config-import.cjs
 
+      - name: Security and bounded stress regression (CODEX-02)
+        run: node tests/security-stress.cjs
+
       - name: Config Studio editor engine regression (#178)
         run: node tests/config-editor.cjs
 
@@ -244,6 +247,9 @@ jobs:
 
       - name: Config Studio browser regression (#176)
         run: node tests/config-studio-browser.cjs
+
+      - name: Security and download end-to-end regression (CODEX-02)
+        run: node tests/security-stress-browser.cjs
 
       - name: Domain Coverage Checker browser regression
         run: node tests/domain-coverage.cjs

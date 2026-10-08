@@ -173,7 +173,7 @@ const SYNTH = [
   const err = await page.textContent('#csStatus');
   assert.ok(err.includes('Не удалось разобрать YAML'), 'bounded error');
   assert.ok(!err.includes('password'), 'без эха содержимого');
-  assert.equal(await page.evaluate(() => document.getElementById('csSummaryCard').style.display), 'none', 'карточка скрыта при ошибке');
+  assert.equal(await page.evaluate(() => csExportText()), SYNTH, 'ошибка нового импорта сохраняет предыдущий рабочий документ');
   ok('malformed');
 
   // --- очистка ---
