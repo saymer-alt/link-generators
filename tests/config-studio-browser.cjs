@@ -298,6 +298,13 @@ const SYNTH = [
   assert.ok(netDiag2.includes('(заявлено)'), 'заявленные значения показаны');
   assert.ok(netDiag2.includes('INTENDED_AT_EXIT'), 'декларация exit показана');
   ok('network diagnostics');
+  // EVENING-03 A1: what-if toggle обновляет сетевую диагностику
+  await page.locator('.pt-toggle[data-pt-node="est-transit"]').click();
+  await page.waitForFunction(() => document.getElementById('ptNetDiagOut').textContent.includes('CHAIN_UNAVAILABLE'), null, { polling: 250 });
+  assert.ok((await page.textContent('#ptWhatIfOut')).includes('Physical chain broken'), 'what-if блок показывает разрыв');
+  await page.locator('.pt-toggle[data-pt-node="est-transit"]').click();
+  await page.waitForFunction(() => !document.getElementById('ptNetDiagOut').textContent.includes('CHAIN_UNAVAILABLE'), null, { polling: 250 });
+  ok('what-if обновляет сетевую диагностику (A1)');
   // malformed metadata отклоняется
   await page.evaluate(() => {
     const s = JSON.parse(document.getElementById('ptSpecInput').value);
