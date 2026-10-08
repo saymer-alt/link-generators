@@ -248,6 +248,34 @@ const SYNTH = [
   assert.ok(overflow.sw <= overflow.iw + 1, 'mobile 360: без overflow (' + overflow.sw + ' vs ' + overflow.iw + ')');
   ok('mobile 360');
 
+  // === PHYSICAL TOPOLOGY → PER-NODE GENERATION (#187) ===
+  await page.locator('.tab', { hasText: 'Mihomo Config Builder' }).click();
+  await page.locator('#physicalTopologyPanel > summary').click();
+  await page.locator('#ptDemoBtn').click();
+  await page.waitForFunction(() => document.getElementById('ptGraphBox').style.display === 'block', null, { polling: 250 });
+  await page.locator('#ptGenBtn').click();
+  await page.waitForFunction(() => document.getElementById('ptGenOut').style.display === 'block', null, { polling: 250 });
+  const genOut = await page.textContent('#ptGenOut');
+  assert.ok(genOut.includes('Узлов: 4'), 'сводка: узлы');
+  assert.ok(genOut.includes('Внешних контрактов: 3'), 'сводка: контракты (2 creds + 1 wireguard)');
+  assert.ok(genOut.includes('Moscow · ENTRY [ENTRY] — PLACEHOLDERS_REQUIRED'), 'Moscow: честные плейсхолдеры без кредов');
+  assert.ok(genOut.includes('EXTERNAL_CONTRACT_REQUIRED'), 'WARP-ребро — контракт');
+  assert.ok(genOut.includes('mihomo -t в браузере: NOT RUN'), 'честный NOT RUN');
+  const dlButtons = await page.locator('#ptGenDownloads button').count();
+  assert.ok(dlButtons >= 7, 'кнопки скачивания per-file + manifest + map: ' + dlButtons);
+  assert.ok((await page.textContent('#ptGenDownloads')).includes('topology.json'), 'manifest доступен');
+  assert.ok((await page.textContent('#ptGenDownloads')).includes('deployment-map.md'), 'deployment map доступен');
+  // YAML генератора не затронут генерацией
+  const yamlAfterGen = await page.evaluate(() => document.getElementById('mihomoOutput').value);
+  await page.locator('#ptGenBtn').click();
+  assert.equal(await page.evaluate(() => document.getElementById('mihomoOutput').value), yamlAfterGen, 'генерация не меняет YAML');
+  ok('per-node generation UI');
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.waitForTimeout(150);
+  const overflow3 = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+  assert.ok(overflow3.sw <= overflow3.iw + 1, 'mobile 360 PT-генерация: без overflow');
+  ok('mobile 360 + PT-генерация');
+
   assert.deepEqual(errors, [], 'нет pageerror');
   await browser.close();
   console.log('PASS config-studio-browser: ' + passed + ' checks');

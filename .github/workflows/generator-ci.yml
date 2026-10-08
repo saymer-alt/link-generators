@@ -140,6 +140,9 @@ jobs:
       - name: Config Studio round-trip fidelity regression (#178)
         run: node tests/config-roundtrip.cjs
 
+      - name: Physical Topology per-node generation regression (#187)
+        run: node tests/per-node-generation.cjs
+
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 
@@ -339,6 +342,9 @@ jobs:
 
       - name: Config Studio export compat (#178)
         run: node tests/config-studio-compat.cjs
+
+      - name: Physical Topology per-node artifacts compat (#187)
+        run: node tests/per-node-mihomo-compat.cjs
 
       - name: Explicit manual/live exclusion guard
         shell: bash
