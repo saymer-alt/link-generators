@@ -80,6 +80,11 @@ py -m http.server 8017 --bind 127.0.0.1     # или любой static server
 - `web4core.runtime.js` — generated/vendor из `saymer-alt/web4core@link-generators`.
   Ручные правки запрещены. Изменения парсинга/эмиссии вносятся в исходники fork;
   wrapper в `index.html` остаётся для адаптаций входа/выхода. См. [UPDATES.md](UPDATES.md).
+- `cs-yaml.runtime.js` — vendored IIFE npm `yaml@2.9.1` (eemeli/yaml, ISC) для
+  Config Studio (source-preserving editing), глобал `CSYaml`, лениво загружается
+  со страницы. Ручные правки запрещены; пересборка: `esbuild browser/index.js
+  --bundle --format=iife --global-name=CSYaml --minify` из распакованного npm
+  tarball + provenance-заголовок (см. docs/research/CONFIG-STUDIO.md §2).
 
 - DOM-id (`mihomoInput`, `cfgLan`, `wgFile`, `copyYamlBtn`, …) — стабильный контракт
   между HTML и JS; не переименовывать в одной половине.
