@@ -263,6 +263,9 @@ jobs:
       - name: YAML Reverse Build browser regression (OWNER-REVERSE-01)
         run: node tests/reverse-yaml-browser.cjs
 
+      - name: QA Reverse Build integration (NIGHT-QA-01)
+        run: node tests/qa-reverse-integration.cjs
+
       - name: Security and download end-to-end regression (CODEX-02)
         run: node tests/security-stress-browser.cjs
 
