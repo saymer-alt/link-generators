@@ -134,6 +134,12 @@ jobs:
       - name: Config Studio import core regression (#176)
         run: node tests/config-import.cjs
 
+      - name: Config Studio editor engine regression (#178)
+        run: node tests/config-editor.cjs
+
+      - name: Config Studio round-trip fidelity regression (#178)
+        run: node tests/config-roundtrip.cjs
+
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 
@@ -330,6 +336,9 @@ jobs:
 
       - name: Tiered Failover runtime lab (#148)
         run: node tests/tiered-failover-runtime.cjs
+
+      - name: Config Studio export compat (#178)
+        run: node tests/config-studio-compat.cjs
 
       - name: Explicit manual/live exclusion guard
         shell: bash

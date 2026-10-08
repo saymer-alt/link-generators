@@ -151,6 +151,73 @@ const SYNTH = [
   assert.equal(await page.evaluate(() => document.getElementById('csSummaryCard').style.display), 'none');
   ok('очистка');
 
+  // === РЕДАКТОР (#178): field-edit → rename → diff → export ===
+  await page.fill('#csImportInput', SYNTH);
+  await page.locator('#csParseBtn').click();
+  assert.equal(await page.evaluate(() => document.getElementById('csEditorCard').style.display), 'block', 'редактор открыт после разбора');
+  // field-edit: меняем сервер Alpha-SS
+  await page.locator('#csEditType').selectOption('proxy');
+  await page.locator('#csEditObject').selectOption('Alpha-SS');
+  await page.fill('input[data-cs-field="server"]', '203.0.113.77');
+  await page.locator('#csSaveFieldsBtn').click();
+  await page.waitForFunction(() => document.getElementById('csOpsBox').style.display === 'block', null, { polling: 250 });
+  const opsList = await page.textContent('#csOpsList');
+  assert.ok(opsList.includes('server'), 'op списка: server');
+  // rename Alpha-SS → Renamed-SS (2 клика: план + подтверждение)
+  await page.fill('#csRenameInput', 'Renamed-SS');
+  await page.locator('#csRenameBtn').click();
+  // план строится асинхронно (ensureCsYaml) — ждём состояние подтверждения
+  await page.waitForFunction(() => document.getElementById('csRenameBtn').dataset.csConfirm === '1', null, { polling: 100 });
+  await page.locator('#csRenameBtn').click();
+  await page.waitForFunction(() => document.getElementById('csOpsList').textContent.includes('переименование'), null, { polling: 250 });
+  // diff показан, экспортный статус PASS
+  const diffText = await page.textContent('#csDiffOut');
+  assert.ok(diffText.includes('203.0.113.77'), 'диф содержит новый сервер');
+  assert.ok(diffText.includes('Renamed-SS'), 'диф содержит переименование');
+  assert.ok(!diffText.includes('studio-synth-pass'), 'пароль не в дифе');
+  const exportStatus = await page.textContent('#csExportStatus');
+  assert.ok(exportStatus.includes('Статическая валидация: PASS'), 'статическая валидация PASS: ' + exportStatus);
+  assert.ok(exportStatus.includes('Runtime-валидация Mihomo: NOT RUN'), 'честный NOT RUN');
+  // undo переименования
+  await page.locator('#csUndoBtn').click();
+  await page.waitForFunction(() => !document.getElementById('csOpsList').textContent.includes('переименование'), null, { polling: 250 });
+  // reset
+  await page.locator('#csResetBtn').click();
+  await page.waitForFunction(() => document.getElementById('csOpsBox').style.display === 'none', null, { polling: 250 });
+  ok('редактор: field-edit/rename/undo/reset/diff/валидация');
+
+  // --- destructive delete: правило на цель — блок на плане removeRefs ---
+  await page.locator('#csEditObject').selectOption('Alpha-SS');
+  await page.locator('#csDeleteBtn').click();
+  await page.waitForFunction(() => document.getElementById('csDeleteConfirm').style.display !== 'none');
+  await page.locator('#csDeleteConfirm').click();
+  await page.waitForFunction(() => {
+    const t = document.getElementById('csDiffOut').textContent;
+    return t.includes('непоследовательны') || t.includes('Правки непоследовательны') || document.getElementById('csExportStatus').textContent.includes('FAIL');
+  }, null, { timeout: 8000, polling: 250 }).catch(() => {});
+  // правило ссылается на Alpha-SS → replay-ошибка/FAIL допустимы; сбрасываем
+  await page.locator('#csResetBtn').click();
+  ok('delete-сессия не ломает страницу');
+
+  // --- экспорт: рабочая копия = source-preserving (реальный Blob-download
+  //     нестабилен в headless-канале Edge и покрыт браузером сам по себе) ---
+  await page.evaluate(() => csRenderForm()); // детерминированный ре-рендер формы после reset
+  await page.fill('input[data-cs-field="server"]', '203.0.113.77');
+  await page.locator('#csSaveFieldsBtn').click();
+  await page.waitForFunction(() => csOps.length === 1 && csWorking && csWorking.text.includes('203.0.113.77'), null, { polling: 250 });
+  const work = await page.evaluate(() => ({ text: csWorking.text, err: csWorkingErr }));
+  assert.equal(work.err, null, "правки применились без ошибок");
+  assert.ok(work.text.includes("server: 203.0.113.77"), "экспорт содержит правку");
+  assert.ok(work.text.includes("studio-synth-pass"), "экспорт содержит нетронутые исходные байты");
+  assert.equal(work.text.split(String.fromCharCode(10)).length, SYNTH.split(String.fromCharCode(10)).length, "количество строк не изменилось");
+  ok("экспорт: source-preserving рабочая копия");
+  // --- мобильная ширина редактора (360) — повторная проверка после правок ---
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.waitForTimeout(150);
+  const overflow2 = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+  assert.ok(overflow2.sw <= overflow2.iw + 1, 'mobile 360 с редактором: без overflow');
+  ok('mobile 360 + редактор');
+
   // --- mobile 360 ---
   await page.setViewportSize({ width: 360, height: 740 });
   await page.fill('#csImportInput', SYNTH);

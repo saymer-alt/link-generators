@@ -728,6 +728,38 @@
         <div id="csTraceOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       </details>
     </div>
+    <div class="card" id="csEditorCard" style="display:none">
+      <div class="card-title">✏️ Редактор Mihomo-конфига</div>
+      <div class="hint">Точечные правки поверх исходного текста (source-preserving): меняется только отредактированный диапазон YAML, комментарии/порядок/кавычки/неизвестные ключи остаются байт-в-байт. Правки живут только в памяти вкладки; экспорт никогда не перезаписывает загруженный файл и ничего не отправляет. Секретные поля маскируются — оставьте пустым, чтобы не менять.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:flex-end">
+        <span><label class="label" for="csEditType" style="display:inline">Тип:</label><br>
+          <select id="csEditType" aria-label="Тип объекта">
+            <option value="proxy">Прокси</option>
+            <option value="group">Группы</option>
+            <option value="proxy-providers">Proxy-провайдеры</option>
+            <option value="rule-providers">Rule-провайдеры</option>
+          </select></span>
+        <span style="flex:1;min-width:200px"><label class="label" for="csEditObject" style="display:inline">Объект:</label><br>
+          <select id="csEditObject" aria-label="Объект конфига" style="width:100%"></select></span>
+      </div>
+      <div id="csEditForm" style="margin-top:8px"></div>
+      <div id="csImpactBox" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+      <div id="csOpsBox" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+        <div class="label" style="font-weight:bold">Правки сессии</div>
+        <div id="csOpsList" class="hint" style="white-space:pre-line;margin-top:4px"></div>
+        <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
+          <button type="button" class="btn btn-gray" id="csUndoBtn">↩ Отменить последнее</button>
+          <button type="button" class="btn btn-gray" id="csResetBtn">Сбросить все правки</button>
+        </div>
+        <div id="csDiffOut" class="hint" style="margin-top:8px;white-space:pre-line;font-family:monospace;font-size:.78rem;max-height:40vh;overflow:auto"></div>
+        <div id="csExportStatus" class="hint" style="margin-top:8px;white-space:pre-line"></div>
+        <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
+          <button type="button" class="btn" id="csExportCopy">📋 Скопировать YAML</button>
+          <button type="button" class="btn" id="csExportDownload">⬇️ Скачать config.yaml</button>
+        </div>
+        <div class="hint" style="margin-top:4px">Runtime-валидация Mihomo (mihomo -t) в браузере не выполняется и не выдаётся за выполненную: проверьте экспорт на целевой версии.</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -5956,6 +5988,380 @@ function csTraceText(doc) {
 }
 // === CONFIG STUDIO CORE — CS-CORE-END ===
 
+// === CONFIG STUDIO EDITOR ENGINE (source-preserving; #178) — CS-EDITOR-START ===
+// Модель: CST-диапазоны (CSYaml Document, keepSourceTokens) → точечные сплайс-патчи
+// ИСХОДНОГО ТЕКСТА. Ничего не перепечатывается: нет правок → экспорт байт-в-байт.
+// plan-* чисты и принимают (csDoc, src, …); применение — csApplyPatches; после
+// каждого шага вызывающий перепарсивает (структурный guard) — см. csReplay.
+// Эмпирика CST: seq.range[0] = дефис первого элемента; item.range НЕ включает
+// дефис, но включает хвостовой \n; у Pair диапазона нет — берём key/value.
+function csTopPair(csDoc, key) {
+  const c = csDoc.contents;
+  return (c && c.items) ? (c.items.find(p => p.key && p.key.value === key) || null) : null;
+}
+function csSeqOf(csDoc, key) {
+  const p = csTopPair(csDoc, key);
+  return p && p.value && p.value.items ? p.value : null;
+}
+function csMapOf(csDoc, key) {
+  const p = csTopPair(csDoc, key);
+  return p && p.value && p.value.items ? p.value : null;
+}
+function csNameOfItem(itemNode) {
+  const pair = (itemNode.items || []).find(p => p.key && p.key.value === 'name');
+  return pair && pair.value ? String(pair.value.value) : null;
+}
+function csFindSeqItem(csDoc, key, name) {
+  const seq = csSeqOf(csDoc, key);
+  if (!seq) return null;
+  const idx = seq.items.findIndex(it => csNameOfItem(it) === name);
+  return idx === -1 ? null : { node: seq.items[idx], index: idx, seq };
+}
+function csDashStart(src, node) {
+  return src.lastIndexOf('-', node.range[0]);
+}
+function csLineStart(src, pos) {
+  return src.lastIndexOf('\n', pos - 1) + 1;
+}
+// Определения имён и ссылочные позиции (CST). Reference model = csCollectRefs
+// (plain-doc), здесь те же семантики по узлам документа.
+function csWalkNamed(csDoc) {
+  const out = { proxyDefs: [], groupDefs: [], providerDefs: [], rpDefs: [], memberRefs: [], useRefs: [], dialerRefs: [] };
+  const pSeq = csSeqOf(csDoc, 'proxies');
+  if (pSeq) for (const it of pSeq.items) {
+    const pair = (it.items || []).find(p => p.key && p.key.value === 'name');
+    if (pair) out.proxyDefs.push({ name: String(pair.value.value), valueNode: pair.value, item: it });
+    const dp = (it.items || []).find(p => p.key && p.key.value === 'dialer-proxy');
+    if (dp && dp.value && dp.value.range) out.dialerRefs.push({ from: csNameOfItem(it), node: dp.value });
+  }
+  const gSeq = csSeqOf(csDoc, 'proxy-groups');
+  if (gSeq) for (const it of gSeq.items) {
+    const pair = (it.items || []).find(p => p.key && p.key.value === 'name');
+    if (pair) out.groupDefs.push({ name: String(pair.value.value), valueNode: pair.value, item: it });
+    const mem = (it.items || []).find(p => p.key && p.key.value === 'proxies');
+    if (mem && mem.value && mem.value.items) for (const m of mem.value.items) if (m.range) out.memberRefs.push({ from: csNameOfItem(it), node: m, seq: mem.value });
+    const use = (it.items || []).find(p => p.key && p.key.value === 'use');
+    if (use && use.value && use.value.items) for (const u of use.value.items) if (u.range) out.useRefs.push({ from: csNameOfItem(it), node: u, seq: use.value });
+    const dp = (it.items || []).find(p => p.key && p.key.value === 'dialer-proxy');
+    if (dp && dp.value && dp.value.range) out.dialerRefs.push({ from: csNameOfItem(it), node: dp.value });
+  }
+  for (const key of ['proxy-providers', 'rule-providers']) {
+    const map = csMapOf(csDoc, key);
+    if (!map) continue;
+    for (const pair of map.items) {
+      const def = { name: String(pair.key.value), keyNode: pair.key, item: pair.value, section: key };
+      if (key === 'proxy-providers') out.providerDefs.push(def); else out.rpDefs.push(def);
+    }
+  }
+  return out;
+}
+// Пересборка текста правила с заменой части по индексу (глубина скобок — как в csRuleTarget).
+function csRuleRebuild(ruleText, partIndex, replacement) {
+  const parts = String(ruleText).split(',');
+  let depth = 0, logical = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const s = depth;
+    depth += (parts[i].match(/\(/g) || []).length - (parts[i].match(/\)/g) || []).length;
+    if (s === 0 && depth === 0) {
+      if (logical === partIndex) { parts[i] = replacement; return parts.join(','); }
+      logical++;
+    }
+  }
+  return null;
+}
+function csRuleTargetIndex(ruleText) {
+  const parts = String(ruleText).split(',');
+  const type = (parts[0] || '').trim();
+  let depth = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const s = depth;
+    depth += (parts[i].match(/\(/g) || []).length - (parts[i].match(/\)/g) || []).length;
+    if (s !== 0 || depth !== 0) continue;
+    if (i === 0) continue; // тип правила — не цель
+    if (type === 'MATCH' || type === 'FINAL') return i;
+    if (i >= 2 && !CS_RULE_OPTIONS.has(parts[i].trim().toLowerCase())) return i;
+  }
+  return -1;
+}
+function csRefsToName(doc, name) {
+  return csCollectRefs(doc).refs.filter(r => r.to === name);
+}
+const CS_EDIT_NAME_RE = /^[^,\n\r"\']*$/;
+function csValidateNewName(newName, registries) {
+  const n = String(newName || '').trim();
+  if (!n) return 'имя не может быть пустым';
+  if (!CS_EDIT_NAME_RE.test(n)) return 'имя не должно содержать запятые/кавычки/переводы строк (ломает правила-ссылки)';
+  for (const reg of registries) if (reg.has(n)) return 'имя «' + n + '» уже занято (перекрёстный реестр имён конфига)';
+  return null;
+}
+function csFindProvider(csDoc, section, name) {
+  const map = csMapOf(csDoc, section);
+  if (!map) return null;
+  const pair = map.items.find(p => p.key && String(p.key.value) === name);
+  return pair ? { key: pair.key, value: pair.value } : null;
+}
+function csPlanFieldEdit(csDoc, src, type, name, field, newText) {
+  const mapNode = type === 'proxy-providers' || type === 'rule-providers'
+    ? (csFindProvider(csDoc, type, name) || {}).value
+    : (csFindSeqItem(csDoc, type === 'proxy' ? 'proxies' : 'proxy-groups', name) || {}).node;
+  if (!mapNode || !mapNode.items) return { error: 'объект «' + name + '» не найден' };
+  const pair = mapNode.items.find(p => p.key && String(p.key.value) === field);
+  if (!pair) return { error: 'поле «' + field + '» у объекта «' + name + '» отсутствует — добавление новых полей пока не поддерживается' };
+  if (!pair.value || !pair.value.range) return { error: 'поле «' + field + '» — не простой скаляр, правка не поддерживается' };
+  const old = pair.value.value === undefined ? null : pair.value.value;
+  if (['server', 'port', 'type'].includes(field) && !String(newText).trim()) return { error: 'поле «' + field + '» не может быть пустым' };
+  if (csIsSecretKey(field) && !String(newText).length) return { error: 'пустое значение секретного поля не допускается (используйте удаление объекта)' };
+  return { patches: [{ start: pair.value.range[0], end: pair.value.range[1], text: csFormatScalar(newText) }],
+    semantic: { opKind: 'field-edit', type, name, field, old: csIsSecretKey(field) ? '••••••' : old, new: csIsSecretKey(field) ? '••••••' : newText } };
+}
+// Наличие YAML-алиасов: переименование при них блокируется честно — алиас
+// разрешается в ЗНАЧЕНИЕ узла, и после правки имени ссылка может стать висячей.
+// Узел-алиас в CST: есть .source (имя якоря), нет .value/.items.
+function csHasAliases(node) {
+  if (!node || typeof node !== 'object') return false;
+  if (typeof node.source === 'string' && node.value === undefined && node.items === undefined && node.key === undefined) return true;
+  if (Array.isArray(node.items)) {
+    for (const it of node.items) {
+      if (it && it.key !== undefined) { if (csHasAliases(it.key) || csHasAliases(it.value)) return true; }
+      else if (csHasAliases(it)) return true;
+    }
+  }
+  return false;
+}
+function csPlanRename(csDoc, doc, type, oldName, newName) {
+  const walk = csWalkNamed(csDoc);
+  if (csHasAliases(csDoc.contents)) return { error: 'документ содержит YAML-алиасы (*anchor) — переименование при них блокировано: алиас разрешается в значение узла, и ссылка может стать висячей; отредактируйте исходник вручную' };
+  const all = new Set();
+  walk.proxyDefs.forEach(d => all.add(d.name));
+  walk.groupDefs.forEach(d => all.add(d.name));
+  walk.providerDefs.forEach(d => all.add(d.name));
+  walk.rpDefs.forEach(d => all.add(d.name));
+  const collision = csValidateNewName(newName, [all]);
+  if (collision) return { error: collision };
+  const dupOld = [walk.proxyDefs, walk.groupDefs, walk.providerDefs, walk.rpDefs].filter(list => list.filter(d => d.name === oldName).length > 1).length;
+  if (dupOld) return { error: 'имя «' + oldName + '» встречается более одного раза — переименование неоднозначно' };
+  const patches = [];
+  let refCount = 0;
+  if (type === 'proxy' || type === 'group') {
+    const def = (type === 'proxy' ? walk.proxyDefs : walk.groupDefs).find(d => d.name === oldName);
+    if (!def) return { error: (type === 'proxy' ? 'proxy «' : 'группа «') + oldName + '» не найдена' };
+    if (def.valueNode.anchor) return { error: 'имя «' + oldName + '» определено через YAML-якорь (&' + def.valueNode.anchor + ') — переименование якорных конструкций не поддерживается, отредактируйте исходник вручную' };
+    patches.push({ start: def.valueNode.range[0], end: def.valueNode.range[1], text: csFormatScalar(newName) });
+    for (const r of walk.memberRefs) if (r.node.value === oldName) { patches.push({ start: r.node.range[0], end: r.node.range[1], text: csFormatScalar(newName) }); refCount++; }
+    for (const r of walk.dialerRefs) if (r.node.value === oldName) { patches.push({ start: r.node.range[0], end: r.node.range[1], text: csFormatScalar(newName) }); refCount++; }
+    for (let i = 0; i < (doc.rules || []).length; i++) {
+      const text = String(doc.rules[i]);
+      const ti = csRuleTargetIndex(text);
+      if (ti >= 0 && (text.split(',')[ti] || '').trim() === oldName) {
+        const node = csRuleScalarNode(csDoc, i);
+        if (!node) return { error: 'не найден диапазон правила #' + (i + 1) };
+        patches.push({ start: node.range[0], end: node.range[1], text: csRuleRebuild(text, ti, newName) });
+        refCount++;
+      }
+    }
+  } else if (type === 'proxy-providers' || type === 'rule-providers') {
+    const list = type === 'proxy-providers' ? walk.providerDefs : walk.rpDefs;
+    const def = list.find(d => d.name === oldName);
+    if (!def) return { error: 'provider «' + oldName + '» не найден' };
+    if (def.keyNode.anchor || (def.item && def.item.anchor)) return { error: '«' + oldName + '» определён через YAML-якорь — переименование якорных конструкций не поддерживается' };
+    patches.push({ start: def.keyNode.range[0], end: def.keyNode.range[1], text: csFormatScalar(newName) });
+    if (type === 'proxy-providers') {
+      for (const r of walk.useRefs) if (r.node.value === oldName) { patches.push({ start: r.node.range[0], end: r.node.range[1], text: csFormatScalar(newName) }); refCount++; }
+    } else {
+      for (let i = 0; i < (doc.rules || []).length; i++) {
+        const text = String(doc.rules[i]);
+        const parts = text.split(',');
+        if ((parts[0] || '').trim() === 'RULE-SET' && (parts[1] || '').trim() === oldName) {
+          const node = csRuleScalarNode(csDoc, i);
+          if (!node) return { error: 'не найден диапазон правила #' + (i + 1) };
+          parts[1] = newName;
+          patches.push({ start: node.range[0], end: node.range[1], text: parts.join(',') });
+          refCount++;
+        }
+      }
+    }
+  } else return { error: 'неизвестный тип объекта' };
+  if (!patches.length) return { error: 'нет позиций для патча' };
+  return { patches, semantic: { opKind: 'rename', type, name: oldName, new: newName, refsAffected: refCount } };
+}
+function csRuleScalarNode(csDoc, ruleIndex) {
+  const seq = csSeqOf(csDoc, 'rules');
+  if (!seq || !seq.items[ruleIndex] || !seq.items[ruleIndex].range) return null;
+  return seq.items[ruleIndex];
+}
+function csSeqItemDeleteRange(src, node, seq) {
+  if (seq.flow) return null;
+  const start = csLineStart(src, csDashStart(src, node));
+  let end = node.range[1];
+  if (src[end] === '\n') end += 1;
+  return { start, end, text: '' };
+}
+function csPlanDelete(csDoc, src, doc, type, name, opts) {
+  if (type === 'proxy' || type === 'group') {
+    const refs = csRefsToName(doc, name);
+    if (refs.length && !(opts && opts.removeRefs)) {
+      return { error: 'REFS', refs, message: 'Удаление «' + name + '» затронет ' + refs.length + ' ссыл(ок/и). «Удалить и исправить ссылки» уберёт их из групп/dialer-proxy.' };
+    }
+    const ruleRefs = (doc.rules || []).map((t, i) => ({ t, i })).filter(({ t }) => {
+      const ti = csRuleTargetIndex(String(t));
+      return ti >= 0 && (String(t).split(',')[ti] || '').trim() === name;
+    });
+    if (ruleRefs.length) return { error: 'REFS-RULES', refs: ruleRefs.map(({ i }) => ({ kind: 'rule-target', from: 'rule #' + (i + 1) })),
+      message: 'На «' + name + '» ссылаются правила: ' + ruleRefs.map(({ i }) => 'rule #' + (i + 1)).join(', ') + ' — сначала перенаправьте их цели (редактирование цели правила).' };
+    const found = csFindSeqItem(csDoc, type === 'proxy' ? 'proxies' : 'proxy-groups', name);
+    if (!found) return { error: 'объект «' + name + '» не найден' };
+    const patches = [{ start: csLineStart(src, csDashStart(src, found.node)), end: found.node.range[1], text: '' }];
+    if (opts && opts.removeRefs) {
+      const walk = csWalkNamed(csDoc);
+      for (const r of walk.memberRefs) if (r.node.value === name) { const del = csSeqItemDeleteRange(src, r.node, r.seq); if (del) patches.push(del); }
+      for (const r of walk.useRefs) if (r.node.value === name) { const del = csSeqItemDeleteRange(src, r.node, r.seq); if (del) patches.push(del); }
+      for (const r of walk.dialerRefs) if (r.node.value === name) {
+        patches.push({ start: csLineStart(src, r.node.range[0]), end: r.node.range[1] + (src[r.node.range[1]] === '\n' ? 1 : 0), text: '' });
+      }
+    }
+    return { patches, semantic: { opKind: 'delete', type, name, refsAffected: refs.length } };
+  }
+  if (type === 'proxy-providers' || type === 'rule-providers') {
+    const def = csFindProvider(csDoc, type, name);
+    if (!def) return { error: 'provider «' + name + '» не найден' };
+    if (type === 'rule-providers') {
+      const ruleRefs = (doc.rules || []).map((t, i) => ({ t, i })).filter(({ t }) => String(t) === 'RULE-SET,' + name || String(t).startsWith('RULE-SET,' + name + ','));
+      if (ruleRefs.length) return { error: 'REFS-RULES', refs: ruleRefs.map(({ i }) => ({ kind: 'rule-target', from: 'rule #' + (i + 1) })),
+        message: 'RULE-SET-правила используют «' + name + '»: ' + ruleRefs.map(({ i }) => 'rule #' + (i + 1)).join(', ') + ' — удалите/перепишите их сначала.' };
+    }
+    const refs = csRefsToName(doc, name);
+    if (refs.length && !(opts && opts.removeRefs)) {
+      return { error: 'REFS', refs, message: 'Удаление «' + name + '» затронет ' + refs.length + ' ссыл(ок/и) (use: в группах).' };
+    }
+    const mapStart = csLineStart(src, def.keyNode.range[0]);
+    const patches = [{ start: mapStart, end: def.value.range[1], text: '' }];
+    if (type === 'proxy-providers' && opts && opts.removeRefs) {
+      const walk = csWalkNamed(csDoc);
+      for (const r of walk.useRefs) if (r.node.value === name) { const del = csSeqItemDeleteRange(src, r.node, r.seq); if (del) patches.push(del); }
+    }
+    return { patches, semantic: { opKind: 'delete', type, name, refsAffected: refs.length } };
+  }
+  return { error: 'неизвестный тип объекта' };
+}
+function csPlanGroupMembers(csDoc, src, groupName, members) {
+  const found = csFindSeqItem(csDoc, 'proxy-groups', groupName);
+  if (!found) return { error: 'группа «' + groupName + '» не найдена' };
+  const pair = (found.node.items || []).find(p => p.key && p.key.value === 'proxies');
+  if (!pair || !pair.value || !pair.value.items) return { error: 'у группы «' + groupName + '» нет списка proxies' };
+  const known = new Set();
+  (csSeqOf(csDoc, 'proxies') || { items: [] }).items.forEach(it => { const n = csNameOfItem(it); if (n) known.add(n); });
+  (csSeqOf(csDoc, 'proxy-groups') || { items: [] }).items.forEach(it => { const n = csNameOfItem(it); if (n) known.add(n); });
+  (csMapOf(csDoc, 'proxy-providers') || { items: [] }).items.forEach(p => known.add(String(p.key.value)));
+  const list = [];
+  for (const raw of (members || [])) {
+    const s = String(raw).trim();
+    if (!s) continue;
+    let resolved = null;
+    if (known.has(String(raw))) resolved = String(raw);
+    else if (known.has(s)) resolved = s;
+    else { for (const n of known) if (n.trim() === s) { resolved = n; break; } }
+    if (!resolved && CS_BUILTIN_TARGETS.has(s)) resolved = s;
+    if (!resolved) return { error: 'участник «' + s + '» не найден среди proxies/groups/providers' };
+    list.push(resolved);
+  }
+  const seq = pair.value;
+  const first = seq.items.find(it => it.range);
+  let indent = '      ';
+  if (first) {
+    const dash = src.lastIndexOf('-', first.range[0]);
+    if (dash !== -1) indent = src.slice(csLineStart(src, dash), dash).replace(/[^ ]/g, '') || '      ';
+  }
+  let text;
+  if (seq.flow) {
+    text = '[' + list.map(m => csFormatScalar(m)).join(', ') + ']';
+  } else {
+    // seq.range[0] указывает на дефис первого элемента: первая строка — без отступа
+    text = list.length
+      ? '- ' + csFormatScalar(list[0]) + '\n' + list.slice(1).map(m => indent + '- ' + csFormatScalar(m)).join('\n') + '\n'
+      : '[]\n';
+  }
+  const oldMembers = seq.items.map(it => it.value);
+  return { patches: [{ start: seq.range[0], end: seq.range[1], text }],
+    semantic: { opKind: 'group-members', type: 'group', name: groupName, old: oldMembers, new: list } };
+}
+function csPlanRuleTarget(csDoc, ruleIndex, newTarget) {
+  const node = csRuleScalarNode(csDoc, ruleIndex);
+  if (!node) return { error: 'правило #' + (ruleIndex + 1) + ' не найдено' };
+  const text = node.value;
+  const ti = csRuleTargetIndex(text);
+  if (ti < 0) return { error: 'не удалось определить цель правила #' + (ruleIndex + 1) };
+  const rebuilt = csRuleRebuild(text, ti, newTarget);
+  return { patches: [{ start: node.range[0], end: node.range[1], text: rebuilt }],
+    semantic: { opKind: 'rule-target', type: 'rule', name: 'rule #' + (ruleIndex + 1), field: 'target', old: text.split(',')[ti], new: newTarget } };
+}
+function csPlanAddProxy(csDoc, src, fields) {
+  const seq = csSeqOf(csDoc, 'proxies');
+  if (!seq || !seq.items.length) return { error: 'секция proxies отсутствует или пуста — добавление пока поддерживается только в существующую секцию' };
+  const all = new Set();
+  (csSeqOf(csDoc, 'proxies') || { items: [] }).items.forEach(it => { const n = csNameOfItem(it); if (n) all.add(n); });
+  (csSeqOf(csDoc, 'proxy-groups') || { items: [] }).items.forEach(it => { const n = csNameOfItem(it); if (n) all.add(n); });
+  (csMapOf(csDoc, 'proxy-providers') || { items: [] }).items.forEach(p => all.add(String(p.key.value)));
+  const nameErr = csValidateNewName(fields.name, [all]);
+  if (nameErr) return { error: nameErr };
+  for (const f of ['type', 'server', 'port']) if (!String(fields[f] || '').trim()) return { error: 'обязательное поле «' + f + '» не заполнено' };
+  const last = seq.items[seq.items.length - 1];
+  const dashIndent = src.slice(csLineStart(src, csDashStart(src, last)), csDashStart(src, last));
+  const fieldIndent = dashIndent + '  ';
+  const lines = [];
+  const order = ['name', 'type', 'server', 'port'];
+  const seen = new Set();
+  for (const f of order.concat(Object.keys(fields))) {
+    if (seen.has(f) || fields[f] === undefined || fields[f] === '') continue;
+    seen.add(f);
+    lines.push({ f, text: f + ': ' + csFormatScalar(fields[f]) });
+  }
+  const firstLine = dashIndent + '- ' + lines[0].text;
+  const restLines = lines.slice(1).map(l => fieldIndent + l.text);
+  const text = firstLine + (restLines.length ? '\n' + restLines.join('\n') : '') + '\n';
+  return { patches: [{ start: last.range[1], end: last.range[1], text }],
+    semantic: { opKind: 'add', type: 'proxy', name: fields.name, new: fields.name } };
+}
+// Применение патчей: сортировка по убыванию позиции, контроль пересечений.
+function csApplyPatches(src, patches) {
+  const sorted = patches.slice().sort((a, b) => b.start - a.start);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].end > sorted[i - 1].start) throw new Error('пересечение патчей — мутация отменена');
+  }
+  let out = src;
+  for (const p of sorted) {
+    if (p.start < 0 || p.end > out.length || p.start > p.end) throw new Error('некорректный диапазон патча');
+    out = out.slice(0, p.start) + p.text + out.slice(p.end);
+  }
+  return out;
+}
+// Повтор правок над исходником: после каждого шага — структурный guard (повторный парс).
+function csReplay(src, ops, CSY) {
+  let text = src;
+  const applied = [];
+  for (const op of ops) {
+    const doc = CSY.parseDocument(text, { keepSourceTokens: true });
+    const plain = CSY.parse(text);
+    const plan = csPlanOp(doc, text, plain, op);
+    if (plan.error) throw new Error(op.opKind + ' «' + (op.name || '') + '»: ' + (plan.message || plan.error));
+    text = csApplyPatches(text, plan.patches);
+    CSY.parse(text); // guard: текст остаётся валидным YAML после каждого шага
+    applied.push(plan.semantic || op);
+  }
+  return { text, applied };
+}
+function csPlanOp(csDoc, src, plain, op) {
+  switch (op.opKind) {
+    case 'field-edit': return csPlanFieldEdit(csDoc, src, op.type, op.name, op.field, op.newText);
+    case 'rename': return csPlanRename(csDoc, plain, op.type, op.name, op.new);
+    case 'delete': return csPlanDelete(csDoc, src, plain, op.type, op.name, { removeRefs: !!op.removeRefs });
+    case 'group-members': return csPlanGroupMembers(csDoc, src, op.name, op.members);
+    case 'rule-target': return csPlanRuleTarget(csDoc, op.ruleIndex, op.newTarget);
+    case 'add': return csPlanAddProxy(csDoc, src, op.fields);
+    default: return { error: 'неизвестный тип правки: ' + op.opKind };
+  }
+}
+// === CONFIG STUDIO EDITOR ENGINE — CS-EDITOR-END ===
+
 // === TIERED FAILOVER (#148, v1.10; runtime-proven: docs/research/TIERED-FAILOVER-RUNTIME.md) ===
 // Явная user-visible feature, DEFAULT OFF: выключена — вывод байт-в-байт прежний.
 // Модель: TieredStrategy = упорядоченные эшелоны; ROOT fallback обходит эшелоны
@@ -6587,6 +6993,11 @@ function csRunAnalysis() {
   document.getElementById('csDomainInput').value = '';
   document.getElementById('csRuleProbe').value = '';
   sumCard.style.display = 'block';
+  csOps = [];
+  csWorking = null;
+  csWorkingErr = null;
+  csPendingRename = null;
+  csRefreshEditor();
   status.textContent = '✓ Разобрано: анализ готов (локально, без сети).';
 }
 
@@ -6638,8 +7049,13 @@ function csClearStudio() {
   document.getElementById('csImportInput').value = '';
   csCurrentDoc = null;
   csImportText = '';
+  csOps = [];
+  csWorking = null;
+  csWorkingErr = null;
+  csPendingRename = null;
   document.getElementById('csSummaryCard').style.display = 'none';
   document.getElementById('csSecretsNote').style.display = 'none';
+  document.getElementById('csEditorCard').style.display = 'none';
   document.getElementById('csStatus').textContent = '';
 }
 
@@ -6670,6 +7086,472 @@ document.addEventListener('change', (e) => {
   }).catch(() => {
     document.getElementById('csStatus').textContent = '✖ Не удалось прочитать файл.';
   });
+});
+
+// === CONFIG STUDIO EDITOR UI (#178): точечные правки + diff + экспорт ===
+// Ops replay-модель: все правки хранятся как семантические операции над
+// ОРИГИНАЛОМ; field-edit/group-members вставляются до переименований того же
+// объекта (имена в ops — оригинальные). Секреты в ops/дифе маскируются.
+let csOps = [];
+let csWorking = null; // { text, applied } | null
+let csWorkingErr = null;
+
+function csNameMap() {
+  const map = {};
+  for (const op of csOps) if (op.opKind === 'rename' && op.type !== 'rule') map[op.name] = op.new;
+  return map;
+}
+function csCurrentName(orig) {
+  const map = csNameMap();
+  return map[orig] || orig;
+}
+function csEditorEnabled() { return !!csCurrentDoc; }
+
+function csRefreshEditor() {
+  const card = document.getElementById('csEditorCard');
+  if (!card) return;
+  card.style.display = csEditorEnabled() ? 'block' : 'none';
+  if (!csEditorEnabled()) { csOps = []; csWorking = null; csWorkingErr = null; return; }
+  const typeSel = document.getElementById('csEditType');
+  const objSel = document.getElementById('csEditObject');
+  const prev = objSel.value;
+  let names = [];
+  if (typeSel.value === 'proxy') names = (csCurrentDoc.proxies || []).map(p => p && p.name).filter(Boolean);
+  else if (typeSel.value === 'group') names = (csCurrentDoc['proxy-groups'] || []).map(g => g && g.name).filter(Boolean);
+  else if (typeSel.value === 'proxy-providers') names = Object.keys(csCurrentDoc['proxy-providers'] || {});
+  else names = Object.keys(csCurrentDoc['rule-providers'] || {});
+  const mapped = names.map(n => ({ orig: n, cur: typeSel.value === 'proxy' || typeSel.value === 'group' ? csCurrentName(n) : n }));
+  objSel.innerHTML = '';
+  for (const m of mapped) {
+    const o = document.createElement('option');
+    o.value = m.orig; o.textContent = m.cur;
+    objSel.appendChild(o);
+  }
+  if (mapped.some(m => m.orig === prev)) objSel.value = prev;
+  csRenderForm();
+  csAfterOpsChange();
+}
+
+const CS_SECRET_INPUT_HINT = '•••••• (не изменено)';
+function csRenderForm() {
+  const form = document.getElementById('csEditForm');
+  if (!form) return;
+  form.textContent = '';
+  if (!csEditorEnabled()) return;
+  const type = document.getElementById('csEditType').value;
+  const orig = document.getElementById('csEditObject').value;
+  if (!orig) { form.textContent = 'В конфиге нет объектов этого типа.'; return; }
+  let obj = null;
+  if (type === 'proxy') obj = (csCurrentDoc.proxies || []).find(p => p.name === orig);
+  else if (type === 'group') obj = (csCurrentDoc['proxy-groups'] || []).find(g => g.name === orig);
+  else if (type === 'proxy-providers') obj = (csCurrentDoc['proxy-providers'] || {})[orig];
+  else obj = (csCurrentDoc['rule-providers'] || {})[orig];
+  if (!obj) { form.textContent = 'Объект не найден.'; return; }
+  // скалярные поля (плоские + health-check.* у провайдеров)
+  const fields = [];
+  const pushField = (key, value, path) => {
+    if (value !== null && typeof value !== 'object') fields.push({ key: path || key, value, secret: csIsSecretKey(key) });
+  };
+  for (const k of Object.keys(obj)) pushField(k, obj[k]);
+  if (obj['health-check'] && typeof obj['health-check'] === 'object') {
+    for (const k of Object.keys(obj['health-check'])) pushField(k, obj['health-check'][k], 'health-check.' + k);
+  }
+  const cur = csCurrentName(orig);
+  const head = document.createElement('div');
+  head.className = 'label';
+  head.style.fontWeight = 'bold';
+  head.textContent = (type === 'proxy' ? 'Прокси «' : type === 'group' ? 'Группа «' : 'Провайдер «') + cur + '»';
+  form.appendChild(head);
+  for (const f of fields) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin:3px 0;flex-wrap:wrap';
+    const lbl = document.createElement('label');
+    lbl.className = 'label';
+    lbl.style.cssText = 'display:inline;min-width:130px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    lbl.title = f.key;
+    lbl.textContent = f.key + ':';
+    const inp = document.createElement('input');
+    inp.type = f.secret ? 'password' : 'text';
+    inp.dataset.csField = f.key;
+    inp.dataset.csOrig = f.secret ? '' : String(f.value);
+    inp.setAttribute('aria-label', 'Поле ' + f.key + ' объекта ' + cur);
+    inp.style.cssText = 'flex:1;min-width:160px;padding:4px 8px';
+    if (f.secret) { inp.placeholder = CS_SECRET_INPUT_HINT; inp.dataset.csSecret = '1'; }
+    else inp.value = String(f.value);
+    row.append(lbl, inp);
+    form.appendChild(row);
+  }
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'btn btn-gray';
+  saveBtn.id = 'csSaveFieldsBtn';
+  saveBtn.textContent = '💾 Сохранить изменения полей';
+  form.appendChild(saveBtn);
+  // rename
+  const renRow = document.createElement('div');
+  renRow.style.cssText = 'display:flex;gap:6px;align-items:center;margin:8px 0 3px;flex-wrap:wrap';
+  const renLbl = document.createElement('span');
+  renLbl.className = 'label';
+  renLbl.textContent = 'Переименовать в:';
+  const renInp = document.createElement('input');
+  renInp.type = 'text';
+  renInp.id = 'csRenameInput';
+  renInp.setAttribute('aria-label', 'Новое имя объекта');
+  renInp.style.cssText = 'flex:1;min-width:160px;padding:4px 8px';
+  const renBtn = document.createElement('button');
+  renBtn.type = 'button';
+  renBtn.className = 'btn btn-gray';
+  renBtn.id = 'csRenameBtn';
+  renBtn.textContent = '✏️ Переименовать';
+  renRow.append(renLbl, renInp, renBtn);
+  form.appendChild(renRow);
+  // delete
+  const delRow = document.createElement('div');
+  delRow.style.cssText = 'display:flex;gap:6px;align-items:center;margin:3px 0;flex-wrap:wrap';
+  const delBtn = document.createElement('button');
+  delBtn.type = 'button';
+  delBtn.className = 'btn btn-gray';
+  delBtn.id = 'csDeleteBtn';
+  delBtn.textContent = '🗑 Удалить объект';
+  delRow.appendChild(delBtn);
+  const delConfirm = document.createElement('button');
+  delConfirm.type = 'button';
+  delConfirm.className = 'btn';
+  delConfirm.id = 'csDeleteConfirm';
+  delConfirm.textContent = 'Удалить и исправить ссылки';
+  delConfirm.style.display = 'none';
+  delRow.appendChild(delConfirm);
+  form.appendChild(delRow);
+  // members для групп
+  if (type === 'group' && Array.isArray(obj.proxies)) {
+    const mLabel = document.createElement('div');
+    mLabel.className = 'label';
+    mLabel.style.cssText = 'display:block;margin-top:8px';
+    mLabel.textContent = 'Участники (по одному в строке, порядок = приоритет для fallback/ordered):';
+    const mInp = document.createElement('textarea');
+    mInp.id = 'csMembersInput';
+    mInp.rows = Math.min(8, Math.max(3, obj.proxies.length));
+    mInp.setAttribute('aria-label', 'Участники группы, по одному в строке');
+    mInp.style.cssText = 'width:100%;padding:8px;box-sizing:border-box;font-family:monospace';
+    mInp.value = obj.proxies.join('\n');
+    const mBtn = document.createElement('button');
+    mBtn.type = 'button';
+    mBtn.className = 'btn btn-gray';
+    mBtn.id = 'csMembersApply';
+    mBtn.textContent = 'Применить состав участников';
+    form.append(mLabel, mInp, mBtn);
+  }
+  // add proxy — всегда доступен
+  const addHead = document.createElement('div');
+  addHead.className = 'label';
+  addHead.style.cssText = 'display:block;margin-top:12px;font-weight:bold';
+  addHead.textContent = '➕ Добавить прокси (в конец секции proxies):';
+  form.appendChild(addHead);
+  const addGrid = document.createElement('div');
+  addGrid.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0';
+  for (const [key, ph] of [['name', 'имя'], ['type', 'ss|vmess|…'], ['server', 'host'], ['port', 'порт'], ['password', 'пароль (секрет)'], ['cipher', 'aes-128-gcm']]) {
+    const inp = document.createElement('input');
+    inp.type = key === 'password' ? 'password' : 'text';
+    inp.id = 'csAdd_' + key;
+    inp.placeholder = ph;
+    inp.setAttribute('aria-label', 'Новое прокси, поле ' + key);
+    inp.style.cssText = 'flex:1 1 120px;min-width:110px;padding:4px 8px';
+    if (key === 'password') inp.placeholder = CS_SECRET_INPUT_HINT;
+    addGrid.appendChild(inp);
+  }
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn btn-gray';
+  addBtn.id = 'csAddApply';
+  addBtn.textContent = '➕ Добавить';
+  form.append(addGrid, addBtn);
+  // rules
+  const rHead = document.createElement('div');
+  rHead.className = 'label';
+  rHead.style.cssText = 'display:block;margin-top:12px;font-weight:bold';
+  rHead.textContent = '🎯 Цель правила (правило ≠ объект):';
+  const rRow = document.createElement('div');
+  rRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0;align-items:center';
+  const rIdx = document.createElement('input');
+  rIdx.type = 'number';
+  rIdx.id = 'csRuleIdx';
+  rIdx.min = '1';
+  rIdx.placeholder = '№ правила';
+  rIdx.setAttribute('aria-label', 'Номер правила');
+  rIdx.style.cssText = 'width:110px;padding:4px 8px';
+  const rTarget = document.createElement('input');
+  rTarget.type = 'text';
+  rTarget.id = 'csRuleTarget';
+  rTarget.placeholder = 'новая цель (группа/DIRECT/…)';
+  rTarget.setAttribute('aria-label', 'Новая цель правила');
+  rTarget.style.cssText = 'flex:1;min-width:160px;padding:4px 8px';
+  const rBtn = document.createElement('button');
+  rBtn.type = 'button';
+  rBtn.className = 'btn btn-gray';
+  rBtn.id = 'csRuleApply';
+  rBtn.textContent = 'Перенаправить';
+  rRow.append(rIdx, rTarget, rBtn);
+  form.append(rHead, rRow);
+  const rCount = document.createElement('div');
+  rCount.className = 'hint';
+  rCount.textContent = 'Всего правил: ' + ((csCurrentDoc.rules || []).length);
+  form.appendChild(rCount);
+}
+
+function csCollectFieldEdits(origName, type) {
+  const form = document.getElementById('csEditForm');
+  const ops = [];
+  form.querySelectorAll('input[data-cs-field]').forEach(inp => {
+    const field = inp.dataset.csField;
+    const secret = inp.dataset.csSecret === '1';
+    const origVal = inp.dataset.csOrig;
+    const val = inp.value;
+    if (secret) { if (!val) return; }
+    else if (val === origVal) return;
+    // путь health-check.* при хранении в op — поле с точкой недопустимо; планируем только простые поля
+    if (field.includes('.')) return;
+    ops.push({ opKind: 'field-edit', type, name: origName, field, newText: val });
+  });
+  return ops;
+}
+
+function csPushOp(op) {
+  // field-edit/group-members одного объекта — до его rename/delete
+  const touches = op.name;
+  const idx = csOps.findIndex(o => (o.opKind === 'rename' || o.opKind === 'delete') && o.name === touches);
+  if (idx !== -1 && (op.opKind === 'field-edit' || op.opKind === 'group-members')) csOps.splice(idx, 0, op);
+  else csOps.push(op);
+}
+
+function csAfterOpsChange() {
+  const box = document.getElementById('csOpsBox');
+  const list = document.getElementById('csOpsList');
+  const diffOut = document.getElementById('csDiffOut');
+  const status = document.getElementById('csExportStatus');
+  if (!box) return;
+  if (!csEditorEnabled() || !csOps.length) {
+    box.style.display = 'none';
+    csWorking = null; csWorkingErr = null;
+    return;
+  }
+  box.style.display = 'block';
+  list.textContent = csOps.map((op, i) => {
+    if (op.opKind === 'field-edit') return (i + 1) + '. ' + op.type + ' «' + csCurrentName(op.name) + '» · ' + op.field + ': ' + (op.showOld || '••••••') + ' → ' + (op.showNew || '••••••');
+    if (op.opKind === 'rename') return (i + 1) + '. переименование ' + op.type + ' «' + op.name + '» → «' + op.new + '»' + (op.refsAffected ? ' (ссылок: ' + op.refsAffected + ')' : '');
+    if (op.opKind === 'delete') return (i + 1) + '. удаление ' + op.type + ' «' + op.name + '»' + (op.refsAffected ? ' (исправлено ссылок: ' + op.refsAffected + ')' : '');
+    if (op.opKind === 'group-members') return (i + 1) + '. участники группы «' + op.name + '»: ' + op.new.join(', ');
+    if (op.opKind === 'rule-target') return (i + 1) + '. ' + op.name + ': цель ' + op.old + ' → ' + op.new;
+    if (op.opKind === 'add') return (i + 1) + '. добавлен прокси «' + op.name + '»';
+    return (i + 1) + '. ' + op.opKind;
+  }).join('\n');
+  ensureCsYaml().then(CSY => {
+    try {
+      csWorking = csReplay(csImportText, csOps, CSY);
+      csWorkingErr = null;
+    } catch (e) {
+      csWorking = null;
+      csWorkingErr = String(e && e.message ? e.message : e);
+    }
+    if (csWorkingErr) {
+      diffOut.textContent = '✖ Правки непоследовательны: ' + csWorkingErr + '\nСбросьте правки или уберите конфликтующую.';
+      status.textContent = '';
+      return;
+    }
+    const d = api_diff(csImportText, csWorking.text);
+    const added = d.filter(x => x.t === '+').length;
+    const removed = d.filter(x => x.t === '-').length;
+    const lines = ['Изменено строк: ' + Math.min(added, removed) + ' · добавлено: ' + Math.max(0, added - removed) + ' · удалено: ' + Math.max(0, removed - added), ''];
+    for (const x of d) {
+      if (x.t === ' ') continue;
+      lines.push((x.t === '+' ? '+ ' : '- ') + csRedactLine(x.line));
+    }
+    diffOut.textContent = lines.join('\n');
+    let valid = 'FAIL';
+    try {
+      const doc = jsyaml.load(csWorking.text);
+      const errs = csDiagnostics(doc).filter(x => x.severity === 'error');
+      valid = errs.length ? 'FAIL' : 'PASS';
+      if (errs.length) status.textContent = 'Статическая валидация: FAIL\n' + errs.map(x => '✖ ' + x.message).join('\n');
+    } catch (e) {
+      status.textContent = 'Статическая валидация: FAIL\n✖ результат правок — не корректный YAML: ' + String(e && e.reason ? e.reason : e.message);
+    }
+    if (valid === 'PASS') status.textContent = 'Статическая валидация: PASS · Runtime-валидация Mihomo: NOT RUN';
+  }).catch(e => {
+    diffOut.textContent = '✖ ' + (e && e.message ? e.message : e);
+  });
+}
+function api_diff(a, b) { return csLineDiff(a, b); }
+// Маскирование строки дифа: секретные ключи и tokenized-URL не показываются.
+function csRedactLine(line) {
+  const m = line.match(/^(\s*(?:-\s*)?)([A-Za-z0-9_-]+):(.*)$/);
+  if (m && csIsSecretKey(m[2])) return m[1] + m[2] + ': ••••••';
+  return csRedactUrl(line);
+}
+
+function csEditorClick(e) {
+  if (!e.target) return;
+  const id = e.target.id;
+  if (id === 'csEditType' || id === 'csEditObject') return;
+  if (id === 'csSaveFieldsBtn') {
+    e.preventDefault();
+    const type = document.getElementById('csEditType').value;
+    const orig = document.getElementById('csEditObject').value;
+    const ops = csCollectFieldEdits(orig, type);
+    if (!ops.length) { document.getElementById('csImpactBox').textContent = 'Изменений полей нет.'; return; }
+    // показываем старые значения в списке правок (замаскированные)
+    for (const op of ops) {
+      const inp = document.querySelector('input[data-cs-field="' + op.field + '"]');
+      if (inp && inp.dataset.csSecret !== '1') op.showOld = inp.dataset.csOrig;
+      if (inp && inp.dataset.csSecret !== '1') op.showNew = inp.value;
+    }
+    ops.forEach(csPushOp);
+    document.getElementById('csImpactBox').textContent = '';
+    csAfterOpsChange();
+    return;
+  }
+  if (id === 'csRenameBtn') {
+    e.preventDefault();
+    const type = document.getElementById('csEditType').value;
+    const orig = document.getElementById('csEditObject').value;
+    const newName = document.getElementById('csRenameInput').value;
+    const impact = document.getElementById('csImpactBox');
+    ensureCsYaml().then(CSY => {
+      const text = csWorking && csWorking.text ? csWorking.text : csImportText;
+      const doc = CSY.parseDocument(text, { keepSourceTokens: true });
+      const plain = CSY.parse(text);
+      const plan = csPlanRename(doc, plain, type, orig, newName);
+      if (plan.error) { impact.textContent = '✖ ' + (plan.message || plan.error); return; }
+      impact.textContent = 'Ссылок будет обновлено: ' + plan.semantic.refsAffected + '. Подтвердите повторным нажатием «✏️ Переименовать».';
+      renConfirm(plan);
+    }).catch(err => { impact.textContent = '✖ ' + (err && err.message ? err.message : err); });
+    return;
+  }
+  if (id === 'csDeleteBtn') {
+    e.preventDefault();
+    const type = document.getElementById('csEditType').value;
+    const orig = document.getElementById('csEditObject').value;
+    const impact = document.getElementById('csImpactBox');
+    ensureCsYaml().then(CSY => {
+      const text = csWorking && csWorking.text ? csWorking.text : csImportText;
+      const plain = CSY.parse(text);
+      const refs = csRefsToName(plain, orig);
+      if (!refs.length) impact.textContent = 'Явных ссылок на «' + orig + '» нет — удаление безопасно. Подтвердите кнопкой «Удалить и исправить ссылки».';
+      else impact.textContent = 'Ссылок: ' + refs.length + ' (' + refs.map(r => r.kind + ' из ' + r.from).join('; ') + '). Подтвердите кнопкой «Удалить и исправить ссылки».';
+      document.getElementById('csDeleteConfirm').style.display = 'inline-block';
+    }).catch(err => { impact.textContent = '✖ ' + (err && err.message ? err.message : err); });
+    return;
+  }
+  if (id === 'csDeleteConfirm') {
+    e.preventDefault();
+    const type = document.getElementById('csEditType').value;
+    const orig = document.getElementById('csEditObject').value;
+    csOps.push({ opKind: 'delete', type, name: orig, removeRefs: true });
+    document.getElementById('csDeleteConfirm').style.display = 'none';
+    document.getElementById('csImpactBox').textContent = '';
+    csAfterOpsChange();
+    return;
+  }
+  if (id === 'csMembersApply') {
+    e.preventDefault();
+    const orig = document.getElementById('csEditObject').value;
+    const members = document.getElementById('csMembersInput').value.split('\n');
+    csPushOp({ opKind: 'group-members', name: orig, members });
+    csAfterOpsChange();
+    return;
+  }
+  if (id === 'csAddApply') {
+    e.preventDefault();
+    const fields = {};
+    for (const k of ['name', 'type', 'server', 'port', 'password', 'cipher']) {
+      const el = document.getElementById('csAdd_' + k);
+      if (el && el.value) fields[k] = el.value;
+    }
+    ensureCsYaml().then(CSY => {
+      const text = csWorking && csWorking.text ? csWorking.text : csImportText;
+      const plan = csPlanOp(CSY.parseDocument(text, { keepSourceTokens: true }), text, CSY.parse(text), { opKind: 'add', fields });
+      if (plan.error) { document.getElementById('csImpactBox').textContent = '✖ ' + plan.error; return; }
+      csOps.push({ opKind: 'add', name: fields.name, fields });
+      for (const k of ['name', 'type', 'server', 'port', 'password', 'cipher']) { const el = document.getElementById('csAdd_' + k); if (el) el.value = ''; }
+      document.getElementById('csImpactBox').textContent = '';
+      csAfterOpsChange();
+    }).catch(err => { document.getElementById('csImpactBox').textContent = '✖ ' + (err && err.message ? err.message : err); });
+    return;
+  }
+  if (id === 'csRuleApply') {
+    e.preventDefault();
+    const idx = Number(document.getElementById('csRuleIdx').value) - 1;
+    const target = document.getElementById('csRuleTarget').value;
+    if (!Number.isInteger(idx) || idx < 0) { document.getElementById('csImpactBox').textContent = '✖ Укажите номер правила.'; return; }
+    csPushOp({ opKind: 'rule-target', ruleIndex: idx, newTarget: target, name: 'rule #' + (idx + 1), old: '—' });
+    csAfterOpsChange();
+    return;
+  }
+  if (id === 'csUndoBtn') {
+    e.preventDefault();
+    csOps.pop();
+    csAfterOpsChange();
+    return;
+  }
+  if (id === 'csResetBtn') {
+    e.preventDefault();
+    csOps = [];
+    csAfterOpsChange();
+    return;
+  }
+  if (id === 'csExportCopy' || id === 'csExportDownload') {
+    e.preventDefault();
+    if (!csWorking) { document.getElementById('csStatus').textContent = '✖ Нет применённых правок для экспорта.'; return; }
+    if (id === 'csExportCopy') {
+      const done = () => showToast('✅ YAML скопирован');
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(csWorking.text).then(done).catch(() => fallbackCopy(csWorking.text, done));
+      else fallbackCopy(csWorking.text, done);
+    } else {
+      const blob = new Blob([csWorking.text], { type: 'text/yaml' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'config.yaml';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      showToast('✅ config.yaml скачан');
+    }
+    return;
+  }
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); done(); } catch (_) { showToast('Не удалось скопировать — выделите вручную', true); }
+  ta.remove();
+}
+// rename с подтверждением: второе нажатие применяет запланированный план
+let csPendingRename = null;
+function renConfirm(plan) {
+  csPendingRename = plan;
+  const btn = document.getElementById('csRenameBtn');
+  btn.textContent = '✏️ Подтвердить (' + plan.semantic.refsAffected + ' ссыл.)';
+  btn.dataset.csConfirm = '1';
+}
+document.addEventListener('click', (e) => {
+  if (!e.target) return;
+  if (e.target.id === 'csRenameBtn' && e.target.dataset.csConfirm === '1') {
+    e.preventDefault();
+    if (csPendingRename) { csPushOp({ opKind: 'rename', type: csPendingRename.semantic.type, name: csPendingRename.semantic.name, new: csPendingRename.semantic.new, refsAffected: csPendingRename.semantic.refsAffected }); csPendingRename = null; }
+    const btn = document.getElementById('csRenameBtn');
+    if (btn) { btn.textContent = '✏️ Переименовать'; delete btn.dataset.csConfirm; }
+    document.getElementById('csImpactBox').textContent = '';
+    csAfterOpsChange();
+    csRenderForm();
+    return;
+  }
+  csEditorClick(e);
+});
+document.addEventListener('change', (e) => {
+  if (!e.target) return;
+  if (e.target.id === 'csEditType' || e.target.id === 'csEditObject') { csPendingRename = null; const b = document.getElementById('csRenameBtn'); if (b) { b.textContent = '✏️ Переименовать'; delete b.dataset.csConfirm; } document.getElementById('csImpactBox').textContent = ''; csRenderForm(); }
 });
 
 // Domain Coverage UI (v1.9 PHASE 5): первый consumer Config Dependency Graph.
