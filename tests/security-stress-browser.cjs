@@ -120,6 +120,10 @@ let cases = 0;
     await page.fill('input[data-cs-field="server"]', '203.0.113.3'); await apply();
     const displayed = await page.locator('#csSummaryCard, #csOpsBox').allTextContents();
     for (const secret of [SECRET, 'SYNTH_BLOCK_ONE', 'SYNTH_BLOCK_TWO', 'SYNTH_AUTH', 'SYNTH_HWID']) assert.ok(!displayed.join('\n').includes(secret), secret);
+    // Visual Routing Graph панель внутри сводки: метки узлов/ID тоже проходят csRedactText.
+    const vrgText = await page.evaluate(() => document.getElementById('csVrgSvgWrap').textContent + '|' + document.getElementById('csVrgTextAltOut').textContent);
+    assert.ok(vrgText.length > 10, 'VRG панель отрендерена после «Разобрать»');
+    for (const secret of [SECRET, 'SYNTH_BLOCK_ONE']) assert.ok(!vrgText.includes(secret), 'VRG leak: ' + secret);
     assert.ok((await download('#csExportDownload')).data.includes(SECRET)); cases++;
     leak.rules = ['RULE-SET,' + SECRET + ',G'];
     await studio(yaml.dump(leak)); await page.fill('#csRuleProbe', 'example.invalid'); await page.click('#csRuleProbeBtn');

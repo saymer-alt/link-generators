@@ -254,6 +254,9 @@ jobs:
       - name: Config Studio browser regression (#176)
         run: node tests/config-studio-browser.cjs
 
+      - name: Visual Routing Graph integration browser regression (#177/MEGA-01)
+        run: node tests/vrg-integration-browser.cjs
+
       - name: Security and download end-to-end regression (CODEX-02)
         run: node tests/security-stress-browser.cjs
 

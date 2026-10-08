@@ -8261,7 +8261,7 @@ function csRunAnalysis(sourceText) {
   csRefreshEditor();
   ptRuntimeEnsureProfiles();
   ptRuntimeRender();
-  if (csCurrentDoc) vrgRenderInto('csVrgSvgWrap', csCurrentDoc, false, 'csVrgTextAltOut');
+  if (csCurrentDoc) vrgRenderInto('csVrgSvgWrap', csCurrentDoc, false, 'csVrgTextAltOut', l => csRedactText(l, csCurrentDoc));
   status.textContent = '✓ Разобрано: анализ готов (локально, без сети).';
 }
 
@@ -8870,9 +8870,13 @@ function vrgTruncateLabel(text, maxLen) {
   return s.length > maxLen ? s.slice(0, maxLen - 1) + '…' : s;
 }
 
-function vrgRenderInto(containerId, doc, stale, textAltId) {
+function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
   const wrap = document.getElementById(containerId);
   if (!wrap) return;
+  // Config Studio: метки узлов проходят через csRedactText (значения из секретных
+  // полей маскируются и при повторении в имени/ID). Краскция ДО усечения —
+  // обрезанный секрет не матчится и утёк бы частично.
+  const R = typeof redact === 'function' ? redact : (s => String(s));
   wrap.textContent = '';
   const status = document.getElementById(containerId === 'vrgSvgWrap' ? 'vrgStatus' : containerId + 'Status');
   if (!doc) {
@@ -8925,7 +8929,7 @@ function vrgRenderInto(containerId, doc, stale, textAltId) {
     g.setAttribute('transform', 'translate(' + n.x + ',' + n.y + ')');
     g.setAttribute('tabindex', '0');
     g.setAttribute('role', 'group');
-    g.setAttribute('aria-label', vrgKindLabel(n.kind) + ': ' + vrgTruncateLabel(vrgNodeLabel(n), 60));
+    g.setAttribute('aria-label', R(vrgKindLabel(n.kind) + ': ' + vrgTruncateLabel(vrgNodeLabel(n), 60)));
     const rect = document.createElementNS(VRG_NS, 'rect');
     rect.setAttribute('width', String(VRG_NODE_W)); rect.setAttribute('height', String(VRG_NODE_H));
     rect.setAttribute('rx', '4');
@@ -8939,16 +8943,16 @@ function vrgRenderInto(containerId, doc, stale, textAltId) {
     const labelText = document.createElementNS(VRG_NS, 'text');
     labelText.setAttribute('x', '8'); labelText.setAttribute('y', '30');
     labelText.setAttribute('class', 'vrg-node-label');
-    labelText.textContent = vrgTruncateLabel(vrgNodeLabel(n), 28);
+    labelText.textContent = vrgTruncateLabel(R(vrgNodeLabel(n)), 28);
     g.appendChild(labelText);
     // EVENING-03 A3: клик и клавиатура — выбор узла как фокуса
-    g.addEventListener('click', () => { vrgFocusId = n.id; vrgFillFocusSelect('vrgFocusSelect', doc); vrgRenderInto(containerId, doc, stale, textAltId); });
+    g.addEventListener('click', () => { vrgFocusId = n.id; vrgFillFocusSelect('vrgFocusSelect', doc); vrgRenderInto(containerId, doc, stale, textAltId, redact); });
     g.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter' || ev.key === ' ') {
         ev.preventDefault();
         vrgFocusId = n.id;
         vrgFillFocusSelect('vrgFocusSelect', doc);
-        vrgRenderInto(containerId, doc, stale, textAltId);
+        vrgRenderInto(containerId, doc, stale, textAltId, redact);
       }
     });
     svg.appendChild(g);
@@ -8958,8 +8962,8 @@ function vrgRenderInto(containerId, doc, stale, textAltId) {
   if (textAltId) {
     const ta = document.getElementById(textAltId);
     if (ta) {
-      const tl = view.nodes.map(n => vrgKindLabel(n.kind) + ': ' + vrgNodeLabel(n) + (n.level !== undefined ? ' [слой ' + n.level + ']' : ''));
-      const el = view.edges.map(e => e.kind + ': ' + e.from + ' → ' + e.to);
+      const tl = view.nodes.map(n => R(vrgKindLabel(n.kind) + ': ' + vrgNodeLabel(n) + (n.level !== undefined ? ' [слой ' + n.level + ']' : '')));
+      const el = view.edges.map(e => R(e.kind + ': ' + e.from + ' → ' + e.to));
       ta.textContent = ['Узлы (' + view.nodes.length + '):', ...tl, '', 'Связи (' + view.edges.length + '):', ...el].join('\n');
     }
   }
