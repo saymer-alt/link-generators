@@ -22,7 +22,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
 
   const panel = page.locator('#physicalTopologyPanel');
-  await panel.locator('summary').click();
+  await panel.locator('> summary').click(); // строго прямой child: внутри есть вложенные details
   assert.equal(await panel.isVisible(), true, 'панель открывается'); ok('панель открылась');
 
   // --- fingerprint exclusion: правки ptSpecInput не делают build STALE ---
