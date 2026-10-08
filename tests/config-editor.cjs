@@ -141,6 +141,22 @@ const FIXTURE = [
   ok();
 }
 
+// --- 5b. duplicate-looking names make a field edit ambiguous and must fail closed ---
+{
+  const duplicate = FIXTURE.replace('proxy-groups:', [
+    '  - name: Old-Exit',
+    '    type: ss',
+    '    server: 198.51.100.99',
+    '    port: 8449',
+    '    password: synth-pass-duplicate',
+    '    cipher: aes-128-gcm',
+    'proxy-groups:'
+  ].join('\n'));
+  const result = plan(duplicate, { opKind: 'field-edit', type: 'proxy', name: 'Old-Exit', field: 'server', newText: '203.0.113.99' });
+  assert.ok(result.error, 'duplicate object identity must not select the first match silently');
+  ok();
+}
+
 // --- 6. rename provider: ключ + use-ссылки ---
 {
   const withUse = FIXTURE.replace('      - DIRECT', '      - DIRECT\n    use:\n      - prov-one');

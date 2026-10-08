@@ -28,6 +28,8 @@ const PROXIES_DIRECT = JSON.stringify({ proxies: {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   const controllerRequests = [];
+  let slowStartedResolve;
+  const slowStarted = new Promise(resolve => { slowStartedResolve = resolve; });
   if (process.env.JS_YAML_PATH) await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ path: process.env.JS_YAML_PATH, contentType: 'text/javascript' }));
 
   // synthetic controllers (Fixture A/C/E): ни один реальный контроллер не задействован
@@ -49,6 +51,13 @@ const PROXIES_DIRECT = JSON.stringify({ proxies: {
   await page.route('http://127.0.0.1:49090/**', (route, request) => {
     controllerRequests.push(request.url());
     return route.abort('connectionrefused'); // Fixture B: unreachable
+  });
+  await page.route('http://127.0.0.1:59090/**', async (route, request) => {
+    controllerRequests.push(request.url());
+    slowStartedResolve();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    if (request.url().endsWith('/version')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ version: 'v1.19.32-slow' }) });
+    return route.fulfill({ contentType: 'application/json', body: PROXIES_CONSISTENT });
   });
 
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
@@ -137,23 +146,48 @@ const PROXIES_DIRECT = JSON.stringify({ proxies: {
 
   // --- 8. STALE структурный: изменили binding после проверки → рендер помечает ---
   await page.fill('input[data-rt-node="swe-exit"][data-rt-key="group"]', 'ДРУГАЯ_ГРУППА');
-  await page.evaluate(() => ptRuntimeRender());
   const statusStale = await page.textContent('#ptRuntimeStatus');
   assert.ok(statusStale.includes('STALE'), 'структурный STALE после изменения профилей: ' + statusStale);
-  ok('структурный STALE');
+  ok('profile edit automatically marks evidence STALE');
 
-  // --- 9. топология/артефакты не затронуты ---
+  // --- 9. delayed response cannot overwrite a changed runtime profile ---
+  await page.fill('input[data-rt-node="msk-entry"][data-rt-key="endpoint"]', '127.0.0.1:59090');
+  await page.fill('input[data-rt-node="est-transit"][data-rt-key="endpoint"]', '');
+  await page.fill('input[data-rt-node="swe-exit"][data-rt-key="endpoint"]', '');
+  await page.locator('#ptRuntimeCheckBtn').click();
+  await slowStarted;
+  await page.fill('input[data-rt-node="msk-entry"][data-rt-key="group"]', 'CHANGED_DURING_FETCH');
+  await page.waitForTimeout(650);
+  const canceledStatus = await page.textContent('#ptRuntimeStatus');
+  const canceledOut = await page.textContent('#ptRuntimeOut');
+  assert.ok(canceledStatus.includes('STALE') && canceledStatus.includes('отменена'), 'profile edit cancels and marks in-flight check stale: ' + canceledStatus);
+  assert.ok(!canceledOut.includes('controller: reachable'), 'late response did not overwrite current profile state');
+  ok('stale response race guard');
+
+  // --- 10. topology draft is stale and cannot be checked before re-analysis ---
+  const beforeDraftCheck = controllerRequests.length;
+  await page.fill('#ptSpecInput', specBefore.replace('Moscow', 'Moscow edited'));
+  const draftStatus = await page.textContent('#ptRuntimeStatus');
+  assert.ok(draftStatus.includes('STALE'), 'topology draft change marks evidence stale');
+  await page.locator('#ptRuntimeCheckBtn').click();
+  assert.ok((await page.textContent('#ptRuntimeStatus')).includes('Сначала проанализируйте'), 'changed topology cannot reuse old analyzed model');
+  assert.equal(controllerRequests.length, beforeDraftCheck, 'no controller request for stale topology draft');
+  await page.locator('#ptAnalyzeBtn').click();
+  await page.fill('#ptSpecInput', specBefore);
+  await page.locator('#ptAnalyzeBtn').click();
+  // --- topology/artifacts are not modified by evidence ---
   const specAfter = await page.inputValue('#ptSpecInput');
-  assert.equal(specAfter, specBefore, 'спецификация не изменилась');
+  assert.equal(specAfter, specBefore, 'spec restored without runtime evidence mutation');
   assert.ok(await page.evaluate(() => !document.getElementById('mihomoOutput').value.includes('runtime-evidence')), 'generated YAML чист');
   ok('topology/config immutable');
 
-  // --- 10. mobile 360 ---
-  await page.setViewportSize({ width: 360, height: 740 });
-  await page.waitForTimeout(150);
-  const overflow = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
-  assert.ok(overflow.sw <= overflow.iw + 1, 'mobile 360: без overflow');
-  ok('mobile 360');
+  // --- 11. mobile widths: runtime profiles, evidence, controls ---
+  for (const width of [320, 360, 390, 412, 480]) {
+    await page.setViewportSize({ width, height: 820 });
+    const overflow = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    assert.ok(overflow.sw <= overflow.iw + 1, 'mobile ' + width + ': no runtime evidence overflow (' + overflow.sw + ' vs ' + overflow.iw + ')');
+    passed++;
+  }
 
   assert.deepEqual(errors, [], 'нет pageerror');
   await browser.close();

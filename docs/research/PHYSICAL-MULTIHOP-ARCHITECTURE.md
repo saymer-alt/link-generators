@@ -6,6 +6,8 @@
 
 Evidence-дисциплина цикла: **SOURCE-PROVEN** (проверено по исходникам/документации), **RUNTIME-PROVEN** (проверено на живом mihomo), **FIELD-OBSERVED** (наблюдение владельца), **INFERRED** (следствие из доказанного), **HYPOTHESIS** (не проверено), **UNKNOWN** (не исследовано). Ничто не повышает уровень без нового доказательства.
 
+**Текущий статус на main (2026-10-08):** последующие этапы реализованы после исходных design-разделов ниже. #188 добавил memory-only Runtime Evidence через Controller API; #187 добавил per-node generation для SS/SOCKS/HTTP и внешние контракты для остальных транспортов. Разделы 7–8 и Phase 14–15 сохраняют первоначальные проектные решения и формулировки того времени; актуальные контракты: [PT-RUNTIME-EVIDENCE.md](PT-RUNTIME-EVIDENCE.md) и [PT-GENERATION.md](PT-GENERATION.md). Ни одна функция не доказывает фактический packet path.
+
 ---
 
 ## 0. Продуктовая рамка (из #177, authoritative)
@@ -279,7 +281,7 @@ Reuse: docs/research/AWG-MTU-OVERHEAD.md (CPA/RandomTrailers ветки, RandomT
 
 - Pure-ядро в index.html (marker-блок `PT-CORE-START/END`): `ptAnalyzeTopology` (schema+identity+graph+roles+policies, диагностический контракт §4), `ptSerialize` (каноническая форма §3.3), `ptTraceTopology` (§5), `ptSimulateTopology` (what-if §11 ниже), sanitized reference fixture (`ptDemoTopologySpec`, §11).
 - Regression: `tests/physical-topology.cjs` (20+ групп; chain 2/3-hop, multiple transits, дубликаты, self/2-node/3-node циклы, disconnected, unreachable exit, role order, multiple entry/exit, overlay placement, детерминизм сериализации и trace, Physical≠Local разделение, отсутствие секретов в диагностиках, Unicode labels, what-if middle-hop, parity при выключенной фиче).
-- Что сознательно НЕ реализовано: runtime evidence (§7), per-node generation (§8), DNS/MTU-анализаторы глубже скелета (§6), automatic topology failover, mesh.
+- Что сознательно НЕ реализовано **на момент этой PHASE 10/11 фиксации**: runtime evidence (§7), per-node generation (§8), DNS/MTU-анализаторы глубже скелета (§6), automatic topology failover, mesh. Текущий статус первых двух этапов указан в заметке в начале документа.
 
 ### What-if (PHASE 11)
 

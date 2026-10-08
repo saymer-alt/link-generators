@@ -63,6 +63,20 @@ const SYNTH = [
   await page.locator('.tab', { hasText: 'Config Studio' }).click();
   assert.ok(await page.locator('#tab-studio').isVisible(), 'tab-studio виден');
   ok('вкладка Studio открывается');
+  const previewOrder = await page.evaluate(() => {
+    const ids = ['deviceModelRow', 'deviceIdentityDetails', 'subListFetchBtn', 'runtimeImportDetails', 'excludeFilterInput'];
+    const els = ids.map(id => document.getElementById(id));
+    return els.every(Boolean) && els.slice(1).every((el, i) => !!(els[i].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
+  });
+  assert.equal(previewOrder, true, 'subscription flow order: device, identity, preview, runtime, exclude filter');
+  ok('subscription preview and runtime import order');
+  for (const id of ['csDangerPanel', 'csAddPanel', 'csRulesPanel']) {
+    const summary = page.locator('#' + id + ' > summary');
+    assert.equal(await summary.locator('span').count(), 0, id + ': нет ручного маркера рядом с native details marker');
+  }
+  assert.ok(await page.locator('#csAddPanel').evaluate(el => el.compareDocumentPosition(document.getElementById('csRulesPanel')) & Node.DOCUMENT_POSITION_FOLLOWING), 'Add предшествует Rule');
+  assert.ok(await page.locator('#csRulesPanel').evaluate(el => el.compareDocumentPosition(document.getElementById('csDangerPanel')) & Node.DOCUMENT_POSITION_FOLLOWING), 'Rule предшествует Danger');
+  ok('disclosure и editor hierarchy');
 
   // --- fingerprint exclusion ДО анализа ---
   const fp1 = await page.evaluate(() => buildStateFingerprint());
@@ -86,6 +100,26 @@ const SYNTH = [
   assert.ok(!outputs.includes('synthtoken'), 'токен провайдера не в выводах');
   assert.ok((await page.textContent('#csSecretsNote')).includes('Секретные поля: 2'), 'заметка о секретах');
   ok('secret-safe выводы');
+
+  // Synthetic tokenized URL passed through error/graph/trace/diff renderers.
+  const redactionProbe = SYNTH.replace('DOMAIN-SUFFIX,example.com,MAIN', 'DOMAIN-SUFFIX,example.com,https://subs.example.invalid/api/v1/client/token/synthetic-url-token-123456?token=synthetic-query-token');
+  await page.fill('#csImportInput', redactionProbe);
+  await page.locator('#csParseBtn').click();
+  const redactionOutputs = await page.evaluate(() => ['#csDiagOut', '#csGraphOut', '#csTraceOut'].map(id => document.querySelector(id).textContent).join('\n'));
+  assert.ok(!redactionOutputs.includes('synthetic-url-token-123456'), 'tokenized path is hidden in DOM diagnostics/graph/trace');
+  assert.ok(!redactionOutputs.includes('synthetic-query-token'), 'URL query is hidden in DOM diagnostics/graph/trace');
+  assert.ok(redactionOutputs.includes('subs.example.invalid'), 'URL host remains useful for context');
+  const diffRedaction = await page.evaluate(() => csRedactLine('    url: "https://subs.example.invalid/client/token/synthetic-url-token-123456?token=synthetic-query-token"'));
+  assert.ok(!diffRedaction.includes('synthetic-url-token-123456') && !diffRedaction.includes('synthetic-query-token'), 'tokenized URL is hidden in diff lines');
+  const keyRedaction = await page.evaluate(() => ['password', 'private-key', 'private_key', 'secret', 'token', 'uuid', 'preshared-key', 'authorization', 'x-hwid'].map(k => csRedactLine('  ' + k + ': synthetic-secret-value')).join('\n'));
+  assert.ok(!keyRedaction.includes('synthetic-secret-value'), 'named secret keys are masked in diffs');
+  const bearerRedaction = await page.evaluate(() => csRedactText('authorization: Bearer synthetic-bearer-secret'));
+  assert.ok(!bearerRedaction.includes('synthetic-bearer-secret'), 'Bearer value is masked in free-text evidence');
+  const punctuatedPathRedaction = await page.evaluate(() => csRedactText('source https://subs.example.invalid/key/synthetic-path-token-123456.'));
+  assert.ok(!punctuatedPathRedaction.includes('synthetic-path-token-123456'), 'punctuated path token is masked');
+  ok('tokenized URL and secret-key redaction');
+  await page.fill('#csImportInput', SYNTH);
+  await page.locator('#csParseBtn').click();
 
   // --- диагностики: unused + OK ---
   const diag = await page.textContent('#csDiagOut');
@@ -162,6 +196,10 @@ const SYNTH = [
   // P0.3: workflow-подсказка и первичное действие
   assert.ok((await page.textContent('#csEditorCard .hint')).includes('Экспортируйте YAML'), 'workflow-подсказка 1..5');
   assert.equal(await page.locator('#csSaveFieldsBtn').textContent(), '💾 Применить изменения', 'первичное действие переименовано');
+  await page.keyboard.press('Tab');
+  await page.locator('#csRulesPanel > summary').focus();
+  const focusStyle = await page.locator('#csRulesPanel > summary').evaluate(el => getComputedStyle(el).outlineStyle + ' ' + getComputedStyle(el).outlineWidth);
+  assert.equal(focusStyle, 'solid 2px', 'custom summary получает явный keyboard focus style');
   // P0.2 gate: zero-change export байт-в-байт (кнопки активны, источник = оригинал)
   assert.equal(await page.evaluate(() => csExportText()), SYNTH, 'zero-change export = исходник байт-в-байт');
   // keyboard: фокус на первичную кнопку + Enter применяет пустое изменение (не падает), затем реальный edit по клавиатуре
@@ -275,6 +313,36 @@ const SYNTH = [
   const overflow3 = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
   assert.ok(overflow3.sw <= overflow3.iw + 1, 'mobile 360 PT-генерация: без overflow');
   ok('mobile 360 + PT-генерация');
+
+  // Artifact buttons and the rest of the Builder remain within requested mobile widths.
+  for (const width of [320, 360, 390, 412, 480]) {
+    await page.setViewportSize({ width, height: 820 });
+    const layout = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    assert.ok(layout.sw <= layout.iw + 1, 'mobile ' + width + ' with per-node artifact buttons: no page overflow (' + layout.sw + ' vs ' + layout.iw + ')');
+    passed++;
+  }
+
+  // Long diagnostic name stresses wrapping and editor controls at every mobile width.
+  await page.locator('.tab', { hasText: 'Config Studio' }).click();
+  const longName = 'LongProxy' + 'X'.repeat(180);
+  const longYaml = SYNTH.replace('proxy-groups:', [
+    '  - name: ' + longName,
+    '    type: ss',
+    '    server: 198.51.100.21',
+    '    port: 8444',
+    '    password: studio-synth-long-name',
+    '    cipher: aes-128-gcm',
+    'proxy-groups:'
+  ].join('\n'));
+  await page.fill('#csImportInput', longYaml);
+  await page.locator('#csParseBtn').click();
+  assert.ok((await page.textContent('#csDiagOut')).includes(longName), 'long diagnostic proxy name is rendered');
+  for (const width of [320, 360, 390, 412, 480]) {
+    await page.setViewportSize({ width, height: 820 });
+    const layout = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    assert.ok(layout.sw <= layout.iw + 1, 'Config Studio long diagnostics at ' + width + ': no overflow (' + layout.sw + ' vs ' + layout.iw + ')');
+    passed++;
+  }
 
   assert.deepEqual(errors, [], 'нет pageerror');
   await browser.close();
