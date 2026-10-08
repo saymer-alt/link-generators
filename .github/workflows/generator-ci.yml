@@ -155,6 +155,9 @@ jobs:
       - name: Visual Routing Graph core regression (#125→#177)
         run: node tests/visual-routing-graph.cjs
 
+      - name: DNS-Routing audit core regression (v1.11 CANDIDATE)
+        run: node tests/dns-routing-core.cjs
+
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 
@@ -256,6 +259,9 @@ jobs:
 
       - name: Visual Routing Graph integration browser regression (#177/MEGA-01)
         run: node tests/vrg-integration-browser.cjs
+
+      - name: DNS-Routing audit browser regression (v1.11 CANDIDATE)
+        run: node tests/dns-routing-browser.cjs
 
       - name: Security and download end-to-end regression (CODEX-02)
         run: node tests/security-stress-browser.cjs
