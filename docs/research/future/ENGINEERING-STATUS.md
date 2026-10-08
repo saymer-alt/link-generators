@@ -1,6 +1,6 @@
 # Engineering Status — handoff for the next agent (NIGHT-MEGA-01)
 
-Дата: 2026-10-08. Назначение: самодостаточная точка входа в инженерное состояние v1.11-complete + future-research. Читай вместе с [../../V1.11-FINAL-INTEGRATION-REPORT.md](../V1.11-FINAL-INTEGRATION-REPORT.md) и [V1.12-V1.14-CANDIDATE-ROADMAP.md](V1.12-V1.14-CANDIDATE-ROADMAP.md).
+Дата: 2026-10-08. Назначение: самодостаточная точка входа в инженерное состояние v1.11-complete + future-research. Читай вместе с [../../V1.11-FINAL-INTEGRATION-REPORT.md](../V1.11-FINAL-INTEGRATION-REPORT.md) и [V1.11-CANDIDATE-READINESS.md](V1.11-CANDIDATE-READINESS.md).
 
 ## 1. Где что лежит
 
@@ -9,7 +9,7 @@
 | v1.11 production (`main`) | feature-complete; VRG-интеграция добита (PR #204) | `index.html` (маркер-блоки RD-CORE/CS-CORE/CS-EDITOR/PT-*/VRG-CORE), `tests/` |
 | v1.11 PT/CS/VRG тесты | зелёные; CI-контракт: каждый `tests/*.cjs` (не manual) ОБЯЗАН быть в `generator-ci.yml` (wiring-guard в job static+node) | `.github/workflows/generator-ci.yml` |
 | Future research (B1–B5) | PoC-и реализованы и протестированы | `research/poc/{dns-routing,mrs,wg-awg-collector,warpscout-engine,known-services}/`, `docs/research/future/` |
-| Roadmap | сводка v1.12–v1.14 | `docs/research/future/V1.12-V1.14-CANDIDATE-ROADMAP.md` |
+| Матрица готовности | v1.11 CANDIDATE policy (уточнение владельца 2026-10-09): готовые функции TRACK B = кандидаты v1.11 через отдельные PR с OWNER GO | `docs/research/future/V1.11-CANDIDATE-READINESS.md` |
 
 ## 2. Что сделано в NIGHT-MEGA-01 (основа для следующих проходов)
 
@@ -39,7 +39,7 @@ sh research/poc/wg-awg-collector/collector.test.sh                   # 14 (POSIX
 ## 4. Открытые гейты / что блокирует production
 
 1. **v1.11 release** — ждёт owner field-test (это решение владельца, не агента).
-2. **v1.12 start** — только по явному owner GO. Дешёвый первый кандидат — DNS↔Routing (тест-план §7 документа).
+2. **Политика v1.11 CANDIDATE (уточнение владельца 2026-10-09)**: v1.12+ не является жёсткой границей; готовые функции TRACK B идут в v1.11 через отдельные PR `v1.11 CANDIDATE` (8 критериев + отчёт о готовности; мерж — только отдельный OWNER GO на PR). Матрица: [V1.11-CANDIDATE-READINESS.md](V1.11-CANDIDATE-READINESS.md). Первый кандидат: DNS↔Routing (PR открыт, ждёт OWNER GO).
 3. **FIELD-OBSERVED данные отсутствуют**: path MTU (auto-MTU), реальные WG-инциденты (auto-restart), реальные WARPSCOUT-перепроверки — всё остаётся PoC до сбора данных на живых системах (по operator-задачам).
 4. **ipcidr payload MRS** — следующий исследовательский шаг (header сверен, payload нет).
 
