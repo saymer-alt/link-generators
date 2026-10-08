@@ -152,6 +152,9 @@ jobs:
       - name: Physical Topology network diagnostics core regression (#177)
         run: node tests/pt-network-diagnostics.cjs
 
+      - name: Visual Routing Graph core regression (#125→#177)
+        run: node tests/visual-routing-graph.cjs
+
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 
