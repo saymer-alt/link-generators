@@ -140,7 +140,8 @@
   .advanced-panel{margin-top:14px;padding:10px 12px;border:1px solid var(--border);border-radius:0;background:rgba(255,255,255,.35)}
   .advanced-panel summary{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:bold;color:var(--info);cursor:pointer;list-style:none;padding:2px 0}
   .advanced-panel summary::-webkit-details-marker{display:none}
-  .site-footer{margin:18px 0 26px;padding:12px 14px;border:1px solid var(--border);background:var(--face);font-size:.8rem;color:var(--muted)}
+  .site-footer{width:min(1520px,100%);margin:18px auto 26px;padding:12px 14px;border:1px solid var(--border);background:var(--face);font-size:.8rem;color:var(--muted)}
+  @media (min-width:2100px){.site-footer{width:min(1600px,100%)}}
   .site-footer-brand{font-weight:bold;color:var(--text)}
   .site-footer-privacy{margin:6px 0;line-height:1.45}
   .site-footer-links{display:flex;gap:8px;align-items:center}
@@ -149,6 +150,9 @@
   .cs-subpanel{margin-top:8px;padding:6px 10px;border:1px solid var(--border);background:rgba(255,255,255,.3)}
   .cs-subpanel > summary{cursor:pointer;font-size:.85rem}
   #csDangerPanel > summary{color:var(--red)}
+  .cs-subpanel > summary:focus-visible,.advanced-panel > summary:focus-visible,details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px;box-shadow:0 0 0 4px rgba(0,84,227,.14)}
+  #csOpsBox{background:rgba(0,84,227,.045);border-top-color:var(--accent)!important;padding:10px!important}
+  #csExportBox{background:rgba(10,122,10,.045);border:1px solid var(--green)!important;padding:10px!important}
   .cs-flash{animation:cs-flash-anim 1.6s ease-out}
   @keyframes cs-flash-anim{0%{background:rgba(255,200,0,.25)}100%{background:transparent}}
   .advanced-panel summary .advanced-badge{flex:none}
@@ -369,7 +373,7 @@
       <label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
       <textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки, созданные во вкладке «⚡ WARP MASQUE Links»"></textarea>
       <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Для HTTP(S) подписки режим ниже определяет результат: включён — динамический <code>proxy-provider</code>; выключен — подписка один раз читается браузером и её текущие узлы встраиваются как обычные <code>proxies:</code>.</div>
-      <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> Автоматический режим белых списков <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Автоматический режим белых списков">?</button><span class="ctx-help-pop" role="note">Плоский резервный набор (PRIMARY → FALLBACK): GLOBAL сначала использует основной набор выходов, при их недоступности переключается на резервный. Health-check каждые 300 секунд, ускоренный при неудачах. Доступен только в профиле «Роутер / обычный TUN»: на VPS не используется.</span></span></label></div>
+      <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> 🛡️ Автоматический режим белых списков <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Автоматический режим белых списков">?</button><span class="ctx-help-pop" role="note">Плоский резервный набор (PRIMARY → FALLBACK): GLOBAL сначала использует основной набор выходов, при их недоступности переключается на резервный. Health-check каждые 300 секунд, ускоренный при неудачах. Доступен только в профиле «Роутер / обычный TUN»: на VPS не используется.</span></span></label></div>
       <div class="hint" id="awlRouterHint" style="display:none">Автоматический режим белых списков доступен только для профиля «Роутер / обычный TUN».</div>
       <div id="whitelistPanel" style="display:none">
         <label for="whitelistInput">Резерв для белых списков (ссылки / подписки)</label>
@@ -470,9 +474,6 @@
         </details>
       </div>
       <div id="excludeFilterRow" style="margin-top:10px">
-        <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
-        <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
-        <div class="hint">Фильтр по фактическим именам узлов. При включённых URL-подписках передаётся Mihomo как <code>exclude-filter</code>; при выключенных применяется браузером к развёрнутым узлам до сборки YAML. Например, <code>(?i)ru|russia|россия</code>. Применяется ко всем подпискам. Пусто — фильтрации нет.</div>
         <div class="hint" id="serverListOffHint" style="display:none">Список серверов нужен только для просмотра узлов и удобного выбора исключений. По умолчанию подписка браузером не запрашивается.</div>
         <div id="serverListPanel" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)">
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -523,6 +524,9 @@
           </details>
         </div>
         <div class="hint" id="subSelectionNote" style="display:none;color:var(--warn)">Выбранные для исключения серверы продолжают действовать (объединяются с ручным фильтром через ИЛИ). Очистить — кнопкой «Снять все» в списке серверов.</div>
+        <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
+        <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
+        <div class="hint">Фильтр по фактическим именам узлов. При включённых URL-подписках передаётся Mihomo как <code>exclude-filter</code>; при выключенных применяется браузером к развёрнутым узлам до сборки YAML. Например, <code>(?i)ru|russia|россия</code>. Применяется ко всем подпискам. Пусто — фильтрации нет.</div>
       </div>
       <div id="realityModernRow" style="margin-top:10px">
         <label for="realityModernInput">🌐 Modern REALITY / Post-Quantum (X25519MLKEM768) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Modern REALITY">?</button><span class="ctx-help-pop" role="note">Опционально только для VLESS + REALITY узлов с подтверждённой поддержкой X25519MLKEM768. Поддержка появилась в Xray-core 25.5.16, но одна только версия Xray не гарантирует совместимость конкретного сервера/клиента. Укажите host или host:port нужных REALITY-серверов — генератор применит modern override только к ним; обычные VLESS/TLS и остальные узлы не изменяются.</span></span></label>
@@ -610,7 +614,7 @@
         </details>
       </div>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label><input type="checkbox" id="cfgTieredFailover"> 🪜 Приоритетные эшелоны выходов (Tiered Failover) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Tiered Failover">?</button><span class="ctx-help-pop" role="note">Строгий приоритет эшелонов (#148, runtime-proven на Mihomo 1.19.31/1.19.32): трафик идёт через первый эшелон, где есть живой выход; следующий используется, только когда весь предыдущий недоступен. Внутри эшелона — url-test (быстрейший) или ordered fallback. Финальное правило MATCH уходит в корневую группу эшелонов; GLOBAL получает её первым участником (ручное переключение в дашборде остаётся возможным). Выключено — вывод без изменений.</span></span></label>
+        <label><input type="checkbox" id="cfgTieredFailover"> 🔀 Приоритетные эшелоны выходов (Tiered Failover) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Tiered Failover">?</button><span class="ctx-help-pop" role="note">Строгий приоритет эшелонов (#148, runtime-proven на Mihomo 1.19.31/1.19.32): runtime-проверки подтвердили переход между эшелонами по доступности HTTP-проб; это не измерение фактического packet path. Внутри эшелона — url-test (быстрейший) или ordered fallback. Финальное правило MATCH уходит в корневую группу эшелонов; GLOBAL получает её первым участником (ручное переключение в дашборде остаётся возможным). Выключено — вывод без изменений.</span></span></label>
       </div>
       <div id="tieredPanel" style="display:none">
         <div class="hint">Эшелоны проверяются по порядку; финальное правило MATCH направляет трафик в корневую группу «🪜 TIERED-AUTO». Участники — из текущей сборки (прокси, WG/AWG-профили, провайдеры). Health-семантика и границы: <a href="https://github.com/saymer-alt/link-generators/blob/main/docs/TIERED-FAILOVER.md">docs/TIERED-FAILOVER.md</a> (HTTP-пробы; UDP не заявлен).</div>
@@ -622,8 +626,8 @@
         <div class="hint" id="tieredTrace" style="margin-top:6px;white-space:pre-line"></div>
       </div>
       <details id="physicalTopologyPanel" class="advanced-panel" style="margin-top:12px">
-        <summary style="cursor:pointer"><span>▶</span> <span class="advanced-badge">EXPERIMENTAL · v1.11-dev</span> <span>Physical Topology (только чтение)</span></summary>
-        <div class="hint">Каноническая модель физической цепочки (#149, v1.11): Client → ENTRY → TRANSIT(0..N) → EXIT [→ FINAL OVERLAY] → Internet. Только чтение и диагностика: не меняет генерируемый YAML, не участвует в Build/fingerprint, состояние живёт только в памяти вкладки. Демо — синтетическая reference-фикстура (никаких реальных адресов). Все выводы — о <em>сконфигурированной</em> (intended) топологии; наблюдаемая топология NOT_MEASURED, пока не подключены runtime-измерения. Local routing policy узла — отдельный уровень: транспортные кандидаты политики не создают новых физических узлов/рёбер.</div>
+        <summary style="cursor:pointer"><span>▶</span> <span class="advanced-badge">PHYSICAL TOPOLOGY</span> <span>🌐 Physical Topology</span></summary>
+        <div class="hint">Физическая цепочка (#149): Client → ENTRY → TRANSIT(0..N) → EXIT [→ FINAL OVERLAY] → Internet. Для этой модели доступны what-if, генерация per-node артефактов и Runtime Evidence. Physical Topology использует отдельную модель и не меняет обычный Mihomo Build автоматически. Демо — синтетическая фикстура; реальные данные остаются в памяти вкладки. Модель описывает intended topology, Runtime Evidence — ограниченные наблюдения Controller API; ни одно из них не доказывает фактический packet path. Local routing policy узла остаётся отдельным уровнем.</div>
         <textarea id="ptSpecInput" rows="10" aria-label="Спецификация физической топологии (JSON)" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder='{"nodes":[{"id":"entry-1","label":"…","role":"entry"}],"links":[{"from":"entry-1","to":"exit-1"}],"localPolicies":[]}'></textarea>
         <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
           <button type="button" class="btn btn-gray" id="ptDemoBtn">Загрузить демо-топологию</button>
@@ -772,17 +776,17 @@
       </div>
       <div id="csEditForm" style="margin-top:8px"></div>
       <div id="csImpactBox" class="hint" style="margin-top:6px;white-space:pre-line"></div>
-      <details id="csDangerPanel" class="cs-subpanel" style="margin-top:10px">
-        <summary style="cursor:pointer"><span>▶</span> <span>⚠ Переименование / удаление объекта</span></summary>
-        <div id="csDangerBody" style="margin-top:6px"></div>
-      </details>
       <details id="csAddPanel" class="cs-subpanel" style="margin-top:8px">
-        <summary style="cursor:pointer"><span>▶</span> <span>➕ Добавить новый прокси</span></summary>
+        <summary style="cursor:pointer">➕ Добавить новый прокси</summary>
         <div id="csAddBody" style="margin-top:6px"></div>
       </details>
       <details id="csRulesPanel" class="cs-subpanel" style="margin-top:8px">
-        <summary style="cursor:pointer"><span>▶</span> <span>🎯 Цель правила</span></summary>
+        <summary style="cursor:pointer">🎯 Цель правила</summary>
         <div id="csRulesBody" style="margin-top:6px"></div>
+      </details>
+      <details id="csDangerPanel" class="cs-subpanel" style="margin-top:10px">
+        <summary style="cursor:pointer">⚠ Переименование / удаление объекта</summary>
+        <div id="csDangerBody" style="margin-top:6px"></div>
       </details>
       <div id="csOpsBox" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:8px">
         <div class="label" style="font-weight:bold">4 · Правки сессии и diff</div>
@@ -5797,6 +5801,13 @@ const PT_TRANSPORTS = {
   http: { outboundType: 'http', listenerType: 'http', needsPassword: false }
 };
 const PT_PLACEHOLDER_PREFIX = '<CS-PLACEHOLDER:';
+const PT_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+const PT_KIND_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/;
+function ptOwnTransport(kind) {
+  return typeof kind === 'string' && Object.prototype.hasOwnProperty.call(PT_TRANSPORTS, kind) ? PT_TRANSPORTS[kind] : null;
+}
+function ptPublicRef(ref) { return typeof ref === 'string' && PT_REF_PATTERN.test(ref) ? ref : null; }
+function ptPublicKind(kind) { return typeof kind === 'string' && PT_KIND_PATTERN.test(kind) ? kind : null; }
 function ptYamlScalar(s) {
   const v = String(s);
   if (/^[A-Za-z0-9_][A-Za-z0-9_./:@%-]*$/.test(v)) return v;
@@ -5813,7 +5824,9 @@ function ptEndpointParts(spec, ref) {
   if (typeof raw !== 'string' || !raw.trim()) return null;
   const m = raw.trim().match(/^\[?([A-Za-z0-9._\-]+)\]?:(\d{1,5})$/);
   if (!m) return null;
-  return { host: m[1], port: m[2] };
+  const port = Number(m[2]);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+  return { host: m[1], port: String(port) };
 }
 // План ссылки для генерации: transport kind + endpoint + credentialRef.
 function ptLinkPlan(spec, fromId, toId) {
@@ -5833,7 +5846,7 @@ function ptNodeArtifactYaml(nodeLabel, role, inbound, outbound, credentials) {
   L.push('mode: rule');
   L.push('log-level: warning');
   if (inbound) {
-    const t = PT_TRANSPORTS[inbound.kind];
+    const t = ptOwnTransport(inbound.kind);
     L.push('listeners:');
     L.push('  - name: pt-in');
     L.push('    type: ' + t.listenerType);
@@ -5844,7 +5857,7 @@ function ptNodeArtifactYaml(nodeLabel, role, inbound, outbound, credentials) {
     }
   }
   if (outbound) {
-    const t = PT_TRANSPORTS[outbound.kind];
+    const t = ptOwnTransport(outbound.kind);
     L.push('proxies:');
     L.push('  - name: pt-out');
     L.push('    type: ' + t.outboundType);
@@ -5878,7 +5891,7 @@ function ptGenerateArtifacts(spec, credentials) {
     let inbound;
     if (idx === 0) {
       const cl = spec.clientLink && spec.clientLink.transport && typeof spec.clientLink.transport === 'object' ? spec.clientLink.transport : null;
-      inbound = cl ? { kind: (cl.kind || '').trim() || null, endpointRef: typeof cl.endpoint === 'string' ? cl.endpoint.trim() : null, credentialRef: typeof cl.credentialRef === 'string' ? cl.credentialRef.trim() : null } : null;
+      inbound = cl ? { kind: typeof cl.kind === 'string' ? cl.kind.trim() || null : null, endpointRef: typeof cl.endpoint === 'string' ? cl.endpoint.trim() : null, credentialRef: typeof cl.credentialRef === 'string' ? cl.credentialRef.trim() : null } : null;
     } else {
       inbound = ptLinkPlan(spec, nodes[idx - 1].id, node.id);
     }
@@ -5890,25 +5903,31 @@ function ptGenerateArtifacts(spec, credentials) {
     let inEp = null, outEp = null;
     if (!inbound || !inbound.kind) {
       nodeBlockers.push({ code: 'PT-GEN-INBOUND', message: !inbound ? 'не задан clientLink (транспорт клиент → ENTRY) — входящий listener не сгенерирован' : 'входящий транспорт не задан' });
-    } else if (!PT_TRANSPORTS[inbound.kind]) {
-      nodeBlockers.push({ code: 'PT-GEN-TRANSPORT', message: 'входящий транспорт «' + inbound.kind + '» вне первоклассного набора (' + Object.keys(PT_TRANSPORTS).join(', ') + ') — серверная часть внешняя' });
+    } else if (!ptOwnTransport(inbound.kind)) {
+      const kindLabel = ptPublicKind(inbound.kind);
+      nodeBlockers.push({ code: 'PT-GEN-TRANSPORT', message: 'входящий транспорт' + (kindLabel ? ' «' + kindLabel + '»' : '') + ' вне первоклассного набора (' + Object.keys(PT_TRANSPORTS).join(', ') + ') — серверная часть внешняя' });
     } else if (!inbound.endpointRef || !(inEp = ptEndpointParts(spec, inbound.endpointRef))) {
-      nodeBlockers.push({ code: 'PT-GEN-ENDPOINT', message: 'endpoint входящей ссылки («' + (inbound.endpointRef || '—') + '») не найден или не host:port в spec.endpoints' });
+      nodeBlockers.push({ code: 'PT-GEN-ENDPOINT', message: 'endpoint входящей ссылки не найден или не host:port в spec.endpoints' });
     }
+    if (inbound && inbound.endpointRef && !PT_REF_PATTERN.test(inbound.endpointRef)) nodeBlockers.push({ code: 'PT-GEN-REFERENCE', message: 'endpoint reference входящей ссылки имеет неподдерживаемый формат' });
+    if (inbound && inbound.credentialRef && !PT_REF_PATTERN.test(inbound.credentialRef)) nodeBlockers.push({ code: 'PT-GEN-REFERENCE', message: 'credential reference входящей ссылки имеет неподдерживаемый формат' });
     let outSupported = false;
     if (outbound) {
-      if (!outbound.kind || !PT_TRANSPORTS[outbound.kind]) {
-        nodeBlockers.push({ code: 'PT-GEN-CONTRACT', message: 'исходящий транспорт «' + (outbound.kind || 'не задан') + '» — внешняя часть: артефакт маршрутизирует в DIRECT, ребро требует внешнего контракта' });
+      if (!outbound.kind || !ptOwnTransport(outbound.kind)) {
+        const kindLabel = ptPublicKind(outbound.kind);
+        nodeBlockers.push({ code: 'PT-GEN-CONTRACT', message: 'исходящий транспорт' + (kindLabel ? ' «' + kindLabel + '»' : ' не задан') + ' — внешняя часть: требуется внешний контракт' });
       } else if (!outbound.endpointRef || !(outEp = ptEndpointParts(spec, outbound.endpointRef))) {
-        nodeBlockers.push({ code: 'PT-GEN-ENDPOINT', message: 'endpoint исходящей ссылки («' + (outbound.endpointRef || '—') + '») не найден или не host:port в spec.endpoints' });
+        nodeBlockers.push({ code: 'PT-GEN-ENDPOINT', message: 'endpoint исходящей ссылки не найден или не host:port в spec.endpoints' });
         outSupported = false;
       } else {
         outSupported = true;
       }
+      if (outbound.endpointRef && !PT_REF_PATTERN.test(outbound.endpointRef)) nodeBlockers.push({ code: 'PT-GEN-REFERENCE', message: 'endpoint reference исходящей ссылки имеет неподдерживаемый формат' });
+      if (outbound.credentialRef && !PT_REF_PATTERN.test(outbound.credentialRef)) nodeBlockers.push({ code: 'PT-GEN-REFERENCE', message: 'credential reference исходящей ссылки имеет неподдерживаемый формат' });
     }
     const needsCred =
-      (inbound && inbound.kind && PT_TRANSPORTS[inbound.kind] && PT_TRANSPORTS[inbound.kind].needsPassword && (!inbound.credentialRef || !credentials || typeof credentials[inbound.credentialRef] !== 'string' || !credentials[inbound.credentialRef])) ||
-      (outbound && outSupported && PT_TRANSPORTS[outbound.kind] && PT_TRANSPORTS[outbound.kind].needsPassword && (!outbound.credentialRef || !credentials || typeof credentials[outbound.credentialRef] !== 'string' || !credentials[outbound.credentialRef]));
+      (inbound && inbound.kind && ptOwnTransport(inbound.kind) && ptOwnTransport(inbound.kind).needsPassword && (!inbound.credentialRef || !credentials || typeof credentials[inbound.credentialRef] !== 'string' || !credentials[inbound.credentialRef])) ||
+      (outbound && outSupported && ptOwnTransport(outbound.kind) && ptOwnTransport(outbound.kind).needsPassword && (!outbound.credentialRef || !credentials || typeof credentials[outbound.credentialRef] !== 'string' || !credentials[outbound.credentialRef]));
     const files = {};
     // конфиг генерируется ТОЛЬКО при полном первоклассном контракте (вход+выход).
     // Неподдерживаемый исходящий транспорт = контракт без конфига: fallback в
@@ -5916,7 +5935,7 @@ function ptGenerateArtifacts(spec, credentials) {
     if (nodeBlockers.length === 0) {
       files['config.yaml'] = ptNodeArtifactYaml(
         node.label, node.role,
-        (!inbound || !inbound.kind || !PT_TRANSPORTS[inbound.kind] || !inEp) ? null : Object.assign({ port: inEp.port }, inbound),
+        (!inbound || !inbound.kind || !ptOwnTransport(inbound.kind) || !inEp) ? null : Object.assign({ port: inEp.port }, inbound),
         (outbound && outSupported) ? Object.assign({ host: outEp.host, port: outEp.port }, outbound) : null,
         credentials || {}
       );
@@ -5931,7 +5950,7 @@ function ptGenerateArtifacts(spec, credentials) {
         'Пункты:',
         ...nodeBlockers.map(b => '- ' + b.code + ': ' + b.message),
         needsCred ? '- PT-GEN-CREDENTIAL: задайте значение credential в spec.credentials (память вкладки) — плейсхолдеры заменятся' : '',
-        (inbound && inbound.kind ? '- входящий транспорт: ' + inbound.kind + ' (endpoint ref: ' + (inbound.endpointRef || '—') + ', credential ref: ' + (inbound.credentialRef || '—') + ')' : '- входящий транспорт: —')
+        (inbound && inbound.kind ? '- входящий транспорт: ' + (ptPublicKind(inbound.kind) || '[invalid]') + ' (endpoint ref: ' + (ptPublicRef(inbound.endpointRef) || '—') + ', credential ref: ' + (ptPublicRef(inbound.credentialRef) || '—') + ')' : '- входящий транспорт: —')
       ].filter(Boolean);
       files['contract.md'] = contractLines.join('\n') + '\n';
       withContract++;
@@ -5942,8 +5961,8 @@ function ptGenerateArtifacts(spec, credentials) {
     artifacts.push({
       nodeId: node.id, label: node.label, role: node.role, status, files,
       blockers: nodeBlockers,
-      inbound: inbound && inbound.kind ? { kind: inbound.kind, endpointRef: inbound.endpointRef, credentialRef: inbound.credentialRef } : null,
-      outbound: outbound && outbound.kind ? { kind: outbound.kind, endpointRef: outbound.endpointRef, credentialRef: outbound.credentialRef } : null,
+      inbound: inbound && inbound.kind ? { kind: ptPublicKind(inbound.kind), endpointRef: ptPublicRef(inbound.endpointRef), credentialRef: ptPublicRef(inbound.credentialRef) } : null,
+      outbound: outbound && outbound.kind ? { kind: ptPublicKind(outbound.kind), endpointRef: ptPublicRef(outbound.endpointRef), credentialRef: ptPublicRef(outbound.credentialRef) } : null,
       downstreamLabel: outbound ? (nodes[idx + 1] ? nodes[idx + 1].label : null) : (nodes[nodes.length - 1].role === 'final-overlay' ? nodes[nodes.length - 1].label : 'Internet')
     });
   });
@@ -5956,9 +5975,9 @@ function ptGenerateArtifacts(spec, credentials) {
     nodes: model.nodes.map(n => ({ id: n.id, label: n.label, role: n.role })),
     links: model.links.map(l => {
       const plan = ptLinkPlan(spec, l.from, l.to);
-      return { from: l.from, to: l.to, transport: plan.kind, endpointRef: plan.endpointRef, credentialRef: plan.credentialRef };
+      return { from: l.from, to: l.to, transport: ptPublicKind(plan.kind), endpointRef: ptPublicRef(plan.endpointRef), credentialRef: ptPublicRef(plan.credentialRef) };
     }),
-    clientLink: spec.clientLink && spec.clientLink.transport ? { transport: spec.clientLink.transport.kind || null, endpointRef: spec.clientLink.transport.endpoint || null } : null,
+    clientLink: spec.clientLink && spec.clientLink.transport ? { transport: ptPublicKind(spec.clientLink.transport.kind), endpointRef: ptPublicRef(spec.clientLink.transport.endpoint) } : null,
     artifacts: artifacts.map(a => ({ nodeId: a.nodeId, status: a.status, files: Object.keys(a.files).sort(), blockers: a.blockers.map(b => b.code) }))
   };
   // deployment-map.md: человекочитаемый слой (intended, NOT_MEASURED)
@@ -6127,9 +6146,14 @@ function csRedactUrl(url) {
     if (u.search) path += '?<params hidden>';
     // path-токены: сегменты после /token|key|download|sub|dl/ и длинные base64url-сегменты
     path = path.replace(/(\/(?:token|key|download|sub|dl)\/)[^/?#]+/gi, '$1<hidden>');
-    path = path.replace(/\/[A-Za-z0-9_-]{20,}(?=\/|$)/g, '/<token hidden>');
+    path = path.replace(/\/[A-Za-z0-9_-]{20,}(?=[/,.;:!?)\]}]|$)/g, '/<token hidden>');
     return u.origin + path;
   } catch (_) { return s; }
+}
+function csRedactText(value) {
+  return String(value || '')
+    .replace(/[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi, url => csRedactUrl(url))
+    .replace(/(\b(?:password|private[-_]?key|secret|token|uuid|preshared[-_]?key|authorization|x-hwid)\b\s*[:=]\s*)(?:Bearer\s+)?(?:"[^"]*"|'[^']*'|[^,\s;]+)/gi, '$1••••••');
 }
 function csRedactValue(key, value) {
   if (value === null || value === undefined) return value;
@@ -6218,9 +6242,9 @@ function csCollectRefs(doc) {
 // оговоркой про неявный GLOBAL (Mihomo включает все proxies/groups в GLOBAL).
 function csDiagnostics(doc) {
   const diags = [];
-  const err = (code, message) => diags.push({ severity: 'error', code, message });
-  const warn = (code, message) => diags.push({ severity: 'warning', code, message });
-  const info = (code, message) => diags.push({ severity: 'info', code, message });
+  const err = (code, message) => diags.push({ severity: 'error', code, message: csRedactText(message) });
+  const warn = (code, message) => diags.push({ severity: 'warning', code, message: csRedactText(message) });
+  const info = (code, message) => diags.push({ severity: 'info', code, message: csRedactText(message) });
   const proxyList = Array.isArray(doc && doc.proxies) ? doc.proxies : [];
   const groupList = Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : [];
   const dupIn = (list, label) => {
@@ -6335,7 +6359,7 @@ function csGraphText(doc) {
   const used = new Set((Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : []).flatMap(g => Array.isArray(g.use) ? g.use : []));
   lines.push('');
   lines.push('Proxy-providers: ' + (provNames.length ? provNames.map(n => n + (used.has(n) ? '' : ' (не используется группами)')).join(', ') : '—'));
-  return lines.join('\n');
+  return csRedactText(lines.join('\n'));
 }
 // Semantic Trace: путь правила (configured), по одному правилу — первые 12; ясное
 // различение configured/runtime: участников select/url-test/fallback помечаем runtime-selected.
@@ -6368,7 +6392,7 @@ function csTraceText(doc) {
   else if (rules.length > limit) lines.push('… остальные ' + (rules.length - limit) + ' — через «Маршрутизация» по домену.');
   lines.push('');
   lines.push('Границы: это STATIC CONFIG GRAPH из YAML. Это не RUNTIME OBSERVED (фактический выбор участника делает Mihomo) и не PHYSICAL TOPOLOGY (#149 — owner-declared).');
-  return lines.join('\n');
+  return csRedactText(lines.join('\n'));
 }
 // === CONFIG STUDIO CORE — CS-CORE-END ===
 
@@ -6485,6 +6509,9 @@ function csFindProvider(csDoc, section, name) {
   return pair ? { key: pair.key, value: pair.value } : null;
 }
 function csPlanFieldEdit(csDoc, src, type, name, field, newText) {
+  const walk = csWalkNamed(csDoc);
+  const defs = type === 'proxy' ? walk.proxyDefs : type === 'group' ? walk.groupDefs : type === 'proxy-providers' ? walk.providerDefs : type === 'rule-providers' ? walk.rpDefs : [];
+  if (defs.filter(d => d.name === name).length > 1) return { error: 'имя объекта встречается более одного раза — правка неоднозначна' };
   const mapNode = type === 'proxy-providers' || type === 'rule-providers'
     ? (csFindProvider(csDoc, type, name) || {}).value
     : (csFindSeqItem(csDoc, type === 'proxy' ? 'proxies' : 'proxy-groups', name) || {}).node;
@@ -7262,6 +7289,7 @@ function renderPhysicalTopologyWhatIf() {
 }
 
 function runPhysicalTopology() {
+  ptRuntimeInvalidatePending('топология повторно проанализирована');
   const input = document.getElementById('ptSpecInput');
   const diagOut = document.getElementById('ptDiagOut');
   const traceOut = document.getElementById('ptTraceOut');
@@ -7300,6 +7328,7 @@ function clearPhysicalTopology() {
   ptRuntimeProfiles = {};
   ptRuntimeEvidence = null;
   ptRuntimeSeq++;
+  if (ptRuntimeAbort) { try { ptRuntimeAbort.abort(); } catch (_) {} ptRuntimeAbort = null; }
   const diagOut = document.getElementById('ptDiagOut');
   const traceOut = document.getElementById('ptTraceOut');
   if (diagOut) diagOut.textContent = '';
@@ -7329,6 +7358,24 @@ function ptRuntimeNodeList() {
 }
 function ptProfilesFingerprint() {
   return JSON.stringify(ptRuntimeProfiles);
+}
+function ptRuntimeInvalidatePending(reason) {
+  const wasPending = !!ptRuntimeAbort;
+  ptRuntimeSeq++;
+  if (ptRuntimeAbort) { try { ptRuntimeAbort.abort(); } catch (_) {} ptRuntimeAbort = null; }
+  if (ptRuntimeEvidence) ptRuntimeRender();
+  else if (wasPending) {
+    const status = document.getElementById('ptRuntimeStatus');
+    if (status) status.textContent = 'STALE · проверка отменена: ' + (reason || 'профиль изменён') + '. Запустите проверку снова.';
+  }
+}
+function ptRuntimeInputTopologyFingerprint() {
+  const input = document.getElementById('ptSpecInput');
+  if (!input || !input.value.trim()) return null;
+  try {
+    const analysis = ptAnalyzeTopology(JSON.parse(input.value));
+    return analysis.ok && analysis.model ? ptRuntimeFingerprint(analysis.model, null) : null;
+  } catch (_) { return null; }
 }
 function csMarkState(state) {
   return { NOT_CHECKED: '·', FETCHING: '…', OBSERVED: '✓', PARTIAL: '◐', UNREACHABLE: '✖', AUTH_ERROR: '🔑', STALE: '⏳', UNKNOWN: '?' }[state] || '·';
@@ -7379,6 +7426,8 @@ function ptRuntimeEnsureProfiles() {
   wrap.querySelectorAll('input[data-rt-node]').forEach(i => {
     i.addEventListener('input', () => {
       ptRuntimeProfiles[i.dataset.rtNode][i.dataset.rtKey] = i.value;
+      ptRuntimeInvalidatePending('профили изменены');
+      ptRuntimeRender();
     });
   });
 }
@@ -7398,9 +7447,9 @@ function ptRuntimeRender() {
   const out = document.getElementById('ptRuntimeOut');
   const status = document.getElementById('ptRuntimeStatus');
   if (!out) return;
-  const fpTopo = ptRuntimeFingerprint(ptLastModel ? JSON.parse(JSON.stringify(ptLastModel)) : null, null);
+  const fpTopo = ptRuntimeInputTopologyFingerprint();
   const fpProf = ptProfilesFingerprint();
-  const staleTopo = ptRuntimeEvidence && ptIsStale(ptRuntimeEvidence, fpTopo);
+  const staleTopo = ptRuntimeEvidence && (!fpTopo || ptIsStale(Object.assign({}, ptRuntimeEvidence, { fingerprint: ptRuntimeEvidence.fpTopo }), fpTopo));
   const staleProf = ptRuntimeEvidence && ptIsStale(Object.assign({}, ptRuntimeEvidence, { fingerprint: ptRuntimeEvidence.fpProfiles }), fpProf);
   const lines = [];
   if (ptRuntimeEvidence) {
@@ -7441,13 +7490,19 @@ async function ptRuntimeCheck() {
   const status = document.getElementById('ptRuntimeStatus');
   if (!status) return;
   if (!ptLastModel) { status.textContent = 'Сначала проанализируйте топологию.'; return; }
+  const inputFingerprint = ptRuntimeInputTopologyFingerprint();
+  const modelFingerprint = ptLastModel ? ptRuntimeFingerprint(ptLastModel, null) : null;
+  if (!inputFingerprint || inputFingerprint !== modelFingerprint) {
+    status.textContent = 'STALE · топология в поле изменилась или некорректна. Сначала проанализируйте текущую топологию.';
+    ptRuntimeRender();
+    return;
+  }
   const seq = ++ptRuntimeSeq;
   if (ptRuntimeAbort) { try { ptRuntimeAbort.abort(); } catch (_) {} }
   ptRuntimeAbort = new AbortController();
   const nodes = ptRuntimeNodeList();
   // snapshot: проверяем против ТЕКУЩИХ профилей; изменились позже → STALE по fingerprint
   const profilesSnapshot = JSON.parse(JSON.stringify(ptRuntimeProfiles));
-  const specNow = ptSpecInput ? (() => { try { return JSON.parse(document.getElementById('ptSpecInput').value); } catch (_) { return null; } })() : null;
   status.textContent = 'FETCHING · проверка контроллеров…';
   // маркер FETCHING в рендере
   ptRuntimeEvidence = null;
@@ -7506,6 +7561,7 @@ async function ptRuntimeCheck() {
   ptRuntimeEvidence.chain = chain;
   ptRuntimeEvidence.fpTopo = ptRuntimeFingerprint(ptLastModel ? JSON.parse(JSON.stringify(ptLastModel)) : null, null);
   ptRuntimeEvidence.fpProfiles = ptProfilesFingerprint();
+  if (seq === ptRuntimeSeq) ptRuntimeAbort = null;
   ptRuntimeRender();
 }
 function csRuntimeSet(nodeId, ev, seq) {
@@ -8069,7 +8125,7 @@ function api_diff(a, b) { return csLineDiff(a, b); }
 function csRedactLine(line) {
   const m = line.match(/^(\s*(?:-\s*)?)([A-Za-z0-9_-]+):(.*)$/);
   if (m && csIsSecretKey(m[2])) return m[1] + m[2] + ': ••••••';
-  return csRedactUrl(line);
+  return csRedactText(line);
 }
 
 function csEditorClick(e) {

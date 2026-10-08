@@ -166,6 +166,42 @@ const credsOf = ids => Object.fromEntries([{ k: 'cr-c' }, ...ids.slice(0, -1).ma
   ok();
 }
 
+// --- malformed credential references fail closed and are not echoed ---
+{
+  const spec = specOf([['e', 'entry'], ['x', 'exit']]);
+  const probe = "cred'\n  - name: injected\n    type: ss";
+  spec.clientLink.transport.credentialRef = probe;
+  const r = api.ptGenerateArtifacts(spec, {});
+  const entry = r.artifacts[0];
+  assert.equal(entry.status, 'EXTERNAL_CONTRACT_REQUIRED', 'malformed credential ref requires an external contract');
+  assert.equal(entry.files['config.yaml'], undefined, 'malformed ref is never interpolated into YAML');
+  assert.ok(!JSON.stringify(r).includes(probe), 'malformed ref is absent from diagnostics and artifacts');
+  const endpointProbe = 'https://subs.example.invalid/?token=synthetic-token-123';
+  const specWithUrlRef = specOf([['e', 'entry'], ['x', 'exit']]);
+  specWithUrlRef.clientLink.transport.endpoint = endpointProbe;
+  const endpointResult = api.ptGenerateArtifacts(specWithUrlRef, {});
+  assert.equal(endpointResult.artifacts[0].status, 'EXTERNAL_CONTRACT_REQUIRED');
+  assert.ok(!JSON.stringify(endpointResult).includes(endpointProbe), 'URL-like endpoint ref is neither exported nor echoed');
+  ok();
+}
+
+// --- endpoint ports are valid and leading zeroes cannot alter YAML numeric meaning ---
+{
+  for (const port of ['0', '00000', '65536', '99999']) {
+    const spec = specOf([['e', 'entry'], ['x', 'exit']]);
+    spec.endpoints['ep-c'] = '192.0.2.1:' + port;
+    const r = api.ptGenerateArtifacts(spec, credsOf([['e', 'entry'], ['x', 'exit']]));
+    assert.equal(r.artifacts[0].status, 'EXTERNAL_CONTRACT_REQUIRED', 'invalid port ' + port + ' blocks artifact');
+    assert.equal(r.artifacts[0].files['config.yaml'], undefined, 'invalid port is never emitted');
+  }
+  const leadingZero = specOf([['e', 'entry'], ['x', 'exit']]);
+  leadingZero.endpoints['ep-c'] = '192.0.2.1:00080';
+  const out = api.ptGenerateArtifacts(leadingZero, credsOf([['e', 'entry'], ['x', 'exit']])).artifacts[0].files['config.yaml'];
+  assert.ok(out.includes('port: 80'), 'valid leading-zero port canonicalizes to decimal');
+  assert.ok(!out.includes('port: 00080'), 'no YAML octal ambiguity');
+  ok();
+}
+
 // --- 12. unsupported transport на ребре — contract, не фейк ---
 {
   const spec = specOf([['e', 'entry'], ['x', 'exit']]);
@@ -175,6 +211,13 @@ const credsOf = ids => Object.fromEntries([{ k: 'cr-c' }, ...ids.slice(0, -1).ma
   assert.equal(e.status, 'EXTERNAL_CONTRACT_REQUIRED');
   assert.ok(!e.files['config.yaml'], 'без входного listener конфиг не генерируется');
   assert.ok(e.files['contract.md'].includes('vless-real-external'));
+  for (const kind of ['toString', 'constructor', '__proto__']) {
+    const inherited = specOf([['e', 'entry'], ['x', 'exit']]);
+    inherited.links[0].transport = { kind };
+    const result = api.ptGenerateArtifacts(inherited, credsOf([['e', 'entry'], ['x', 'exit']]));
+    assert.equal(result.artifacts[0].status, 'EXTERNAL_CONTRACT_REQUIRED', kind + ' is not a registered transport');
+    assert.equal(result.artifacts[0].files['config.yaml'], undefined, kind + ' must fail closed');
+  }
   ok();
 }
 

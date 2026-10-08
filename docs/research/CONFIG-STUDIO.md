@@ -67,7 +67,7 @@ Evidence-метки как в PHYSICAL-MULTIHOP-ARCHITECTURE.md.
 
 ## 5. Semantic boundary (PHASE 5)
 
-STATIC CONFIG GRAPH (из YAML) ≠ LOCAL ROUTING POLICY (семантика групп) ≠ PHYSICAL TOPOLOGY (owner-declared, #149) ≠ RUNTIME EVIDENCE (#159/будущие контроллеры). Импортированный `dialer-proxy`/fallback в Studio подписывается словами «статическая цепочка конфига» — без VPS-утверждений.
+STATIC CONFIG GRAPH (из YAML) ≠ LOCAL ROUTING POLICY (семантика групп) ≠ PHYSICAL TOPOLOGY (owner-declared, #149) ≠ RUNTIME EVIDENCE (#188, наблюдение Controller API). Импортированный `dialer-proxy`/fallback в Studio подписывается словами «статическая цепочка конфига» — без VPS-утверждений; Runtime Evidence сопоставляет явный выбор группы с intended-кандидатами, но не доказывает путь пакета.
 
 ## 6. Валидация перед экспортом (PHASE 16)
 

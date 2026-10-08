@@ -297,19 +297,23 @@ inline-провайдеры политик; DOMAIN-REGEX/DOMAIN-WILDCARD, GEOSIT
 Для обычного использования не нужен. Раскрытие секции ничего не включает —
 включается только явный master-переключатель.
 
-## 8.1 Physical Topology (эксперимент v1.11-dev, только чтение)
+## 8.1 Physical Topology
 
-Панель «EXPERIMENTAL · v1.11-dev — Physical Topology» описывает **физическую**
-цепочку из нескольких независимых узлов (#149): Client → ENTRY → TRANSIT(0..N)
-→ EXIT [→ FINAL OVERLAY] → Internet. Кнопка «Загрузить демо-топологию» кладёт
-синтетический пример (Moscow → Estonia → Sweden → WARP, без реальных адресов),
-«Проанализировать» — проверяет линейную цепочку (циклы, дубликаты, порядок
-ролей, связность, локальные политики) и рисует configured (intended) путь.
-Кнопки доступности на узлах — what-if: недоступный узел разрывает цепочку;
-альтернативная физическая топология никогда не подставляется. Важно: панель
-**не меняет генерируемый YAML**, не участвует в Build/fingerprint и не
-подключается к каким-либо серверам; это модель будущей функции, а не измерение
-трафика. Технические детали — [research/PHYSICAL-MULTIHOP-ARCHITECTURE.md](research/PHYSICAL-MULTIHOP-ARCHITECTURE.md).
+Панель «🌐 Physical Topology» описывает **физическую** цепочку из независимых
+узлов (#149): Client → ENTRY → TRANSIT(0..N) → EXIT [→ FINAL OVERLAY] →
+Internet. «Загрузить демо-топологию» подставляет синтетический пример
+(Moscow → Estonia → Sweden → WARP, без реальных адресов); «Проанализировать»
+проверяет линейную цепочку, а what-if показывает CHAIN_UNAVAILABLE при отказе
+узла. Runtime Evidence по явному действию читает `/version` и `/proxies` на
+указанных контроллерах и сравнивает наблюдаемое состояние с заданной моделью.
+Это не проверка доступности физического узла и не доказательство packet path.
+
+«Подготовить артефакты узлов» создаёт `config.yaml` только для поддержанных
+контрактов SS/SOCKS/HTTP; остальные транспорты получают `contract.md`.
+PLACEHOLDERS_REQUIRED и EXTERNAL_CONTRACT_REQUIRED не являются готовыми к запуску
+конфигами. READY проверяется Mihomo в CI на поддерживаемых версиях. Physical
+Topology использует отдельную модель и не меняет обычный Mihomo Build
+автоматически. Данные панели остаются в памяти вкладки. Подробности: [архитектура](research/PHYSICAL-MULTIHOP-ARCHITECTURE.md), [генерация](research/PT-GENERATION.md), [Runtime Evidence](research/PT-RUNTIME-EVIDENCE.md).
 
 ## 8.2 Config Studio — анализ и правка готового конфига (#176/#178)
 

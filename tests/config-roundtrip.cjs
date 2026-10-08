@@ -158,4 +158,63 @@ const FIX = [
   ok();
 }
 
+// --- 10. anchors/aliases, block scalars, odd spacing, Unicode, nested groups and unknown sections ---
+{
+  const extended = [
+    '# synthetic CST stress fixture',
+    'mixed-port:   7890    # spacing + inline comment',
+    'switch: "true"',
+    'unquoted-zero: 007',
+    'quoted-zero: "007"',
+    'custom-defaults: &defaults',
+    '  interval: 86400',
+    '  marker: "keep me"',
+    'custom-alias: *defaults',
+    'proxies:',
+    '   - name: "🌐 Node (alpha)"',
+    '     type: ss',
+    '     server: 198.51.100.30  # only this scalar should move',
+    '     port: 8443',
+    '     password: synthetic-pass',
+    '     cipher: aes-128-gcm',
+    'proxy-groups:',
+    '   - name: MAIN',
+    '     type: select',
+    '     proxies: ["🌐 Node (alpha)", DIRECT]',
+    '     use: [provider-a]',
+    '   - name: NESTED',
+    '     type: fallback',
+    '     proxies:',
+    '       - MAIN',
+    '       - DIRECT',
+    'proxy-providers:',
+    '  provider-a:',
+    '    type: http',
+    '    url: "https://subs.example.invalid/client/token/synthetic-token-1234567890"',
+    '    interval: 86400',
+    'rules:',
+    '  - MATCH,NESTED',
+    'custom-section:',
+    '  block: |+',
+    '    preserve this: exactly',
+    '    and this line too',
+    ''
+  ].join('\n');
+  assert.equal(replay(extended, []).text, extended, 'extended no-op export is byte exact');
+  const edited = replay(extended, [{ opKind: 'field-edit', type: 'proxy', name: '🌐 Node (alpha)', field: 'server', newText: '203.0.113.30' }]);
+  const changed = api.csLineDiff(extended, edited.text).filter(x => x.t !== ' ');
+  assert.deepEqual(changed.map(x => x.t + x.line), [
+    '-     server: 198.51.100.30  # only this scalar should move',
+    '+     server: 203.0.113.30  # only this scalar should move'
+  ], 'single edit touches only target scalar and preserves its inline comment semantics');
+  for (const keep of ['mixed-port:   7890    # spacing + inline comment', 'switch: "true"', 'unquoted-zero: 007', 'quoted-zero: "007"', 'custom-alias: *defaults', 'proxies: ["🌐 Node (alpha)", DIRECT]', '       - MAIN', 'and this line too', 'synthetic-token-1234567890']) {
+    assert.ok(edited.text.includes(keep), 'unrelated syntax preserved: ' + keep);
+  }
+  const doc = CSY.parseDocument(extended, { keepSourceTokens: true });
+  const plain = CSY.parse(extended);
+  const rename = api.csPlanOp(doc, extended, plain, { opKind: 'rename', type: 'proxy', name: '🌐 Node (alpha)', new: '🌐 Node (beta)' });
+  assert.ok(rename.error && /алиас/i.test(rename.error), 'unsupported alias rename fails closed');
+  ok();
+}
+
 console.log('PASS config-roundtrip: ' + cases + ' groups');
