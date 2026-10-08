@@ -644,6 +644,16 @@
         <div class="hint" style="margin-top:4px">Генерация работает только для валидной цепочки; транспорты первого класса — ss/socks/http (полная пара outbound+listener в Mihomo, доказано по исходникам 1.19.32). Всё остальное — честный external contract без выдуманного серверного YAML. Значения секретов задаются в spec.credentials (память вкладки, в manifest не попадают); без них артефакты получают плейсхолдеры.</div>
         <div id="ptGenOut" class="hint" style="display:none;margin-top:6px;white-space:pre-line"></div>
         <div id="ptGenDownloads" style="display:none;margin-top:8px"></div>
+        <details id="ptRuntimePanel" style="margin-top:10px">
+          <summary style="cursor:pointer"><span>▶</span> <span>🔍 Runtime Evidence (эксперимент #188)</span></summary>
+          <div class="hint" style="margin-top:6px">Свяжите каждый физический узел с его Mihomo-контроллером (например <code>127.0.0.1:19090</code> через ваш SSH local-forward — генератор туннели не создаёт). Секрет и адрес — только память вкладки, никакого auto-fetch: запрос идёт по кнопке «Проверить runtime». Наблюдения НЕ меняют топологию и не являются доказательством пути пакета: максимум — «наблюдаемое состояние контроллеров согласуется с intended-топологией». Недоступный контроллер ≠ узел выключен (причины: offline/CORS/mixed-content/нет SSH forward).</div>
+          <div id="ptRuntimeProfiles" style="margin-top:6px"></div>
+          <div class="btn-group" style="margin-top:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-gray" id="ptRuntimeCheckBtn">🔍 Проверить runtime</button>
+          </div>
+          <div id="ptRuntimeStatus" class="hint" style="margin-top:6px;white-space:pre-line" aria-live="polite"></div>
+          <div id="ptRuntimeOut" class="hint" style="margin-top:6px;white-space:pre-line;font-family:monospace;font-size:.78rem"></div>
+        </details>
       </details>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN Interface">?</button><span class="ctx-help-pop" role="note">Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo».</span></span></label>
@@ -5980,6 +5990,114 @@ function ptGenerateArtifacts(spec, credentials) {
   };
 }
 // === PHYSICAL TOPOLOGY GENERATION ENGINE — PT-GEN-END ===
+
+// === PHYSICAL TOPOLOGY RUNTIME EVIDENCE CORE (#188, v1.11) — PT-RUNTIME-START ===
+// Evidence-слой поверх intended-топологии. Контракты:
+// 1) STATIC CONFIG ≠ INTENDED TOPOLOGY ≠ RUNTIME EVIDENCE ≠ PACKET PATH PROOF —
+//    формулировка «consistent with intended topology», никогда «пакет прошёл»;
+// 2) топология иммутабельна: evidence ничего в ней не переставляет;
+// 3) binding ТОЛЬКО явный (group + expectedMembers на физическое ребро) —
+//    имя прокси («Estonia», «Germany») физикой не является;
+// 4) кандидаты одного ребра — одно физическое ребро (Mieru→VLESS не новые узлы);
+// 5) секреты в этот блок НЕ входят: classify работает по наблюдениям,
+//    fetch-оркестрация с секретом живёт в UI-слое страницы.
+const PT_RT_STATES = ['NOT_CHECKED', 'FETCHING', 'OBSERVED', 'PARTIAL', 'UNREACHABLE', 'AUTH_ERROR', 'STALE', 'UNKNOWN'];
+const PT_RT_MAX_DEPTH = 8;
+// Built-in таргеты Mihomo: известны независимо от наличия в /proxies.
+const PT_RT_BUILTINS = ['DIRECT', 'REJECT', 'REJECT-DROP', 'GLOBAL', 'PASS', 'COMPATIBLE'];
+// /proxies → { name: { type, now, all, alive } } — минимум безопасных полей
+// (SOURCE-PROVEN: hub/route/proxies.go getProxies + adapter/adapter.go
+// MarshalJSON + outboundgroup Selector/URLTest/Fallback MarshalJSON «now»).
+function ptRuntimeParseProxies(rawJson) {
+  let data;
+  try { data = JSON.parse(rawJson); } catch (_) { return null; }
+  const src = data && data.proxies && typeof data.proxies === 'object' ? data.proxies : null;
+  if (!src) return null;
+  const out = {};
+  for (const name of Object.keys(src)) {
+    const p = src[name];
+    if (!p || typeof p !== 'object') continue;
+    out[name] = {
+      type: typeof p.type === 'string' ? p.type : null,
+      now: typeof p.now === 'string' ? p.now : null,
+      all: Array.isArray(p.all) ? p.all.map(String) : null,
+      alive: p.alive === undefined ? null : !!p.alive
+    };
+  }
+  return out;
+}
+// Цепочка выбора: group.now → (если это группа: есть all+now) → … Ограничение
+// глубины + защита от цикла; неизвестное имя завершает цепочку с null.
+function ptResolveSelectionChain(proxies, groupName, maxDepth) {
+  const limit = maxDepth || PT_RT_MAX_DEPTH;
+  const chain = [];
+  const visited = new Set();
+  let current = groupName;
+  let cycle = false, unknown = false;
+  while (chain.length <= limit) {
+    if (visited.has(current)) { cycle = true; break; }
+    visited.add(current);
+    const node = proxies ? proxies[current] : null;
+    if (!node) { unknown = true; chain.push(current); break; } // неизвестный лист — тоже часть цепочки
+    chain.push(current);
+    if (!node.all || !node.now) break; // не группа (leaf-прокси) — конец
+    current = node.now;
+    if (current === null) break;
+  }
+  if (chain.length > limit) cycle = true;
+  return { chain, cycle, unknown, tail: chain.length ? chain[chain.length - 1] : null };
+}
+// Классификация одного физического ребра. binding: {group, expectedMembers[]};
+// observation: {status, proxies?, chain?|selectedMember?}. Никогда не INCONSISTENT
+// на неизвестном кандидате (→ UNKNOWN) — динамические provider-узлы не объявлены.
+function ptClassifyEdge(binding, observation) {
+  const b = binding || {};
+  const o = observation || {};
+  if (o.status && o.status !== 'OBSERVED') {
+    // UNREACHABLE/AUTH_ERROR/STALE/UNKNOWN — не классифицируются как inconsistent
+    return { verdict: o.status === 'OBSERVED' ? 'UNKNOWN' : o.status, reason: o.reason || ('контроллер: ' + o.status) };
+  }
+  if (!b.group) return { verdict: 'PARTIAL', reason: 'binding.group не задан' };
+  if (!Array.isArray(b.expectedMembers) || !b.expectedMembers.length) return { verdict: 'PARTIAL', reason: 'expectedMembers не заданы' };
+  if (!o.proxies) return { verdict: 'PARTIAL', reason: 'нет наблюдения /proxies' };
+  const res = ptResolveSelectionChain(o.proxies, b.group);
+  if (res.chain.length === 0) return { verdict: 'PARTIAL', reason: 'группа «' + b.group + '» не найдена в /proxies' };
+  if (res.unknown && res.chain.length === 1 && res.tail === b.group) {
+    return { verdict: 'PARTIAL', reason: 'binding-группа «' + b.group + '» отсутствует в /proxies этого контроллера (не тот контроллер/конфиг?)' };
+  }
+  const selected = res.tail;
+  if (res.cycle) return { verdict: 'PARTIAL', reason: 'цикл в цепочке выбора: ' + res.chain.join(' → ') };
+  if (res.unknown && !PT_RT_BUILTINS.includes(res.tail)) {
+    return { verdict: 'UNKNOWN', reason: 'хвост цепочки «' + res.tail + '» отсутствует в /proxies (динамический/provider узел?)' };
+  }
+  if (!selected) return { verdict: 'PARTIAL', reason: 'группа «' + b.group + '» без now' };
+  if (b.expectedMembers.includes(selected)) return { verdict: 'CONSISTENT', reason: 'наблюдаемый выбор «' + selected + '» входит в ожидаемые кандидаты ребра', chain: res.chain, selected };
+  if (PT_RT_BUILTINS.includes(selected)) {
+    return { verdict: 'INCONSISTENT', reason: 'наблюдаемый выбор «' + selected + '» — встроенный обходной таргет, не входящий в контракт ребра', chain: res.chain, selected };
+  }
+  return { verdict: 'UNKNOWN', reason: 'наблюдаемый выбор «' + selected + '» не входит в объявленные кандидаты ребра — кандидат не объявлен (динамический provider?)', chain: res.chain, selected };
+}
+// Агрегат цепочки: детерминированный приоритет
+// INCONSISTENT > PARTIAL/UNREACHABLE/AUTH_ERROR/STALE > UNKNOWN > CONSISTENT.
+function ptAggregateChain(edgeResults) {
+  const arr = edgeResults || [];
+  if (!arr.length) return 'UNKNOWN';
+  const has = v => arr.some(x => x.verdict === v);
+  if (has('INCONSISTENT')) return 'INCONSISTENT';
+  if (has('PARTIAL') || has('UNREACHABLE') || has('AUTH_ERROR') || has('STALE')) return 'PARTIAL';
+  if (has('UNKNOWN')) return 'UNKNOWN';
+  return 'CONSISTENT';
+}
+// Структурная просроченность: время само по себе не меняет классификацию
+// (P2.15). STALE только при структурном несовпадении отпечатков.
+function ptRuntimeFingerprint(topologySpec, profiles) {
+  return JSON.stringify({ t: topologySpec || null, p: profiles || null });
+}
+function ptIsStale(evidence, fingerprintNow) {
+  if (!evidence || !evidence.fingerprint) return false;
+  return evidence.fingerprint !== fingerprintNow;
+}
+// === PHYSICAL TOPOLOGY RUNTIME EVIDENCE CORE — PT-RUNTIME-END ===
 // === CONFIG STUDIO CORE (pure, deterministic; v1.11 #176/#178/#177) — CS-CORE-START ===
 // Анализ импортированного Mihomo-конфига. Дизайн: docs/research/CONFIG-STUDIO.md.
 // Ключевое переиспользование: импортированный doc после jsyaml.load скармливается
@@ -7167,6 +7285,8 @@ function runPhysicalTopology() {
     renderPhysicalTopologyGraph();
     const trace = ptTraceTopology(ptLastModel);
     traceOut.textContent = trace ? trace.text : '';
+    ptRuntimeEnsureProfiles();
+    ptRuntimeRender();
   } else {
     traceOut.textContent = 'Топология не валидна — trace/визуализация строятся только для валидной линейной цепочки (no silent-fix).';
   }
@@ -7177,6 +7297,9 @@ function clearPhysicalTopology() {
   if (input) input.value = '';
   ptLastModel = null;
   ptUnavailableNodes = new Set();
+  ptRuntimeProfiles = {};
+  ptRuntimeEvidence = null;
+  ptRuntimeSeq++;
   const diagOut = document.getElementById('ptDiagOut');
   const traceOut = document.getElementById('ptTraceOut');
   if (diagOut) diagOut.textContent = '';
@@ -7186,6 +7309,211 @@ function clearPhysicalTopology() {
   const genDl = document.getElementById('ptGenDownloads');
   if (genOut) genOut.style.display = 'none';
   if (genDl) { genDl.style.display = 'none'; genDl.textContent = ''; }
+  document.getElementById('ptRuntimeOut').textContent = '';
+  document.getElementById('ptRuntimeStatus').textContent = '';
+}
+
+// === Physical Topology Runtime Evidence UI (#188, P2.3–P2.15) ===
+// Профили и секреты — ТОЛЬКО память вкладки (никакого storage); fetch — только
+// по явному клику; race-guard: generation id + AbortController; STALE —
+// структурно (fingerprint топологии/профилей), не по времени. Observations
+// никогда не меняют топологию и не утверждают packet-path.
+let ptRuntimeProfiles = {}; // nodeId → {endpoint, secret, group, members}
+let ptRuntimeEvidence = null; // {checkedAt, fpTopo, fpProfiles, perNode, chain}
+let ptRuntimeSeq = 0;
+let ptRuntimeAbort = null;
+
+function ptRuntimeNodeList() {
+  if (!ptLastModel) return [];
+  return ptLastModel.nodes.filter(n => n.role !== 'final-overlay');
+}
+function ptProfilesFingerprint() {
+  return JSON.stringify(ptRuntimeProfiles);
+}
+function csMarkState(state) {
+  return { NOT_CHECKED: '·', FETCHING: '…', OBSERVED: '✓', PARTIAL: '◐', UNREACHABLE: '✖', AUTH_ERROR: '🔑', STALE: '⏳', UNKNOWN: '?' }[state] || '·';
+}
+
+function ptRuntimeEnsureProfiles() {
+  const wrap = document.getElementById('ptRuntimeProfiles');
+  if (!wrap) return;
+  wrap.textContent = '';
+  const nodes = ptRuntimeNodeList();
+  for (const n of nodes) {
+    if (!ptRuntimeProfiles[n.id]) ptRuntimeProfiles[n.id] = { endpoint: '', secret: '', group: '', members: '' };
+    const p = ptRuntimeProfiles[n.id];
+    const box = document.createElement('div');
+    box.style.cssText = 'border:1px solid var(--border);padding:6px 10px;margin:6px 0;background:rgba(255,255,255,.3)';
+    const head = document.createElement('div');
+    head.className = 'label';
+    head.style.fontWeight = 'bold';
+    head.textContent = n.label + ' [' + ptRoleLabel(n.role) + ']';
+    box.appendChild(head);
+    const mk = (label, key, ph, secret) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:6px;align-items:center;margin:3px 0;flex-wrap:wrap';
+      const l = document.createElement('label');
+      l.className = 'label';
+      l.style.cssText = 'display:inline;min-width:140px';
+      l.textContent = label;
+      const i = document.createElement('input');
+      i.type = secret ? 'password' : 'text';
+      i.value = p[key] || '';
+      i.placeholder = ph;
+      i.setAttribute('aria-label', label + ' — ' + n.label);
+      i.style.cssText = 'flex:1;min-width:170px;padding:4px 8px';
+      i.dataset.rtNode = n.id;
+      i.dataset.rtKey = key;
+      row.append(l, i);
+      return row;
+    };
+    box.append(
+      mk('Runtime Controller', 'endpoint', '127.0.0.1:19090 или http://127.0.0.1:19090', false),
+      mk('Secret (опционально)', 'secret', '•••••• (memory-only)', true),
+      mk('Observed group', 'group', 'название группы в конфиге узла', false),
+      mk('Expected members', 'members', 'EE-Mieru, EE-VLESS (через запятую)', false)
+    );
+    wrap.appendChild(box);
+  }
+  // live-bind inputs → память
+  wrap.querySelectorAll('input[data-rt-node]').forEach(i => {
+    i.addEventListener('input', () => {
+      ptRuntimeProfiles[i.dataset.rtNode][i.dataset.rtKey] = i.value;
+    });
+  });
+}
+
+function ptRuntimeIntendedNext(nodeId) {
+  const nodes = ptRuntimeNodeList();
+  const i = nodes.findIndex(n => n.id === nodeId);
+  if (i === -1) return '—';
+  if (i === nodes.length - 1) {
+    const last = ptLastModel.nodes[ptLastModel.nodes.length - 1];
+    return last.role === 'final-overlay' ? last.label + ' (final overlay)' : 'Internet';
+  }
+  return nodes[i + 1].label;
+}
+
+function ptRuntimeRender() {
+  const out = document.getElementById('ptRuntimeOut');
+  const status = document.getElementById('ptRuntimeStatus');
+  if (!out) return;
+  const fpTopo = ptRuntimeFingerprint(ptLastModel ? JSON.parse(JSON.stringify(ptLastModel)) : null, null);
+  const fpProf = ptProfilesFingerprint();
+  const staleTopo = ptRuntimeEvidence && ptIsStale(ptRuntimeEvidence, fpTopo);
+  const staleProf = ptRuntimeEvidence && ptIsStale(Object.assign({}, ptRuntimeEvidence, { fingerprint: ptRuntimeEvidence.fpProfiles }), fpProf);
+  const lines = [];
+  if (ptRuntimeEvidence) {
+    lines.push('Последняя явная проверка: ' + ptRuntimeEvidence.checkedAt +
+      (staleTopo ? ' · ⏳ STALE: топология изменилась после проверки' : '') +
+      (staleProf ? ' · ⏳ STALE: профили изменились после проверки' : ''));
+  }
+  if (ptRuntimeEvidence && ptRuntimeEvidence.chain) {
+    lines.push('Chain evidence: ' + ptRuntimeEvidence.chain + (staleTopo || staleProf ? ' (данные структурно устарели — проверьте заново)' : ''));
+    lines.push('');
+  }
+  const nodes = ptRuntimeNodeList();
+  for (const n of nodes) {
+    const ev = ptRuntimeEvidence && ptRuntimeEvidence.perNode ? ptRuntimeEvidence.perNode[n.id] : null;
+    const state = ev ? ev.status : 'NOT_CHECKED';
+    lines.push('▪ ' + n.label + ' [' + ptRoleLabel(n.role) + ']');
+    lines.push('  INTENDED · следующий физический узел: ' + ptRuntimeIntendedNext(n.id));
+    if (!ev) { lines.push('  RUNTIME EVIDENCE: ' + csMarkState('NOT_CHECKED') + ' не проверялось'); lines.push(''); continue; }
+    lines.push('  RUNTIME EVIDENCE: ' + csMarkState(state) + ' ' + state);
+    if (ev.controllerVersion) lines.push('  controller: reachable · version ' + ev.controllerVersion);
+    if (ev.reason && state !== 'OBSERVED') lines.push('  причина: ' + ev.reason);
+    if (ev.observedGroup) lines.push('  группа: ' + ev.observedGroup);
+    if (ev.chain && ev.chain.length) lines.push('  selection: ' + ev.chain.join(' → '));
+    if (ev.verdict) lines.push('  evidence: ' + ev.verdict + (ev.classifyReason ? ' — ' + ev.classifyReason : ''));
+    lines.push('');
+  }
+  lines.push('Формулировки: «наблюдаемое состояние контроллеров согласуется с intended-топологией».');
+  lines.push('Недоступный контроллер ≠ узел выключен. Packet-path не доказывается этим инструментом.');
+  out.textContent = lines.join('\n');
+  // обновить статусную строку (chain aggregate + timestamp)
+  if (status && ptRuntimeEvidence && ptRuntimeEvidence.chain) {
+    status.textContent = 'Chain evidence: ' + ptRuntimeEvidence.chain + ' · проверено: ' + ptRuntimeEvidence.checkedAt +
+      ((staleTopo || staleProf) ? ' · ⏳ STALE' : '');
+  }
+}
+
+async function ptRuntimeCheck() {
+  const status = document.getElementById('ptRuntimeStatus');
+  if (!status) return;
+  if (!ptLastModel) { status.textContent = 'Сначала проанализируйте топологию.'; return; }
+  const seq = ++ptRuntimeSeq;
+  if (ptRuntimeAbort) { try { ptRuntimeAbort.abort(); } catch (_) {} }
+  ptRuntimeAbort = new AbortController();
+  const nodes = ptRuntimeNodeList();
+  // snapshot: проверяем против ТЕКУЩИХ профилей; изменились позже → STALE по fingerprint
+  const profilesSnapshot = JSON.parse(JSON.stringify(ptRuntimeProfiles));
+  const specNow = ptSpecInput ? (() => { try { return JSON.parse(document.getElementById('ptSpecInput').value); } catch (_) { return null; } })() : null;
+  status.textContent = 'FETCHING · проверка контроллеров…';
+  // маркер FETCHING в рендере
+  ptRuntimeEvidence = null;
+  ptRuntimeRender();
+  outLoop:
+  for (const n of nodes) {
+    const p = profilesSnapshot[n.id] || {};
+    const perNode = {};
+    perNode[n.id] = { status: 'FETCHING' };
+    if (seq !== ptRuntimeSeq) return; // начата новая проверка
+    if (!p.endpoint) {
+      csRuntimeSet(n.id, { status: 'NOT_CHECKED', reason: 'endpoint не задан' }, seq);
+      continue;
+    }
+    let base;
+    try { base = normalizeRuntimeController(p.endpoint); }
+    catch (e) { csRuntimeSet(n.id, { status: 'UNKNOWN', reason: 'endpoint: ' + e.message }, seq); continue; }
+    const headers = { Accept: 'application/json' };
+    if (p.secret) headers.Authorization = 'Bearer ' + p.secret;
+    try {
+      const resp = await fetch(base + '/version', { headers, cache: 'no-store', signal: ptRuntimeAbort.signal });
+      if (seq !== ptRuntimeSeq) return;
+      if (resp.status === 401 || resp.status === 403) { csRuntimeSet(n.id, { status: 'AUTH_ERROR', reason: 'HTTP ' + resp.status + ': секрет не принят' }, seq); continue outLoop; }
+      if (!resp.ok) { csRuntimeSet(n.id, { status: 'UNKNOWN', reason: 'HTTP ' + resp.status + ' на /version' }, seq); continue outLoop; }
+      let version = null;
+      try { const vj = await resp.json(); version = vj && vj.version ? String(vj.version) : null; } catch (_) {}
+      if (seq !== ptRuntimeSeq) return;
+      const resp2 = await fetch(base + '/proxies', { headers, cache: 'no-store', signal: ptRuntimeAbort.signal });
+      if (seq !== ptRuntimeSeq) return;
+      if (!resp2.ok) { csRuntimeSet(n.id, { status: 'UNKNOWN', reason: 'HTTP ' + resp2.status + ' на /proxies' }, seq); continue outLoop; }
+      const text = await resp2.text();
+      if (seq !== ptRuntimeSeq) return;
+      const proxies = ptRuntimeParseProxies(text);
+      if (!proxies) { csRuntimeSet(n.id, { status: 'UNKNOWN', reason: 'ответ /proxies не распознан' }, seq); continue outLoop; }
+      if (!p.group) { csRuntimeSet(n.id, { status: 'PARTIAL', reason: 'observed group не задан в профиле' }, seq); continue outLoop; }
+      const members = (p.members || '').split(',').map(x => x.trim()).filter(Boolean);
+      const cls = ptClassifyEdge({ group: p.group, expectedMembers: members }, { status: 'OBSERVED', proxies });
+      csRuntimeSet(n.id, {
+        status: 'OBSERVED', verdict: cls.verdict, reason: cls.reason,
+        chain: cls.chain, selected: cls.selected, observedGroup: p.group,
+        controllerVersion: version
+      }, seq);
+    } catch (e) {
+      if (seq !== ptRuntimeSeq) return;
+      const aborted = e && (e.name === 'AbortError');
+      csRuntimeSet(n.id, aborted
+        ? { status: 'UNKNOWN', reason: 'запрос прерван (новая проверка/отмена)' }
+        : { status: 'UNREACHABLE', reason: 'контроллер не отвечает из браузера: offline/CORS/mixed-content/нет SSH forward — это НЕ означает, что узел выключен' }, seq);
+    }
+  }
+  // aggregate по ребрам (узлы без OBSERVED дают свой вклад)
+  const perNodeEvidence = ptRuntimeEvidence && ptRuntimeEvidence.perNode ? ptRuntimeEvidence.perNode : {};
+  const edgeResults = nodes.map(n => perNodeEvidence[n.id]).filter(Boolean).map(ev => ({ verdict: ev.verdict || ev.status }));
+  const chain = ptAggregateChain(edgeResults);
+  ptRuntimeEvidence.checkedAt = new Date().toLocaleTimeString();
+  ptRuntimeEvidence.chain = chain;
+  ptRuntimeEvidence.fpTopo = ptRuntimeFingerprint(ptLastModel ? JSON.parse(JSON.stringify(ptLastModel)) : null, null);
+  ptRuntimeEvidence.fpProfiles = ptProfilesFingerprint();
+  ptRuntimeRender();
+}
+function csRuntimeSet(nodeId, ev, seq) {
+  if (seq !== ptRuntimeSeq) return;
+  if (!ptRuntimeEvidence) ptRuntimeEvidence = { checkedAt: '', perNode: {} };
+  if (!ptRuntimeEvidence.perNode) ptRuntimeEvidence.perNode = {};
+  ptRuntimeEvidence.perNode[nodeId] = ev;
+  ptRuntimeRender();
 }
 
 // === Physical Topology → per-node artifacts UI (#187, P1.7/P1.8/P1.16) ===
@@ -7263,6 +7591,7 @@ document.addEventListener('click', (e) => {
   if (e.target.id === 'ptAnalyzeBtn') { e.preventDefault(); runPhysicalTopology(); }
   if (e.target.id === 'ptClearBtn') { e.preventDefault(); clearPhysicalTopology(); }
   if (e.target.id === 'ptGenBtn') { e.preventDefault(); runPtGenerate(); }
+  if (e.target.id === 'ptRuntimeCheckBtn') { e.preventDefault(); ptRuntimeCheck(); }
   const nodeToggle = e.target.closest && e.target.closest('.pt-toggle[data-pt-node]');
   if (nodeToggle) {
     e.preventDefault();
@@ -7334,6 +7663,8 @@ function csRunAnalysis() {
   csWorkingErr = null;
   csPendingRename = null;
   csRefreshEditor();
+  ptRuntimeEnsureProfiles();
+  ptRuntimeRender();
   status.textContent = '✓ Разобрано: анализ готов (локально, без сети).';
 }
 
