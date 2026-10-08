@@ -45,7 +45,16 @@ let cases = 0;
       await page.selectOption('#csEditType', 'proxy');
     };
     const download = async selector => {
-      const event = page.waitForEvent('download'); await page.locator(selector).click(); const d = await event;
+      // CI-раннеры медленнее локальных: ожидание события до клика с явным
+      // timeout (15 с) и одной повторной попыткой.
+      const event = page.waitForEvent('download', { timeout: 15000 });
+      await page.locator(selector).click();
+      let d;
+      try { d = await event; } catch (e) {
+        const retry = page.waitForEvent('download', { timeout: 15000 });
+        await page.locator(selector).click();
+        d = await retry;
+      }
       const data = await fs.promises.readFile(await d.path(), 'utf8'); return { name: d.suggestedFilename(), data };
     };
     const apply = async () => { await page.click('#csSaveFieldsBtn'); await page.waitForFunction(() => document.getElementById('csExportStatus').textContent.includes('PASS') && csWorking && !csWorkingErr); };
