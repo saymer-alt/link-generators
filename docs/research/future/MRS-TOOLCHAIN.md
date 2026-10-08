@@ -1,9 +1,9 @@
 # MRS Toolchain — будущее исследование (NIGHT-FUTURE-01)
 
-Дата: 2026-10-08. Статус: **RESEARCHED (частично — см. §5 Ограничения)**.
+Дата: 2026-10-08. Статус: **RESEARCHED + EMPIRICALLY PROVEN (domain payload)** — см. §5 (обновлено NIGHT-MEGA-01 B2).
 Upstream: MetaCubeX/mihomo, **тег v1.19.32** (все ссылки — raw-fetch этого тега, 2026-10-08).
 
-Evidence-метки: SOURCE-PROVEN (прочитано в исходниках указанного тега) / INFERRED / UNKNOWN.
+Evidence-метки: SOURCE-PROVEN (прочитано в исходниках указанного тега) / INFERRED / UNKNOWN / EMPIRICAL (сверено с выводом официального бинарника mihomo v1.19.31).
 
 ---
 
@@ -34,17 +34,18 @@ offset  size  поле
 
 ### 3.1 behavior=domain — `rules/provider/domain_strategy.go`
 
-`FromMrs` → `trie.ReadDomainSetBin(r)`; `WriteMrs` → `domainSet.WriteBin(w)`; `DumpMrs` — экспорт обратно в текст (группирует `domain` + `.domain` в `+.domain`).
+`FromMrs` → `trie.ReadDomainSetBin(r)` (domain_strategy.go:57-58); `WriteMrs` → `domainSet.WriteBin(w)`; `DumpMrs` — экспорт обратно в текст.
 
-Payload = `DomainMap.WriteBin` (`component/trie/domain_map_bin.go`):
+**Payload = DomainSet bin, и ТОЛЬКО он** (уточнено B2): `FromMrs` читает ровно `ReadDomainSetBin` — ни separator, ни values после него. (`DomainMap.WriteBin` из `domain_map_bin.go` с separator/version/values — другой путь записи, в MRS-payload не участвует; прежняя версия этого документа ошибочно приписывала его MRS.)
 
 ```text
-succinct DomainSet (см. §3.2)
-0x00                separator
 0x01                version
-int64 BE            values count
-values              (для domain-behavior — зависимости от версии; формат values
-                     определяется writeValue-колбэком)
+int64 BE            leaves: число uint64 BE слов
+leaves              бит-вектор терминальных узлов
+int64 BE            labelBitmap: число uint64 BE слов
+labelBitmap         LOUDS-битмап меток/закрытий
+int64 BE            labels: число байт
+labels              BFS-метки (байты реверсированных ключей)
 ```
 
 ### 3.2 behavior=ipcidr — `rules/provider/ipcidr_strategy.go`
@@ -55,14 +56,16 @@ values              (для domain-behavior — зависимости от ве
 
 MRS не поддерживается: `classical_strategy.go` не реализует FromMrs/WriteMrs; `rulesMrsParse` вернёт `ErrInvalidFormat`. SOURCE-PROVEN.
 
-### 3.4 Succinct DomainSet — ядро формата
+### 3.4 Succinct DomainSet — ядро формата (EMPIRICAL с B2)
 
-`component/trie/domain_set.go` (заголовок: «Modify from https://github.com/openacid/succinct/blob/…/sskv.go»):
-- домены вставляются **в обратном порядке частей** (`insert(parts []string)` — reversed labels) в succinct-трие;
-- структура — labelStream + bitmap'ы (label/childStart/leaf) openacid-succinct-формата;
-- `Has(key)` декодирует по этим стримам; `Foreach` — полный обход.
+`component/trie/domain_set.go` + `domain_set_bin.go` (порт «openacid/succinct sskv»):
+- ключи = байт-реверс целиком домена, нормализованного в lowercase (`insert` → `utils.Reverse(joinDomain(parts))`); `+.dom` даёт ДВЕ вставки (точная `dom` + суффикс `+.dom`); `.dom` → `+`-форма;
+- константы: `+` (complexWildcard — матчится любой хвост), `*` (ровно один label), `.` (шаг домена);
+- сериализация — version(1) + leaves + labelBitmap + labels (см. §3.1), порядок байтов BE;
+- `Has()` — обход входа с конца (revLowerAt) по LOUDS-правилу `nextNodeId = bmIdx − nodeId + 1`, `entry = select(nodeId−1)+1`, wildcard-стек для `*`, рестарт-переходы для `*`/`.`-веток;
+- `Foreach` — DFS; `+.dom` выводится как пара `dom` + `.dom` (хвостовая точка реверсированного ключа после среза `+`).
 
-Точная байтовая раскладка стримов — SOURCE-PROVEN только по факту «это модифицированный openacid/succinct sskv»; для рабочего парсера потребуется перенос openacid/succinct в JS (или чтение обоих репозиториев построчно). Это **главная трудоёмкость** будущего MRS-парсера.
+**Эмпирическое доказательство (B2)**: JS-порт (`research/poc/mrs/decode-mrs.mjs`) воспроизводит payload официального бинарника байт-в-байт; декодер отвечает на членство с полной wildcard-семантикой. Фикстуры: `research/poc/mrs/fixtures/` (PROVENANCE.md внутри).
 
 ## 4. Повреждённые файлы — проверки (проект парсера)
 
@@ -78,10 +81,15 @@ SOURCE-PROVEN аналоги проверок из mrs_reader.go:
 
 ## 5. Ограничения и honest gaps
 
-- **Точный succinct-бинарный формат DomainSet не подтверждён побайтовой реализацией** — формат обёртки SOURCE-PROVEN, внутренности succinct-трие — INFERRED из openacid/succinct (файл указан в комментарии upstream). UNKNOWN до первого рабочего парсера.
-- **behavior byte числовые значения не зафиксированы в этом проходе** (INFERRED: Domain/IPCIDR/Classical — iota-порядок; эмпирически проверяется на реальном .mrs).
-- `values` DomainMap для behavior=domain — формат writeValue-колбэка не найден в прочитанных файлах (UNKNOWN).
-- Node-side zstd в браузере: `DecompressionStream('zstd')` поддержан не везде (Chrome 130+); для надёжного viewer'а — wasm-библиотека или предраспакованный inner-payload. Решение — за будущей задачей.
+Обновлено 2026-10-08 (NIGHT-MEGA-01 B2) — часть прежних gaps закрыта эмпирикой:
+
+- ~~succinct-формат не подтверждён~~ → **EMPIRICAL**: JS-порт builder'а воспроизводит payload официального бинарника mihomo v1.19.31 байт-в-байт (тест «bit-for-bit» в `decode-mrs.test.mjs`).
+- ~~behavior byte не зафиксирован~~ → **EMPIRICAL: domain=0, ipcidr=1** (фикстуры официального `convert-ruleset`). Прежнее INFERRED 1/2/3 опровергнуто.
+- ~~values DomainMap — UNKNOWN~~ → **в MRS их нет**: `FromMrs` читает только `ReadDomainSetBin` (см. §3.1).
+- Производительность PoC-декодера ~2 мс/lookup на 20k доменах (rank O(words), select — линейный скан слова). Production-парсер требует инкрементальных rank/select-кэшей (как `IndexSelect32R64` openacid/low/bitmap) — иначе только офлайн-инструменты, не UI.
+- Не-ASCII домены: Go — rune-ToLower + реверс; PoC — JS `toLowerCase` (расхождение на отдельных codepoints). Для публичных geo-списков неактуально; граница задокументирована.
+- zstd: `node:zlib` (v22.14) zstd не умеет; использован официальный CLI zstd v1.5.6 win64 (sha256 `6b5c50dde7062909b69b618fae228c72090596dc254efe498fb426f5f430a1f9`). В браузере — `DecompressionStream('zstd')` (Chrome 130+) или wasm; решение за будущим viewer'ом.
+- ipcidr payload (`component/ipcidr`) не декодируется — header эмпирически сверен (behavior=1), payload — задача следующего прохода.
 
 ## 6. Модель будущего инструментария
 
@@ -106,15 +114,15 @@ SOURCE-PROVEN аналоги проверок из mrs_reader.go:
 
 ## 8. PoC
 
-`research/poc/mrs/inspect-mrs.mjs` — автономный Node-скрипт (без зависимостей):
-- принимает декомпрессированный inner-payload (stdin/файл) и проверяет заголовок/behavior/count/extra по §2;
-- генерирует synthetic inner-payload fixture (`--make-fixture`);
-- НЕ декодирует succinct DomainSet (см. §5) — честная граница PoC.
+- `research/poc/mrs/inspect-mrs.mjs` — заголовочный инспектор (первый проход): заголовок/behavior/count/extra + synthetic fixture; succint payload НЕ декодирует.
+- `research/poc/mrs/decode-mrs.mjs` (B2, 2026-10-08) — полный JS-порт: builder (`insertKeys`/`buildDomainSet`), serializer (`domainSetWriteBin`), reader (`parseMrsContainer`/`readDomainSetBin`), запросы (`has`/`foreach`). Зависимости: нет (node:buffer + BigInt).
+- `research/poc/mrs/decode-mrs.test.mjs` — 10 проверок node --test: заголовки обоих behaviors, членство (позитив/негатив/wildcard/регистр), Foreach-семантика, **байт-в-байт сверка с официальным бинарником**, round-trip, мусорные входы.
+- `research/poc/mrs/fixtures/` — синтетические фикстуры официального бинарника + PROVENANCE.md (без реальных geo-данных).
 
 ## 9. Следующие шаги (implementation tasks, v1.12+ candidate)
 
-1. Верифицировать behavior byte на реальном .mrs (эмпирика).
-2. Перенести openacid/succinct sskv decode в JS (или переиспользовать готовый порт) + fixture-сверка с Go.
-3. MRS viewer как отдельная research-страница (не в production bundle).
-4. Решение по converter: паритет с `mihomo convert-ruleset` против «вызывать mihomo локально».
-5. Расширить исследование на ipcidr payload (`component/ipcidr`).
+1. ~~Верифицировать behavior byte~~ — СДЕЛАНО (B2: domain=0, ipcidr=1).
+2. ~~Перенести succinct decode в JS + fixture-сверка~~ — СДЕЛАНО (B2, байт-в-байт).
+3. MRS viewer как отдельная research-страница (нужен zstd-decode в браузере + инкрементальные rank/select-кэши).
+4. Решение по converter: паритет с `mihomo convert-ruleset` (builder уже байт-совместим — осталось обвязать zstd-сжатие) против «вызывать mihomo локально».
+5. ipcidr payload: прочитать `component/ipcidr` bin-формат, эмпирически сверить на CIDR-фикстуре.
