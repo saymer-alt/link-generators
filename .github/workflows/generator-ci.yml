@@ -131,6 +131,9 @@ jobs:
       - name: Physical Topology core regression (#149)
         run: node tests/physical-topology.cjs
 
+      - name: Config Studio import core regression (#176)
+        run: node tests/config-import.cjs
+
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 

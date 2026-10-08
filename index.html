@@ -219,6 +219,7 @@
   <div class="tabs">
     <button class="tab" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
     <button class="tab active" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
+    <button class="tab" onclick="switchTab(event, 'studio')">🔎 Config Studio</button>
   </div>
 
   <!-- TAB 1: WARP GENERATOR -->
@@ -681,6 +682,31 @@
       <div id="mihomoOutputHint" class="hint">Предпросмотр только для чтения. Чтобы изменить YAML, поправьте входные данные или настройки выше и снова нажмите ⚡ Build Config.</div>
       <div id="mihomoValidationBox" class="validation-box state-not-built" aria-live="polite"></div>
       <div id="mihomoCompatBox" class="compat-box" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- TAB 3: CONFIG STUDIO (v1.11 #176/#178) -->
+  <div id="tab-studio" class="tab-content">
+    <div class="card">
+      <div class="card-title">🔎 Анализ готового Mihomo-конфига</div>
+      <div class="hint">Импорт уже работающего конфига (Mihomo/Clash Meta) для анализа: структура, граф зависимостей, маршрутизация, диагностики. Разбор и анализ — локально в браузере; конфиг никуда не отправляется и не сохраняется; подписки/провайдеры автоматически не скачиваются. Значения секретных полей (password/uuid/ключи) скрываются и в диагностики не попадают. Поддерживается YAML одного документа.</div>
+      <textarea id="csImportInput" rows="12" aria-label="Mihomo config YAML для анализа" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="Вставьте содержимое config.yaml…"></textarea>
+      <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
+        <button type="button" class="btn btn-gray" id="csParseBtn">🔎 Разобрать</button>
+        <label class="btn btn-gray" style="margin:0" for="csImportFile">📂 Загрузить .yaml / .yml</label>
+        <input type="file" id="csImportFile" accept=".yaml,.yml" hidden>
+        <button type="button" class="btn btn-gray" id="csClearBtn">Очистить</button>
+      </div>
+      <div id="csStatus" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+      <div id="csSecretsNote" class="hint" style="display:none;margin-top:6px;border:1px solid var(--border);padding:6px;background:rgba(255,170,0,.08)"></div>
+    </div>
+    <div class="card" id="csSummaryCard" style="display:none">
+      <div class="card-title">📊 Обзор</div>
+      <div id="csSummary" class="hint" style="white-space:pre-line"></div>
+      <details id="csDiagnosticsPanel" style="margin-top:8px">
+        <summary style="cursor:pointer"><span>▶</span> <span>Диагностики</span></summary>
+        <div id="csDiagOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+      </details>
     </div>
   </div>
 </div>
@@ -5642,6 +5668,219 @@ function ptDemoTopologySpec() {
 }
 // === PHYSICAL TOPOLOGY CORE — PT-CORE-END ===
 
+// === CONFIG STUDIO CORE (pure, deterministic; v1.11 #176/#178/#177) — CS-CORE-START ===
+// Анализ импортированного Mihomo-конфига. Дизайн: docs/research/CONFIG-STUDIO.md.
+// Ключевое переиспользование: импортированный doc после jsyaml.load скармливается
+// существующим cdgBuildGraph/routingInspect/cdgDomainCoverage напрямую — второй
+// аналитический фреймворк не создаётся; CS-CORE добавляет сводку, redaction,
+// карту ссылок для редактора и диагностики. Никаких секретов в выводах: значения
+// секретных ключей и tokenized-URL маскируются на границе ядра.
+const CS_SECRET_EXACT = new Set(['password', 'private-key', 'private_key', 'secret', 'token', 'uuid', 'uuid2', 'preshared-key', 'presharedkey', 'psk', 'auth', 'authorization', 'x-hwid', 'hwid', 'private-key-order', 'auth-pass', 'auth-str', 'authuser', 'authpass', 'obfs-password', 'private-key-file-password']);
+function csIsSecretKey(key) {
+  const k = String(key || '').toLowerCase();
+  if (!k) return false;
+  if (CS_SECRET_EXACT.has(k)) return true;
+  // суффиксные семантические эквиваленты; public-key/серийные не секрет
+  if (/(^|[-_.])(password|passwd)$/.test(k)) return true;
+  if (/(^|[-_.])secret(s)?$/.test(k)) return true;
+  if (/private[-_.]?key/.test(k)) return true;
+  if (/(^|[-_.])(token|hwid)$/.test(k)) return true;
+  return false;
+}
+// tokenized-URL: query-параметры и path-токены скрываются; хост остаётся читаемым
+function csRedactUrl(url) {
+  const s = String(url || '');
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
+  try {
+    const u = new URL(s);
+    let path = u.pathname;
+    if (u.search) path += '?<params hidden>';
+    // path-токены: сегменты после /token|key|download|sub|dl/ и длинные base64url-сегменты
+    path = path.replace(/(\/(?:token|key|download|sub|dl)\/)[^/?#]+/gi, '$1<hidden>');
+    path = path.replace(/\/[A-Za-z0-9_-]{20,}(?=\/|$)/g, '/<token hidden>');
+    return u.origin + path;
+  } catch (_) { return s; }
+}
+function csRedactValue(key, value) {
+  if (value === null || value === undefined) return value;
+  if (csIsSecretKey(key)) return '••••••';
+  if (typeof value === 'string' && /^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return csRedactUrl(value);
+  return value;
+}
+// Сводка: только счётчики и булевы факты; external-controller — адрес, поэтому булево.
+function csSummarize(doc) {
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return null;
+  const arrLen = a => (Array.isArray(a) ? a.length : 0);
+  const dns = doc.dns && typeof doc.dns === 'object' ? doc.dns : null;
+  const tun = doc.tun && typeof doc.tun === 'object' ? doc.tun : null;
+  const sniffer = doc.sniffer && typeof doc.sniffer === 'object' ? doc.sniffer : null;
+  return {
+    proxies: arrLen(doc.proxies),
+    groups: arrLen(doc['proxy-groups']),
+    providers: doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object' ? Object.keys(doc['proxy-providers']).length : 0,
+    ruleProviders: doc['rule-providers'] && typeof doc['rule-providers'] === 'object' ? Object.keys(doc['rule-providers']).length : 0,
+    rules: arrLen(doc.rules),
+    dns: !!dns,
+    tun: !!(tun && tun.enable !== false && (tun.enable === true || tun.device)),
+    sniffer: !!(sniffer && sniffer.enable !== false && (sniffer.enable === true || sniffer['parse-pure-ip'] !== undefined)),
+    mode: typeof doc.mode === 'string' ? doc.mode : null,
+    hasExternalController: doc['external-controller'] !== undefined && doc['external-controller'] !== null
+  };
+}
+// Инвентарь секретных полей — ТОЛЬКО пути, без значений (заметка + маскирование редактора).
+function csScanSecrets(doc) {
+  const out = [];
+  const walk = (node, path) => {
+    if (Array.isArray(node)) { node.forEach((v, i) => walk(v, path + '[' + i + ']')); return; }
+    if (node && typeof node === 'object') {
+      for (const k of Object.keys(node)) {
+        const v = node[k];
+        if (csIsSecretKey(k) && v !== null && v !== undefined && v !== '') { out.push({ path: path + '.' + k, key: k }); continue; }
+        if (typeof v === 'object' && v !== null) walk(v, path + '.' + k);
+      }
+    }
+  };
+  walk(doc, '$');
+  return out;
+}
+const CS_BUILTIN_TARGETS = new Set(['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL']);
+const CS_RULE_OPTIONS = new Set(['no-resolve', 'no-drop', 'src', 'need-alive']);
+// Целевая политика правила: TYPE,payload,TARGET[,opt…]; MATCH,target; логические
+// правила (AND/OR/NOT) несут скобочные payload'ы с запятыми — глубина учитывается.
+function csRuleTarget(rule) {
+  const parts = String(rule).split(',').map(s => s.trim());
+  const type = parts[0] || '';
+  if (type === 'SUB-RULE') return '';
+  let depth = 0;
+  for (let i = 1; i < parts.length; i++) {
+    const start = depth;
+    depth += (parts[i].match(/\(/g) || []).length - (parts[i].match(/\)/g) || []).length;
+    if (start > 0 || depth > 0) continue; // часть внутри скобочного payload'а
+    if (type === 'MATCH' || type === 'FINAL') return parts[i] || '';
+    if (i >= 2 && !CS_RULE_OPTIONS.has(parts[i].toLowerCase())) return parts[i];
+  }
+  return '';
+}
+// Карта ссылок для редактора: каждое упоминание имени объекта. toKind разрешается
+// по фактическому наличию имени в соответствующем реестре.
+function csCollectRefs(doc) {
+  const refs = [];
+  const proxyNames = new Set((Array.isArray(doc && doc.proxies) ? doc.proxies : []).map(p => p && p.name).filter(Boolean));
+  const groupNames = new Set((Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : []).map(g => g && g.name).filter(Boolean));
+  const provNames = new Set(doc && doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object' ? Object.keys(doc['proxy-providers']) : []);
+  const rpNames = new Set(doc && doc['rule-providers'] && typeof doc['rule-providers'] === 'object' ? Object.keys(doc['rule-providers']) : []);
+  const kindOf = n => proxyNames.has(n) ? 'proxy' : groupNames.has(n) ? 'group' : provNames.has(n) ? 'provider' : CS_BUILTIN_TARGETS.has(n) ? 'builtin' : rpNames.has(n) ? 'rule-provider' : 'unknown';
+  (Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : []).forEach((g, gi) => {
+    (Array.isArray(g && g.proxies) ? g.proxies : []).forEach((m, mi) => refs.push({ kind: 'group-member', from: g.name, fromKind: 'group', fromPath: { groupIndex: gi, memberIndex: mi }, to: String(m), toKind: kindOf(String(m)) }));
+    (Array.isArray(g && g.use) ? g.use : []).forEach((u, ui) => refs.push({ kind: 'group-use', from: g.name, fromKind: 'group', fromPath: { groupIndex: gi, useIndex: ui }, to: String(u), toKind: kindOf(String(u)) }));
+    if (g && typeof g['dialer-proxy'] === 'string' && g['dialer-proxy']) refs.push({ kind: 'dialer-proxy', from: g.name, fromKind: 'group', fromPath: { groupIndex: gi }, to: g['dialer-proxy'], toKind: kindOf(g['dialer-proxy']) });
+  });
+  (Array.isArray(doc && doc.proxies) ? doc.proxies : []).forEach((p, pi) => {
+    if (p && typeof p['dialer-proxy'] === 'string' && p['dialer-proxy']) refs.push({ kind: 'dialer-proxy', from: p.name, fromKind: 'proxy', fromPath: { proxyIndex: pi }, to: p['dialer-proxy'], toKind: kindOf(p['dialer-proxy']) });
+  });
+  (Array.isArray(doc && doc.rules) ? doc.rules : []).forEach((r, ri) => {
+    const t = csRuleTarget(r);
+    if (t) refs.push({ kind: 'rule-target', from: 'rule #' + (ri + 1), fromKind: 'rule', fromPath: { ruleIndex: ri }, to: t, toKind: kindOf(t) });
+  });
+  return { refs, proxyNames, groupNames, provNames, rpNames, kindOf };
+}
+// Диагностики импортированного конфига (CS-*). Только доказуемое; unused — с
+// оговоркой про неявный GLOBAL (Mihomo включает все proxies/groups в GLOBAL).
+function csDiagnostics(doc) {
+  const diags = [];
+  const err = (code, message) => diags.push({ severity: 'error', code, message });
+  const warn = (code, message) => diags.push({ severity: 'warning', code, message });
+  const info = (code, message) => diags.push({ severity: 'info', code, message });
+  const proxyList = Array.isArray(doc && doc.proxies) ? doc.proxies : [];
+  const groupList = Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : [];
+  const dupIn = (list, label) => {
+    const seen = new Map();
+    list.forEach(x => { const n = x && x.name; if (!n) return; if (seen.has(n)) warn('CS-DUP-NAME', 'дубликат имени ' + label + ' «' + n + '» — Mihomo такой конфиг не примет'); else seen.set(n, 1); });
+  };
+  dupIn(proxyList, 'proxy');
+  dupIn(groupList, 'group');
+  const { refs, proxyNames, groupNames, provNames, rpNames } = csCollectRefs(doc);
+  for (const r of refs) {
+    if (r.toKind === 'unknown') {
+      if (r.kind === 'group-member' || r.kind === 'dialer-proxy') { err('CS-DANGLING-REF', r.kind === 'dialer-proxy' ? 'dialer-proxy «' + r.from + '» → «' + r.to + '»: цель не найдена среди proxies/groups/providers' : 'группа «' + r.from + '» содержит несуществующего участника «' + r.to + '»'); }
+      else if (r.kind === 'group-use') { err('CS-DANGLING-REF', 'группа «' + r.from + '» использует несуществующий provider «' + r.to + '»'); }
+      else if (r.kind === 'rule-target') { if (!CS_BUILTIN_TARGETS.has(r.to)) err('CS-DANGLING-REF', 'правило ' + r.from + ' ведёт в «' + r.to + '» — не найдено среди proxies/groups/DIRECT/REJECT'); }
+    } else if (r.kind === 'rule-target' && r.toKind === 'provider') {
+      err('CS-DANGLING-REF', 'правило ' + r.from + ' ведёт в «' + r.to + '» — это proxy-provider, а не группа/прокси');
+    } else if (r.kind === 'group-member' && r.toKind === 'rule-provider') {
+      err('CS-DANGLING-REF', 'группа «' + r.from + '» содержит «' + r.to + '» — это rule-provider, а не прокси');
+    }
+  }
+  // unused: явные ссылки (GLOBAL-оговорка обязательна)
+  const referenced = new Set(refs.map(r => r.to));
+  proxyNames.forEach(n => { if (!referenced.has(n)) warn('CS-UNUSED', 'proxy «' + n + '» не упоминается явно (GLOBAL включает все proxies неявно — прокси всё же доступен)'); });
+  groupNames.forEach(n => { if (!referenced.has(n) && n !== 'GLOBAL') warn('CS-UNUSED', 'group «' + n + '» не упоминается правилами/группами (GLOBAL включает все группы неявно)'); });
+  provNames.forEach(n => { if (!referenced.has(n)) warn('CS-UNUSED', 'proxy-provider «' + n + '» не используется ни одной группой (use:)'); });
+  rpNames.forEach(n => { if (!referenced.has(n)) warn('CS-UNUSED', 'rule-provider «' + n + '» не используется правилами (RULE-SET)'); });
+  // циклы group → group (member)
+  {
+    const graph = new Map();
+    groupNames.forEach(n => graph.set(n, []));
+    for (const r of refs) if (r.kind === 'group-member' && r.toKind === 'group') graph.get(r.from).push(r.to);
+    const state = new Map();
+    const stack = [];
+    let cycle = null;
+    const dfs = v => {
+      state.set(v, 1); stack.push(v);
+      for (const w of graph.get(v) || []) {
+        if (state.get(w) === 1) { cycle = stack.slice(stack.indexOf(w)); return true; }
+        if (!state.get(w) && dfs(w)) return true;
+      }
+      state.set(v, 2); stack.pop(); return false;
+    };
+    for (const n of groupNames) { if (!state.get(n) && dfs(n)) break; }
+    if (cycle) err('CS-GROUP-CYCLE', 'цикл вложенности групп: ' + cycle.concat([cycle[0]]).map(x => '«' + x + '»').join(' → '));
+  }
+  if (!diags.some(d => d.severity === 'error')) info('CS-OK', 'Структурные ссылки: явных ошибок не найдено');
+  return diags;
+}
+// Квотирование скаляра для патча исходника: plain-safe/числа → как есть (mihomo
+// читает YAML 1.2 core: цифры — число, ведущий ноль — строка), иначе двойные кавычки.
+// Никакой нормализации типов: вход — строка, выход — строка для вставки.
+function csFormatScalar(value) {
+  const s = String(value);
+  if (/^(0[0-9]+|0x[0-9a-fA-F]+)$/.test(s)) return '"' + s + '"'; // ведущий ноль/hex — защита от yaml-1.1 трактовок
+  if (/^[A-Za-z0-9_][A-Za-z0-9_\-./@:%]*$/.test(s) && !/^(true|false|null|~)$/i.test(s)) return s;
+  return JSON.stringify(s);
+}
+// Строчный diff (LCS) оригинал↔экспорт; секреты маскируются до отображения.
+function csLineDiff(aText, bText) {
+  const a = String(aText).split('\n'), b = String(bText).split('\n');
+  const n = a.length, m = b.length;
+  const w = new Array((n + 1) * (m + 1)).fill(0);
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) w[i * (m + 1) + j] = a[i] === b[j] ? w[(i + 1) * (m + 1) + j + 1] + 1 : Math.max(w[(i + 1) * (m + 1) + j], w[i * (m + 1) + j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ t: ' ', line: a[i] }); i++; j++; }
+    else if (w[(i + 1) * (m + 1) + j] >= w[i * (m + 1) + j + 1]) { out.push({ t: '-', line: a[i] }); i++; }
+    else { out.push({ t: '+', line: b[j] }); j++; }
+  }
+  while (i < n) { out.push({ t: '-', line: a[i++] }); }
+  while (j < m) { out.push({ t: '+', line: b[j++] }); }
+  return out;
+}
+// Ленивая загрузка vendored-рантайма (локальный файл, сеть не задействована).
+let csYamlPromise = null;
+function ensureCsYaml() {
+  if (globalThis.CSYaml) return Promise.resolve(globalThis.CSYaml);
+  if (csYamlPromise) return csYamlPromise;
+  csYamlPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'cs-yaml.runtime.js';
+    s.onload = () => globalThis.CSYaml ? resolve(globalThis.CSYaml) : reject(new Error('cs-yaml.runtime.js загрузился без CSYaml'));
+    s.onerror = () => { csYamlPromise = null; reject(new Error('Не удалось загрузить cs-yaml.runtime.js (локальный файл). Редактор/экспорт недоступны, анализ продолжает работать.')); };
+    document.head.appendChild(s);
+  });
+  return csYamlPromise;
+}
+// === CONFIG STUDIO CORE — CS-CORE-END ===
+
 // === TIERED FAILOVER (#148, v1.10; runtime-proven: docs/research/TIERED-FAILOVER-RUNTIME.md) ===
 // Явная user-visible feature, DEFAULT OFF: выключена — вывод байт-в-байт прежний.
 // Модель: TieredStrategy = упорядоченные эшелоны; ROOT fallback обходит эшелоны
@@ -5949,7 +6188,7 @@ bindTieredUI();
 // чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
 // ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
 // но визуально помечен как previous Build.
-const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'rtControllerInput', 'rtSecretInput', 'ptSpecInput']);
+const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'rtControllerInput', 'rtSecretInput', 'ptSpecInput', 'csImportInput']);
 let lastBuildFingerprint = null;
 
 function buildStateFingerprint() {
@@ -6214,6 +6453,96 @@ document.addEventListener('click', (e) => {
     if (ptUnavailableNodes.has(id)) ptUnavailableNodes.delete(id); else ptUnavailableNodes.add(id);
     renderPhysicalTopologyGraph();
   }
+});
+
+// === CONFIG STUDIO UI (v1.11 #176): import + сводка + диагностики ===
+// Состояние — память вкладки; csImportInput вне build-fingerprint; секретные
+// значения не выводятся и не сохраняются (csRedactValue/csScanSecrets).
+let csCurrentDoc = null;
+let csImportText = '';
+
+function csRunAnalysis() {
+  const input = document.getElementById('csImportInput');
+  const status = document.getElementById('csStatus');
+  const note = document.getElementById('csSecretsNote');
+  const sumCard = document.getElementById('csSummaryCard');
+  if (!input || !status) return;
+  csCurrentDoc = null;
+  csImportText = '';
+  sumCard.style.display = 'none';
+  note.style.display = 'none';
+  const text = String(input.value).replace(/\r\n/g, '\n');
+  if (!text.trim()) { status.textContent = 'Вставьте YAML или загрузите файл (.yaml/.yml).'; return; }
+  if (text.length > 2 * 1024 * 1024) { status.textContent = '✖ Файл больше 2 МБ — анализ не запущен (ограничение производительности вкладки).'; return; }
+  let doc;
+  try {
+    doc = jsyaml.load(text);
+  } catch (e) {
+    const line = e && e.mark ? (e.mark.line + 1) : null;
+    const reason = String(e && e.reason ? e.reason : (e && e.message ? e.message : e)).replace(/https?:\/\/\S+/gi, '[URL hidden]');
+    status.textContent = '✖ Не удалось разобрать YAML' + (line ? '\nСтрока: ' + line : '') + '\nПричина: ' + reason;
+    return;
+  }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    status.textContent = '✖ Разобрано, но это не YAML-объект конфига (ожидались keys вида proxies/rules).';
+    return;
+  }
+  csCurrentDoc = doc;
+  csImportText = text;
+  const sum = csSummarize(doc);
+  const lines = [
+    'Proxies: ' + sum.proxies + ' · Groups: ' + sum.groups + ' · Providers: ' + sum.providers + ' · Rule Providers: ' + sum.ruleProviders + ' · Rules: ' + sum.rules,
+    'DNS: ' + (sum.dns ? 'включён' : 'нет') + ' · TUN: ' + (sum.tun ? 'включён' : 'нет') + ' · Sniffer: ' + (sum.sniffer ? 'включён' : 'нет') + (sum.mode ? ' · mode: ' + sum.mode : ''),
+    sum.hasExternalController ? 'external-controller: задан (значение не показывается)' : 'external-controller: не задан'
+  ];
+  document.getElementById('csSummary').textContent = lines.join('\n');
+  const secrets = csScanSecrets(doc);
+  if (secrets.length) {
+    note.style.display = 'block';
+    const shown = secrets.slice(0, 5).map(s => s.path).join(', ');
+    note.textContent = '🔒 Секретные поля: ' + secrets.length + ' — значения скрыты и в диагностики не попадают (' + shown + (secrets.length > 5 ? ', …' : '') + '). Содержимое вкладки никуда не отправляется и не сохраняется.';
+  }
+  const diags = csDiagnostics(doc);
+  const out = document.getElementById('csDiagOut');
+  out.textContent = diags.map(d => (d.severity === 'error' ? '✖ ' : d.severity === 'warning' ? '⚠ ' : 'ℹ ') + d.message).join('\n');
+  sumCard.style.display = 'block';
+  status.textContent = '✓ Разобрано: анализ готов (локально, без сети).';
+}
+
+function csClearStudio() {
+  document.getElementById('csImportInput').value = '';
+  csCurrentDoc = null;
+  csImportText = '';
+  document.getElementById('csSummaryCard').style.display = 'none';
+  document.getElementById('csSecretsNote').style.display = 'none';
+  document.getElementById('csStatus').textContent = '';
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target) return;
+  if (e.target.id === 'csParseBtn') { e.preventDefault(); csRunAnalysis(); }
+  if (e.target.id === 'csClearBtn') { e.preventDefault(); csClearStudio(); }
+});
+
+document.addEventListener('change', (e) => {
+  if (!e.target || e.target.id !== 'csImportFile') return;
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ''; // повторный выбор того же файла снова генерирует change
+  if (!file) return;
+  if (!/\.(ya?ml)$/i.test(file.name)) {
+    document.getElementById('csStatus').textContent = '✖ Ожидался файл .yaml или .yml.';
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    document.getElementById('csStatus').textContent = '✖ Файл больше 2 МБ — анализ не запущен.';
+    return;
+  }
+  file.text().then(t => {
+    document.getElementById('csImportInput').value = t;
+    csRunAnalysis();
+  }).catch(() => {
+    document.getElementById('csStatus').textContent = '✖ Не удалось прочитать файл.';
+  });
 });
 
 // Domain Coverage UI (v1.9 PHASE 5): первый consumer Config Dependency Graph.
