@@ -54,8 +54,8 @@ Local failover (кандидаты в `localPolicies`) остаётся лока
 | статус | что значит | mihomo -t |
 |---|---|---|
 | `READY` | полный первоклассный контракт, креды резолвлены | RUN и обязан проходить (compat-сюита в CI-матрице 1.19.31/1.19.32) |
-| `PLACEHOLDERS_REQUIRED` | конфиг сгенерирован, но кред-рефы без значений → `<CS-PLACEHOLDER:cred-ref>` | NOT_RUN — плейсхолдеры должны быть заменены владельцем |
-| `EXTERNAL_CONTRACT_REQUIRED` | серверная часть вне первоклассного набора / нет контракта | NOT_RUN — config.yaml НЕ генерируется (fallback в DIRECT де-анонимизировал бы цепочку — намеренно не эмитим) |
+| `PLACEHOLDERS_REQUIRED` | не хватает supported inbound/outbound/endpoint данных (без config.yaml), либо кред-рефы без значений → `<CS-PLACEHOLDER:cred-ref>` | NOT_RUN — данные/плейсхолдеры должны быть заполнены владельцем |
+| `EXTERNAL_CONTRACT_REQUIRED` | серверная часть вне первоклассного набора / неподдерживаемый reference | NOT_RUN — config.yaml НЕ генерируется (fallback в DIRECT де-анонимизировал бы цепочку — намеренно не эмитим) |
 
 FINAL OVERLAY (WARP) — attachment, не узел: узла-артефакта не создаёт; ребро exit→overlay обслуживается EXIT-узлом (при wireguard — external contract).
 

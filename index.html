@@ -153,6 +153,8 @@
   .cs-subpanel > summary:focus-visible,.advanced-panel > summary:focus-visible,details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px;box-shadow:0 0 0 4px rgba(0,84,227,.14)}
   #csOpsBox{background:rgba(0,84,227,.045);border-top-color:var(--accent)!important;padding:10px!important}
   #csExportBox{background:rgba(10,122,10,.045);border:1px solid var(--green)!important;padding:10px!important}
+  #tab-studio,#physicalTopologyPanel{overflow-wrap:anywhere}
+  #csEditObject{max-width:100%}
   .cs-flash{animation:cs-flash-anim 1.6s ease-out}
   @keyframes cs-flash-anim{0%{background:rgba(255,200,0,.25)}100%{background:transparent}}
   .advanced-panel summary .advanced-badge{flex:none}
@@ -735,15 +737,15 @@
       <div class="card-title">📊 Обзор</div>
       <div id="csSummary" class="hint" style="white-space:pre-line"></div>
       <details id="csDiagnosticsPanel" style="margin-top:8px">
-        <summary style="cursor:pointer"><span>▶</span> <span>Диагностики</span></summary>
+        <summary style="cursor:pointer">Диагностики</summary>
         <div id="csDiagOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       </details>
       <details id="csGraphPanel" style="margin-top:8px">
-        <summary style="cursor:pointer"><span>▶</span> <span>Граф зависимостей</span></summary>
+        <summary style="cursor:pointer">Граф зависимостей</summary>
         <div id="csGraphOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       </details>
       <details id="csRoutingPanel" style="margin-top:8px">
-        <summary style="cursor:pointer"><span>▶</span> <span>Маршрутизация</span></summary>
+        <summary style="cursor:pointer">Маршрутизация</summary>
         <div class="hint">Покрытие доменов импортированным конфигом: какое правило выигрывает и путь до цели (насколько это доказуемо статически). GEOSITE/GEOIP/external-провайдеры — честный UNKNOWN. По одному домену в строке.</div>
         <textarea id="csDomainInput" rows="3" aria-label="Домены для проверки покрытия" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="gemini.google.com&#10;unknown-service.example"></textarea>
         <button type="button" class="btn btn-gray" id="csDomainBtn">Проверить покрытие</button>
@@ -755,7 +757,7 @@
         <div id="csRuleProbeOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       </details>
       <details id="csTracePanel" style="margin-top:8px">
-        <summary style="cursor:pointer"><span>▶</span> <span>Semantic Trace</span></summary>
+        <summary style="cursor:pointer">Semantic Trace</summary>
         <div id="csTraceOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       </details>
     </div>
@@ -5481,6 +5483,7 @@ function ptAnalyzeTopology(spec) {
     return { schemaVersion: PT_SCHEMA_VERSION, ok: false, model: null,
       diagnostics: [ptDiag('error', 'PT-SCHEMA-NODES', 'nodes: ожидается непустой массив узлов.')] };
   }
+  if (spec.nodes.length > 256 || (Array.isArray(spec.links) && spec.links.length > 512)) return { schemaVersion: PT_SCHEMA_VERSION, ok: false, model: null, diagnostics: [ptDiag('error', 'PT-LIMIT', 'Топология слишком большая (максимум 256 узлов / 512 links).')] };
 
   // === Pass 1: nodes (identity + roles) ===
   const byId = new Map();
@@ -5490,6 +5493,7 @@ function ptAnalyzeTopology(spec) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { err('PT-BAD-ID', 'узел: ожидается объект {id, role}.'); continue; }
     const id = typeof raw.id === 'string' ? raw.id.trim() : '';
     if (!id) { err('PT-BAD-ID', 'узел без непустого строкового id (display label не может быть identity).'); continue; }
+    if (/[\x00-\x1f\x7f\u2028\u2029]/.test(id + (typeof raw.label === 'string' ? raw.label : ''))) { err('PT-BAD-ID', 'ID/label узла содержит управляющие символы — генерация блокирована.'); continue; }
     const role = raw.role;
     if (!PT_ROLES.includes(role)) { err('PT-BAD-ROLE', 'узел «' + id + '»: неизвестная роль ' + JSON.stringify(role === undefined ? null : role) + ' (ожидается entry|transit|exit|final-overlay).', [id]); continue; }
     if (byId.has(id)) { err('PT-DUP-ID', 'дубликат стабильного ID «' + id + '» — identity должна быть уникальной.', [id]); continue; }
@@ -5915,7 +5919,7 @@ function ptGenerateArtifacts(spec, credentials) {
     if (outbound) {
       if (!outbound.kind || !ptOwnTransport(outbound.kind)) {
         const kindLabel = ptPublicKind(outbound.kind);
-        nodeBlockers.push({ code: 'PT-GEN-CONTRACT', message: 'исходящий транспорт' + (kindLabel ? ' «' + kindLabel + '»' : ' не задан') + ' — внешняя часть: требуется внешний контракт' });
+        nodeBlockers.push({ code: outbound.kind ? 'PT-GEN-CONTRACT' : 'PT-GEN-MISSING', message: 'исходящий транспорт' + (kindLabel ? ' «' + kindLabel + '»' : ' не задан') + (outbound.kind ? ' — внешняя часть: требуется внешний контракт' : ' — заполните транспорт межузлового ребра') });
       } else if (!outbound.endpointRef || !(outEp = ptEndpointParts(spec, outbound.endpointRef))) {
         nodeBlockers.push({ code: 'PT-GEN-ENDPOINT', message: 'endpoint исходящей ссылки не найден или не host:port в spec.endpoints' });
         outSupported = false;
@@ -5929,6 +5933,8 @@ function ptGenerateArtifacts(spec, credentials) {
       (inbound && inbound.kind && ptOwnTransport(inbound.kind) && ptOwnTransport(inbound.kind).needsPassword && (!inbound.credentialRef || !credentials || typeof credentials[inbound.credentialRef] !== 'string' || !credentials[inbound.credentialRef])) ||
       (outbound && outSupported && ptOwnTransport(outbound.kind) && ptOwnTransport(outbound.kind).needsPassword && (!outbound.credentialRef || !credentials || typeof credentials[outbound.credentialRef] !== 'string' || !credentials[outbound.credentialRef]));
     const files = {};
+    const external = nodeBlockers.some(b => ['PT-GEN-CONTRACT', 'PT-GEN-TRANSPORT', 'PT-GEN-REFERENCE'].includes(b.code));
+    const status = external ? 'EXTERNAL_CONTRACT_REQUIRED' : (nodeBlockers.length || needsCred ? 'PLACEHOLDERS_REQUIRED' : 'READY');
     // конфиг генерируется ТОЛЬКО при полном первоклассном контракте (вход+выход).
     // Неподдерживаемый исходящий транспорт = контракт без конфига: fallback в
     // DIRECT де-анонимизировал бы цепочку, поэтому «честный DIRECT» не эмитим.
@@ -5943,9 +5949,9 @@ function ptGenerateArtifacts(spec, credentials) {
     }
     if (nodeBlockers.length || needsCred) {
       const contractLines = [
-        '# External transport contract — ' + node.label + ' [' + ptRoleLabel(node.role) + ']',
+        '# Deployment requirements — ' + node.label + ' [' + ptRoleLabel(node.role) + ']',
         '',
-        needsCred ? 'Статус: PLACEHOLDERS_REQUIRED (в config.yaml есть <CS-PLACEHOLDER:*>)' : 'Статус: EXTERNAL_CONTRACT_REQUIRED',
+        'Статус: ' + status + (files['config.yaml'] && needsCred ? ' (в config.yaml есть <CS-PLACEHOLDER:*>)' : ''),
         '',
         'Пункты:',
         ...nodeBlockers.map(b => '- ' + b.code + ': ' + b.message),
@@ -5955,7 +5961,6 @@ function ptGenerateArtifacts(spec, credentials) {
       files['contract.md'] = contractLines.join('\n') + '\n';
       withContract++;
     }
-    const status = nodeBlockers.length ? 'EXTERNAL_CONTRACT_REQUIRED' : (needsCred ? 'PLACEHOLDERS_REQUIRED' : 'READY');
     if (status === 'READY') ready++;
     if (status === 'PLACEHOLDERS_REQUIRED') placeholders++;
     artifacts.push({
@@ -6028,18 +6033,20 @@ const PT_RT_BUILTINS = ['DIRECT', 'REJECT', 'REJECT-DROP', 'GLOBAL', 'PASS', 'CO
 // (SOURCE-PROVEN: hub/route/proxies.go getProxies + adapter/adapter.go
 // MarshalJSON + outboundgroup Selector/URLTest/Fallback MarshalJSON «now»).
 function ptRuntimeParseProxies(rawJson) {
+  if (rawJson.length > 2 * 1024 * 1024) return null;
   let data;
   try { data = JSON.parse(rawJson); } catch (_) { return null; }
-  const src = data && data.proxies && typeof data.proxies === 'object' ? data.proxies : null;
+  const src = data && data.proxies && typeof data.proxies === 'object' && !Array.isArray(data.proxies) ? data.proxies : null;
   if (!src) return null;
-  const out = {};
+  if (Object.keys(src).length > 5000) return null;
+  const out = Object.create(null);
   for (const name of Object.keys(src)) {
     const p = src[name];
     if (!p || typeof p !== 'object') continue;
     out[name] = {
       type: typeof p.type === 'string' ? p.type : null,
       now: typeof p.now === 'string' ? p.now : null,
-      all: Array.isArray(p.all) ? p.all.map(String) : null,
+      all: Array.isArray(p.all) && p.all.length <= 5000 && p.all.every(x => typeof x === 'string') ? p.all : null,
       alive: p.alive === undefined ? null : !!p.alive
     };
   }
@@ -6056,7 +6063,7 @@ function ptResolveSelectionChain(proxies, groupName, maxDepth) {
   while (chain.length <= limit) {
     if (visited.has(current)) { cycle = true; break; }
     visited.add(current);
-    const node = proxies ? proxies[current] : null;
+    const node = proxies && Object.prototype.hasOwnProperty.call(proxies, current) ? proxies[current] : null;
     if (!node) { unknown = true; chain.push(current); break; } // неизвестный лист — тоже часть цепочки
     chain.push(current);
     if (!node.all || !node.now) break; // не группа (leaf-прокси) — конец
@@ -6125,6 +6132,46 @@ function ptIsStale(evidence, fingerprintNow) {
 // карту ссылок для редактора и диагностики. Никаких секретов в выводах: значения
 // секретных ключей и tokenized-URL маскируются на границе ядра.
 const CS_SECRET_EXACT = new Set(['password', 'private-key', 'private_key', 'secret', 'token', 'uuid', 'uuid2', 'preshared-key', 'presharedkey', 'psk', 'auth', 'authorization', 'x-hwid', 'hwid', 'private-key-order', 'auth-pass', 'auth-str', 'authuser', 'authpass', 'obfs-password', 'private-key-file-password']);
+// Ограничения ДО рекурсивных анализаторов и редактора; алиасы разрешены в малых DAG.
+function csLoadBounded(text, loader) {
+  if (text.length > 2 * 1024 * 1024) throw new Error('CS-LIMIT: файл больше 2 МБ');
+  const invalidUnicode = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  if (invalidUnicode.test(text)) throw new Error('CS-SHAPE: некорректный Unicode');
+  const lines = text.split('\n');
+  if (lines.length > 20000 || lines.some(l => l.length > 16384)) throw new Error('CS-LIMIT: слишком много строк или строка длиннее 16384 символов');
+  let depth = 0, events = 0;
+  const doc = loader.load(text, { listener(event) {
+    if (++events > 100000 || (event === 'open' && ++depth > 64)) throw new Error('CS-LIMIT: YAML слишком сложный (глубина/число узлов)');
+    if (event === 'close') depth--;
+  } });
+  const active = new Set();
+  const pending = [{ value: doc, depth: 0 }];
+  let visits = 0;
+  while (pending.length) {
+    const item = pending.pop(), v = item.value;
+    if (item.leave) { active.delete(v); continue; }
+    if (++visits > 50000 || item.depth > 64) throw new Error('CS-LIMIT: слишком большое раскрытие aliases/структура');
+    if (typeof v === 'string' && invalidUnicode.test(v)) throw new Error('CS-SHAPE: некорректный Unicode');
+    if (!v || typeof v !== 'object') continue;
+    if (active.has(v)) throw new Error('CS-LIMIT: циклические YAML aliases не поддерживаются');
+    active.add(v); pending.push({ value: v, leave: true });
+    for (const k of Object.keys(v)) { if (invalidUnicode.test(k)) throw new Error('CS-SHAPE: некорректный Unicode'); pending.push({ value: v[k], depth: item.depth + 1 }); }
+  }
+  const map = v => v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
+  if (!map(doc)) throw new Error('CS-SHAPE: ожидался YAML-объект конфига');
+  for (const key of ['proxies', 'proxy-groups', 'rules']) {
+    if (doc[key] === undefined) continue;
+    if (!Array.isArray(doc[key])) throw new Error('CS-SHAPE: ' + key + ' должен быть списком');
+    if (doc[key].length > (key === 'rules' ? 10000 : key === 'proxy-groups' ? 256 : 2000)) throw new Error('CS-LIMIT: слишком большой список ' + key);
+    for (const item of doc[key]) {
+      if (key === 'rules') { if (typeof item !== 'string') throw new Error('CS-SHAPE: правило должно быть строкой'); continue; }
+      if (!map(item) || typeof item.name !== 'string' || !item.name) throw new Error('CS-SHAPE: объект должен иметь строковое name');
+      for (const list of ['proxies', 'use']) if (item[list] !== undefined && (!Array.isArray(item[list]) || item[list].some(x => typeof x !== 'string'))) throw new Error('CS-SHAPE: members/use должны быть списками строк');
+    }
+  }
+  for (const key of ['proxy-providers', 'rule-providers']) if (doc[key] !== undefined && (!map(doc[key]) || Object.values(doc[key]).some(v => !map(v)))) throw new Error('CS-SHAPE: providers должны быть объектами');
+  return doc;
+}
 function csIsSecretKey(key) {
   const k = String(key || '').toLowerCase();
   if (!k) return false;
@@ -6150,8 +6197,24 @@ function csRedactUrl(url) {
     return u.origin + path;
   } catch (_) { return s; }
 }
-function csRedactText(value) {
-  return String(value || '')
+const CS_REDACTION_VALUES = new WeakMap();
+function csRedactText(value, doc) {
+  let text = String(value || '');
+  // Известные значения маскируются и при повторении в имени/правиле/комментарии.
+  // Не меняем исходник или экспорт; только автоматически показанный текст.
+  if (doc && typeof doc === 'object' && !CS_REDACTION_VALUES.has(doc)) {
+    const values = new Set(), seen = new Set(), pending = [{ v: doc, secret: false }];
+    while (pending.length) {
+      const { v, secret } = pending.pop();
+      if (typeof v === 'string' && secret && v) { values.add(v); if (/^Bearer\s+/i.test(v)) values.add(v.replace(/^Bearer\s+/i, '')); v.split(/\r?\n/).forEach(x => { if (x.trim()) values.add(x.trim()); }); }
+      else if (v && typeof v === 'object' && !seen.has(v)) { seen.add(v); for (const k of Object.keys(v)) pending.push({ v: v[k], secret: secret || csIsSecretKey(k) }); }
+    }
+    const parts = [...values].sort((a, b) => b.length - a.length).map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    CS_REDACTION_VALUES.set(doc, parts.length ? new RegExp(parts.join('|'), 'g') : null);
+  }
+  const known = doc && CS_REDACTION_VALUES.get(doc);
+  if (known) text = text.replace(known, '••••••');
+  return text
     .replace(/[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi, url => csRedactUrl(url))
     .replace(/(\b(?:password|private[-_]?key|secret|token|uuid|preshared[-_]?key|authorization|x-hwid)\b\s*[:=]\s*)(?:Bearer\s+)?(?:"[^"]*"|'[^']*'|[^,\s;]+)/gi, '$1••••••');
 }
@@ -6184,7 +6247,9 @@ function csSummarize(doc) {
 // Инвентарь секретных полей — ТОЛЬКО пути, без значений (заметка + маскирование редактора).
 function csScanSecrets(doc) {
   const out = [];
+  const seen = new Set();
   const walk = (node, path) => {
+    if (node && typeof node === 'object') { if (seen.has(node)) return; seen.add(node); }
     if (Array.isArray(node)) { node.forEach((v, i) => walk(v, path + '[' + i + ']')); return; }
     if (node && typeof node === 'object') {
       for (const k of Object.keys(node)) {
@@ -6242,9 +6307,9 @@ function csCollectRefs(doc) {
 // оговоркой про неявный GLOBAL (Mihomo включает все proxies/groups в GLOBAL).
 function csDiagnostics(doc) {
   const diags = [];
-  const err = (code, message) => diags.push({ severity: 'error', code, message: csRedactText(message) });
-  const warn = (code, message) => diags.push({ severity: 'warning', code, message: csRedactText(message) });
-  const info = (code, message) => diags.push({ severity: 'info', code, message: csRedactText(message) });
+  const err = (code, message) => diags.push({ severity: 'error', code, message: csRedactText(message, doc) });
+  const warn = (code, message) => diags.push({ severity: 'warning', code, message: csRedactText(message, doc) });
+  const info = (code, message) => diags.push({ severity: 'info', code, message: csRedactText(message, doc) });
   const proxyList = Array.isArray(doc && doc.proxies) ? doc.proxies : [];
   const groupList = Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : [];
   const dupIn = (list, label) => {
@@ -6306,6 +6371,13 @@ function csFormatScalar(value) {
 function csLineDiff(aText, bText) {
   const a = String(aText).split('\n'), b = String(bText).split('\n');
   const n = a.length, m = b.length;
+  // Большой diff: линейный общий prefix/suffix вместо квадратичной LCS-таблицы.
+  if ((n + 1) * (m + 1) > 1000000) {
+    let start = 0, endA = n, endB = m;
+    while (start < endA && start < endB && a[start] === b[start]) start++;
+    while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) { endA--; endB--; }
+    return [...a.slice(0, start).map(line => ({ t: ' ', line })), ...a.slice(start, endA).map(line => ({ t: '-', line })), ...b.slice(start, endB).map(line => ({ t: '+', line })), ...a.slice(endA).map(line => ({ t: ' ', line }))];
+  }
   const w = new Array((n + 1) * (m + 1)).fill(0);
   for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) w[i * (m + 1) + j] = a[i] === b[j] ? w[(i + 1) * (m + 1) + j + 1] + 1 : Math.max(w[(i + 1) * (m + 1) + j], w[i * (m + 1) + j + 1]);
   const out = [];
@@ -6359,7 +6431,7 @@ function csGraphText(doc) {
   const used = new Set((Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : []).flatMap(g => Array.isArray(g.use) ? g.use : []));
   lines.push('');
   lines.push('Proxy-providers: ' + (provNames.length ? provNames.map(n => n + (used.has(n) ? '' : ' (не используется группами)')).join(', ') : '—'));
-  return csRedactText(lines.join('\n'));
+  return csRedactText(lines.join('\n'), doc);
 }
 // Semantic Trace: путь правила (configured), по одному правилу — первые 12; ясное
 // различение configured/runtime: участников select/url-test/fallback помечаем runtime-selected.
@@ -6392,7 +6464,7 @@ function csTraceText(doc) {
   else if (rules.length > limit) lines.push('… остальные ' + (rules.length - limit) + ' — через «Маршрутизация» по домену.');
   lines.push('');
   lines.push('Границы: это STATIC CONFIG GRAPH из YAML. Это не RUNTIME OBSERVED (фактический выбор участника делает Mihomo) и не PHYSICAL TOPOLOGY (#149 — owner-declared).');
-  return csRedactText(lines.join('\n'));
+  return csRedactText(lines.join('\n'), doc);
 }
 // === CONFIG STUDIO CORE — CS-CORE-END ===
 
@@ -6466,16 +6538,9 @@ function csWalkNamed(csDoc) {
 // Пересборка текста правила с заменой части по индексу (глубина скобок — как в csRuleTarget).
 function csRuleRebuild(ruleText, partIndex, replacement) {
   const parts = String(ruleText).split(',');
-  let depth = 0, logical = 0;
-  for (let i = 0; i < parts.length; i++) {
-    const s = depth;
-    depth += (parts[i].match(/\(/g) || []).length - (parts[i].match(/\)/g) || []).length;
-    if (s === 0 && depth === 0) {
-      if (logical === partIndex) { parts[i] = replacement; return parts.join(','); }
-      logical++;
-    }
-  }
-  return null;
+  if (!Number.isInteger(partIndex) || partIndex < 1 || partIndex >= parts.length) throw new Error('неверный диапазон цели правила');
+  parts[partIndex] = replacement;
+  return parts.join(',');
 }
 function csRuleTargetIndex(ruleText) {
   const parts = String(ruleText).split(',');
@@ -6518,7 +6583,7 @@ function csPlanFieldEdit(csDoc, src, type, name, field, newText) {
   if (!mapNode || !mapNode.items) return { error: 'объект «' + name + '» не найден' };
   const pair = mapNode.items.find(p => p.key && String(p.key.value) === field);
   if (!pair) return { error: 'поле «' + field + '» у объекта «' + name + '» отсутствует — добавление новых полей пока не поддерживается' };
-  if (!pair.value || !pair.value.range) return { error: 'поле «' + field + '» — не простой скаляр, правка не поддерживается' };
+  if (!pair.value || !pair.value.range || pair.value.items || (pair.value.source && pair.value.value === undefined) || pair.value.anchor || mapNode.anchor) return { error: 'поле «' + field + '» — не независимый скаляр, правка не поддерживается' };
   const old = pair.value.value === undefined ? null : pair.value.value;
   if (['server', 'port', 'type'].includes(field) && !String(newText).trim()) return { error: 'поле «' + field + '» не может быть пустым' };
   if (csIsSecretKey(field) && !String(newText).length) return { error: 'пустое значение секретного поля не допускается (используйте удаление объекта)' };
@@ -6566,7 +6631,7 @@ function csPlanRename(csDoc, doc, type, oldName, newName) {
       if (ti >= 0 && (text.split(',')[ti] || '').trim() === oldName) {
         const node = csRuleScalarNode(csDoc, i);
         if (!node) return { error: 'не найден диапазон правила #' + (i + 1) };
-        patches.push({ start: node.range[0], end: node.range[1], text: csRuleRebuild(text, ti, newName) });
+        patches.push({ start: node.range[0], end: node.range[1], text: csRulePatchText(csDoc, node, csRuleRebuild(text, ti, newName)) });
         refCount++;
       }
     }
@@ -6586,7 +6651,7 @@ function csPlanRename(csDoc, doc, type, oldName, newName) {
           const node = csRuleScalarNode(csDoc, i);
           if (!node) return { error: 'не найден диапазон правила #' + (i + 1) };
           parts[1] = newName;
-          patches.push({ start: node.range[0], end: node.range[1], text: parts.join(',') });
+          patches.push({ start: node.range[0], end: node.range[1], text: csRulePatchText(csDoc, node, parts.join(',')) });
           refCount++;
         }
       }
@@ -6608,6 +6673,10 @@ function csSeqItemDeleteRange(src, node, seq) {
   return { start, end, text: '' };
 }
 function csPlanDelete(csDoc, src, doc, type, name, opts) {
+  if (opts && opts.removeRefs) {
+    const walk = csWalkNamed(csDoc);
+    if ([...walk.memberRefs, ...walk.useRefs].some(r => r.node.value === name && r.seq.flow)) return { error: 'удаление ссылки из flow-списка не поддерживается — сначала измените состав группы/use вручную' };
+  }
   if (type === 'proxy' || type === 'group') {
     const refs = csRefsToName(doc, name);
     if (refs.length && !(opts && opts.removeRefs)) {
@@ -6621,6 +6690,7 @@ function csPlanDelete(csDoc, src, doc, type, name, opts) {
       message: 'На «' + name + '» ссылаются правила: ' + ruleRefs.map(({ i }) => 'rule #' + (i + 1)).join(', ') + ' — сначала перенаправьте их цели (редактирование цели правила).' };
     const found = csFindSeqItem(csDoc, type === 'proxy' ? 'proxies' : 'proxy-groups', name);
     if (!found) return { error: 'объект «' + name + '» не найден' };
+    if (csSeqOf(csDoc, type === 'proxy' ? 'proxies' : 'proxy-groups').flow) return { error: 'удаление объекта из flow-списка не поддерживается' };
     const patches = [{ start: csLineStart(src, csDashStart(src, found.node)), end: found.node.range[1], text: '' }];
     if (opts && opts.removeRefs) {
       const walk = csWalkNamed(csDoc);
@@ -6695,14 +6765,20 @@ function csPlanGroupMembers(csDoc, src, groupName, members) {
   return { patches: [{ start: seq.range[0], end: seq.range[1], text }],
     semantic: { opKind: 'group-members', type: 'group', name: groupName, old: oldMembers, new: list } };
 }
+function csRulePatchText(csDoc, node, text) {
+  const seq = csSeqOf(csDoc, 'rules');
+  return (seq && seq.flow) || /QUOTE/.test(node.type || '') || /:\s|\s#|[\r\n]/.test(text) ? JSON.stringify(text) : text;
+}
 function csPlanRuleTarget(csDoc, ruleIndex, newTarget) {
+  const nameError = csValidateNewName(newTarget, []);
+  if (nameError) return { error: nameError };
   const node = csRuleScalarNode(csDoc, ruleIndex);
   if (!node) return { error: 'правило #' + (ruleIndex + 1) + ' не найдено' };
   const text = node.value;
   const ti = csRuleTargetIndex(text);
   if (ti < 0) return { error: 'не удалось определить цель правила #' + (ruleIndex + 1) };
   const rebuilt = csRuleRebuild(text, ti, newTarget);
-  return { patches: [{ start: node.range[0], end: node.range[1], text: rebuilt }],
+  return { patches: [{ start: node.range[0], end: node.range[1], text: csRulePatchText(csDoc, node, rebuilt) }],
     semantic: { opKind: 'rule-target', type: 'rule', name: 'rule #' + (ruleIndex + 1), field: 'target', old: text.split(',')[ti], new: newTarget } };
 }
 function csPlanAddProxy(csDoc, src, fields) {
@@ -6761,6 +6837,12 @@ function csReplay(src, ops, CSY) {
   return { text, applied };
 }
 function csPlanOp(csDoc, src, plain, op) {
+  if (op.opKind !== 'field-edit' && csHasAliases(csDoc.contents)) return { error: 'документ содержит YAML-алиасы — структурная мутация блокирована, исходник сохранён' };
+  const walk = csWalkNamed(csDoc);
+  if (['field-edit', 'rename', 'delete', 'group-members'].includes(op.opKind)) {
+    const defs = op.type === 'proxy' ? walk.proxyDefs : op.type === 'proxy-providers' ? walk.providerDefs : op.type === 'rule-providers' ? walk.rpDefs : walk.groupDefs;
+    if (defs.filter(d => d.name === op.name).length > 1) return { error: 'имя объекта встречается более одного раза — правка неоднозначна' };
+  }
   switch (op.opKind) {
     case 'field-edit': return csPlanFieldEdit(csDoc, src, op.type, op.name, op.field, op.newText);
     case 'rename': return csPlanRename(csDoc, plain, op.type, op.name, op.new);
@@ -7300,9 +7382,10 @@ function runPhysicalTopology() {
   traceOut.textContent = '';
   let spec;
   try {
+    if (input.value.length > 2 * 1024 * 1024) throw new Error('PT-LIMIT');
     spec = JSON.parse(input.value);
   } catch (e) {
-    diagOut.textContent = '✖ Спецификация — не корректный JSON: ' + String(e && e.message ? e.message : e);
+    diagOut.textContent = '✖ Спецификация — некорректный или слишком большой JSON (максимум 2 МБ; значения скрыты).';
     return;
   }
   const res = ptAnalyzeTopology(spec);
@@ -7325,7 +7408,7 @@ function clearPhysicalTopology() {
   if (input) input.value = '';
   ptLastModel = null;
   ptUnavailableNodes = new Set();
-  ptRuntimeProfiles = {};
+  ptRuntimeProfiles = Object.create(null);
   ptRuntimeEvidence = null;
   ptRuntimeSeq++;
   if (ptRuntimeAbort) { try { ptRuntimeAbort.abort(); } catch (_) {} ptRuntimeAbort = null; }
@@ -7347,7 +7430,7 @@ function clearPhysicalTopology() {
 // по явному клику; race-guard: generation id + AbortController; STALE —
 // структурно (fingerprint топологии/профилей), не по времени. Observations
 // никогда не меняют топологию и не утверждают packet-path.
-let ptRuntimeProfiles = {}; // nodeId → {endpoint, secret, group, members}
+let ptRuntimeProfiles = Object.create(null); // nodeId → {endpoint, secret, group, members}
 let ptRuntimeEvidence = null; // {checkedAt, fpTopo, fpProfiles, perNode, chain}
 let ptRuntimeSeq = 0;
 let ptRuntimeAbort = null;
@@ -7371,7 +7454,7 @@ function ptRuntimeInvalidatePending(reason) {
 }
 function ptRuntimeInputTopologyFingerprint() {
   const input = document.getElementById('ptSpecInput');
-  if (!input || !input.value.trim()) return null;
+  if (!input || !input.value.trim() || input.value.length > 2 * 1024 * 1024) return null;
   try {
     const analysis = ptAnalyzeTopology(JSON.parse(input.value));
     return analysis.ok && analysis.model ? ptRuntimeFingerprint(analysis.model, null) : null;
@@ -7478,7 +7561,7 @@ function ptRuntimeRender() {
   }
   lines.push('Формулировки: «наблюдаемое состояние контроллеров согласуется с intended-топологией».');
   lines.push('Недоступный контроллер ≠ узел выключен. Packet-path не доказывается этим инструментом.');
-  out.textContent = lines.join('\n');
+  out.textContent = csRedactText(lines.join('\n'), { secret: Object.values(ptRuntimeProfiles).map(p => p.secret).filter(Boolean) });
   // обновить статусную строку (chain aggregate + timestamp)
   if (status && ptRuntimeEvidence && ptRuntimeEvidence.chain) {
     status.textContent = 'Chain evidence: ' + ptRuntimeEvidence.chain + ' · проверено: ' + ptRuntimeEvidence.checkedAt +
@@ -7522,17 +7605,24 @@ async function ptRuntimeCheck() {
     catch (e) { csRuntimeSet(n.id, { status: 'UNKNOWN', reason: 'endpoint: ' + e.message }, seq); continue; }
     const headers = { Accept: 'application/json' };
     if (p.secret) headers.Authorization = 'Bearer ' + p.secret;
+    const requestAbort = new AbortController();
+    const parentSignal = ptRuntimeAbort.signal;
+    const cancel = () => requestAbort.abort();
+    parentSignal.addEventListener('abort', cancel, { once: true });
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; requestAbort.abort(); }, 8000);
     try {
-      const resp = await fetch(base + '/version', { headers, cache: 'no-store', signal: ptRuntimeAbort.signal });
+      const resp = await fetch(base + '/version', { headers, cache: 'no-store', signal: requestAbort.signal });
       if (seq !== ptRuntimeSeq) return;
       if (resp.status === 401 || resp.status === 403) { csRuntimeSet(n.id, { status: 'AUTH_ERROR', reason: 'HTTP ' + resp.status + ': секрет не принят' }, seq); continue outLoop; }
       if (!resp.ok) { csRuntimeSet(n.id, { status: 'UNKNOWN', reason: 'HTTP ' + resp.status + ' на /version' }, seq); continue outLoop; }
       let version = null;
-      try { const vj = await resp.json(); version = vj && vj.version ? String(vj.version) : null; } catch (_) {}
+      try { const vj = await resp.json(); version = vj && typeof vj.version === 'string' && vj.version.length <= 128 ? vj.version : null; } catch (_) {}
+      if (!version) { csRuntimeSet(n.id, { status: 'UNKNOWN', reason: 'ответ /version не распознан' }, seq); continue outLoop; }
       if (seq !== ptRuntimeSeq) return;
-      const resp2 = await fetch(base + '/proxies', { headers, cache: 'no-store', signal: ptRuntimeAbort.signal });
+      const resp2 = await fetch(base + '/proxies', { headers, cache: 'no-store', signal: requestAbort.signal });
       if (seq !== ptRuntimeSeq) return;
-      if (!resp2.ok) { csRuntimeSet(n.id, { status: 'UNKNOWN', reason: 'HTTP ' + resp2.status + ' на /proxies' }, seq); continue outLoop; }
+      if (!resp2.ok) { csRuntimeSet(n.id, { status: resp2.status === 401 || resp2.status === 403 ? 'AUTH_ERROR' : 'UNKNOWN', reason: 'HTTP ' + resp2.status + ' на /proxies' }, seq); continue outLoop; }
       const text = await resp2.text();
       if (seq !== ptRuntimeSeq) return;
       const proxies = ptRuntimeParseProxies(text);
@@ -7548,9 +7638,14 @@ async function ptRuntimeCheck() {
     } catch (e) {
       if (seq !== ptRuntimeSeq) return;
       const aborted = e && (e.name === 'AbortError');
-      csRuntimeSet(n.id, aborted
+      csRuntimeSet(n.id, timedOut
+        ? { status: 'UNREACHABLE', reason: 'timeout 8 с — контроллер не ответил; это НЕ означает, что физический узел выключен' }
+        : aborted
         ? { status: 'UNKNOWN', reason: 'запрос прерван (новая проверка/отмена)' }
         : { status: 'UNREACHABLE', reason: 'контроллер не отвечает из браузера: offline/CORS/mixed-content/нет SSH forward — это НЕ означает, что узел выключен' }, seq);
+    } finally {
+      clearTimeout(timeout);
+      parentSignal.removeEventListener('abort', cancel);
     }
   }
   // aggregate по ребрам (узлы без OBSERVED дают свой вклад)
@@ -7566,8 +7661,8 @@ async function ptRuntimeCheck() {
 }
 function csRuntimeSet(nodeId, ev, seq) {
   if (seq !== ptRuntimeSeq) return;
-  if (!ptRuntimeEvidence) ptRuntimeEvidence = { checkedAt: '', perNode: {} };
-  if (!ptRuntimeEvidence.perNode) ptRuntimeEvidence.perNode = {};
+  if (!ptRuntimeEvidence) ptRuntimeEvidence = { checkedAt: '', perNode: Object.create(null) };
+  if (!ptRuntimeEvidence.perNode) ptRuntimeEvidence.perNode = Object.create(null);
   ptRuntimeEvidence.perNode[nodeId] = ev;
   ptRuntimeRender();
 }
@@ -7584,10 +7679,11 @@ function runPtGenerate() {
   dlBox.style.display = 'none';
   let spec;
   try {
+    if (input.value.length > 2 * 1024 * 1024) throw new Error('PT-LIMIT');
     spec = JSON.parse(input.value);
   } catch (e) {
     out.style.display = 'block';
-    out.textContent = '✖ Спецификация — не корректный JSON: ' + String(e && e.message ? e.message : e);
+    out.textContent = '✖ Спецификация — некорректный или слишком большой JSON (максимум 2 МБ; значения скрыты).';
     return;
   }
   const r = ptGenerateArtifacts(spec, spec.credentials || null);
@@ -7656,6 +7752,9 @@ document.addEventListener('click', (e) => {
     renderPhysicalTopologyGraph();
   }
 });
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.id === 'ptSpecInput') { ptRuntimeInvalidatePending('топология изменена'); ptRuntimeRender(); }
+});
 
 // === CONFIG STUDIO UI (v1.11 #176): import + сводка + диагностики ===
 // Состояние — память вкладки; csImportInput вне build-fingerprint; секретные
@@ -7663,26 +7762,22 @@ document.addEventListener('click', (e) => {
 let csCurrentDoc = null;
 let csImportText = '';
 
-function csRunAnalysis() {
+function csRunAnalysis(sourceText) {
   const input = document.getElementById('csImportInput');
   const status = document.getElementById('csStatus');
   const note = document.getElementById('csSecretsNote');
   const sumCard = document.getElementById('csSummaryCard');
   if (!input || !status) return;
-  csCurrentDoc = null;
-  csImportText = '';
-  sumCard.style.display = 'none';
-  note.style.display = 'none';
-  const text = String(input.value).replace(/\r\n/g, '\n');
+  const text = typeof sourceText === 'string' ? sourceText : String(input.value);
   if (!text.trim()) { status.textContent = 'Вставьте YAML или загрузите файл (.yaml/.yml).'; return; }
   if (text.length > 2 * 1024 * 1024) { status.textContent = '✖ Файл больше 2 МБ — анализ не запущен (ограничение производительности вкладки).'; return; }
   let doc;
   try {
-    doc = jsyaml.load(text);
+    doc = csLoadBounded(text, jsyaml);
   } catch (e) {
     const line = e && e.mark ? (e.mark.line + 1) : null;
-    const reason = String(e && e.reason ? e.reason : (e && e.message ? e.message : e)).replace(/https?:\/\/\S+/gi, '[URL hidden]');
-    status.textContent = '✖ Не удалось разобрать YAML' + (line ? '\nСтрока: ' + line : '') + '\nПричина: ' + reason;
+    const reason = /^CS-(LIMIT|SHAPE):/.test(String(e.message)) ? e.message : 'некорректный YAML (значения скрыты)';
+    status.textContent = '✖ Не удалось разобрать YAML' + (line ? '\nСтрока: ' + line : '') + '\nПричина: ' + reason + (csCurrentDoc ? '\nПредыдущий рабочий документ сохранён.' : '');
     return;
   }
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
@@ -7691,18 +7786,19 @@ function csRunAnalysis() {
   }
   csCurrentDoc = doc;
   csImportText = text;
+  note.style.display = 'none';
   const sum = csSummarize(doc);
   const lines = [
     'Proxies: ' + sum.proxies + ' · Groups: ' + sum.groups + ' · Providers: ' + sum.providers + ' · Rule Providers: ' + sum.ruleProviders + ' · Rules: ' + sum.rules,
     'DNS: ' + (sum.dns ? 'включён' : 'нет') + ' · TUN: ' + (sum.tun ? 'включён' : 'нет') + ' · Sniffer: ' + (sum.sniffer ? 'включён' : 'нет') + (sum.mode ? ' · mode: ' + sum.mode : ''),
     sum.hasExternalController ? 'external-controller: задан (значение не показывается)' : 'external-controller: не задан'
   ];
-  document.getElementById('csSummary').textContent = lines.join('\n');
+  document.getElementById('csSummary').textContent = csRedactText(lines.join('\n'), doc);
   const secrets = csScanSecrets(doc);
   if (secrets.length) {
     note.style.display = 'block';
     const shown = secrets.slice(0, 5).map(s => s.path).join(', ');
-    note.textContent = '🔒 Секретные поля: ' + secrets.length + ' — значения скрыты и в диагностики не попадают (' + shown + (secrets.length > 5 ? ', …' : '') + '). Содержимое вкладки никуда не отправляется и не сохраняется.';
+    note.textContent = csRedactText('🔒 Секретные поля: ' + secrets.length + ' — значения скрыты и в диагностики не попадают (' + shown + (secrets.length > 5 ? ', …' : '') + '). Содержимое вкладки никуда не отправляется и не сохраняется.', doc);
   }
   const diags = csDiagnostics(doc);
   const out = document.getElementById('csDiagOut');
@@ -7742,7 +7838,7 @@ function runCsDomainCoverage() {
       : (r.viaProvider ? 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw + ' (inline-провайдер «' + r.viaProvider + '»)' : 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw);
     lines.push(head + ' ' + via + RD_NL + '  → ' + r.chainText + (r.runtimeSelected ? ' — runtime-selected' : ''));
   }
-  out.textContent = lines.join(RD_NL);
+  out.textContent = csRedactText(lines.join(RD_NL), csCurrentDoc);
 }
 
 // Проверка одного домена/IP по импортированному конфигу (routingInspect — то же
@@ -7754,21 +7850,22 @@ function runCsRuleProbe() {
   const input = document.getElementById('csRuleProbe').value;
   const res = routingInspect(csCurrentDoc, input);
   if (res.verdict === 'EMPTY') { out.textContent = res.message; return; }
-  if (res.verdict === 'UNKNOWN') { out.textContent = '⚠ UNKNOWN — результат не может быть доказан офлайн. Причина: ' + (res.firstUnknown ? res.firstUnknown.reason : '—'); return; }
+  if (res.verdict === 'UNKNOWN') { out.textContent = csRedactText('⚠ UNKNOWN — результат не может быть доказан офлайн. Причина: ' + (res.firstUnknown ? res.firstUnknown.reason : '—'), csCurrentDoc); return; }
   if (res.verdict === 'NO MATCH') { out.textContent = '✗ ' + res.message; return; }
   if (res.verdict === 'FALLBACK') {
     const rule = rdParseRule(csCurrentDoc.rules[res.winner]);
-    out.textContent = 'Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + (rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Вход не совпал ни с одним известным правилом до MATCH.)';
+    out.textContent = csRedactText('Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + (rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Вход не совпал ни с одним известным правилом до MATCH.)', csCurrentDoc);
     return;
   }
   const w = res.winner;
   const matched = res.matched.find(m => m.index === w);
   const rule = rdParseRule(csCurrentDoc.rules[w]);
   const human = matched && rdSemanticTargetText(csCurrentDoc, rule.target, { expandGlobal: true });
-  out.textContent = '✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + csCurrentDoc.rules[w] + RD_NL + RD_NL + 'Маршрут: ' + rule.target + (human ? ' → ' + human : '') + (rdTargetIsRuntimeSelected(csCurrentDoc, rule.target) ? RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы (runtime-selected).' : '');
+  out.textContent = csRedactText('✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + csCurrentDoc.rules[w] + RD_NL + RD_NL + 'Маршрут: ' + rule.target + (human ? ' → ' + human : '') + (rdTargetIsRuntimeSelected(csCurrentDoc, rule.target) ? RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы (runtime-selected).' : ''), csCurrentDoc);
 }
 
 function csClearStudio() {
+  csEditorSeq++;
   document.getElementById('csImportInput').value = '';
   csCurrentDoc = null;
   csImportText = '';
@@ -7803,11 +7900,12 @@ document.addEventListener('change', (e) => {
     document.getElementById('csStatus').textContent = '✖ Файл больше 2 МБ — анализ не запущен.';
     return;
   }
-  file.text().then(t => {
+  file.arrayBuffer().then(bytes => {
+    const t = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
     document.getElementById('csImportInput').value = t;
-    csRunAnalysis();
+    csRunAnalysis(t);
   }).catch(() => {
-    document.getElementById('csStatus').textContent = '✖ Не удалось прочитать файл.';
+    document.getElementById('csStatus').textContent = '✖ Не удалось прочитать файл: ожидается корректный UTF-8 YAML. Предыдущий рабочий документ сохранён.';
   });
 });
 
@@ -7818,9 +7916,10 @@ document.addEventListener('change', (e) => {
 let csOps = [];
 let csWorking = null; // { text, applied } | null
 let csWorkingErr = null;
+let csEditorSeq = 0;
 
 function csNameMap() {
-  const map = {};
+  const map = Object.create(null);
   for (const op of csOps) if (op.opKind === 'rename' && op.type !== 'rule') map[op.name] = op.new;
   return map;
 }
@@ -8050,6 +8149,7 @@ function csPushOp(op) {
 }
 
 function csAfterOpsChange() {
+  const seq = ++csEditorSeq;
   const box = document.getElementById('csOpsBox');
   const list = document.getElementById('csOpsList');
   const diffOut = document.getElementById('csDiffOut');
@@ -8064,12 +8164,14 @@ function csAfterOpsChange() {
     box.style.display = 'none';
     csWorking = null; csWorkingErr = null;
     if (exportNote) exportNote.textContent = 'Изменений нет — экспорт идентичен оригиналу (байт-в-байт).';
-    if (status) status.textContent = 'Статическая валидация: PASS (оригинал) · Runtime-валидация Mihomo: NOT RUN';
+    if (status) status.textContent = 'Статическая валидация: ' + (csDiagnostics(csCurrentDoc).some(d => d.severity === 'error') ? 'FAIL' : 'PASS') + ' (оригинал) · Runtime-валидация Mihomo: NOT RUN';
     return;
   }
   box.style.display = 'block';
+  csWorking = null; csWorkingErr = 'правки ещё обрабатываются';
+  const redactionDoc = { config: csCurrentDoc, secret: csOps.filter(op => csIsSecretKey(op.field)).map(op => op.newText), added: csOps.filter(op => op.opKind === 'add').map(op => op.fields) };
   if (exportNote) exportNote.textContent = 'Правок в сессии: ' + csOps.length + ' — экспорт применит их к оригиналу.';
-  list.textContent = csOps.map((op, i) => {
+  list.textContent = csRedactText(csOps.map((op, i) => {
     if (op.opKind === 'field-edit') return (i + 1) + '. ' + op.type + ' «' + csCurrentName(op.name) + '» · ' + op.field + ': ' + (op.showOld || '••••••') + ' → ' + (op.showNew || '••••••');
     if (op.opKind === 'rename') return (i + 1) + '. переименование ' + op.type + ' «' + op.name + '» → «' + op.new + '»' + (op.refsAffected ? ' (ссылок: ' + op.refsAffected + ')' : '');
     if (op.opKind === 'delete') return (i + 1) + '. удаление ' + op.type + ' «' + op.name + '»' + (op.refsAffected ? ' (исправлено ссылок: ' + op.refsAffected + ')' : '');
@@ -8077,8 +8179,9 @@ function csAfterOpsChange() {
     if (op.opKind === 'rule-target') return (i + 1) + '. ' + op.name + ': цель ' + op.old + ' → ' + op.new;
     if (op.opKind === 'add') return (i + 1) + '. добавлен прокси «' + op.name + '»';
     return (i + 1) + '. ' + op.opKind;
-  }).join('\n');
+  }).join('\n'), redactionDoc);
   ensureCsYaml().then(CSY => {
+    if (seq !== csEditorSeq) return;
     try {
       csWorking = csReplay(csImportText, csOps, CSY);
       csWorkingErr = null;
@@ -8087,7 +8190,7 @@ function csAfterOpsChange() {
       csWorkingErr = String(e && e.message ? e.message : e);
     }
     if (csWorkingErr) {
-      diffOut.textContent = '✖ Правки непоследовательны: ' + csWorkingErr + '\nСбросьте правки или уберите конфликтующую.';
+      diffOut.textContent = csRedactText('✖ Правки непоследовательны: ' + csWorkingErr + '\nСбросьте правки или уберите конфликтующую.', redactionDoc);
       status.textContent = '';
       return;
     }
@@ -8097,20 +8200,22 @@ function csAfterOpsChange() {
     const lines = ['Изменено строк: ' + Math.min(added, removed) + ' · добавлено: ' + Math.max(0, added - removed) + ' · удалено: ' + Math.max(0, removed - added), ''];
     for (const x of d) {
       if (x.t === ' ') continue;
-      lines.push((x.t === '+' ? '+ ' : '- ') + csRedactLine(x.line));
+      lines.push((x.t === '+' ? '+ ' : '- ') + csRedactLine(x.line, redactionDoc));
     }
     diffOut.textContent = lines.join('\n');
     let valid = 'FAIL';
     try {
-      const doc = jsyaml.load(csWorking.text);
+      const doc = csLoadBounded(csWorking.text, jsyaml);
       const errs = csDiagnostics(doc).filter(x => x.severity === 'error');
       valid = errs.length ? 'FAIL' : 'PASS';
       if (errs.length) status.textContent = 'Статическая валидация: FAIL\n' + errs.map(x => '✖ ' + x.message).join('\n');
     } catch (e) {
-      status.textContent = 'Статическая валидация: FAIL\n✖ результат правок — не корректный YAML: ' + String(e && e.reason ? e.reason : e.message);
+      status.textContent = 'Статическая валидация: FAIL\n✖ результат правок — не корректный или слишком сложный YAML (значения скрыты)';
     }
+    if (valid !== 'PASS') csWorkingErr = 'статическая валидация FAIL';
     if (valid === 'PASS') status.textContent = 'Статическая валидация: PASS · Runtime-валидация Mihomo: NOT RUN';
   }).catch(e => {
+    if (seq !== csEditorSeq) return;
     diffOut.textContent = '✖ ' + (e && e.message ? e.message : e);
   });
 }
@@ -8122,10 +8227,10 @@ function csExportText() {
 }
 function api_diff(a, b) { return csLineDiff(a, b); }
 // Маскирование строки дифа: секретные ключи и tokenized-URL не показываются.
-function csRedactLine(line) {
+function csRedactLine(line, doc) {
   const m = line.match(/^(\s*(?:-\s*)?)([A-Za-z0-9_-]+):(.*)$/);
   if (m && csIsSecretKey(m[2])) return m[1] + m[2] + ': ••••••';
-  return csRedactText(line);
+  return csRedactText(line, doc || csCurrentDoc);
 }
 
 function csEditorClick(e) {
@@ -8140,7 +8245,7 @@ function csEditorClick(e) {
     if (!ops.length) { document.getElementById('csImpactBox').textContent = 'Изменений полей нет.'; return; }
     // показываем старые значения в списке правок (замаскированные)
     for (const op of ops) {
-      const inp = document.querySelector('input[data-cs-field="' + op.field + '"]');
+      const inp = [...document.querySelectorAll('input[data-cs-field]')].find(el => el.dataset.csField === op.field);
       if (inp && inp.dataset.csSecret !== '1') op.showOld = inp.dataset.csOrig;
       if (inp && inp.dataset.csSecret !== '1') op.showNew = inp.value;
     }
@@ -8301,7 +8406,7 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('change', (e) => {
   if (!e.target) return;
-  if (e.target.id === 'csEditType' || e.target.id === 'csEditObject') { csPendingRename = null; const b = document.getElementById('csRenameBtn'); if (b) { b.textContent = '✏️ Переименовать'; delete b.dataset.csConfirm; } document.getElementById('csImpactBox').textContent = ''; csRenderForm(); }
+  if (e.target.id === 'csEditType' || e.target.id === 'csEditObject') { csPendingRename = null; const b = document.getElementById('csRenameBtn'); if (b) { b.textContent = '✏️ Переименовать'; delete b.dataset.csConfirm; } document.getElementById('csImpactBox').textContent = ''; if (e.target.id === 'csEditType') csRefreshEditor(); else csRenderForm(); }
 });
 
 // Domain Coverage UI (v1.9 PHASE 5): первый consumer Config Dependency Graph.

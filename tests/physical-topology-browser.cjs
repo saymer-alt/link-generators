@@ -80,7 +80,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   // --- невалидный JSON и невалидная модель — structured diagnostics, no crash ---
   await page.fill('#ptSpecInput', '{oops');
   await page.locator('#ptAnalyzeBtn').click();
-  assert.ok((await page.textContent('#ptDiagOut')).includes('не корректный JSON'), 'честная JSON-ошибка');
+  assert.ok((await page.textContent('#ptDiagOut')).includes('JSON') && (await page.textContent('#ptDiagOut')).includes('значения скрыты'), 'bounded JSON-ошибка без эха исходника');
   await page.fill('#ptSpecInput', '{"nodes":[]}');
   await page.locator('#ptAnalyzeBtn').click();
   const diagBad = await page.textContent('#ptDiagOut');
