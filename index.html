@@ -146,6 +146,11 @@
   .site-footer-links{display:flex;gap:8px;align-items:center}
   .site-footer a{color:var(--info)}
   .site-footer a:focus-visible{outline:2px dotted var(--accent);outline-offset:2px}
+  .cs-subpanel{margin-top:8px;padding:6px 10px;border:1px solid var(--border);background:rgba(255,255,255,.3)}
+  .cs-subpanel > summary{cursor:pointer;font-size:.85rem}
+  #csDangerPanel > summary{color:var(--red)}
+  .cs-flash{animation:cs-flash-anim 1.6s ease-out}
+  @keyframes cs-flash-anim{0%{background:rgba(255,200,0,.25)}100%{background:transparent}}
   .advanced-panel summary .advanced-badge{flex:none}
   .advanced-badge{display:inline-block;padding:1px 7px;border:1px solid #b09a4a;border-radius:3px;color:#5a4a00;background:var(--warn-bg);font-size:.68rem;letter-spacing:.05em}
   .advanced-master{margin-top:8px;padding:0;background:transparent}
@@ -736,7 +741,8 @@
     </div>
     <div class="card" id="csEditorCard" style="display:none">
       <div class="card-title">✏️ Редактор Mihomo-конфига</div>
-      <div class="hint">Точечные правки поверх исходного текста (source-preserving): меняется только отредактированный диапазон YAML, комментарии/порядок/кавычки/неизвестные ключи остаются байт-в-байт. Правки живут только в памяти вкладки; экспорт никогда не перезаписывает загруженный файл и ничего не отправляет. Секретные поля маскируются — оставьте пустым, чтобы не менять.</div>
+      <div class="hint">Как работать: <b>1</b> · Выберите объект → <b>2</b> · Измените нужные поля → <b>3</b> · «💾 Применить изменения» → <b>4</b> · Проверьте зависимости / diff → <b>5</b> · Экспортируйте YAML. Точечные правки поверх исходного текста (source-preserving): меняется только отредактированный диапазон YAML, комментарии/порядок/кавычки/неизвестные ключи остаются байт-в-байт. Правки живут только в памяти вкладки; экспорт никогда не перезаписывает загруженный файл и ничего не отправляет. Секретные поля маскируются — оставьте пустым, чтобы не менять.</div>
+      <div class="label" style="font-weight:bold;margin-top:10px">1–2 · Выберите объект и измените поля</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:flex-end">
         <span><label class="label" for="csEditType" style="display:inline">Тип:</label><br>
           <select id="csEditType" aria-label="Тип объекта">
@@ -750,15 +756,31 @@
       </div>
       <div id="csEditForm" style="margin-top:8px"></div>
       <div id="csImpactBox" class="hint" style="margin-top:6px;white-space:pre-line"></div>
-      <div id="csOpsBox" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
-        <div class="label" style="font-weight:bold">Правки сессии</div>
+      <details id="csDangerPanel" class="cs-subpanel" style="margin-top:10px">
+        <summary style="cursor:pointer"><span>▶</span> <span>⚠ Переименование / удаление объекта</span></summary>
+        <div id="csDangerBody" style="margin-top:6px"></div>
+      </details>
+      <details id="csAddPanel" class="cs-subpanel" style="margin-top:8px">
+        <summary style="cursor:pointer"><span>▶</span> <span>➕ Добавить новый прокси</span></summary>
+        <div id="csAddBody" style="margin-top:6px"></div>
+      </details>
+      <details id="csRulesPanel" class="cs-subpanel" style="margin-top:8px">
+        <summary style="cursor:pointer"><span>▶</span> <span>🎯 Цель правила</span></summary>
+        <div id="csRulesBody" style="margin-top:6px"></div>
+      </details>
+      <div id="csOpsBox" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:8px">
+        <div class="label" style="font-weight:bold">4 · Правки сессии и diff</div>
         <div id="csOpsList" class="hint" style="white-space:pre-line;margin-top:4px"></div>
         <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
           <button type="button" class="btn btn-gray" id="csUndoBtn">↩ Отменить последнее</button>
           <button type="button" class="btn btn-gray" id="csResetBtn">Сбросить все правки</button>
         </div>
         <div id="csDiffOut" class="hint" style="margin-top:8px;white-space:pre-line;font-family:monospace;font-size:.78rem;max-height:40vh;overflow:auto"></div>
-        <div id="csExportStatus" class="hint" style="margin-top:8px;white-space:pre-line"></div>
+      </div>
+      <div id="csExportBox" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:8px">
+        <div class="label" style="font-weight:bold">5 · Экспорт</div>
+        <div id="csExportNote" class="hint" style="margin-top:4px"></div>
+        <div id="csExportStatus" class="hint" style="margin-top:6px;white-space:pre-line"></div>
         <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
           <button type="button" class="btn" id="csExportCopy">📋 Скопировать YAML</button>
           <button type="button" class="btn" id="csExportDownload">⬇️ Скачать config.yaml</button>
@@ -5991,7 +6013,13 @@ function csTraceText(doc) {
     const chain = [];
     chain.push('#' + (i + 1) + ' ' + raw);
     if (target) {
-      chain.push('  → политика/цель: ' + target + (rdTargetIsRuntimeSelected(doc, target) ? ' [runtime-selected]' : ''));
+      // P0 (field-test): static YAML доказывает ТОЛЬКО configured policy target.
+      // Какого участника группа реально выберет во время работы — UNKNOWN;
+      // помечать саму группу как «runtime-selected» — ошибка семантики.
+      chain.push('  → configured policy: ' + target);
+      if (rdTargetIsRuntimeSelected(doc, target)) {
+        chain.push('  → runtime-selected member: UNKNOWN (участника выбирает Mihomo во время работы — static YAML этого не доказывает)');
+      }
       const sem = rdSemanticTargetText(doc, target, { expandGlobal: true });
       chain.push('  → ' + sem);
     } else {
@@ -7202,46 +7230,11 @@ function csRenderForm() {
   }
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
-  saveBtn.className = 'btn btn-gray';
+  saveBtn.className = 'btn';
   saveBtn.id = 'csSaveFieldsBtn';
-  saveBtn.textContent = '💾 Сохранить изменения полей';
+  saveBtn.textContent = '💾 Применить изменения';
   form.appendChild(saveBtn);
-  // rename
-  const renRow = document.createElement('div');
-  renRow.style.cssText = 'display:flex;gap:6px;align-items:center;margin:8px 0 3px;flex-wrap:wrap';
-  const renLbl = document.createElement('span');
-  renLbl.className = 'label';
-  renLbl.textContent = 'Переименовать в:';
-  const renInp = document.createElement('input');
-  renInp.type = 'text';
-  renInp.id = 'csRenameInput';
-  renInp.setAttribute('aria-label', 'Новое имя объекта');
-  renInp.style.cssText = 'flex:1;min-width:160px;padding:4px 8px';
-  const renBtn = document.createElement('button');
-  renBtn.type = 'button';
-  renBtn.className = 'btn btn-gray';
-  renBtn.id = 'csRenameBtn';
-  renBtn.textContent = '✏️ Переименовать';
-  renRow.append(renLbl, renInp, renBtn);
-  form.appendChild(renRow);
-  // delete
-  const delRow = document.createElement('div');
-  delRow.style.cssText = 'display:flex;gap:6px;align-items:center;margin:3px 0;flex-wrap:wrap';
-  const delBtn = document.createElement('button');
-  delBtn.type = 'button';
-  delBtn.className = 'btn btn-gray';
-  delBtn.id = 'csDeleteBtn';
-  delBtn.textContent = '🗑 Удалить объект';
-  delRow.appendChild(delBtn);
-  const delConfirm = document.createElement('button');
-  delConfirm.type = 'button';
-  delConfirm.className = 'btn';
-  delConfirm.id = 'csDeleteConfirm';
-  delConfirm.textContent = 'Удалить и исправить ссылки';
-  delConfirm.style.display = 'none';
-  delRow.appendChild(delConfirm);
-  form.appendChild(delRow);
-  // members для групп
+  // members для групп (часть правки выбранного объекта)
   if (type === 'group' && Array.isArray(obj.proxies)) {
     const mLabel = document.createElement('div');
     mLabel.className = 'label';
@@ -7260,61 +7253,99 @@ function csRenderForm() {
     mBtn.textContent = 'Применить состав участников';
     form.append(mLabel, mInp, mBtn);
   }
-  // add proxy — всегда доступен
-  const addHead = document.createElement('div');
-  addHead.className = 'label';
-  addHead.style.cssText = 'display:block;margin-top:12px;font-weight:bold';
-  addHead.textContent = '➕ Добавить прокси (в конец секции proxies):';
-  form.appendChild(addHead);
-  const addGrid = document.createElement('div');
-  addGrid.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0';
-  for (const [key, ph] of [['name', 'имя'], ['type', 'ss|vmess|…'], ['server', 'host'], ['port', 'порт'], ['password', 'пароль (секрет)'], ['cipher', 'aes-128-gcm']]) {
-    const inp = document.createElement('input');
-    inp.type = key === 'password' ? 'password' : 'text';
-    inp.id = 'csAdd_' + key;
-    inp.placeholder = ph;
-    inp.setAttribute('aria-label', 'Новое прокси, поле ' + key);
-    inp.style.cssText = 'flex:1 1 120px;min-width:110px;padding:4px 8px';
-    if (key === 'password') inp.placeholder = CS_SECRET_INPUT_HINT;
-    addGrid.appendChild(inp);
+  // P0 (field-test): rename/delete — опасная зона, отдельная сворачиваемая панель
+  const dangerBody = document.getElementById('csDangerBody');
+  if (dangerBody) {
+    dangerBody.textContent = '';
+    const renRow = document.createElement('div');
+    renRow.style.cssText = 'display:flex;gap:6px;align-items:center;margin:6px 0 3px;flex-wrap:wrap';
+    const renLbl = document.createElement('span');
+    renLbl.className = 'label';
+    renLbl.textContent = 'Переименовать в:';
+    const renInp = document.createElement('input');
+    renInp.type = 'text';
+    renInp.id = 'csRenameInput';
+    renInp.setAttribute('aria-label', 'Новое имя объекта');
+    renInp.style.cssText = 'flex:1;min-width:160px;padding:4px 8px';
+    const renBtn = document.createElement('button');
+    renBtn.type = 'button';
+    renBtn.className = 'btn btn-gray';
+    renBtn.id = 'csRenameBtn';
+    renBtn.textContent = '✏️ Переименовать';
+    renRow.append(renLbl, renInp, renBtn);
+    const delRow = document.createElement('div');
+    delRow.style.cssText = 'display:flex;gap:6px;align-items:center;margin:3px 0;flex-wrap:wrap';
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn btn-gray';
+    delBtn.id = 'csDeleteBtn';
+    delBtn.textContent = '🗑 Удалить объект';
+    delRow.appendChild(delBtn);
+    const delConfirm = document.createElement('button');
+    delConfirm.type = 'button';
+    delConfirm.className = 'btn';
+    delConfirm.id = 'csDeleteConfirm';
+    delConfirm.textContent = 'Удалить и исправить ссылки';
+    delConfirm.style.display = 'none';
+    delRow.appendChild(delConfirm);
+    dangerBody.append(renRow, delRow);
   }
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'btn btn-gray';
-  addBtn.id = 'csAddApply';
-  addBtn.textContent = '➕ Добавить';
-  form.append(addGrid, addBtn);
-  // rules
-  const rHead = document.createElement('div');
-  rHead.className = 'label';
-  rHead.style.cssText = 'display:block;margin-top:12px;font-weight:bold';
-  rHead.textContent = '🎯 Цель правила (правило ≠ объект):';
-  const rRow = document.createElement('div');
-  rRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0;align-items:center';
-  const rIdx = document.createElement('input');
-  rIdx.type = 'number';
-  rIdx.id = 'csRuleIdx';
-  rIdx.min = '1';
-  rIdx.placeholder = '№ правила';
-  rIdx.setAttribute('aria-label', 'Номер правила');
-  rIdx.style.cssText = 'width:110px;padding:4px 8px';
-  const rTarget = document.createElement('input');
-  rTarget.type = 'text';
-  rTarget.id = 'csRuleTarget';
-  rTarget.placeholder = 'новая цель (группа/DIRECT/…)';
-  rTarget.setAttribute('aria-label', 'Новая цель правила');
-  rTarget.style.cssText = 'flex:1;min-width:160px;padding:4px 8px';
-  const rBtn = document.createElement('button');
-  rBtn.type = 'button';
-  rBtn.className = 'btn btn-gray';
-  rBtn.id = 'csRuleApply';
-  rBtn.textContent = 'Перенаправить';
-  rRow.append(rIdx, rTarget, rBtn);
-  form.append(rHead, rRow);
-  const rCount = document.createElement('div');
-  rCount.className = 'hint';
-  rCount.textContent = 'Всего правил: ' + ((csCurrentDoc.rules || []).length);
-  form.appendChild(rCount);
+  // add proxy — отдельная панель
+  const addBody = document.getElementById('csAddBody');
+  if (addBody) {
+    addBody.textContent = '';
+    const addNote = document.createElement('div');
+    addNote.className = 'hint';
+    addNote.textContent = 'Добавление — в конец секции proxies:';
+    const addGrid = document.createElement('div');
+    addGrid.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0';
+    for (const [key, ph] of [['name', 'имя'], ['type', 'ss|vmess|…'], ['server', 'host'], ['port', 'порт'], ['password', 'пароль (секрет)'], ['cipher', 'aes-128-gcm']]) {
+      const inp = document.createElement('input');
+      inp.type = key === 'password' ? 'password' : 'text';
+      inp.id = 'csAdd_' + key;
+      inp.placeholder = ph;
+      inp.setAttribute('aria-label', 'Новое прокси, поле ' + key);
+      inp.style.cssText = 'flex:1 1 120px;min-width:110px;padding:4px 8px';
+      if (key === 'password') inp.placeholder = CS_SECRET_INPUT_HINT;
+      addGrid.appendChild(inp);
+    }
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn btn-gray';
+    addBtn.id = 'csAddApply';
+    addBtn.textContent = '➕ Добавить';
+    addBody.append(addNote, addGrid, addBtn);
+  }
+  // правила — отдельная панель
+  const rulesBody = document.getElementById('csRulesBody');
+  if (rulesBody) {
+    rulesBody.textContent = '';
+    const rRow = document.createElement('div');
+    rRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0;align-items:center';
+    const rIdx = document.createElement('input');
+    rIdx.type = 'number';
+    rIdx.id = 'csRuleIdx';
+    rIdx.min = '1';
+    rIdx.placeholder = '№ правила';
+    rIdx.setAttribute('aria-label', 'Номер правила');
+    rIdx.style.cssText = 'width:110px;padding:4px 8px';
+    const rTarget = document.createElement('input');
+    rTarget.type = 'text';
+    rTarget.id = 'csRuleTarget';
+    rTarget.placeholder = 'новая цель (группа/DIRECT/…)';
+    rTarget.setAttribute('aria-label', 'Новая цель правила');
+    rTarget.style.cssText = 'flex:1;min-width:160px;padding:4px 8px';
+    const rBtn = document.createElement('button');
+    rBtn.type = 'button';
+    rBtn.className = 'btn btn-gray';
+    rBtn.id = 'csRuleApply';
+    rBtn.textContent = 'Перенаправить';
+    rRow.append(rIdx, rTarget, rBtn);
+    const rCount = document.createElement('div');
+    rCount.className = 'hint';
+    rCount.textContent = 'Всего правил: ' + ((csCurrentDoc.rules || []).length);
+    rulesBody.append(rRow, rCount);
+  }
 }
 
 function csCollectFieldEdits(origName, type) {
@@ -7347,13 +7378,21 @@ function csAfterOpsChange() {
   const list = document.getElementById('csOpsList');
   const diffOut = document.getElementById('csDiffOut');
   const status = document.getElementById('csExportStatus');
-  if (!box) return;
-  if (!csEditorEnabled() || !csOps.length) {
+  const exportBox = document.getElementById('csExportBox');
+  const exportNote = document.getElementById('csExportNote');
+  if (!box || !exportBox) return;
+  // P0 (field-test): экспорт видим СРАЗУ после импорта — без правок это оригинал.
+  exportBox.style.display = csEditorEnabled() ? 'block' : 'none';
+  if (!csEditorEnabled()) { box.style.display = 'none'; csWorking = null; csWorkingErr = null; return; }
+  if (!csOps.length) {
     box.style.display = 'none';
     csWorking = null; csWorkingErr = null;
+    if (exportNote) exportNote.textContent = 'Изменений нет — экспорт идентичен оригиналу (байт-в-байт).';
+    if (status) status.textContent = 'Статическая валидация: PASS (оригинал) · Runtime-валидация Mihomo: NOT RUN';
     return;
   }
   box.style.display = 'block';
+  if (exportNote) exportNote.textContent = 'Правок в сессии: ' + csOps.length + ' — экспорт применит их к оригиналу.';
   list.textContent = csOps.map((op, i) => {
     if (op.opKind === 'field-edit') return (i + 1) + '. ' + op.type + ' «' + csCurrentName(op.name) + '» · ' + op.field + ': ' + (op.showOld || '••••••') + ' → ' + (op.showNew || '••••••');
     if (op.opKind === 'rename') return (i + 1) + '. переименование ' + op.type + ' «' + op.name + '» → «' + op.new + '»' + (op.refsAffected ? ' (ссылок: ' + op.refsAffected + ')' : '');
@@ -7399,6 +7438,12 @@ function csAfterOpsChange() {
     diffOut.textContent = '✖ ' + (e && e.message ? e.message : e);
   });
 }
+// P0 (field-test): единый источник экспортного текста — без правок это оригинал.
+function csExportText() {
+  if (csOps.length && csWorking && !csWorkingErr) return csWorking.text;
+  if (csOps.length) return null; // правки есть, но не применились — экспорт блокирован
+  return csImportText;
+}
 function api_diff(a, b) { return csLineDiff(a, b); }
 // Маскирование строки дифа: секретные ключи и tokenized-URL не показываются.
 function csRedactLine(line) {
@@ -7426,6 +7471,15 @@ function csEditorClick(e) {
     ops.forEach(csPushOp);
     document.getElementById('csImpactBox').textContent = '';
     csAfterOpsChange();
+    // P0 (field-test): после применения — показать и подсветить сессию/diff (шаг 4)
+    const opsBox = document.getElementById('csOpsBox');
+    if (opsBox && opsBox.style.display === 'block') {
+      opsBox.scrollIntoView({ block: 'nearest' });
+      opsBox.classList.remove('cs-flash');
+      void opsBox.offsetWidth;
+      opsBox.classList.add('cs-flash');
+      setTimeout(() => opsBox.classList.remove('cs-flash'), 1600);
+    }
     return;
   }
   if (id === 'csRenameBtn') {
@@ -7519,13 +7573,14 @@ function csEditorClick(e) {
   }
   if (id === 'csExportCopy' || id === 'csExportDownload') {
     e.preventDefault();
-    if (!csWorking) { document.getElementById('csStatus').textContent = '✖ Нет применённых правок для экспорта.'; return; }
+    const text = csExportText();
+    if (text === null || !text) { document.getElementById('csStatus').textContent = '✖ Экспорт недоступен: правки не применились (см. diff).'; return; }
     if (id === 'csExportCopy') {
       const done = () => showToast('✅ YAML скопирован');
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(csWorking.text).then(done).catch(() => fallbackCopy(csWorking.text, done));
-      else fallbackCopy(csWorking.text, done);
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+      else fallbackCopy(text, done);
     } else {
-      const blob = new Blob([csWorking.text], { type: 'text/yaml' });
+      const blob = new Blob([text], { type: 'text/yaml' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'config.yaml';
