@@ -731,6 +731,10 @@
       <div class="btn-group">
         <button class="btn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" onclick="buildMihomo()">⚡ Build Config</button>
         <button class="btn btn-gray" id="copyYamlBtn" title="Скопировать итоговый YAML (доступно только после успешной проверки)" onclick="copyMihomo()">📋 Copy YAML</button>
+        <button class="btn btn-gray" title="Сохранить проект генератора (все подписки, WG/AWG-профили, настройки) в .lgproject.json. ВНИМАНИЕ: файл содержит приватные ключи и токены" onclick="rbSaveProject()">💾 Сохранить проект</button>
+        <button class="btn btn-gray" title="Загрузить проект генератора (.lgproject.json) и восстановить Builder" onclick="document.getElementById('rbProjectFile').click()">📂 Загрузить проект</button>
+        <button class="btn btn-gray" id="rbUndoBtn" style="display:none" title="Вернуть состояние Builder до загрузки проекта" onclick="rbUndoRestore()">↩︎ Отменить восстановление</button>
+        <input type="file" id="rbProjectFile" accept=".lgproject.json,.json" hidden>
       </div>
     </div>
 
@@ -6523,6 +6527,124 @@ function ptNetworkDiagnostics(spec, model, opts) {
   };
 }
 // === PHYSICAL TOPOLOGY NETWORK DIAGNOSTICS — PT-DIAG-END ===
+// === REVERSE BUILD CORE (OWNER-REVERSE-01, PR B) — RB-CORE-START ===
+// Портативный проект генератора (.lgproject.json v1): валидация/миграция/
+// bounded-разбор — pure-функции (без DOM). Контракт формата:
+// docs/research/PORTABLE-BUILDER-PROJECT.md. Сбор/применение состояния
+// Builder (DOM) живёт в RB-UI, здесь только данные.
+const RB_PROJECT_SCHEMA_VERSION = 1;
+const RB_PROJECT_MAX_BYTES = 4 * 1024 * 1024;
+const RB_PROFILES = new Set(['router', 'vps-local', 'vps-gateway']);
+const RB_DASHBOARDS = new Set(['metacubexd', 'yacd-meta', 'zashboard', 'custom']);
+const RB_STRATEGIES = new Set(['url-test', 'fallback', 'load-balance']);
+
+
+function rbValidateProject(p) {
+  const errors = [];
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return ['project: not an object'];
+  if (typeof p.schemaVersion !== 'number' || !Number.isInteger(p.schemaVersion) || p.schemaVersion < 1) {
+    errors.push('schemaVersion: positive integer expected');
+  }
+  if (p.schemaVersion > RB_PROJECT_SCHEMA_VERSION) {
+    errors.push('файл создан более новой версией генератора (schemaVersion ' + p.schemaVersion + ' > ' + RB_PROJECT_SCHEMA_VERSION + ')');
+  }
+  const sources = p.sources;
+  if (!sources || typeof sources !== 'object') errors.push('sources: object expected');
+  else {
+    if (typeof sources.mainInput !== 'string') errors.push('sources.mainInput: string expected');
+    if (typeof sources.fallbackInput !== 'string') errors.push('sources.fallbackInput: string expected');
+    if (typeof sources.subMode !== 'boolean') errors.push('sources.subMode: boolean expected');
+    if (typeof sources.autoWhitelist !== 'boolean') errors.push('sources.autoWhitelist: boolean expected');
+  }
+  if (!Array.isArray(p.wgProfiles)) errors.push('wgProfiles: array expected');
+  else {
+    for (const w of p.wgProfiles) {
+      if (!w || typeof w !== 'object') { errors.push('wgProfiles[]: object expected'); continue; }
+      if (typeof w.filename !== 'string') errors.push('wgProfiles.filename: string expected');
+      if (!w.bean || typeof w.bean !== 'object') { errors.push('wgProfiles.bean: object expected'); continue; }
+      if (typeof w.bean.name !== 'string') errors.push('wgProfiles.bean.name: string expected');
+      if (w.mode !== 'direct' && w.mode !== 'proxy') errors.push('wgProfiles.mode: direct|proxy expected');
+      if (typeof w.target !== 'string') errors.push('wgProfiles.target: string expected');
+    }
+  }
+  if (!p.options || typeof p.options !== 'object') errors.push('options: object expected');
+  else {
+    if (!RB_PROFILES.has(p.options.profile)) errors.push('options.profile: router|vps-local|vps-gateway expected');
+    if (p.options.webUiDashboard !== undefined && p.options.webUiDashboard !== '' && !RB_DASHBOARDS.has(p.options.webUiDashboard)) {
+      errors.push('options.webUiDashboard: unknown dashboard');
+    }
+    if (p.options.serverList !== undefined) {
+      const sl = p.options.serverList;
+      if (!sl || typeof sl !== 'object' || !Array.isArray(sl.names) || !Array.isArray(sl.selected)) {
+        errors.push('options.serverList: {names[], selected[]} expected');
+      }
+    }
+  }
+  if (!p.dialer || typeof p.dialer !== 'object') errors.push('dialer: object expected');
+  else {
+    for (const k of ['name', 'members', 'providers']) {
+      if (typeof p.dialer[k] !== 'string') errors.push('dialer.' + k + ': string expected');
+    }
+  }
+  if (!p.domainPolicy || typeof p.domainPolicy !== 'object') errors.push('domainPolicy: object expected');
+  else {
+    if (typeof p.domainPolicy.enabled !== 'boolean') errors.push('domainPolicy.enabled: boolean expected');
+    if (!Array.isArray(p.domainPolicy.cards)) errors.push('domainPolicy.cards: array expected');
+    else for (const c of p.domainPolicy.cards) {
+      if (!c || typeof c !== 'object' || typeof c.name !== 'string' || typeof c.domains !== 'string' || typeof c.target !== 'string') {
+        errors.push('domainPolicy.cards[]: {name, domains, target} strings expected');
+        break;
+      }
+    }
+  }
+  if (!p.tiered || typeof p.tiered !== 'object') errors.push('tiered: object expected');
+  else {
+    if (typeof p.tiered.enabled !== 'boolean') errors.push('tiered.enabled: boolean expected');
+    if (!Array.isArray(p.tiered.cards)) errors.push('tiered.cards: array expected');
+    else for (const c of p.tiered.cards) {
+      if (!c || typeof c !== 'object' || typeof c.name !== 'string' || typeof c.strategy !== 'string') {
+        errors.push('tiered.cards[]: {name, strategy, members} expected');
+        break;
+      }
+      if (!RB_STRATEGIES.has(c.strategy)) errors.push('tiered.cards[].strategy: url-test|fallback|load-balance expected');
+      if (!Array.isArray(c.members)) { errors.push('tiered.cards[].members: array expected'); break; }
+    }
+  }
+  return errors;
+}
+
+// Миграции: v1 — текущая; >1 отвергается валидацией. Новые версии добавляют
+// упорядоченные шаги rbMigrations[1→2] и т.д.
+const RB_MIGRATIONS = {};
+function rbMigrateProject(p) {
+  let cur = p;
+  while (cur && cur.schemaVersion < RB_PROJECT_SCHEMA_VERSION) {
+    const step = RB_MIGRATIONS[cur.schemaVersion];
+    if (!step) return { ok: false, error: 'нет миграции schemaVersion ' + cur.schemaVersion };
+    cur = step(cur);
+    cur.schemaVersion = (cur.schemaVersion || 0) + 1;
+  }
+  return { ok: true, project: cur };
+}
+
+// Bounded-разбор: размер → JSON → миграция → валидация. Ничего не бросает:
+// результат {ok, project|error}.
+function rbParseProjectText(text) {
+  const s = String(text || '');
+  if (!s.length) return { ok: false, error: 'файл проекта пуст' };
+  if (s.length > RB_PROJECT_MAX_BYTES) return { ok: false, error: 'файл проекта слишком большой (>' + Math.floor(RB_PROJECT_MAX_BYTES / 1024 / 1024) + ' МБ)' };
+  let raw;
+  try { raw = JSON.parse(s); } catch (e) {
+    return { ok: false, error: 'не JSON: ' + String(e && e.message ? e.message : e).slice(0, 120) };
+  }
+  const migrated = rbMigrateProject(raw);
+  if (!migrated.ok) return { ok: false, error: migrated.error };
+  const errors = rbValidateProject(migrated.project);
+  if (errors.length) return { ok: false, error: 'структура проекта: ' + errors[0] + (errors.length > 1 ? ' (и ещё ' + (errors.length - 1) + ')' : '') };
+  return { ok: true, project: migrated.project };
+}
+// === REVERSE BUILD CORE — RB-CORE-END ===
+
 // === CONFIG STUDIO CORE (pure, deterministic; v1.11 #176/#178/#177) — CS-CORE-START ===
 // Анализ импортированного Mihomo-конфига. Дизайн: docs/research/CONFIG-STUDIO.md.
 // Ключевое переиспользование: импортированный doc после jsyaml.load скармливается
@@ -9483,6 +9605,175 @@ function copyMihomo() {
 function copyText(text) {
   navigator.clipboard.writeText(text).then(() => showToast('Скопировано!'));
 }
+
+// === REVERSE BUILD UI (OWNER-REVERSE-01, PR B) — RB-UI-START ===
+// DOM ↔ .lgproject.json (контракт: docs/research/PORTABLE-BUILDER-PROJECT.md).
+// Файл проекта содержит секреты (приватные ключи WG, токены подписок):
+// сохранение — только по явному действию с предупреждением; импорт —
+// bounded (rbParseProjectText) с подтверждением и undo; ни localStorage,
+// ни сети, ни секретов в логах/статусах.
+let rbUndoProjectState = null;
+
+function rbReadPolicyCardsRaw() {
+  return Array.from(document.querySelectorAll('#policyCards .policy-card')).map(card => {
+    const t = sel => { const el = card.querySelector(sel); return el ? el.value : ''; };
+    return { name: t('.policy-name'), domains: t('.policy-domains'), target: t('.policy-target') || 'SELECT' };
+  });
+}
+
+// Builder → проект. Зеркалирует DOM 1:1, без нормализаций: значения —
+// как ввёл пользователь (валидацию делает Build).
+function rbCollectProject() {
+  const opt = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const chk = id => { const el = document.getElementById(id); return !!(el && el.checked); };
+  return {
+    schemaVersion: RB_PROJECT_SCHEMA_VERSION,
+    meta: {
+      app: 'link-generators',
+      created: new Date().toISOString(),
+      generatorVersion: String((globalThis.GENERATOR_META && GENERATOR_META.version) || ''),
+      origin: 'builder',
+      wgProfileSeq: wgProfileSeq
+    },
+    sources: {
+      subMode: chk('cfgSubMode'),
+      mainInput: opt('mihomoInput'),
+      fallbackInput: opt('whitelistInput'),
+      autoWhitelist: chk('cfgAutoWhitelist')
+    },
+    wgProfiles: wgProfiles.map(p => ({ id: p.id, filename: p.filename, bean: JSON.parse(JSON.stringify(p.bean)), mode: p.mode, target: p.target })),
+    options: {
+      profile: opt('cfgProfile'),
+      addTun: chk('cfgTun'), tunMips: chk('cfgTunMips'), tunStackAdvanced: chk('cfgTunStackAdvanced'), tunStackEx: opt('cfgTunStackEx'),
+      addSocks: chk('cfgSocks'), lan: chk('cfgLan'),
+      perProxyMaster: chk('cfgPerProxyMaster'), perProxyTun: chk('cfgPerProxyTun'), perProxySocks: chk('cfgPerProxySocks'),
+      webUI: chk('cfgWebUI'), webUiDashboard: opt('webUiSelect'), webUiCustomUrl: opt('webUiCustomUrl'),
+      urlTestPreset: opt('pingSelect'), urlTestCustomUrl: opt('pingCustomUrl'),
+      excludeFilter: opt('excludeFilterInput'),
+      serverList: { names: subscriptionListNames.slice(), nodes: subscriptionListNodes, selected: Array.from(subscriptionSelection) },
+      realityModern: opt('realityModernInput'),
+      deviceModel: opt('deviceModelInput'),
+      wgCustomDns: opt('wgCustomDns'),
+      awgKeepalive: chk('cfgAwgKeepalive'), awgRtDiag: chk('cfgAwgRtDiag'),
+      vpsDnsEnabled: chk('vpsDnsEnabled'),
+      vpsDevice: opt('vpsDevice'), vpsMtu: opt('vpsMtu'), vpsFakeIp: opt('vpsFakeIp'), vpsDnsListen: opt('vpsDnsListen'), vpsDnsNs: opt('vpsDnsNs'), vpsProxyNs: opt('vpsProxyNs')
+    },
+    dialer: { name: opt('wgDialerInput'), members: opt('wgDialerMembers'), providers: opt('wgDialerProviders') },
+    domainPolicy: { enabled: chk('cfgPolicyRouting'), cards: rbReadPolicyCardsRaw() },
+    tiered: { enabled: chk('cfgTieredFailover'), cards: (window.__tierCardsState || []).map(t => ({ name: t.name, strategy: t.strategy, members: (t.members || []).slice() })) }
+  };
+}
+
+// Проект → Builder. Значения присваиваются напрямую, зависимый UI
+// пересчитывается существующими update-функциями (тот же путь, что после
+// ручного ввода; клемпы профиля применяются ими же).
+function rbApplyProject(project) {
+  const setOpt = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+  const s = project.sources, o = project.options;
+  setOpt('mihomoInput', s.mainInput);
+  setOpt('whitelistInput', s.fallbackInput);
+  setChk('cfgSubMode', s.subMode);
+  setChk('cfgAutoWhitelist', s.autoWhitelist);
+  // WG-профили: полная замена (подтверждение — в rbLoadProject).
+  wgProfiles = (project.wgProfiles || []).map(w => ({ id: w.id, filename: w.filename, bean: JSON.parse(JSON.stringify(w.bean)), mode: w.mode, target: w.target }));
+  wgProfileSeq = Math.max(Number(project.meta && project.meta.wgProfileSeq) || 0, wgProfiles.reduce((m, w) => Math.max(m, Number(w.id) || 0), 0));
+  setOpt('cfgProfile', o.profile);
+  setChk('cfgTun', o.addTun); setChk('cfgTunMips', o.tunMips); setChk('cfgTunStackAdvanced', o.tunStackAdvanced); setOpt('cfgTunStackEx', o.tunStackEx || 'gvisor');
+  setChk('cfgSocks', o.addSocks); setChk('cfgLan', o.lan);
+  setChk('cfgPerProxyMaster', o.perProxyMaster); setChk('cfgPerProxyTun', o.perProxyTun); setChk('cfgPerProxySocks', o.perProxySocks);
+  setChk('cfgWebUI', o.webUI); setOpt('webUiSelect', o.webUiDashboard || 'metacubexd'); setOpt('webUiCustomUrl', o.webUiCustomUrl || '');
+  setOpt('pingSelect', o.urlTestPreset || 'https://www.gstatic.com/generate_204');
+  const pingCustom = document.getElementById('pingCustomUrl');
+  if (pingCustom) { pingCustom.value = o.urlTestCustomUrl || ''; pingCustom.dispatchEvent(new Event('change', { bubbles: true })); }
+  setOpt('excludeFilterInput', o.excludeFilter || '');
+  subscriptionListNames = (o.serverList && Array.isArray(o.serverList.names)) ? o.serverList.names.slice() : [];
+  subscriptionListNodes = (o.serverList && Number(o.serverList.nodes)) || 0;
+  subscriptionSelection = new Set((o.serverList && Array.isArray(o.serverList.selected)) ? o.serverList.selected : []);
+  setOpt('realityModernInput', o.realityModern || '');
+  setOpt('deviceModelInput', o.deviceModel || '');
+  setOpt('wgCustomDns', o.wgCustomDns || '');
+  setChk('cfgAwgKeepalive', o.awgKeepalive); setChk('cfgAwgRtDiag', o.awgRtDiag);
+  setChk('vpsDnsEnabled', o.vpsDnsEnabled);
+  setOpt('vpsDevice', o.vpsDevice || ''); setOpt('vpsMtu', o.vpsMtu || ''); setOpt('vpsFakeIp', o.vpsFakeIp || '');
+  setOpt('vpsDnsListen', o.vpsDnsListen || ''); setOpt('vpsDnsNs', o.vpsDnsNs || ''); setOpt('vpsProxyNs', o.vpsProxyNs || '');
+  setOpt('wgDialerInput', project.dialer.name);
+  setOpt('wgDialerMembers', project.dialer.members);
+  setOpt('wgDialerProviders', project.dialer.providers);
+  const pc = document.getElementById('policyCards');
+  if (pc) {
+    pc.textContent = '';
+    (project.domainPolicy.cards || []).forEach(c => addPolicyCard({ name: c.name, domains: c.domains, target: c.target }));
+  }
+  setChk('cfgPolicyRouting', project.domainPolicy.enabled);
+  window.__tierCardsState = (project.tiered.cards || []).map(t => ({ name: t.name, strategy: t.strategy, members: (t.members || []).slice() }));
+  setChk('cfgTieredFailover', project.tiered.enabled);
+  // Зависимый UI — те же update-функции, что после ручного ввода.
+  updateExcludeFilterVisibility();
+  updateSubModeHint();
+  onProfileChange();
+  onWhitelistChange();
+  updateVpsDnsFields();
+  updateMihomoOptionStates();
+  updatePolicyRoutingVisibility();
+  if (typeof renderWgList === 'function') renderWgList();
+  if (typeof renderServerList === 'function') renderServerList();
+  updateServerListStats();
+  renderTierCards();
+  refreshWgTargetSelectors();
+  syncWgCollections();
+  refreshBuildStaleness();
+}
+
+function rbSaveProject() {
+  const project = rbCollectProject();
+  const json = JSON.stringify(project, null, 2);
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + 'Z';
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'mihomo-project-' + stamp + '.lgproject.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  showToast('💾 Проект сохранён. В файле приватные ключи WG/AWG и токены подписок — никому его не передавайте.');
+}
+
+async function rbLoadProject(file) {
+  let text = '';
+  try { text = await file.text(); } catch (e) { return showToast('❌ Не удалось прочитать файл: ' + (e && e.message ? e.message : e), true); }
+  const parsed = rbParseProjectText(text);
+  if (!parsed.ok) return showToast('❌ Проект: ' + parsed.error, true);
+  const project = parsed.project;
+  const hasState = document.getElementById('mihomoInput').value.trim() || wgProfiles.length;
+  if (hasState && !confirm('Загрузить проект вместо текущего состояния Builder? Прежнее состояние можно вернуть кнопкой «↩︎ Отменить восстановление».')) {
+    return showToast('Загрузка проекта отменена.');
+  }
+  rbUndoProjectState = rbCollectProject();
+  rbApplyProject(project);
+  const undoBtn = document.getElementById('rbUndoBtn');
+  if (undoBtn) undoBtn.style.display = '';
+  const subs = project.sources.mainInput.split('\n').filter(x => x.trim()).length;
+  showToast('✅ Проект загружен: ' + project.wgProfiles.length + ' WG/AWG, ' + subs + ' строк источников. Нажмите ⚡ Build Config.');
+}
+
+function rbUndoRestore() {
+  if (!rbUndoProjectState) return;
+  const snapshot = rbUndoProjectState;
+  rbUndoProjectState = null;
+  rbApplyProject(snapshot);
+  const undoBtn = document.getElementById('rbUndoBtn');
+  if (undoBtn) undoBtn.style.display = 'none';
+  showToast('↩︎ Восстановление отменено — прежнее состояние Builder возвращено.');
+}
+
+document.getElementById('rbProjectFile').addEventListener('change', (e) => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (f) rbLoadProject(f);
+});
+// === REVERSE BUILD UI — RB-UI-END ===
 
 // === INIT ===
 initPingSelector();

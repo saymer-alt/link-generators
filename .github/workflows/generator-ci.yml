@@ -257,6 +257,9 @@ jobs:
       - name: Visual Routing Graph integration browser regression (#177/MEGA-01)
         run: node tests/vrg-integration-browser.cjs
 
+      - name: Project roundtrip browser regression (OWNER-REVERSE-01)
+        run: node tests/project-roundtrip-browser.cjs
+
       - name: Security and download end-to-end regression (CODEX-02)
         run: node tests/security-stress-browser.cjs
 

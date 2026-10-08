@@ -16,9 +16,16 @@ export const MARKERS = {
   vpsDnsHijack: 'any:53',
 };
 
-// computeProviderName — порт web4core mihomo.js:42 (детерминированный пересчёт).
-export function sanitizeProviderName(hostname) {
-  return String(hostname || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63);
+// computeProviderName — порт web4core mihomo.js:31/42 (детерминированный пересчёт).
+export function sanitizeProviderName(name) {
+  const raw = String(name || '').trim().toLowerCase();
+  if (!raw) return '';
+  return raw
+    .replace(/^www\./, '')
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/[._-]{2,}/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 48);
 }
 export function computeProviderName(url, index, total, used) {
   let base = '';
@@ -96,41 +103,52 @@ export function detectDeploymentProfile(doc) {
 
 // --- WG/AWG (C3) ---
 
-const AWG_FIELDS = ['amnezia-optimization', 'h1', 'h2', 'h3', 'h4', 's1', 's2', 's3', 's4', 'jc', 'jmin', 'jmax'];
-
+// Форма bean = выход parseWireGuardConf (web4core): camelCase-поля, AWG —
+// wireguard['amnezia-wg-option'] (SOURCE-PROVEN по фактическому parse+emit).
+// Эмиттер YAML: server/port/private-key/udp/ip/public-key/allowed-ips/
+// ip-version/dns/remote-dns-resolve/mtu?/persistent-keepalive?/reserved?/
+// amnezia-wg-option? (проверено фактическим Build; нюанс: raw-строка
+// keepalive-диапазона ('25-35') в YAML не попадает — восстанавливается
+// эффективное значение, исходный raw = NOT RECOVERABLE).
 export function extractWgProfiles(doc) {
   const out = [];
   for (const p of (doc && Array.isArray(doc.proxies) ? doc.proxies : [])) {
     if (!p || p.type !== 'wireguard') continue;
-    const awgFields = AWG_FIELDS.filter(f => p[f] !== undefined);
+    const awg = (p['amnezia-wg-option'] && typeof p['amnezia-wg-option'] === 'object') ? p['amnezia-wg-option'] : null;
+    const wg = {
+      ip: p.ip || '', ipv6: p.ipv6 || '',
+      addresses: [p.ip, p.ipv6].filter(Boolean),
+      privateKey: p['private-key'] || '',
+      publicKey: p['public-key'] || '',
+      preSharedKey: p['pre-shared-key'] || '',
+      allowedIPs: Array.isArray(p['allowed-ips']) ? p['allowed-ips'].slice() : [],
+      dns: Array.isArray(p.dns) ? p.dns.slice() : [],
+      remoteDnsResolve: !!p['remote-dns-resolve']
+    };
+    if (p.mtu !== undefined) wg.mtu = p.mtu;
+    if (p['persistent-keepalive'] !== undefined) wg.persistentKeepalive = p['persistent-keepalive'];
+    if (p.reserved !== undefined) wg.reserved = p.reserved;
+    if (awg) wg['amnezia-wg-option'] = Object.assign({}, awg);
     out.push({
       recovered: 'RECOVERED_FROM_YAML',
       originalFilename: 'UNKNOWN',
       originalFormatting: 'NOT RECOVERABLE',
       bean: {
-        name: String(p.name || ''),
         proto: 'wireguard',
-        wireguard: {
-          server: p.server, port: p.port,
-          'private-key': p['private-key'], 'public-key': p['public-key'],
-          ip: p.ip, 'ipv6': p['ipv6'], mtu: p.mtu,
-          udp: p.udp !== false,
-          'preshared-key': p['preshared-key'],
-          'remote-dns-resolve': p['remote-dns-resolve'],
-          dns: Array.isArray(p.dns) ? p.dns.slice() : undefined,
-          reserved: p.reserved,
-          // dialer-proxy — это mode/target, не поле bean: переносится отдельно
-        },
-        // AWG-поля — верхним уровнем, как их эмитит web4core
-        ...Object.fromEntries(awgFields.map(f => [f, p[f]]))
+        name: String(p.name || ''),
+        host: p.server,
+        port: p.port,
+        ipVersion: p['ip-version'] || 'ipv4',
+        wireguard: wg
       },
       mode: p['dialer-proxy'] ? 'proxy' : 'direct',
       target: p['dialer-proxy'] ? String(p['dialer-proxy']) : '',
-      kind: awgFields.length ? 'awg' : 'wg',
+      kind: awg ? 'awg' : 'wg',
       confidence: 'EXACT',
+      notes: p['persistent-keepalive'] !== undefined ? ['persistent-keepalive raw-range NOT RECOVERABLE (восстановлено эффективное значение)'] : [],
       secretsPresent: {
-        privateKey: p['private-key'] !== undefined,
-        presharedKey: p['preshared-key'] !== undefined
+        privateKey: !!p['private-key'],
+        presharedKey: !!p['pre-shared-key']
       }
     });
   }
