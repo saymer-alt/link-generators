@@ -785,6 +785,15 @@
         <summary style="cursor:pointer">Semantic Trace</summary>
         <div id="csTraceOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       </details>
+      <details id="csVrgPanel" style="margin-top:8px">
+        <summary style="cursor:pointer">Visual Routing Graph</summary>
+        <div class="hint" style="margin-top:4px">Граф зависимостей импортированного конфига (после «Разобрать»). Не обновляется при правках редактора — повторно нажмите «Разобрать».</div>
+        <div id="csVrgSvgWrap" style="margin-top:6px;overflow:auto;max-height:50vh;border:1px solid var(--border);background:rgba(255,255,255,.35)" role="img" aria-label="Config Studio Visual Routing Graph"></div>
+        <details id="csVrgTextAlt" style="margin-top:4px">
+          <summary style="cursor:pointer">Текстовая альтернатива</summary>
+          <div id="csVrgTextAltOut" class="hint" style="margin-top:4px;white-space:pre-line"></div>
+        </details>
+      </details>
     </div>
     <div class="card" id="csEditorCard" style="display:none">
       <div class="card-title">✏️ Редактор Mihomo-конфига</div>
@@ -5548,8 +5557,9 @@ function vrgClosure(nodes, edges, focusId, maxNodes) {
 function vrgBuildView(graph, opts) {
   const o = opts || {};
   const maxNodes = o.maxNodes && Number.isInteger(o.maxNodes) ? Math.max(8, o.maxNodes) : VRG_MAX_NODES;
-  const nodes = (graph && Array.isArray(graph.nodes)) ? graph.nodes.slice() : [];
-  const edges = (graph && Array.isArray(graph.edges)) ? graph.edges.slice() : [];
+  // EVENING-03 A5: глубокое копирование узлов — vrgBuildView не мутирует canonical CDG
+  const nodes = (graph && Array.isArray(graph.nodes)) ? graph.nodes.map(n => Object.assign({}, n)) : [];
+  const edges = (graph && Array.isArray(graph.edges)) ? graph.edges.map(e => Object.assign({}, e)) : [];
   let visibleIds = null;
   let focused = null;
   if (o.focus && nodes.some(n => n.id === o.focus)) {
@@ -8251,6 +8261,7 @@ function csRunAnalysis(sourceText) {
   csRefreshEditor();
   ptRuntimeEnsureProfiles();
   ptRuntimeRender();
+  if (csCurrentDoc) vrgRenderInto('csVrgSvgWrap', csCurrentDoc, false, 'csVrgTextAltOut', l => csRedactText(l, csCurrentDoc));
   status.textContent = '✓ Разобрано: анализ готов (локально, без сети).';
 }
 
@@ -8310,6 +8321,10 @@ function csClearStudio() {
   document.getElementById('csSummaryCard').style.display = 'none';
   document.getElementById('csSecretsNote').style.display = 'none';
   document.getElementById('csEditorCard').style.display = 'none';
+  const csVrg = document.getElementById('csVrgSvgWrap');
+  if (csVrg) csVrg.textContent = '';
+  const csVrgAlt = document.getElementById('csVrgTextAltOut');
+  if (csVrgAlt) csVrgAlt.textContent = '';
   document.getElementById('csStatus').textContent = '';
 }
 
@@ -8855,18 +8870,24 @@ function vrgTruncateLabel(text, maxLen) {
   return s.length > maxLen ? s.slice(0, maxLen - 1) + '…' : s;
 }
 
-function vrgRenderInto(containerId, doc, stale) {
+function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
   const wrap = document.getElementById(containerId);
   if (!wrap) return;
+  // Config Studio: метки узлов проходят через csRedactText (значения из секретных
+  // полей маскируются и при повторении в имени/ID). Краскция ДО усечения —
+  // обрезанный секрет не матчится и утёк бы частично.
+  const R = typeof redact === 'function' ? redact : (s => String(s));
   wrap.textContent = '';
   const status = document.getElementById(containerId === 'vrgSvgWrap' ? 'vrgStatus' : containerId + 'Status');
   if (!doc) {
     if (status) status.textContent = stale ? '⚠ Snapshot предыдущей сборки.' : 'Сначала выполните Build / Разобрать.';
+    if (textAltId) document.getElementById(textAltId).textContent = '';
     return;
   }
   let graph;
   try { graph = cdgBuildGraph(doc); } catch (e) {
     if (status) status.textContent = '✖ Не удалось построить граф: ' + String(e && e.message ? e.message : e).slice(0, 120);
+    if (textAltId) document.getElementById(textAltId).textContent = '';
     return;
   }
   const view = vrgBuildView(graph, { maxNodes: VRG_MAX_NODES, focus: vrgFocusId || undefined });
@@ -8908,7 +8929,7 @@ function vrgRenderInto(containerId, doc, stale) {
     g.setAttribute('transform', 'translate(' + n.x + ',' + n.y + ')');
     g.setAttribute('tabindex', '0');
     g.setAttribute('role', 'group');
-    g.setAttribute('aria-label', vrgKindLabel(n.kind) + ': ' + vrgTruncateLabel(vrgNodeLabel(n), 60));
+    g.setAttribute('aria-label', R(vrgKindLabel(n.kind) + ': ' + vrgTruncateLabel(vrgNodeLabel(n), 60)));
     const rect = document.createElementNS(VRG_NS, 'rect');
     rect.setAttribute('width', String(VRG_NODE_W)); rect.setAttribute('height', String(VRG_NODE_H));
     rect.setAttribute('rx', '4');
@@ -8922,11 +8943,30 @@ function vrgRenderInto(containerId, doc, stale) {
     const labelText = document.createElementNS(VRG_NS, 'text');
     labelText.setAttribute('x', '8'); labelText.setAttribute('y', '30');
     labelText.setAttribute('class', 'vrg-node-label');
-    labelText.textContent = vrgTruncateLabel(vrgNodeLabel(n), 28);
+    labelText.textContent = vrgTruncateLabel(R(vrgNodeLabel(n)), 28);
     g.appendChild(labelText);
+    // EVENING-03 A3: клик и клавиатура — выбор узла как фокуса
+    g.addEventListener('click', () => { vrgFocusId = n.id; vrgFillFocusSelect('vrgFocusSelect', doc); vrgRenderInto(containerId, doc, stale, textAltId, redact); });
+    g.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        vrgFocusId = n.id;
+        vrgFillFocusSelect('vrgFocusSelect', doc);
+        vrgRenderInto(containerId, doc, stale, textAltId, redact);
+      }
+    });
     svg.appendChild(g);
   }
   wrap.appendChild(svg);
+  // EVENING-03 A4: текстовая альтернатива
+  if (textAltId) {
+    const ta = document.getElementById(textAltId);
+    if (ta) {
+      const tl = view.nodes.map(n => R(vrgKindLabel(n.kind) + ': ' + vrgNodeLabel(n) + (n.level !== undefined ? ' [слой ' + n.level + ']' : '')));
+      const el = view.edges.map(e => R(e.kind + ': ' + e.from + ' → ' + e.to));
+      ta.textContent = ['Узлы (' + view.nodes.length + '):', ...tl, '', 'Связи (' + view.edges.length + '):', ...el].join('\n');
+    }
+  }
   if (status) {
     const parts = ['Узлов: ' + view.nodes.length + ' · связей: ' + view.edges.length];
     if (view.truncated) parts.push('⚠ Скрыто: ' + view.hiddenNodes + ' узлов, ' + view.hiddenEdges + ' связей (используйте фокус для просмотра)');
@@ -9405,6 +9445,7 @@ async function buildMihomo() {
     updateRoutingDiagnostics(yaml);
     markBuildFresh();
     renderCompatSummary(yaml);
+    renderVrgBuilder();
     showToast('✅ Mihomo config built!');
     if (realityModern.invalid > 0) {
       showToast('⚠ Modern REALITY: пропущено некорректных строк: ' + realityModern.invalid);
