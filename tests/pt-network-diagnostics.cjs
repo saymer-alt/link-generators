@@ -12,7 +12,7 @@ const api = new Function(
   grab('PT-GEN-START', 'PT-GEN-END ===') + '\n' +
   grab('PT-RUNTIME-START', 'PT-RUNTIME-END ===') + '\n' +
   grab('PT-DIAG-START', 'PT-DIAG-END ===') + '\n' +
-  'return { ptNetworkDiagnostics, ptTcpUdpDiagnostics, ptDnsDiagnostics, ptMtuDiagnostics, ptAnalyzeTopology, ptSimulateTopology, ptDiagIsIpLiteral, ptGenerateArtifacts, ptDemoTopologySpec, PT_DIAG_CAPS };'
+  'return { ptNetworkDiagnostics, ptTcpUdpDiagnostics, ptDnsDiagnostics, ptMtuDiagnostics, ptAnalyzeTopology, ptSimulateTopology, ptDiagIsIpLiteral, ptDiagCaps, ptGenerateArtifacts, ptDemoTopologySpec, PT_DIAG_CAPS };'
 )();
 // ptDnsDiagnostics использует ptEndpointParts из PT-GEN (endpoint ref → host:port);
 // блок PT-GEN подтягивается тем же grab выше.
@@ -275,6 +275,45 @@ const CRED = { 'cr-e': 'v1', 'cr-x': 'v2' };
   const m1 = api.ptNetworkDiagnostics(spec, api.ptAnalyzeTopology(spec).model);
   const m2 = api.ptNetworkDiagnostics(spec, api.ptAnalyzeTopology(spec).model);
   assert.deepEqual(m1, m2, 'диагностика детерминирована');
+  ok();
+}
+
+// --- 19. EVENING-03 A2: exit по роли, не по позиции (WARP-overlay последним) ---
+{
+  const spec = api.ptDemoTopologySpec();
+  spec.nodes[0].dns = { destination: 'exit' };
+  const model = api.ptAnalyzeTopology(spec).model;
+  const r = api.ptDnsDiagnostics(spec, model);
+  assert.equal(r.destination.verdict, 'INTENDED_AT_EXIT');
+  // exit — Sweden · EXIT (роль exit), НЕ последний WARP-узел
+  assert.ok(r.destination.reason.includes('Sweden · EXIT'), 'exit resolved by role: ' + r.destination.reason);
+  // противоречивые декларации (exit + local) → INTENDED_CONFLICT
+  const specC = api.ptDemoTopologySpec();
+  specC.nodes[1].dns = { destination: 'exit' };
+  specC.nodes[2].dns = { destination: 'local' };
+  const mc = api.ptAnalyzeTopology(specC).model;
+  const rc = api.ptDnsDiagnostics(specC, mc);
+  assert.equal(rc.destination.verdict, 'INTENDED_CONFLICT', 'противоречивые декларации видны: ' + JSON.stringify(rc.destination));
+  ok();
+}
+
+// --- 20. EVENING-03 A4: prototype-safe transport lookup ---
+{
+  for (const hostile of ['constructor', 'toString', '__proto__', 'hasOwnProperty', '']) {
+    const caps = api.ptDiagCaps ? api.ptDiagCaps(hostile) : null;
+    const viaTcpUdp = api.ptNetworkDiagnostics(
+      { nodes: [{ id: 'a', role: 'entry' }, { id: 'b', role: 'exit' }],
+        links: [{ from: 'a', to: 'b', transport: { kind: hostile, endpoint: 'ep' } }],
+        clientLink: { transport: { kind: 'ss', endpoint: 'ep0' } },
+        endpoints: { ep: '198.51.100.1:1', ep0: '192.0.2.1:1' } },
+      api.ptAnalyzeTopology({
+        nodes: [{ id: 'a', role: 'entry' }, { id: 'b', role: 'exit' }],
+        links: [{ from: 'a', to: 'b' }], clientLink: { transport: { kind: 'ss' } } }).model,
+      {});
+    // на хостильном kind связью должен быть UNKNOWN, никогда SOURCE-PROVEN SUPPORTED
+    const link = viaTcpUdp.tcpUdp.links.find(l => l.from === 'a');
+    assert.equal(link.tcp, 'UNKNOWN', 'hostile kind ' + JSON.stringify(hostile) + ' → UNKNOWN, got ' + link.tcp);
+  }
   ok();
 }
 

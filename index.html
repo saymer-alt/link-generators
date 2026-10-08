@@ -6190,9 +6190,11 @@ function ptDiagEndpointParts(spec, ref) {
   return { host: m[1], port: String(port) };
 }
 function ptDiagCaps(kind) {
-  // Первоклассные транспорты — из PT_TRANSPORTS-контрактов генератора;
-  // всё прочее (внешний контракт) — UNKNOWN: возможности не доказаны генератором.
-  if (kind && PT_DIAG_CAPS[kind]) return Object.assign({ kind, level: 'SOURCE-PROVEN' }, PT_DIAG_CAPS[kind]);
+  // EVENING-03 A4: только собственные ключи реестра — 'constructor'/'toString'/
+  // '__proto__' и прочие наследуемые свойства не должны выдавать SOURCE-PROVEN.
+  if (typeof kind === 'string' && Object.prototype.hasOwnProperty.call(PT_DIAG_CAPS, kind)) {
+    return Object.assign({ kind, level: 'SOURCE-PROVEN' }, PT_DIAG_CAPS[kind]);
+  }
   return { kind: kind || null, tcp: 'UNKNOWN', udp: 'UNKNOWN', level: 'UNKNOWN',
     notes: kind ? 'внешний контракт («' + kind + '») — возможности не доказаны генератором' : 'транспорт не задан' };
 }
@@ -6275,11 +6277,19 @@ function ptDnsDiagnostics(spec, model, opts) {
   // destination resolution: декларации node.dns.destination
   const declared = model.nodes.filter(n => n.dns && n.dns.destination && n.dns.destination !== 'unknown')
     .map(n => ({ nodeId: n.id, label: n.label, destination: n.dns.destination }));
-  const exit = model.nodes[model.nodes.length - 1];
+  // EVENING-03 A2: выходной узел — по канонической роли exit, не по позиции массива
+  // (для ENTRY → TRANSIT → EXIT → FINAL_OVERLAY последним элементом является overlay).
+  const exit = model.nodes.find(n => n.role === 'exit') || null;
   let destination;
+  const declaredExit = declared.filter(d => d.destination === 'exit');
+  const declaredLocal = declared.filter(d => d.destination === 'local');
   if (!declared.length) destination = { verdict: 'UNKNOWN', reason: 'per-node DNS configuration not provided (node.dns.destination не задан ни на одном узле)' };
-  else if (declared.some(d => d.destination === 'exit')) {
-    destination = { verdict: 'INTENDED_AT_EXIT', reason: 'владелец объявил: домены назначения туннелируются до выходного узла «' + exit.label + '» и резолвятся там (INTENDED, не измерение)', declared };
+  else if (declaredExit.length && declaredLocal.length) {
+    // EVENING-03 A2: противоречивые декларации — честно показать конфликт
+    destination = { verdict: 'INTENDED_CONFLICT', reason: 'противоречивые DNS-декларации: ' + declaredExit.map(d => '«' + d.label + '»→exit').join(', ') + ' И ' + declaredLocal.map(d => '«' + d.label + '»→local').join(', ') + ' — уточните, где фактически резолвятся домены (INTENDED, не измерение)', declared };
+  } else if (declaredExit.length) {
+    if (!exit) destination = { verdict: 'INTENDED_AT_EXIT', reason: 'владелец объявил резолвинг на выходном узле, но узел с ролью exit в цепочке не найден — противоречивая декларация (INTENDED, не измерение)', declared };
+    else destination = { verdict: 'INTENDED_AT_EXIT', reason: 'владелец объявил: домены назначения туннелируются до выходного узла «' + exit.label + '» и резолвятся там (INTENDED, не измерение)', declared };
   } else {
     destination = { verdict: 'INTENDED_DIVERTED', reason: 'владелец объявил локальный резолвинг на узлах: ' + declared.map(d => d.label + '→local').join(', ') + ' — DNS path расходится с data path по декларации', declared };
   }
@@ -7999,10 +8009,20 @@ document.addEventListener('click', (e) => {
     const id = nodeToggle.getAttribute('data-pt-node');
     if (ptUnavailableNodes.has(id)) ptUnavailableNodes.delete(id); else ptUnavailableNodes.add(id);
     renderPhysicalTopologyGraph();
+    // EVENING-03 A1: what-if должен пересчитывать и сетевые диагностики
+    renderPtNetDiagnostics();
   }
 });
+// EVENING-03 A3: правка JSON инвалидирует сетевые диагностики (без сетевых вызовов)
 document.addEventListener('input', (e) => {
-  if (e.target && e.target.id === 'ptSpecInput') { ptRuntimeInvalidatePending('топология изменена'); ptRuntimeRender(); }
+  if (e.target && e.target.id === 'ptSpecInput') {
+    ptRuntimeInvalidatePending('топология изменена');
+    ptRuntimeRender();
+    const nd = document.getElementById('ptNetDiagOut');
+    if (nd && nd.textContent && !nd.textContent.includes('Настройки топологии изменены')) {
+      nd.textContent = 'Настройки топологии изменены.\nПовторите анализ для обновления диагностики.\n' + nd.textContent;
+    }
+  }
 });
 
 // === CONFIG STUDIO UI (v1.11 #176): import + сводка + диагностики ===
