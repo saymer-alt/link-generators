@@ -143,6 +143,9 @@ jobs:
       - name: Physical Topology per-node generation regression (#187)
         run: node tests/per-node-generation.cjs
 
+      - name: Physical Topology runtime evidence core regression (#188)
+        run: node tests/pt-runtime-evidence.cjs
+
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 
@@ -345,6 +348,9 @@ jobs:
 
       - name: Physical Topology per-node artifacts compat (#187)
         run: node tests/per-node-mihomo-compat.cjs
+
+      - name: Physical Topology runtime evidence browser regression (#188)
+        run: node tests/pt-runtime-browser.cjs
 
       - name: Explicit manual/live exclusion guard
         shell: bash
