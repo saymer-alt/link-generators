@@ -50,7 +50,11 @@ let cases = 0;
   assert.equal(meta.channel, 'main');
   assert.equal(meta.derived, await badge.textContent(), 'badge text derives from GENERATOR_META');
   assert.equal(meta.title, 'Generator version 1.11.0-dev, channel main', 'accessible title из GENERATOR_META');
-  cases += 5;
+  // Футер: версия/канал из того же источника GENERATOR_META (PHASE 23)
+  assert.equal(await page.textContent('#footerVersion'), await badge.textContent(), 'footer version деривится из GENERATOR_META как бейдж');
+  const rel = await page.getAttribute('.site-footer-links a', 'rel');
+  assert.ok(rel && rel.includes('noopener') && rel.includes('noreferrer'), 'внешние ссылки футера с rel=noopener noreferrer');
+  cases += 7;
 
   // Narrow viewport: no horizontal overflow, badge still visible
   await page.setViewportSize({ width: 360, height: 740 });

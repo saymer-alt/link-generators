@@ -140,6 +140,12 @@
   .advanced-panel{margin-top:14px;padding:10px 12px;border:1px solid var(--border);border-radius:0;background:rgba(255,255,255,.35)}
   .advanced-panel summary{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:bold;color:var(--info);cursor:pointer;list-style:none;padding:2px 0}
   .advanced-panel summary::-webkit-details-marker{display:none}
+  .site-footer{margin:18px 0 26px;padding:12px 14px;border:1px solid var(--border);background:var(--face);font-size:.8rem;color:var(--muted)}
+  .site-footer-brand{font-weight:bold;color:var(--text)}
+  .site-footer-privacy{margin:6px 0;line-height:1.45}
+  .site-footer-links{display:flex;gap:8px;align-items:center}
+  .site-footer a{color:var(--info)}
+  .site-footer a:focus-visible{outline:2px dotted var(--accent);outline-offset:2px}
   .advanced-panel summary .advanced-badge{flex:none}
   .advanced-badge{display:inline-block;padding:1px 7px;border:1px solid #b09a4a;border-radius:3px;color:#5a4a00;background:var(--warn-bg);font-size:.68rem;letter-spacing:.05em}
   .advanced-master{margin-top:8px;padding:0;background:transparent}
@@ -765,6 +771,16 @@
 
 <div class="toast" id="toast" aria-live="polite">Done!</div>
 
+<footer class="site-footer">
+  <div class="site-footer-brand">link-generators · <span id="footerVersion"></span></div>
+  <div class="site-footer-privacy">Конфиги обрабатываются локально в браузере: генератор и Config Studio не отправляют конфиги и вводимые данные на серверы проекта. В сеть ходят только отдельные явные действия по вашему запросу (получение preview подписки, обращение к вашему собственному Mihomo-контроллеру).</div>
+  <div class="site-footer-links">
+    <a href="https://github.com/saymer-alt/link-generators" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+    <span aria-hidden="true">·</span>
+    <a href="https://github.com/saymer-alt/link-generators/issues" target="_blank" rel="noopener noreferrer">Issues ↗</a>
+  </div>
+</footer>
+
 <!-- WEB4CORE RUNTIME -->
 <script src="./web4core.runtime.js"></script>
 
@@ -776,9 +792,12 @@
 const GENERATOR_META = Object.freeze({ version: '1.11.0-dev', channel: 'main' });
 (function renderGeneratorMeta() {
   const el = document.getElementById('genVersionBadge');
-  if (!el) return;
-  el.textContent = 'v' + GENERATOR_META.version + ' · ' + GENERATOR_META.channel.toUpperCase();
-  el.title = 'Generator version ' + GENERATOR_META.version + ', channel ' + GENERATOR_META.channel;
+  if (el) {
+    el.textContent = 'v' + GENERATOR_META.version + ' · ' + GENERATOR_META.channel.toUpperCase();
+    el.title = 'Generator version ' + GENERATOR_META.version + ', channel ' + GENERATOR_META.channel;
+  }
+  const footer = document.getElementById('footerVersion');
+  if (footer) footer.textContent = 'v' + GENERATOR_META.version + ' · ' + GENERATOR_META.channel.toUpperCase();
 })();
 
 // === TABS ===
