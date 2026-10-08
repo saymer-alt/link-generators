@@ -227,6 +227,12 @@
      микрошрифта; min-width:0 не спасает при flex:0 0 auto + nowrap-тексте). */
   @media (max-width:480px){.tabs{flex-wrap:wrap}.tab{flex:1 1 100%;border-radius:0;border-bottom:none}.tab.active{top:0;margin-bottom:0}}
   @media (max-width:390px){body{padding:4px}.row{flex-direction:column}.row>*{min-width:0}.btn{flex:1 1 auto}.wg-target-row,.wg-card-mode{flex-direction:column;align-items:stretch}}
+  .vrg-node-rect{fill:rgba(255,255,255,.75);stroke:var(--border,#ccc);stroke-width:1.5}
+  .vrg-kind-label{font-size:9px;font-weight:bold;fill:var(--muted,#888)}
+  .vrg-node-label{font-size:11px;fill:var(--text,#333)}
+  .vrg-focus-rect{stroke:var(--accent,#0074d9)!important;stroke-width:2.5}
+  g[vrg-focus] .vrg-node-rect{stroke:var(--accent,#0074d9);stroke-width:2.5}
+  g:focus .vrg-node-rect,g:focus-visible .vrg-node-rect{stroke:var(--accent,#0074d9);stroke-width:2.5}
 </style>
 </head>
 <body>
@@ -612,6 +618,21 @@
               <button type="button" class="btn btn-gray" id="dcRunBtn">Проверить покрытие</button>
             </div>
             <div id="dcResults" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+          </details>
+          <details id="vrgPanel" style="margin-top:8px">
+            <summary style="cursor:pointer">Visual Routing Graph</summary>
+            <div class="hint" style="margin-top:6px">Граф зависимостей из последнего Build: правила → группы → провайдеры/прокси. Клик по узлу — фокус на его зависимостях. Толь�ко доказанные CDG-связи; динамические группы (select/url-test/fallback) показывают состав, не выбор участника. Не меняет конфигурацию.</div>
+            <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <label class="label" for="vrgFocusSelect" style="display:inline">Фокус:</label>
+              <select id="vrgFocusSelect" aria-label="Фокус графа" style="max-width:280px;padding:4px 8px"><option value="">— весь граф —</option></select>
+              <button type="button" class="btn btn-gray" id="vrgResetBtn">Сбросить фокус</button>
+            </div>
+            <div id="vrgStatus" class="hint" style="margin-top:4px;white-space:pre-line"></div>
+            <div id="vrgSvgWrap" style="margin-top:6px;overflow:auto;max-height:70vh;border:1px solid var(--border);background:rgba(255,255,255,.35)" role="img" aria-label="Visual Routing Graph"></div>
+            <details id="vrgTextAlt" style="margin-top:4px">
+              <summary style="cursor:pointer">Текстовая альтернатива графу</summary>
+              <div id="vrgTextAltOut" class="hint" style="margin-top:4px;white-space:pre-line"></div>
+            </details>
           </details>
         </details>
       </div>
@@ -5437,6 +5458,150 @@ function cdgDomainCoverage(doc, domainsText, opts) {
   return { results, stale, graph: cdgBuildGraph(doc) };
 }
 /* === CONFIG DEPENDENCY GRAPH CORE — CDG-CORE-END === */
+
+// === VISUAL ROUTING GRAPH CORE (#125→#177, v1.11 EVENING-03) — VRG-CORE-START ===
+// Графическая раскладка поверх canonical CDG (cdgBuildGraph): слоёная укладка
+// (longest-path layering), усечение с явным счётчиком скрытых элементов,
+// focus-режим (замыкание вокруг выбранного узла). Только то, что доказано CDG;
+// динамические группы НЕ изображаются как выбравшие конкретный сервер.
+// Pure: без DOM/SVG-кода (рендер — отдельная UI-функция), детерминирован.
+const VRG_MAX_NODES = 60;
+const VRG_NODE_W = 176, VRG_NODE_H = 40, VRG_COL_GAP = 60, VRG_ROW_GAP = 18;
+
+const VRG_KIND_LABELS = {
+  'rule': 'ПРАВИЛО', 'rule-provider': 'RULE-PROVIDER', 'proxy-group': 'ГРУППА',
+  'proxy': 'ПРОКСИ', 'proxy-provider': 'PROXY-PROVIDER', 'dns-policy': 'DNS',
+  'dns-entry': 'DNS-ЗАПИСЬ', 'dns-config': 'DNS-КОНФИГ', 'builtin': 'BUILTIN',
+  'unresolved': 'НЕНАЙДЕНО'
+};
+function vrgKindLabel(kind) { return VRG_KIND_LABELS[kind] || String(kind || '?').toUpperCase(); }
+
+function vrgNodeLabel(node) {
+  const m = node || {};
+  if (m.kind === 'rule') return '#' + ((m.index | 0) + 1) + ' ' + String(m.raw || '').slice(0, 48);
+  if (m.kind === 'unresolved') return String(m.name || m.id) + ' (не найдено)';
+  if (m.kind === 'builtin') return String(m.name || m.id);
+  return String(m.name || m.id || m.id);
+}
+
+// Топологические уровни (Kahn). Остаток при цикле — последовательными уровнями
+// в порядке вставки; цикл помечается (не разрывается молча).
+function vrgComputeLevels(nodes, edges) {
+  const ids = nodes.map(n => n.id);
+  const idset = new Set(ids);
+  const out = new Map(ids.map(id => [id, []]));
+  const indeg = new Map(ids.map(id => [id, 0]));
+  let hasCycleEdge = false;
+  for (const e of edges) {
+    if (!idset.has(e.from) || !idset.has(e.to)) continue;
+    out.get(e.from).push(e.to);
+    indeg.set(e.to, (indeg.get(e.to) || 0) + 1);
+  }
+  const level = new Map(ids.map(id => [id, 0]));
+  const queue = ids.filter(id => (indeg.get(id) || 0) === 0);
+  const q = queue.slice();
+  while (q.length) {
+    const v = q.shift();
+    for (const w of out.get(v) || []) {
+      const cand = (level.get(v) || 0) + 1;
+      if (cand > (level.get(w) || 0)) level.set(w, cand);
+      indeg.set(w, indeg.get(w) - 1);
+      if (indeg.get(w) === 0) q.push(w);
+    }
+  }
+  // узлы в циклах: Kahn их не достиг (indeg > 0 навсегда) — детерминированный fallback
+  let cycleLevel = ids.length ? Math.max(...ids.map(id => level.get(id) || 0)) + 1 : 0;
+  for (const id of ids) if ((indeg.get(id) || 0) > 0) { level.set(id, cycleLevel); hasCycleEdge = true; }
+  return { level, hasCycleEdge };
+}
+
+// Замыкание вокруг focus: узлы, достижимые по рёбрам в обе стороны (соседи по
+// зависимостям), ограниченное maxNodes; приоритет — BFS от focus.
+function vrgClosure(nodes, edges, focusId, maxNodes) {
+  const adj = new Map(), radj = new Map();
+  const idset = new Set(nodes.map(n => n.id));
+  for (const e of edges) {
+    if (!idset.has(e.from) || !idset.has(e.to)) continue;
+    if (!adj.has(e.from)) adj.set(e.from, []);
+    if (!radj.has(e.to)) radj.set(e.to, []);
+    adj.get(e.from).push(e.to);
+    radj.get(e.to).push(e.from);
+  }
+  const keep = new Set([focusId]);
+  const grow = (seedMap) => {
+    const q = [...seedMap];
+    while (q.length && keep.size < maxNodes) {
+      const v = q.shift();
+      for (const w of (adj.get(v) || []).concat(radj.get(v) || [])) {
+        if (!keep.has(w)) { keep.add(w); q.push(w); }
+        if (keep.size >= maxNodes) return;
+      }
+    }
+  };
+  grow(new Set([focusId]));
+  return keep;
+}
+
+// Главная функция: graph (cdgBuildGraph) → данные для SVG-рендера.
+// opts: { maxNodes?: число, focus?: nodeId }
+// Возвращает { nodes, edges, hiddenNodes, hiddenEdges, truncated, focused, cyclePresent, width, height, legend }.
+function vrgBuildView(graph, opts) {
+  const o = opts || {};
+  const maxNodes = o.maxNodes && Number.isInteger(o.maxNodes) ? Math.max(8, o.maxNodes) : VRG_MAX_NODES;
+  const nodes = (graph && Array.isArray(graph.nodes)) ? graph.nodes.slice() : [];
+  const edges = (graph && Array.isArray(graph.edges)) ? graph.edges.slice() : [];
+  let visibleIds = null;
+  let focused = null;
+  if (o.focus && nodes.some(n => n.id === o.focus)) {
+    focused = o.focus;
+    visibleIds = vrgClosure(nodes, edges, o.focus, maxNodes);
+  }
+  if (!visibleIds) {
+    if (nodes.length > maxNodes) {
+      // Детерминированное усечение: первые maxNodes узлов в порядке вставки
+      // (правила идут первыми в документе). Скрытые узлы/рёбра считаются явно.
+      visibleIds = new Set(nodes.slice(0, maxNodes).map(n => n.id));
+    } else {
+      visibleIds = new Set(nodes.map(n => n.id));
+    }
+  }
+  const visNodes = nodes.filter(n => visibleIds.has(n.id));
+  const visEdges = edges.filter(e => visibleIds.has(e.from) && visibleIds.has(e.to));
+  const hiddenNodes = nodes.length - visNodes.length;
+  const hiddenEdges = edges.length - visEdges.length;
+  const { level, hasCycleEdge } = vrgComputeLevels(visNodes, visEdges);
+  // Раскладка: x = уровень, y = позиция внутри уровня (в порядке вставки)
+  const byLevel = new Map();
+  visNodes.forEach(n => {
+    const l = level.get(n.id) || 0;
+    if (!byLevel.has(l)) byLevel.set(l, []);
+    byLevel.get(l).push(n);
+  });
+  const levelsSorted = [...byLevel.keys()].sort((a, b) => a - b);
+  const maxRows = Math.max(1, ...levelsSorted.map(l => byLevel.get(l).length));
+  levelsSorted.forEach(l => {
+    byLevel.get(l).forEach((n, i) => {
+      n.x = 20 + l * (VRG_NODE_W + VRG_COL_GAP);
+      n.y = 20 + i * (VRG_NODE_H + VRG_ROW_GAP);
+      n.level = l;
+    });
+  });
+  const width = 20 + (levelsSorted.length) * (VRG_NODE_W + VRG_COL_GAP);
+  const height = 20 + maxRows * (VRG_NODE_H + VRG_ROW_GAP);
+  return {
+    nodes: visNodes, edges: visEdges,
+    hiddenNodes, hiddenEdges,
+    truncated: hiddenNodes > 0 || hiddenEdges > 0,
+    focused, cyclePresent: hasCycleEdge,
+    width, height,
+    legend: {
+      kinds: [...new Set(visNodes.map(n => n.kind))].sort().map(k => vrgKindLabel(k)),
+      edgeKinds: [...new Set(visEdges.map(e => e.kind))].sort()
+    }
+  };
+}
+// === VISUAL ROUTING GRAPH CORE — VRG-CORE-END ===
+
 /* === ROUTING DIAGNOSTICS CORE — RD-CORE-END === */
 
 // === PHYSICAL TOPOLOGY CORE (pure, deterministic; v1.11 #149/#177) — PT-CORE-START ===
@@ -8677,6 +8842,144 @@ document.addEventListener('change', (e) => {
   if (!e.target) return;
   if (e.target.id === 'csEditType' || e.target.id === 'csEditObject') { csPendingRename = null; const b = document.getElementById('csRenameBtn'); if (b) { b.textContent = '✏️ Переименовать'; delete b.dataset.csConfirm; } document.getElementById('csImpactBox').textContent = ''; if (e.target.id === 'csEditType') csRefreshEditor(); else csRenderForm(); }
 });
+
+// === Visual Routing Graph UI (#125→#177, v1.11 EVENING-03) ===
+// Рендер поверх cdgBuildGraph: SVG без внешних зависимостей, textContent для
+// всех подписей (XSS-safe), усечение с явным счётчиком, focus-режим по клику.
+// Строится из lastRoutingDoc (Builder snapshot) или csCurrentDoc (Config Studio).
+const VRG_NS = 'http://www.w3.org/2000/svg';
+let vrgFocusId = '';
+
+function vrgTruncateLabel(text, maxLen) {
+  const s = String(text || '');
+  return s.length > maxLen ? s.slice(0, maxLen - 1) + '…' : s;
+}
+
+function vrgRenderInto(containerId, doc, stale) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  wrap.textContent = '';
+  const status = document.getElementById(containerId === 'vrgSvgWrap' ? 'vrgStatus' : containerId + 'Status');
+  if (!doc) {
+    if (status) status.textContent = stale ? '⚠ Snapshot предыдущей сборки.' : 'Сначала выполните Build / Разобрать.';
+    return;
+  }
+  let graph;
+  try { graph = cdgBuildGraph(doc); } catch (e) {
+    if (status) status.textContent = '✖ Не удалось построить граф: ' + String(e && e.message ? e.message : e).slice(0, 120);
+    return;
+  }
+  const view = vrgBuildView(graph, { maxNodes: VRG_MAX_NODES, focus: vrgFocusId || undefined });
+  const svg = document.createElementNS(VRG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + view.width + ' ' + view.height);
+  svg.setAttribute('width', String(view.width));
+  svg.setAttribute('height', String(view.height));
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Visual Routing Graph: ' + view.nodes.length + ' узлов, ' + view.edges.length + ' связей');
+  // defs: стрелки
+  const defs = document.createElementNS(VRG_NS, 'defs');
+  const marker = document.createElementNS(VRG_NS, 'marker');
+  marker.setAttribute('id', containerId + '-arrow');
+  marker.setAttribute('markerWidth', '8'); marker.setAttribute('markerHeight', '8');
+  marker.setAttribute('refX', '7'); marker.setAttribute('refY', '4');
+  marker.setAttribute('orient', 'auto');
+  const mpath = document.createElementNS(VRG_NS, 'path');
+  mpath.setAttribute('d', 'M0,0 L8,4 L0,8 Z');
+  mpath.setAttribute('fill', 'var(--muted, #888)');
+  marker.appendChild(mpath);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+  // рёбра (линии со стрелками)
+  const nodeById = new Map(view.nodes.map(n => [n.id, n]));
+  for (const e of view.edges) {
+    const a = nodeById.get(e.from), b = nodeById.get(e.to);
+    if (!a || !b) continue;
+    const line = document.createElementNS(VRG_NS, 'line');
+    line.setAttribute('x1', a.x + VRG_NODE_W); line.setAttribute('y1', a.y + VRG_NODE_H / 2);
+    line.setAttribute('x2', b.x); line.setAttribute('y2', b.y + VRG_NODE_H / 2);
+    line.setAttribute('stroke', 'var(--muted, #888)');
+    line.setAttribute('stroke-width', '1.5');
+    line.setAttribute('marker-end', 'url(#' + containerId + '-arrow)');
+    svg.appendChild(line);
+  }
+  // узлы (rect + kind badge + label)
+  for (const n of view.nodes) {
+    const g = document.createElementNS(VRG_NS, 'g');
+    g.setAttribute('transform', 'translate(' + n.x + ',' + n.y + ')');
+    g.setAttribute('tabindex', '0');
+    g.setAttribute('role', 'group');
+    g.setAttribute('aria-label', vrgKindLabel(n.kind) + ': ' + vrgTruncateLabel(vrgNodeLabel(n), 60));
+    const rect = document.createElementNS(VRG_NS, 'rect');
+    rect.setAttribute('width', String(VRG_NODE_W)); rect.setAttribute('height', String(VRG_NODE_H));
+    rect.setAttribute('rx', '4');
+    rect.setAttribute('class', 'vrg-node-rect vrg-kind-' + n.kind);
+    g.appendChild(rect);
+    const kindText = document.createElementNS(VRG_NS, 'text');
+    kindText.setAttribute('x', '8'); kindText.setAttribute('y', '14');
+    kindText.setAttribute('class', 'vrg-kind-label');
+    kindText.textContent = vrgKindLabel(n.kind);
+    g.appendChild(kindText);
+    const labelText = document.createElementNS(VRG_NS, 'text');
+    labelText.setAttribute('x', '8'); labelText.setAttribute('y', '30');
+    labelText.setAttribute('class', 'vrg-node-label');
+    labelText.textContent = vrgTruncateLabel(vrgNodeLabel(n), 28);
+    g.appendChild(labelText);
+    svg.appendChild(g);
+  }
+  wrap.appendChild(svg);
+  if (status) {
+    const parts = ['Узлов: ' + view.nodes.length + ' · связей: ' + view.edges.length];
+    if (view.truncated) parts.push('⚠ Скрыто: ' + view.hiddenNodes + ' узлов, ' + view.hiddenEdges + ' связей (используйте фокус для просмотра)');
+    if (view.focused) parts.push('Фокус: ' + view.focused);
+    if (view.cyclePresent) parts.push('⚠ Обнаружены циклы в зависимостях');
+    if (stale) parts.push('⚠ Snapshot предыдущей сборки');
+    status.textContent = parts.join(' · ');
+  }
+}
+
+function vrgFillFocusSelect(selId, doc) {
+  const sel = document.getElementById(selId);
+  if (!sel || !doc) return;
+  const prev = sel.value;
+  sel.textContent = '';
+  const def = document.createElement('option');
+  def.value = ''; def.textContent = '— весь граф —';
+  sel.appendChild(def);
+  const g = cdgBuildGraph(doc);
+  const groupsByKind = new Map();
+  for (const n of g.nodes) {
+    const kl = vrgKindLabel(n.kind);
+    if (!groupsByKind.has(kl)) groupsByKind.set(kl, []);
+    groupsByKind.get(kl).push(n.id);
+  }
+  for (const kl of [...groupsByKind.keys()].sort()) {
+    const og = document.createElement('optgroup');
+    og.label = kl;
+    for (const id of groupsByKind.get(kl)) {
+      const o = document.createElement('option');
+      o.value = id; o.textContent = vrgTruncateLabel(id, 50);
+      og.appendChild(o);
+    }
+    sel.appendChild(og);
+  }
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target) return;
+  if (e.target.id === 'vrgResetBtn') { e.preventDefault(); vrgFocusId = ''; renderVrgBuilder(); return; }
+});
+
+document.addEventListener('change', (e) => {
+  if (!e.target) return;
+  if (e.target.id === 'vrgFocusSelect') { e.preventDefault(); vrgFocusId = e.target.value; renderVrgBuilder(); }
+});
+
+function renderVrgBuilder() {
+  const stale = document.getElementById('staleBuildWarn') && document.getElementById('staleBuildWarn').style.display === 'block';
+  vrgRenderInto('vrgSvgWrap', lastRoutingDoc, stale);
+  vrgFillFocusSelect('vrgFocusSelect', lastRoutingDoc);
+}
 
 // Domain Coverage UI (v1.9 PHASE 5): первый consumer Config Dependency Graph.
 // Только отображение результатов ядра (cdgDomainCoverage); snapshot последнего
