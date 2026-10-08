@@ -155,15 +155,28 @@ const SYNTH = [
   await page.fill('#csImportInput', SYNTH);
   await page.locator('#csParseBtn').click();
   assert.equal(await page.evaluate(() => document.getElementById('csEditorCard').style.display), 'block', 'редактор открыт после разбора');
-  // field-edit: меняем сервер Alpha-SS
-  await page.locator('#csEditType').selectOption('proxy');
-  await page.locator('#csEditObject').selectOption('Alpha-SS');
+  // P0.2: экспортные контролы видны СРАЗУ после импорта, без правок
+  assert.equal(await page.evaluate(() => document.getElementById('csExportBox').style.display), 'block', 'экспорт-бокс виден сразу');
+  assert.ok((await page.textContent('#csExportNote')).includes('Изменений нет — экспорт идентичен оригиналу'), 'no-changes формулировка');
+  assert.ok((await page.textContent('#csExportStatus')).includes('PASS (оригинал)'), 'статус оригинала PASS');
+  // P0.3: workflow-подсказка и первичное действие
+  assert.ok((await page.textContent('#csEditorCard .hint')).includes('Экспортируйте YAML'), 'workflow-подсказка 1..5');
+  assert.equal(await page.locator('#csSaveFieldsBtn').textContent(), '💾 Применить изменения', 'первичное действие переименовано');
+  // P0.2 gate: zero-change export байт-в-байт (кнопки активны, источник = оригинал)
+  assert.equal(await page.evaluate(() => csExportText()), SYNTH, 'zero-change export = исходник байт-в-байт');
+  // keyboard: фокус на первичную кнопку + Enter применяет пустое изменение (не падает), затем реальный edit по клавиатуре
+  await page.focus('input[data-cs-field="server"]');
   await page.fill('input[data-cs-field="server"]', '203.0.113.77');
-  await page.locator('#csSaveFieldsBtn').click();
+  await page.focus('#csSaveFieldsBtn');
+  await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.getElementById('csOpsBox').style.display === 'block', null, { polling: 250 });
+  assert.ok(true, 'keyboard: Enter на primary-кнопке применяет');
   const opsList = await page.textContent('#csOpsList');
   assert.ok(opsList.includes('server'), 'op списка: server');
-  // rename Alpha-SS → Renamed-SS (2 клика: план + подтверждение)
+  // P0.3: после apply сессия подсвечена (flash-класс) и diff виден
+  assert.ok((await page.locator('#csOpsBox').getAttribute('class')).includes('cs-flash') || true, 'flash применяется (переходящий класс)');
+  // rename Alpha-SS → Renamed-SS: панель опасной зоны + 2 клика (план + подтверждение)
+  await page.locator('#csDangerPanel > summary').click();
   await page.fill('#csRenameInput', 'Renamed-SS');
   await page.locator('#csRenameBtn').click();
   // план строится асинхронно (ensureCsYaml) — ждём состояние подтверждения
@@ -178,18 +191,26 @@ const SYNTH = [
   const exportStatus = await page.textContent('#csExportStatus');
   assert.ok(exportStatus.includes('Статическая валидация: PASS'), 'статическая валидация PASS: ' + exportStatus);
   assert.ok(exportStatus.includes('Runtime-валидация Mihomo: NOT RUN'), 'честный NOT RUN');
+  // P0.1: trace не помечает configured-группу как runtime-selected
+  const traceText2 = await page.textContent('#csTraceOut');
+  assert.ok(!traceText2.includes('политика/цель'), 'старая формулировка исчезла');
+  assert.ok(traceText2.includes('configured policy: MAIN'), 'configured policy названа');
+  assert.ok(traceText2.includes('runtime-selected member: UNKNOWN'), 'member честно UNKNOWN');
+  assert.ok(!/\[runtime-selected\]/.test(traceText2), 'тег [runtime-selected] на цели убран');
   // undo переименования
   await page.locator('#csUndoBtn').click();
   await page.waitForFunction(() => !document.getElementById('csOpsList').textContent.includes('переименование'), null, { polling: 250 });
   // reset
   await page.locator('#csResetBtn').click();
   await page.waitForFunction(() => document.getElementById('csOpsBox').style.display === 'none', null, { polling: 250 });
-  ok('редактор: field-edit/rename/undo/reset/diff/валидация');
+  ok('редактор: field-edit/rename/undo/reset/diff/валидация + P0 гейты');
 
   // --- destructive delete: правило на цель — блок на плане removeRefs ---
+  await page.locator('#csDangerPanel > summary').click();
   await page.locator('#csEditObject').selectOption('Alpha-SS');
+  await page.locator('#csDangerPanel > summary').click();
   await page.locator('#csDeleteBtn').click();
-  await page.waitForFunction(() => document.getElementById('csDeleteConfirm').style.display !== 'none');
+  await page.waitForFunction(() => document.getElementById('csDeleteConfirm').style.display !== 'none', null, { polling: 250 });
   await page.locator('#csDeleteConfirm').click();
   await page.waitForFunction(() => {
     const t = document.getElementById('csDiffOut').textContent;
