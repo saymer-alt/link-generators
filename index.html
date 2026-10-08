@@ -707,6 +707,26 @@
         <summary style="cursor:pointer"><span>▶</span> <span>Диагностики</span></summary>
         <div id="csDiagOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       </details>
+      <details id="csGraphPanel" style="margin-top:8px">
+        <summary style="cursor:pointer"><span>▶</span> <span>Граф зависимостей</span></summary>
+        <div id="csGraphOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+      </details>
+      <details id="csRoutingPanel" style="margin-top:8px">
+        <summary style="cursor:pointer"><span>▶</span> <span>Маршрутизация</span></summary>
+        <div class="hint">Покрытие доменов импортированным конфигом: какое правило выигрывает и путь до цели (насколько это доказуемо статически). GEOSITE/GEOIP/external-провайдеры — честный UNKNOWN. По одному домену в строке.</div>
+        <textarea id="csDomainInput" rows="3" aria-label="Домены для проверки покрытия" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="gemini.google.com&#10;unknown-service.example"></textarea>
+        <button type="button" class="btn btn-gray" id="csDomainBtn">Проверить покрытие</button>
+        <div id="csDomainOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <input type="text" id="csRuleProbe" placeholder="домен или IP — какое правило сработает" aria-label="Проверить одно доменное имя" style="flex:1;min-width:180px;padding:4px 8px">
+          <button type="button" class="btn btn-gray" id="csRuleProbeBtn">Проверить</button>
+        </div>
+        <div id="csRuleProbeOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+      </details>
+      <details id="csTracePanel" style="margin-top:8px">
+        <summary style="cursor:pointer"><span>▶</span> <span>Semantic Trace</span></summary>
+        <div id="csTraceOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+      </details>
     </div>
   </div>
 </div>
@@ -5879,6 +5899,61 @@ function ensureCsYaml() {
   });
   return csYamlPromise;
 }
+// Текстовые вью поверх существующих ядер (rdSemanticTargetText/cdgDomainCoverage —
+// RD-CORE; на странице они в общей области видимости, node-тесты конкатенируют оба
+// маркер-блока). Детерминированные строки; секретов в doc-именах быть не должно,
+// но значения полей прокси здесь вообще не выводятся — только имена/структура.
+function csGraphText(doc) {
+  const rules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const groups = Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : [];
+  const lines = [];
+  lines.push('Правила → цели (первые 20):');
+  const ruleLimit = Math.min(rules.length, 20);
+  for (let i = 0; i < ruleLimit; i++) {
+    const target = csRuleTarget(rules[i]);
+    lines.push('#' + (i + 1) + ' ' + String(rules[i]) + ' → ' + (target ? rdSemanticTargetText(doc, target, { expandGlobal: true }) : '—'));
+  }
+  if (rules.length > ruleLimit) lines.push('… ещё ' + (rules.length - ruleLimit) + ' правил(а) — полный путь см. «Маршрутизация» по конкретному домену');
+  if (!rules.length) lines.push('Правил нет (или секция rules пустая)');
+  lines.push('');
+  lines.push('Группы:');
+  if (!groups.length) lines.push('— (секция proxy-groups пустая)');
+  for (const g of groups) {
+    lines.push('• ' + g.name + ' (' + String(g.type || '?') + ')' + ' → ' + rdSemanticTargetText(doc, g.name, { expandGlobal: true }).replace(/^[^[]*/, ''));
+  }
+  const provNames = doc && doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object' ? Object.keys(doc['proxy-providers']) : [];
+  const used = new Set((Array.isArray(doc && doc['proxy-groups']) ? doc['proxy-groups'] : []).flatMap(g => Array.isArray(g.use) ? g.use : []));
+  lines.push('');
+  lines.push('Proxy-providers: ' + (provNames.length ? provNames.map(n => n + (used.has(n) ? '' : ' (не используется группами)')).join(', ') : '—'));
+  return lines.join('\n');
+}
+// Semantic Trace: путь правила (configured), по одному правилу — первые 12; ясное
+// различение configured/runtime: участников select/url-test/fallback помечаем runtime-selected.
+function csTraceText(doc) {
+  const rules = Array.isArray(doc && doc.rules) ? doc.rules : [];
+  const lines = [];
+  lines.push('Configured semantic trace (первые 12 правил; «runtime-selected» = фактического выбора из static YAML не следует):');
+  const limit = Math.min(rules.length, 12);
+  for (let i = 0; i < limit; i++) {
+    const raw = String(rules[i]);
+    const target = csRuleTarget(raw);
+    const chain = [];
+    chain.push('#' + (i + 1) + ' ' + raw);
+    if (target) {
+      chain.push('  → политика/цель: ' + target + (rdTargetIsRuntimeSelected(doc, target) ? ' [runtime-selected]' : ''));
+      const sem = rdSemanticTargetText(doc, target, { expandGlobal: true });
+      chain.push('  → ' + sem);
+    } else {
+      chain.push('  → цель не определена статически');
+    }
+    lines.push(chain.join('\n'));
+  }
+  if (!rules.length) lines.push('Правил нет — trace нечего показать.');
+  else if (rules.length > limit) lines.push('… остальные ' + (rules.length - limit) + ' — через «Маршрутизация» по домену.');
+  lines.push('');
+  lines.push('Границы: это STATIC CONFIG GRAPH из YAML. Это не RUNTIME OBSERVED (фактический выбор участника делает Mihomo) и не PHYSICAL TOPOLOGY (#149 — owner-declared).');
+  return lines.join('\n');
+}
 // === CONFIG STUDIO CORE — CS-CORE-END ===
 
 // === TIERED FAILOVER (#148, v1.10; runtime-proven: docs/research/TIERED-FAILOVER-RUNTIME.md) ===
@@ -6188,7 +6263,7 @@ bindTieredUI();
 // чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
 // ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
 // но визуально помечен как previous Build.
-const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'rtControllerInput', 'rtSecretInput', 'ptSpecInput', 'csImportInput']);
+const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'rtControllerInput', 'rtSecretInput', 'ptSpecInput', 'csImportInput', 'csDomainInput', 'csRuleProbe']);
 let lastBuildFingerprint = null;
 
 function buildStateFingerprint() {
@@ -6505,8 +6580,58 @@ function csRunAnalysis() {
   const diags = csDiagnostics(doc);
   const out = document.getElementById('csDiagOut');
   out.textContent = diags.map(d => (d.severity === 'error' ? '✖ ' : d.severity === 'warning' ? '⚠ ' : 'ℹ ') + d.message).join('\n');
+  document.getElementById('csGraphOut').textContent = csGraphText(doc);
+  document.getElementById('csTraceOut').textContent = csTraceText(doc);
+  document.getElementById('csDomainOut').textContent = '';
+  document.getElementById('csRuleProbeOut').textContent = '';
+  document.getElementById('csDomainInput').value = '';
+  document.getElementById('csRuleProbe').value = '';
   sumCard.style.display = 'block';
   status.textContent = '✓ Разобрано: анализ готов (локально, без сети).';
+}
+
+// Покрытие доменов по ИМПОРТИРОВАННОМУ конфигу (cdgDomainCoverage — то же ядро,
+// что у генератора; снапшот последнего Build не затрагивается).
+function runCsDomainCoverage() {
+  const out = document.getElementById('csDomainOut');
+  if (!out) return;
+  if (!csCurrentDoc) { out.textContent = 'Сначала разберите конфиг.'; return; }
+  const res = cdgDomainCoverage(csCurrentDoc, document.getElementById('csDomainInput').value, {});
+  if (!res.results.length) { out.textContent = 'Введите домены (по одному в строке).'; return; }
+  const lines = [];
+  for (const r of res.results) {
+    const head = r.input + ':';
+    if (!r.valid) { lines.push(head + ' INVALID — ' + r.reason); continue; }
+    if (r.verdict === 'UNKNOWN' || r.verdict === 'UNCOVERED') { lines.push(head + ' ' + r.verdict + ' — ' + r.reason); continue; }
+    const via = r.verdict === 'FALLBACK'
+      ? 'fallback MATCH'
+      : (r.viaProvider ? 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw + ' (inline-провайдер «' + r.viaProvider + '»)' : 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw);
+    lines.push(head + ' ' + via + RD_NL + '  → ' + r.chainText + (r.runtimeSelected ? ' — runtime-selected' : ''));
+  }
+  out.textContent = lines.join(RD_NL);
+}
+
+// Проверка одного домена/IP по импортированному конфигу (routingInspect — то же
+// ядро, что у генератора; формулировки — «какое правило выиграло», не runtime).
+function runCsRuleProbe() {
+  const out = document.getElementById('csRuleProbeOut');
+  if (!out) return;
+  if (!csCurrentDoc) { out.textContent = 'Сначала разберите конфиг.'; return; }
+  const input = document.getElementById('csRuleProbe').value;
+  const res = routingInspect(csCurrentDoc, input);
+  if (res.verdict === 'EMPTY') { out.textContent = res.message; return; }
+  if (res.verdict === 'UNKNOWN') { out.textContent = '⚠ UNKNOWN — результат не может быть доказан офлайн. Причина: ' + (res.firstUnknown ? res.firstUnknown.reason : '—'); return; }
+  if (res.verdict === 'NO MATCH') { out.textContent = '✗ ' + res.message; return; }
+  if (res.verdict === 'FALLBACK') {
+    const rule = rdParseRule(csCurrentDoc.rules[res.winner]);
+    out.textContent = 'Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + (rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Вход не совпал ни с одним известным правилом до MATCH.)';
+    return;
+  }
+  const w = res.winner;
+  const matched = res.matched.find(m => m.index === w);
+  const rule = rdParseRule(csCurrentDoc.rules[w]);
+  const human = matched && rdSemanticTargetText(csCurrentDoc, rule.target, { expandGlobal: true });
+  out.textContent = '✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + csCurrentDoc.rules[w] + RD_NL + RD_NL + 'Маршрут: ' + rule.target + (human ? ' → ' + human : '') + (rdTargetIsRuntimeSelected(csCurrentDoc, rule.target) ? RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы (runtime-selected).' : '');
 }
 
 function csClearStudio() {
@@ -6522,6 +6647,8 @@ document.addEventListener('click', (e) => {
   if (!e.target) return;
   if (e.target.id === 'csParseBtn') { e.preventDefault(); csRunAnalysis(); }
   if (e.target.id === 'csClearBtn') { e.preventDefault(); csClearStudio(); }
+  if (e.target.id === 'csDomainBtn') { e.preventDefault(); runCsDomainCoverage(); }
+  if (e.target.id === 'csRuleProbeBtn') { e.preventDefault(); runCsRuleProbe(); }
 });
 
 document.addEventListener('change', (e) => {
