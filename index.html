@@ -638,6 +638,12 @@
           <div id="ptWhatIfOut" class="hint" style="margin-top:4px;white-space:pre-line"></div>
         </div>
         <div id="ptTraceOut" class="hint" style="margin-top:8px;white-space:pre-line"></div>
+        <div class="btn-group" style="margin-top:10px">
+          <button type="button" class="btn btn-gray" id="ptGenBtn">📦 Подготовить артефакты узлов</button>
+        </div>
+        <div class="hint" style="margin-top:4px">Генерация работает только для валидной цепочки; транспорты первого класса — ss/socks/http (полная пара outbound+listener в Mihomo, доказано по исходникам 1.19.32). Всё остальное — честный external contract без выдуманного серверного YAML. Значения секретов задаются в spec.credentials (память вкладки, в manifest не попадают); без них артефакты получают плейсхолдеры.</div>
+        <div id="ptGenOut" class="hint" style="display:none;margin-top:6px;white-space:pre-line"></div>
+        <div id="ptGenDownloads" style="display:none;margin-top:8px"></div>
       </details>
       <div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN Interface">?</button><span class="ctx-help-pop" role="note">Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo».</span></span></label>
@@ -5749,10 +5755,16 @@ function ptDemoTopologySpec() {
       { id: 'warp-overlay', label: 'WARP · FINAL OVERLAY', role: 'final-overlay' }
     ],
     links: [
-      { from: 'msk-entry', to: 'est-transit' },
-      { from: 'est-transit', to: 'swe-exit' },
-      { from: 'swe-exit', to: 'warp-overlay' }
+      { from: 'msk-entry', to: 'est-transit', transport: { kind: 'ss', endpoint: 'ep-msk-est', credentialRef: 'cred-msk-est' } },
+      { from: 'est-transit', to: 'swe-exit', transport: { kind: 'ss', endpoint: 'ep-est-swe', credentialRef: 'cred-est-swe' } },
+      { from: 'swe-exit', to: 'warp-overlay', transport: { kind: 'wireguard' } }
     ],
+    clientLink: { transport: { kind: 'ss', endpoint: 'ep-client-msk', credentialRef: 'cred-client-msk' } },
+    endpoints: {
+      'ep-client-msk': '192.0.2.10:40001',
+      'ep-msk-est': '198.51.100.1:40002',
+      'ep-est-swe': '198.51.100.2:40003'
+    },
     localPolicies: [
       { nodeId: 'est-transit', targetNodeId: 'swe-exit',
         candidates: [ { id: 'candidate-a', label: 'AWG' }, { id: 'candidate-b', label: 'Mieru' } ] }
@@ -5761,6 +5773,213 @@ function ptDemoTopologySpec() {
 }
 // === PHYSICAL TOPOLOGY CORE — PT-CORE-END ===
 
+// === PHYSICAL TOPOLOGY GENERATION ENGINE (#187, v1.11) — PT-GEN-START ===
+// Topology → per-node артефакты. Первоклассные транспорты (полная пара
+// client-outbound/server-listener в Mihomo, SOURCE-PROVEN по listener/parse.go
+// и adapter/outbound тега v1.19.32): ss, socks, http. Всё остальное
+// (wireguard-сервер, сторонние стеки) — честный external contract, без
+// выдуманного серверного YAML. Секреты: в spec — только credentialRef; значения
+// берутся из spec.credentials (память вкладки, в manifest НЕ попадают); без
+// значения — плейсхолдер и статус PLACEHOLDERS_REQUIRED (никаких заявлений о -t).
+const PT_TRANSPORTS = {
+  ss: { outboundType: 'ss', listenerType: 'shadowsocks', cipher: 'aes-128-gcm', needsPassword: true },
+  socks: { outboundType: 'socks5', listenerType: 'socks', needsPassword: false },
+  http: { outboundType: 'http', listenerType: 'http', needsPassword: false }
+};
+const PT_PLACEHOLDER_PREFIX = '<CS-PLACEHOLDER:';
+function ptYamlScalar(s) {
+  const v = String(s);
+  if (/^[A-Za-z0-9_][A-Za-z0-9_./:@%-]*$/.test(v)) return v;
+  return JSON.stringify(v);
+}
+function ptCredValue(credentialRef, credentials) {
+  if (credentialRef && credentials && typeof credentials === 'object' && typeof credentials[credentialRef] === 'string' && credentials[credentialRef]) {
+    return ptYamlScalar(credentials[credentialRef]);
+  }
+  return '\'' + PT_PLACEHOLDER_PREFIX + (credentialRef || 'credential') + '>\'';
+}
+function ptEndpointParts(spec, ref) {
+  const raw = spec && spec.endpoints && typeof spec.endpoints === 'object' ? spec.endpoints[ref] : null;
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const m = raw.trim().match(/^\[?([A-Za-z0-9._\-]+)\]?:(\d{1,5})$/);
+  if (!m) return null;
+  return { host: m[1], port: m[2] };
+}
+// План ссылки для генерации: transport kind + endpoint + credentialRef.
+function ptLinkPlan(spec, fromId, toId) {
+  const raw = (spec.links || []).find(l => l && l.from === fromId && l.to === toId);
+  const t = raw && raw.transport && typeof raw.transport === 'object' ? raw.transport : null;
+  return {
+    kind: t && typeof t.kind === 'string' ? t.kind.trim() : null,
+    endpointRef: t && typeof t.endpoint === 'string' ? t.endpoint.trim() : null,
+    credentialRef: t && typeof t.credentialRef === 'string' ? t.credentialRef.trim() : null
+  };
+}
+// Детерминированный YAML-блок артефакта узла. Ни DOM, ни сети, ни случайности.
+function ptNodeArtifactYaml(nodeLabel, role, inbound, outbound, credentials) {
+  const L = [];
+  L.push('# Physical Topology artifact (generated) — ' + nodeLabel + ' [' + ptRoleLabel(role) + ']');
+  L.push('# topology: linear chain · schema ' + PT_SCHEMA_VERSION + ' · сгенерировано, не редактируйте вручную');
+  L.push('mode: rule');
+  L.push('log-level: warning');
+  if (inbound) {
+    const t = PT_TRANSPORTS[inbound.kind];
+    L.push('listeners:');
+    L.push('  - name: pt-in');
+    L.push('    type: ' + t.listenerType);
+    L.push('    port: ' + inbound.port);
+    if (t.needsPassword) {
+      L.push('    password: ' + ptCredValue(inbound.credentialRef, credentials));
+      L.push('    cipher: ' + t.cipher);
+    }
+  }
+  if (outbound) {
+    const t = PT_TRANSPORTS[outbound.kind];
+    L.push('proxies:');
+    L.push('  - name: pt-out');
+    L.push('    type: ' + t.outboundType);
+    L.push('    server: ' + outbound.host);
+    L.push('    port: ' + outbound.port);
+    if (t.needsPassword) {
+      L.push('    password: ' + ptCredValue(outbound.credentialRef, credentials));
+      L.push('    cipher: ' + t.cipher);
+    }
+    L.push('rules:');
+    L.push('  - MATCH,pt-out');
+  } else {
+    L.push('# исходящее ребро не реализовано этим артефактом (см. contract.md)');
+    L.push('rules:');
+    L.push('  - MATCH,DIRECT');
+  }
+  return L.join('\n') + '\n';
+}
+// Главная функция: spec (raw) → артефакты. Цепочка валидируется ptAnalyzeTopology.
+function ptGenerateArtifacts(spec, credentials) {
+  const analysis = ptAnalyzeTopology(spec);
+  if (!analysis.ok || !analysis.model) {
+    return { ok: false, diagnostics: analysis.diagnostics, summary: null, artifacts: [], manifest: null, deploymentMap: null };
+  }
+  const model = analysis.model;
+  const nodes = model.nodes;
+  const artifacts = [];
+  let withConfig = 0, withContract = 0, placeholders = 0, ready = 0;
+  nodes.forEach((node, idx) => {
+    // вход: clientLink для ENTRY, входящее ребро для остальных
+    let inbound;
+    if (idx === 0) {
+      const cl = spec.clientLink && spec.clientLink.transport && typeof spec.clientLink.transport === 'object' ? spec.clientLink.transport : null;
+      inbound = cl ? { kind: (cl.kind || '').trim() || null, endpointRef: typeof cl.endpoint === 'string' ? cl.endpoint.trim() : null, credentialRef: typeof cl.credentialRef === 'string' ? cl.credentialRef.trim() : null } : null;
+    } else {
+      inbound = ptLinkPlan(spec, nodes[idx - 1].id, node.id);
+    }
+    // выход: исходящее ребро (у exit — ребро к final-overlay, если есть)
+    const outbound = idx < nodes.length - 1 ? ptLinkPlan(spec, node.id, nodes[idx + 1].id) : null;
+    // final-overlay — attachment, а не узел с mihomo-артефактом: его ребро обслуживает EXIT
+    if (node.role === 'final-overlay') return;
+    const nodeBlockers = [];
+    let inEp = null, outEp = null;
+    if (!inbound || !inbound.kind) {
+      nodeBlockers.push({ code: 'PT-GEN-INBOUND', message: !inbound ? 'не задан clientLink (транспорт клиент → ENTRY) — входящий listener не сгенерирован' : 'входящий транспорт не задан' });
+    } else if (!PT_TRANSPORTS[inbound.kind]) {
+      nodeBlockers.push({ code: 'PT-GEN-TRANSPORT', message: 'входящий транспорт «' + inbound.kind + '» вне первоклассного набора (' + Object.keys(PT_TRANSPORTS).join(', ') + ') — серверная часть внешняя' });
+    } else if (!inbound.endpointRef || !(inEp = ptEndpointParts(spec, inbound.endpointRef))) {
+      nodeBlockers.push({ code: 'PT-GEN-ENDPOINT', message: 'endpoint входящей ссылки («' + (inbound.endpointRef || '—') + '») не найден или не host:port в spec.endpoints' });
+    }
+    let outSupported = false;
+    if (outbound) {
+      if (!outbound.kind || !PT_TRANSPORTS[outbound.kind]) {
+        nodeBlockers.push({ code: 'PT-GEN-CONTRACT', message: 'исходящий транспорт «' + (outbound.kind || 'не задан') + '» — внешняя часть: артефакт маршрутизирует в DIRECT, ребро требует внешнего контракта' });
+      } else if (!outbound.endpointRef || !(outEp = ptEndpointParts(spec, outbound.endpointRef))) {
+        nodeBlockers.push({ code: 'PT-GEN-ENDPOINT', message: 'endpoint исходящей ссылки («' + (outbound.endpointRef || '—') + '») не найден или не host:port в spec.endpoints' });
+        outSupported = false;
+      } else {
+        outSupported = true;
+      }
+    }
+    const needsCred =
+      (inbound && inbound.kind && PT_TRANSPORTS[inbound.kind] && PT_TRANSPORTS[inbound.kind].needsPassword && (!inbound.credentialRef || !credentials || typeof credentials[inbound.credentialRef] !== 'string' || !credentials[inbound.credentialRef])) ||
+      (outbound && outSupported && PT_TRANSPORTS[outbound.kind] && PT_TRANSPORTS[outbound.kind].needsPassword && (!outbound.credentialRef || !credentials || typeof credentials[outbound.credentialRef] !== 'string' || !credentials[outbound.credentialRef]));
+    const files = {};
+    // конфиг генерируется ТОЛЬКО при полном первоклассном контракте (вход+выход).
+    // Неподдерживаемый исходящий транспорт = контракт без конфига: fallback в
+    // DIRECT де-анонимизировал бы цепочку, поэтому «честный DIRECT» не эмитим.
+    if (nodeBlockers.length === 0) {
+      files['config.yaml'] = ptNodeArtifactYaml(
+        node.label, node.role,
+        (!inbound || !inbound.kind || !PT_TRANSPORTS[inbound.kind] || !inEp) ? null : Object.assign({ port: inEp.port }, inbound),
+        (outbound && outSupported) ? Object.assign({ host: outEp.host, port: outEp.port }, outbound) : null,
+        credentials || {}
+      );
+      withConfig++;
+    }
+    if (nodeBlockers.length || needsCred) {
+      const contractLines = [
+        '# External transport contract — ' + node.label + ' [' + ptRoleLabel(node.role) + ']',
+        '',
+        needsCred ? 'Статус: PLACEHOLDERS_REQUIRED (в config.yaml есть <CS-PLACEHOLDER:*>)' : 'Статус: EXTERNAL_CONTRACT_REQUIRED',
+        '',
+        'Пункты:',
+        ...nodeBlockers.map(b => '- ' + b.code + ': ' + b.message),
+        needsCred ? '- PT-GEN-CREDENTIAL: задайте значение credential в spec.credentials (память вкладки) — плейсхолдеры заменятся' : '',
+        (inbound && inbound.kind ? '- входящий транспорт: ' + inbound.kind + ' (endpoint ref: ' + (inbound.endpointRef || '—') + ', credential ref: ' + (inbound.credentialRef || '—') + ')' : '- входящий транспорт: —')
+      ].filter(Boolean);
+      files['contract.md'] = contractLines.join('\n') + '\n';
+      withContract++;
+    }
+    const status = nodeBlockers.length ? 'EXTERNAL_CONTRACT_REQUIRED' : (needsCred ? 'PLACEHOLDERS_REQUIRED' : 'READY');
+    if (status === 'READY') ready++;
+    if (status === 'PLACEHOLDERS_REQUIRED') placeholders++;
+    artifacts.push({
+      nodeId: node.id, label: node.label, role: node.role, status, files,
+      blockers: nodeBlockers,
+      inbound: inbound && inbound.kind ? { kind: inbound.kind, endpointRef: inbound.endpointRef, credentialRef: inbound.credentialRef } : null,
+      outbound: outbound && outbound.kind ? { kind: outbound.kind, endpointRef: outbound.endpointRef, credentialRef: outbound.credentialRef } : null,
+      downstreamLabel: outbound ? (nodes[idx + 1] ? nodes[idx + 1].label : null) : (nodes[nodes.length - 1].role === 'final-overlay' ? nodes[nodes.length - 1].label : 'Internet')
+    });
+  });
+  // manifest: детерминированный topology.json (без секретов)
+  const manifest = {
+    schemaVersion: 1,
+    topologyId: 'pt-' + model.nodes.map(n => n.id).join('--'),
+    generator: 'link-generators physical-topology',
+    evidence: 'NOT_MEASURED',
+    nodes: model.nodes.map(n => ({ id: n.id, label: n.label, role: n.role })),
+    links: model.links.map(l => {
+      const plan = ptLinkPlan(spec, l.from, l.to);
+      return { from: l.from, to: l.to, transport: plan.kind, endpointRef: plan.endpointRef, credentialRef: plan.credentialRef };
+    }),
+    clientLink: spec.clientLink && spec.clientLink.transport ? { transport: spec.clientLink.transport.kind || null, endpointRef: spec.clientLink.transport.endpoint || null } : null,
+    artifacts: artifacts.map(a => ({ nodeId: a.nodeId, status: a.status, files: Object.keys(a.files).sort(), blockers: a.blockers.map(b => b.code) }))
+  };
+  // deployment-map.md: человекочитаемый слой (intended, NOT_MEASURED)
+  const dm = [
+    '# Physical Topology Deployment Map',
+    '',
+    'Client → ' + model.nodes.map(n => n.label + ' [' + ptRoleLabel(n.role) + ']').join(' → ') + ' → Internet',
+    '',
+    '> Сконфигурированная (intended) топология. Наблюдаемая — NOT_MEASURED,',
+    '> пока не подключены runtime-измерения. Формулировок о фактическом',
+    '> трафике здесь нет намеренно.',
+    ''
+  ];
+  for (const a of artifacts) {
+    dm.push('## ' + a.label + ' [' + ptRoleLabel(a.role) + '] — ' + a.status);
+    if (a.inbound) dm.push('- вход: транспорт ' + a.inbound.kind + ' (endpoint ref: ' + (a.inbound.endpointRef || '—') + ')');
+    if (a.outbound && a.nodeId !== nodes[nodes.length - 1].id) dm.push('- выход: транспорт ' + a.outbound.kind + ' → следующий узел: ' + a.downstreamLabel);
+    if (a.nodeId === nodes[nodes.length - 1].id) dm.push('- финальный сегмент: ' + a.downstreamLabel + (a.outbound ? ' (транспорт ' + a.outbound.kind + ')' : ' (внешний контракт)'));
+    for (const f of Object.keys(a.files).sort()) dm.push('- файл: `' + a.nodeId + '/' + f + '`');
+    for (const b of a.blockers) dm.push('- блокер: ' + b.code + ' — ' + b.message);
+    dm.push('');
+  }
+  return {
+    ok: true, diagnostics: analysis.diagnostics,
+    summary: { nodes: model.nodes.length, ready, placeholders, withContract, withConfig, blockers: artifacts.reduce((s, a) => s + a.blockers.length, 0) },
+    artifacts,
+    manifest: JSON.stringify(manifest, null, 2) + '\n',
+    deploymentMap: dm.join('\n')
+  };
+}
+// === PHYSICAL TOPOLOGY GENERATION ENGINE — PT-GEN-END ===
 // === CONFIG STUDIO CORE (pure, deterministic; v1.11 #176/#178/#177) — CS-CORE-START ===
 // Анализ импортированного Mihomo-конфига. Дизайн: docs/research/CONFIG-STUDIO.md.
 // Ключевое переиспользование: импортированный doc после jsyaml.load скармливается
@@ -6963,6 +7182,75 @@ function clearPhysicalTopology() {
   if (diagOut) diagOut.textContent = '';
   if (traceOut) traceOut.textContent = '';
   document.getElementById('ptGraphBox').style.display = 'none';
+  const genOut = document.getElementById('ptGenOut');
+  const genDl = document.getElementById('ptGenDownloads');
+  if (genOut) genOut.style.display = 'none';
+  if (genDl) { genDl.style.display = 'none'; genDl.textContent = ''; }
+}
+
+// === Physical Topology → per-node artifacts UI (#187, P1.7/P1.8/P1.16) ===
+// Генерация только по явному действию; креды — из spec.credentials (память
+// вкладки); скачивание пофайловое (без ZIP-зависимости, security > convenience).
+function runPtGenerate() {
+  const input = document.getElementById('ptSpecInput');
+  const out = document.getElementById('ptGenOut');
+  const dlBox = document.getElementById('ptGenDownloads');
+  if (!out || !dlBox) return;
+  dlBox.textContent = '';
+  dlBox.style.display = 'none';
+  let spec;
+  try {
+    spec = JSON.parse(input.value);
+  } catch (e) {
+    out.style.display = 'block';
+    out.textContent = '✖ Спецификация — не корректный JSON: ' + String(e && e.message ? e.message : e);
+    return;
+  }
+  const r = ptGenerateArtifacts(spec, spec.credentials || null);
+  out.style.display = 'block';
+  if (!r.ok) {
+    out.textContent = '✖ Топология не валидна — генерация невозможна (no silent-fix):\n' + r.diagnostics.map(d => (d.severity === 'error' ? '✖ ' : '⚠ ') + d.message).join('\n');
+    return;
+  }
+  const s = r.summary;
+  const lines = ['Узлов: ' + s.nodes + ' · Mihomo-артефактов: ' + s.withConfig + ' · Внешних контрактов: ' + s.withContract + ' · Блокеров: ' + s.blockers];
+  for (const a of r.artifacts) {
+    lines.push('');
+    lines.push('▪ ' + a.label + ' [' + ptRoleLabel(a.role) + '] — ' + a.status);
+    lines.push('  Generated: ' + Object.keys(a.files).sort().map(f => a.nodeId + '/' + f).join(', '));
+    if (a.inbound) lines.push('  Вход: ' + a.inbound.kind + ' (endpoint ref: ' + (a.inbound.endpointRef || '—') + ')');
+    if (a.outbound) lines.push('  Downstream: ' + (a.downstreamLabel || '—'));
+    if (!a.outbound) lines.push('  Downstream: ' + (a.downstreamLabel || 'Internet') + ' (финальный сегмент)');
+    lines.push('  Validation: STATIC PASS · mihomo -t в браузере: NOT RUN');
+    for (const b of a.blockers) lines.push('  ⚠ ' + b.code + ': ' + b.message);
+  }
+  out.textContent = lines.join('\n');
+  // downloads: per-file + manifest + map
+  const mkBtn = (name, text) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-gray';
+    b.textContent = '⬇️ ' + name;
+    b.addEventListener('click', () => {
+      const blob = new Blob([text], { type: name.endsWith('.yaml') ? 'text/yaml' : 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    });
+    return b;
+  };
+  dlBox.appendChild(mkBtn('topology.json', r.manifest));
+  dlBox.appendChild(mkBtn('deployment-map.md', r.deploymentMap));
+  for (const a of r.artifacts) {
+    for (const f of Object.keys(a.files).sort()) {
+      dlBox.appendChild(mkBtn(a.nodeId + '-' + f, a.files[f]));
+    }
+  }
+  dlBox.style.display = 'block';
 }
 
 document.addEventListener('click', (e) => {
@@ -6974,6 +7262,7 @@ document.addEventListener('click', (e) => {
   }
   if (e.target.id === 'ptAnalyzeBtn') { e.preventDefault(); runPhysicalTopology(); }
   if (e.target.id === 'ptClearBtn') { e.preventDefault(); clearPhysicalTopology(); }
+  if (e.target.id === 'ptGenBtn') { e.preventDefault(); runPtGenerate(); }
   const nodeToggle = e.target.closest && e.target.closest('.pt-toggle[data-pt-node]');
   if (nodeToggle) {
     e.preventDefault();

@@ -48,10 +48,11 @@ const chain = (...ids) => {
   assert.deepEqual(r.model.nodes.map(n => n.id), ['msk-entry', 'est-transit', 'swe-exit', 'warp-overlay'], 'demo: порядок цепочки entry→transit→exit→overlay');
   assert.equal(r.model.nodes[3].role, 'final-overlay');
   assert.equal(r.model.links.length, 3, 'demo: ровно 3 физических link');
-  // санитизация фикстуры: никаких адресов/ключей/URL
+  // санитизация фикстуры: только RFC5737-адреса, никаких ключей/паролей/URL
   const flat = JSON.stringify(demo);
   assert.ok(!/https?:\/\//.test(flat), 'demo: без URL');
-  assert.ok(!/\d+\.\d+\.\d+\.\d+/.test(flat), 'demo: без IP-адресов');
+  const ips = flat.match(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g) || [];
+  assert.ok(ips.every(ip => /^(192\.0\.2\.|198\.51\.100\.|203\.0\.113\.)/.test(ip)), 'demo: только RFC5737-адреса, найдено: ' + ips.join(','));
   assert.ok(!/-----BEGIN|private-key|password|uuid|hwid/i.test(flat), 'demo: без ключей/паролей/HWID');
   ok();
 }
