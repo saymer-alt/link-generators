@@ -44,6 +44,44 @@ async function check(name, fn) {
   }
   const names = page => page.locator('#policyCards .policy-name').evaluateAll(xs => xs.map(x => x.value));
   const p = await fresh();
+  const disclosure = await fresh();
+  await check('UX09 chevrons follow native open state and nested keyboard toggles', async () => {
+    const ids = ['wgDialerAdvanced', 'routingDiagnostics', 'ruleProviderExplorer',
+      'domainCoveragePanel', 'physicalTopologyPanel', 'ptRuntimePanel', 'perProxyAdvancedDetails'];
+    for (const id of ids) {
+      const details = disclosure.locator('#' + id);
+      const marker = details.locator(':scope > summary > .disclosure-chevron');
+      assert.equal(await marker.count(), 1, id + ': missing marker');
+      assert.equal(await marker.getAttribute('aria-hidden'), 'true');
+      await details.evaluate(d => { d.open = false; });
+      await disclosure.waitForFunction(id => document.querySelector('#' + id + ' > summary > .disclosure-chevron').textContent === '▶', id);
+      await details.evaluate(d => { d.open = true; });
+      await disclosure.waitForFunction(id => document.querySelector('#' + id + ' > summary > .disclosure-chevron').textContent === '▼', id);
+      await details.evaluate(d => { d.open = false; });
+      await disclosure.waitForFunction(id => document.querySelector('#' + id + ' > summary > .disclosure-chevron').textContent === '▶', id);
+    }
+    const diag = disclosure.locator('#routingDiagnostics');
+    await diag.locator(':scope > summary').click();
+    assert.equal(await diag.evaluate(d => d.open), true, 'mouse toggles Diagnostics');
+    const explorer = disclosure.locator('#ruleProviderExplorer');
+    await explorer.locator(':scope > summary').focus();
+    await disclosure.keyboard.press('Enter');
+    assert.equal(await explorer.evaluate(d => d.open), true, 'keyboard opens nested Explorer');
+    await disclosure.keyboard.press('Enter');
+    assert.equal(await explorer.evaluate(d => d.open), false, 'keyboard closes nested Explorer');
+    const topology = disclosure.locator('#physicalTopologyPanel');
+    await topology.locator(':scope > summary').click();
+    assert.equal(await topology.evaluate(d => d.open), true, 'mouse opens Physical Topology');
+    const runtime = disclosure.locator('#ptRuntimePanel');
+    await runtime.locator(':scope > summary').click();
+    assert.equal(await runtime.evaluate(d => d.open), true, 'mouse opens nested Runtime Evidence');
+    // The shared native-toggle marker also covers the legacy per-proxy control.
+    const perProxy = disclosure.locator('#perProxyAdvancedDetails');
+    await perProxy.locator(':scope > summary').click();
+    await disclosure.waitForFunction(() => document.getElementById('perProxyDisclosureMarker').textContent === '▼');
+    await perProxy.locator(':scope > summary').click();
+    await disclosure.waitForFunction(() => document.getElementById('perProxyDisclosureMarker').textContent === '▶');
+  });
   await check('UX01 add controls precede cards and separate import', async () => {
     assert.equal(await p.evaluate(() => !!(document.getElementById('btnPolicyAdd').compareDocumentPosition(document.getElementById('policyCards')) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
   });

@@ -431,7 +431,7 @@
         <div id="awgRtDiagWarn" class="hint" style="display:none;color:var(--red);margin-top:4px">⚠️ Диагностическая модификация AWG-профилей: RandomTrailers будет отключён в сборке (random-trailers: on → off). Это controlled experiment для теста обрывов, а НЕ доказанный universal fix; MTU/ключи и остальные поля не меняются.</div>
       </div>
       <details id="wgDialerAdvanced" class="advanced-panel" style="margin-top:15px">
-        <summary><span>▶</span> <span class="advanced-badge">ADVANCED</span> <span>Ручная общая dialer-группа (Legacy)</span></summary>
+        <summary><span class="disclosure-chevron" aria-hidden="true">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Ручная общая dialer-группа (Legacy)</span></summary>
         <div class="hint">Обычно этот раздел не нужен. Для каждого WG/AWG используйте настройку «Через промежуточный proxy» в его карточке — генератор сам создаст безопасную группу (для подписки — provider-backed). Этот блок — ручной/Legacy путь: общая dialer-группа, которую несколько WG/AWG используют совместно, для особых схем.</div>
         <label class="label" for="wgDialerInput" style="display:block;margin-bottom:5px;">Переопределить имя группы (необязательно):</label>
         <input type="text" id="wgDialerInput" style="width:100%;padding:8px;box-sizing:border-box;" placeholder="Пусто = WARP-DIALER">
@@ -600,7 +600,7 @@
         <div id="mtImportResult" class="hint" hidden></div>
         <div class="hint" id="policyRoutingHint"></div>
         <details id="routingDiagnostics" class="advanced-panel" style="margin-top:12px">
-          <summary><span>▶</span> <span class="advanced-badge">DIAGNOSTICS</span> <span>Routing Inspector / Diagnostics</span></summary>
+          <summary><span class="disclosure-chevron" aria-hidden="true">▶</span> <span class="advanced-badge">DIAGNOSTICS</span> <span>Routing Inspector / Diagnostics</span></summary>
           <div class="hint">Офлайн-анализатор итогового конфига (результат последнего Build). Точно анализируются DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD и inline-провайдеры политик; GEOSITE/GEOIP/external-провайдеры/DNS-зависимые правила честно возвращают UNKNOWN. Инспектор не заменяет диагностику самого Mihomo и ничего не меняет в конфиге.</div>
           <div id="staleBuildWarn" class="hint" style="display:none;margin:8px 0;color:var(--red);border:1px solid var(--red);padding:6px;background:rgba(255,0,0,.07)">⚠ Настройки изменены после последнего Build. Диагностика ниже относится к предыдущей сборке — пересоберите конфиг, чтобы анализировать актуальную.</div>
           <div id="rdSummary" class="hint" style="margin-top:8px;white-space:pre-line"></div>
@@ -617,14 +617,14 @@
           <div id="rdResult" class="hint" style="margin-top:6px;white-space:pre-line" aria-live="polite"></div>
           <button type="button" class="btn btn-gray" id="rdBuildCheckBtn" hidden>Собрать конфигурацию и проверить</button>
           <details id="ruleProviderExplorer" style="margin-top:8px">
-            <summary style="cursor:pointer"><span>▶</span> <span>Rule Provider Explorer</span></summary>
+            <summary style="cursor:pointer"><span class="disclosure-chevron" aria-hidden="true">▶</span> <span>Rule Provider Explorer</span></summary>
             <div class="hint">Инвентарь <code>rule-providers</code> итогового конфига (результат последнего Build), в порядке YAML. Inline-содержимое доступно локально; содержимое внешних провайдеров браузером не загружается (fetch/HEAD не выполняются), MRS не декодируется. Поиск — case-insensitive подстрока по уже доступному inline-payload, без сохранения. Только чтение — конфиг не меняется.</div>
             <div id="rpeSummary" class="hint" style="margin-top:8px;white-space:pre-line"></div>
             <div id="rpeMissing" class="hint" style="margin-top:6px;white-space:pre-line;display:none;border:1px solid var(--border);padding:6px;background:rgba(255,170,0,.08)"></div>
             <div id="rpeProviders" style="margin-top:8px"></div>
           </details>
           <details id="domainCoveragePanel" style="margin-top:8px">
-            <summary style="cursor:pointer"><span>▶</span> <span>Domain Coverage Checker</span></summary>
+            <summary style="cursor:pointer"><span class="disclosure-chevron" aria-hidden="true">▶</span> <span>Domain Coverage Checker</span></summary>
             <div class="hint">Покрытие доменов итоговым конфигом (результат последнего Build): какое правило выигрывает первым, через inline-правило или провайдера, и статический путь до цели насколько это доказуемо. «Совпадает с правилом» ≠ «гарантированно идёт через конкретный прокси»: для <code>select</code>/<code>url-test</code>/<code>fallback</code> участник определяется Mihomo во время работы (помечается <code>runtime-selected</code>). GEOSITE/GEOIP/внешние провайдеры/DNS-зависимые правила честно возвращают UNKNOWN. По одному домену в строке; только чтение — конфиг не меняется.</div>
             <textarea id="dcInput" rows="4" aria-label="Domains to check, one per line" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="gemini.google.com&#10;youtube.com&#10;unknown-service.example"></textarea>
             <div class="btn-group" style="margin-top:6px">
@@ -663,7 +663,7 @@
         <div class="hint" id="tieredTrace" style="margin-top:6px;white-space:pre-line"></div>
       </div>
       <details id="physicalTopologyPanel" class="advanced-panel" style="margin-top:12px">
-        <summary style="cursor:pointer"><span>▶</span> <span class="advanced-badge">PHYSICAL TOPOLOGY</span> <span>🌐 Physical Topology</span></summary>
+        <summary style="cursor:pointer"><span class="disclosure-chevron" aria-hidden="true">▶</span> <span class="advanced-badge">PHYSICAL TOPOLOGY</span> <span>🌐 Physical Topology</span></summary>
         <div class="hint">Физическая цепочка (#149): Client → ENTRY → TRANSIT(0..N) → EXIT [→ FINAL OVERLAY] → Internet. Для этой модели доступны what-if, генерация per-node артефактов и Runtime Evidence. Physical Topology использует отдельную модель и не меняет обычный Mihomo Build автоматически. Демо — синтетическая фикстура; реальные данные остаются в памяти вкладки. Модель описывает intended topology, Runtime Evidence — ограниченные наблюдения Controller API; ни одно из них не доказывает фактический packet path. Local routing policy узла остаётся отдельным уровнем.</div>
         <textarea id="ptSpecInput" rows="10" aria-label="Спецификация физической топологии (JSON)" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder='{"nodes":[{"id":"entry-1","label":"…","role":"entry"}],"links":[{"from":"entry-1","to":"exit-1"}],"localPolicies":[]}'></textarea>
         <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
@@ -690,7 +690,7 @@
         <div id="ptGenOut" class="hint" style="display:none;margin-top:6px;white-space:pre-line"></div>
         <div id="ptGenDownloads" style="display:none;margin-top:8px"></div>
         <details id="ptRuntimePanel" style="margin-top:10px">
-          <summary style="cursor:pointer"><span>▶</span> <span>🔍 Runtime Evidence (эксперимент #188)</span></summary>
+          <summary style="cursor:pointer"><span class="disclosure-chevron" aria-hidden="true">▶</span> <span>🔍 Runtime Evidence (эксперимент #188)</span></summary>
           <div class="hint" style="margin-top:6px">Свяжите каждый физический узел с его Mihomo-контроллером (например <code>127.0.0.1:19090</code> через ваш SSH local-forward — генератор туннели не создаёт). Секрет и адрес — только память вкладки, никакого auto-fetch: запрос идёт по кнопке «Проверить runtime». Наблюдения НЕ меняют топологию и не являются доказательством пути пакета: максимум — «наблюдаемое состояние контроллеров согласуется с intended-топологией». Недоступный контроллер ≠ узел выключен (причины: offline/CORS/mixed-content/нет SSH forward).</div>
           <div id="ptRuntimeProfiles" style="margin-top:6px"></div>
           <div class="btn-group" style="margin-top:8px;flex-wrap:wrap">
@@ -707,7 +707,7 @@
       <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
       <div id="perProxyAdvancedPanel" class="advanced-panel">
         <details id="perProxyAdvancedDetails">
-          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Расширенные настройки</span></summary>
+          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker" class="disclosure-chevron" aria-hidden="true">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Расширенные настройки</span></summary>
           <div class="advanced-subsection">
             <div class="advanced-subsection-title">⚙ Расширенный TUN stack</div>
             <div class="advanced-stack-control">
@@ -10676,17 +10676,16 @@ initWgUpload();
 document.getElementById('cfgAutoWhitelist').addEventListener('change', onWhitelistChange);
 document.getElementById('cfgProfile').addEventListener('change', onProfileChange);
 
-// ADVANCED-спойлер: маркер раскрытия. Раскрытие не включает master,
-// закрытие не сбрасывает настройки — состояние master/children отдельно.
+// Decorative disclosure chevrons follow native <details> state consistently.
+// This does not change master checkbox, children or routing state.
 (function () {
-  const d = document.getElementById('perProxyAdvancedDetails');
-  const marker = document.getElementById('perProxyDisclosureMarker');
-  if (!d || !marker) return;
-  // маркер — отдельный span: badge-разметка summary не разрушается,
-  // повторные open/close не накапливают пробелы
-  const sync = () => { marker.textContent = d.open ? '▼' : '▶'; };
-  d.addEventListener('toggle', sync);
-  sync();
+  for (const d of document.querySelectorAll('details')) {
+    const marker = d.querySelector(':scope > summary > .disclosure-chevron');
+    if (!marker) continue;
+    const sync = () => { marker.textContent = d.open ? '▼' : '▶'; };
+    d.addEventListener('toggle', sync);
+    sync();
+  }
 })();
 document.getElementById('vpsDnsEnabled').addEventListener('change', updateVpsDnsFields);
 document.getElementById('cfgTun').addEventListener('change', updateMihomoOptionStates);

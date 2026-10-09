@@ -66,6 +66,13 @@
       "scenario_prefixes": [
         "UX08 stale coverage offers rebuild and retains chosen domains"
       ]
+    },
+    {
+      "id": "UX-09",
+      "summary": "Стрелки раскрывающихся панелей не меняют направление после открытия",
+      "scenario_prefixes": [
+        "UX09 chevrons follow native open state and nested keyboard toggles"
+      ]
     }
   ]
 }
