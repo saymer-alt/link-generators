@@ -6,6 +6,8 @@
 
 ### Added
 
+- **Synthetic field acceptance (v1.11-dev):** локальная воспроизводимая лаборатория, 29 positive /20 negative scenarios, Project/Reverse/edits/Undo и реальные Mihomo31/32 CI parse checks. Reverse блокирует WG dialer на непереносимый direct node; web validator отклоняет invalid emitted WG IPv4 и flat endpoint ports вне1..65535. Generated runtime не изменён; network/handshake не выполняются. Отчёт: docs/research/V1.11-REAL-FIXTURE-ACCEPTANCE.md.
+
 - **Independent Reverse profile repair:** vps-gateway с DNS OFF сохраняет профиль и auto-route:false; device/MTU/DNS переносятся из YAML, выключенный TUN остаётся выключенным. Project принимает фактический dashboard `yacd`; custom health-check восстанавливается через `__custom__`. Полная исходная модель сохраняется в passthrough как recovery evidence, новый Build её не накладывает; произвольная YAML parity не обещается. Negative/byte-parity regression: `independent-reverse-profiles-browser`; 8+7 owner journey также проходит реальный `mihomo -t` в CI matrix.
 
 - **Independent boundary repair (v1.11-dev):** project JSON limits depth/nodes, validates boolean/string fields and unique WG IDs, rejects dangerous keys. VRG masks known secret values before truncation in both Builder and Studio, including aria/status/select labels; Studio focus no longer changes Builder focus, keyboard focus survives rerender. Negative regressions: `independent-boundaries-browser`.
