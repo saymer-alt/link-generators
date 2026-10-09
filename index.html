@@ -237,6 +237,11 @@
   .vrg-focus-rect{stroke:var(--accent,#0074d9)!important;stroke-width:2.5}
   g[vrg-focus] .vrg-node-rect{stroke:var(--accent,#0074d9);stroke-width:2.5}
   g:focus .vrg-node-rect,g:focus-visible .vrg-node-rect{stroke:var(--accent,#0074d9);stroke-width:2.5}
+  .vrg-nav{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;min-width:0}
+  .vrg-nav .btn{padding:5px 10px;flex:0 1 auto}
+  .vrg-viewport{max-width:100%;min-width:0}
+  .vrg-viewport svg{display:block;max-width:none;touch-action:none}
+  .vrg-viewport.vrg-panning{cursor:grabbing;user-select:none}
 </style>
 </head>
 <body>
@@ -503,6 +508,7 @@
                 <input type="password" id="rtSecretInput" placeholder="API secret (необязательно)" style="flex:1 1 140px;min-width:0;padding:4px 8px" aria-label="API secret контроллера (только память)" autocomplete="off">
                 <button type="button" class="btn btn-gray" id="rtFetchBtn">📥 Получить узлы из Mihomo</button>
               </div>
+              <div class="hint">Если адрес не указан, используется 192.168.1.1:9090. Запрос выполняется только по нажатию кнопки.</div>
               <div class="hint">Адрес и secret не сохраняются (только память вкладки, до перезагрузки страницы). Запрос идёт из браузера напрямую в контроллер — через проектный воркер он не передаётся никогда. Если браузер не пускает (CORS / разрешение локальной сети / listen-адрес) — используйте «Вставить JSON» или «Загрузить .json» ниже: откройте <code>http://&lt;контроллер&gt;/providers/proxies</code> в соседней вкладке и скопируйте ответ.</div>
               <div class="tier-add-row">
                 <button type="button" class="btn btn-gray" id="rtPasteBtn">📋 Вставить JSON</button>
@@ -551,6 +557,25 @@
       <div class="hint" id="policyRoutingOffHint">Доменные категории («AI», «YouTube»…) направляются в отдельные группы выхода через <code>RULE-SET</code>; состав подписки меняется — правила не пересобираются. Подробно — <a href="quick-start.html">❓ Быстрый старт</a>.</div>
       <div id="policyRoutingPanel" style="display:none">
         <div class="hint">Доменное правило → стабильная логическая группа → <code>proxy-provider</code> подписки → текущий живой узел. Правила ссылаются на группы, а не на серверы: состав подписки может меняться — правила не требуют пересборки. Порядок политик = порядок правил; завершающее <code>MATCH,GLOBAL</code> остаётся правилом по умолчанию. Требуется Mihomo ≥ 1.19.27 (empty-fallback), инлайн rule-провайдеры ≥ 1.19.1.</div>
+        <div id="policyAddControls" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-gray" id="btnPolicyAdd" type="button">➕ Добавить политику</button>
+          <span style="min-width:0;flex:1 1 220px">
+            <label class="label" for="policyPresetSelect" style="display:inline">Шаблон для новой политики:</label>
+            <select id="policyPresetSelect" style="max-width:100%">
+              <option value="ai">🤖 AI</option>
+              <option value="media">📺 YouTube / Media</option>
+              <option value="telegram">✈️ Telegram</option>
+              <option value="google">🔎 Google</option>
+              <option value="github">🐙 GitHub / Development</option>
+              <option value="microsoft">🪟 Microsoft</option>
+              <option value="apple">🍎 Apple</option>
+              <option value="social">💬 Social Networks</option>
+              <option value="direct">⬇️ Direct (свои домены мимо прокси)</option>
+              <option value="proxy">🚀 Proxy (свои домены через прокси)</option>
+            </select>
+          </span>
+        </div>
+        <div id="policyAddStatus" class="hint" role="status" aria-live="polite" aria-atomic="true"></div>
         <div id="policyCards"></div>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <button type="button" class="btn btn-gray" id="mtImportBtn">📂 Импорт MagiTrickle (.mtrickle)</button><span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Импорт MagiTrickle">?</button><span class="ctx-help-pop" role="note">Локальный импорт JSON-экспорта MagiTrickle: файл читается в браузере и никуда не отправляется. Группы превращаются в политики, маршруты-интерфейсы маппятся на таргеты (mitun0 → GLOBAL, blackhole → REJECT, остальные — «Пропустить»); отключённые правила/группы, дубли и неизвестные типы пропускаются с честным итогом. Повторный импорт добавляется к текущим политикам.</span></span>
@@ -573,24 +598,6 @@
           </div>
         </div>
         <div id="mtImportResult" class="hint" hidden></div>
-        <div style="margin-top:8px">
-          <button class="btn btn-gray" id="btnPolicyAdd" type="button">➕ Добавить политику</button>
-          <span style="margin-left:8px">
-            <label class="label" for="policyPresetSelect" style="display:inline">Шаблон для новой политики:</label>
-            <select id="policyPresetSelect">
-              <option value="ai">🤖 AI</option>
-              <option value="media">📺 YouTube / Media</option>
-              <option value="telegram">✈️ Telegram</option>
-              <option value="google">🔎 Google</option>
-              <option value="github">🐙 GitHub / Development</option>
-              <option value="microsoft">🪟 Microsoft</option>
-              <option value="apple">🍎 Apple</option>
-              <option value="social">💬 Social Networks</option>
-              <option value="direct">⬇️ Direct (свои домены мимо прокси)</option>
-              <option value="proxy">🚀 Proxy (свои домены через прокси)</option>
-            </select>
-          </span>
-        </div>
         <div class="hint" id="policyRoutingHint"></div>
         <details id="routingDiagnostics" class="advanced-panel" style="margin-top:12px">
           <summary><span>▶</span> <span class="advanced-badge">DIAGNOSTICS</span> <span>Routing Inspector / Diagnostics</span></summary>
@@ -606,7 +613,9 @@
             <input type="text" id="rdTestInput" placeholder="gemini.google.com" style="flex:1;min-width:180px;padding:4px 8px">
             <button type="button" class="btn btn-gray" id="rdTestBtn">Проверить</button>
           </div>
-          <div id="rdResult" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+          <div id="rdEffectiveInput" class="hint"></div>
+          <div id="rdResult" class="hint" style="margin-top:6px;white-space:pre-line" aria-live="polite"></div>
+          <button type="button" class="btn btn-gray" id="rdBuildCheckBtn" hidden>Собрать конфигурацию и проверить</button>
           <details id="ruleProviderExplorer" style="margin-top:8px">
             <summary style="cursor:pointer"><span>▶</span> <span>Rule Provider Explorer</span></summary>
             <div class="hint">Инвентарь <code>rule-providers</code> итогового конфига (результат последнего Build), в порядке YAML. Inline-содержимое доступно локально; содержимое внешних провайдеров браузером не загружается (fetch/HEAD не выполняются), MRS не декодируется. Поиск — case-insensitive подстрока по уже доступному inline-payload, без сохранения. Только чтение — конфиг не меняется.</div>
@@ -622,10 +631,11 @@
               <button type="button" class="btn btn-gray" id="dcRunBtn">Проверить покрытие</button>
             </div>
             <div id="dcResults" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+            <button type="button" class="btn btn-gray" id="dcBuildCheckBtn" hidden>Собрать и проверить покрытие</button>
           </details>
           <details id="vrgPanel" style="margin-top:8px">
             <summary style="cursor:pointer">Visual Routing Graph</summary>
-            <div class="hint" style="margin-top:6px">Граф зависимостей из последнего Build: правила → группы → провайдеры/прокси. Клик по узлу — фокус на его зависимостях. Толь�ко доказанные CDG-связи; динамические группы (select/url-test/fallback) показывают состав, не выбор участника. Не меняет конфигурацию.</div>
+            <div class="hint" style="margin-top:6px">Граф зависимостей из последнего Build: правила → группы → провайдеры/прокси. Клик по узлу — фокус на его зависимостях. Только доказанные CDG-связи; динамические группы (select/url-test/fallback) показывают состав, не выбор участника. Не меняет конфигурацию.</div>
             <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <label class="label" for="vrgFocusSelect" style="display:inline">Фокус:</label>
               <select id="vrgFocusSelect" aria-label="Фокус графа" style="max-width:280px;padding:4px 8px"><option value="">— весь граф —</option></select>
@@ -4228,9 +4238,9 @@ function renderRuntimeSummary() {
 // авто-сканирования и запросов на ввод: запрос только по явному клику.
 function normalizeRuntimeController(input) {
   let value = String(input || '').trim().replace(/\/+$/, '');
-  if (!value) throw new Error('Укажите адрес контроллера (например 192.168.1.1:9090)');
+  if (!value) value = 'http://192.168.1.1:9090';
   if (!/^https?:\/\//i.test(value)) {
-    if (!/^[a-z0-9.-]+(?::\d+)?$/i.test(value) || !/:\d+$/.test(value)) {
+    if (!/^(?:[a-z0-9.-]+|\[[a-f0-9:]+\]):\d+$/i.test(value)) {
       throw new Error('Адрес контроллера: ожидается host:port или http(s)://host:port');
     }
     value = 'http://' + value;
@@ -4239,8 +4249,10 @@ function normalizeRuntimeController(input) {
   try { u = new URL(value); } catch (_) { throw new Error('Адрес контроллера: некорректный URL'); }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Адрес контроллера: только http/https');
   if (!u.hostname) throw new Error('Адрес контроллера: нет host');
+  if (u.username || u.password) throw new Error('Адрес контроллера: credentials в URL запрещены; используйте поле API secret');
   // Сохраняем path, если пользователь указал базу с префиксом; отсекаем query/hash.
-  return u.origin + (u.pathname && u.pathname !== '/' ? u.pathname.replace(/\/+$/, '') : '');
+  const path = u.pathname.replace(/\/+$/, '');
+  return u.origin + (path === '/ui' ? '' : path);
 }
 
 let rtImportSeq = 0, rtImportAbort = null;
@@ -4259,6 +4271,10 @@ async function fetchRuntimeProviders() {
   catch (e) { say('❌ ' + e.message); return; }
   rtControllerMemory = base; // только память вкладки
   const secret = (document.getElementById('rtSecretInput').value || '').trim();
+  if (secret && !document.getElementById('rtControllerInput').value.trim() &&
+      !window.confirm('Адрес не указан. Отправить API secret на ' + base + '/providers/proxies?')) {
+    say('Запрос отменён. API secret не отправлен.'); return;
+  }
   const headers = { Accept: 'application/json' };
   if (secret) headers.Authorization = 'Bearer ' + secret;
   say('Загрузка…');
@@ -4274,20 +4290,20 @@ async function fetchRuntimeProviders() {
       // HTTP-ответ — можно утверждать точно.
       const label = resp.status === 401 ? 'HTTP 401: секрет не принят (auth failed)'
         : resp.status === 403 ? 'HTTP 403: доступ запрещён (forbidden)'
+        : resp.status === 404 ? 'HTTP 404: API /providers/proxies не найден. Проверьте адрес и API-префикс.'
         : 'HTTP ' + resp.status;
       say('❌ ' + label);
       return;
     }
     const text = await resp.text();
     if (seq !== rtImportSeq || controller.signal.aborted) return;
-    applyRuntimePayload(text, 'fetch');
-    say('✔ Список узлов получен из Mihomo runtime.');
+    if (applyRuntimePayload(text, 'fetch')) say('✔ Список узлов получен из Mihomo runtime.');
   } catch (e) {
     if (seq !== rtImportSeq) return;
     if (controller.signal.aborted) { say('❌ Время ожидания Mihomo controller истекло. Повторите запрос или загрузите JSON локально.'); return; }
     // Generic TypeError браузера не раскрывает причину: не выдумываем
     // «CORS_DENIED»/«LOCAL_NETWORK_PERMISSION_DENIED» без доказательств.
-    say('❌ Не удалось обратиться к Mihomo controller. Причиной может быть адрес/listen, CORS, разрешение браузера на локальную сеть или обычная сетевая недоступность. Используйте «Вставить JSON»/«Загрузить .json» — ответ откройте в соседней вкладке http://<контроллер>/providers/proxies.');
+    say('❌ Сетевой отказ: причина не установлена. Проверьте адрес/listen, CORS, разрешение локальной сети и mixed content (HTTPS-страница → HTTP-controller). Подробности: F12 → Console (или Ctrl+Shift+J). Безопасный ручной путь: «Вставить JSON»/«Загрузить .json» из GET /providers/proxies; secret никуда через прокси не передаётся.');
   } finally {
     clearTimeout(deadline);
     if (rtImportAbort === controller) rtImportAbort = null;
@@ -4300,12 +4316,13 @@ function applyRuntimePayload(rawJson, how) {
   const say = (text) => { status.textContent = text; status.style.display = text ? '' : 'none'; };
   let model;
   try { model = parseMihomoRuntimeProviders(rawJson); }
-  catch (e) { say('❌ ' + e.message); return; }
-  if (!model.providers.length) { say('❌ runtime JSON: ни одного провайдера в /providers/proxies'); return; }
+  catch (e) { say('❌ Некорректный API JSON: ' + e.message); return false; }
+  if (!model.providers.length) { say('❌ runtime JSON: ни одного провайдера в /providers/proxies'); return false; }
   runtimeProviderModel = { providers: model.providers, fetchedAt: new Date().toLocaleTimeString() };
   applyMergedSourceList();
   document.getElementById('subListControls').style.display = subscriptionListNames.length ? '' : 'none';
   say(how === 'paste' ? '✔ Runtime JSON разобран (paste).' : '✔ Runtime JSON разобран.');
+  return true;
 }
 
 function clearRuntimeList() {
@@ -4567,7 +4584,16 @@ function policyCardDom(card, index) {
 }
 
 function addPolicyCard(card) {
-  document.getElementById('policyCards').appendChild(policyCardDom(card || {}));
+  const el = policyCardDom(card || {});
+  document.getElementById('policyCards').appendChild(el);
+  return el;
+}
+
+function nextPolicyName(base) {
+  const used = new Set(Array.from(document.querySelectorAll('#policyCards .policy-name'), el => el.value.trim()));
+  let name = base || 'POLICY', suffix = 2;
+  while (used.has(name)) name = (base || 'POLICY') + '-' + suffix++;
+  return name;
 }
 
 // === MAGITRICKLE IMPORT (.mtrickle) ===
@@ -8142,12 +8168,13 @@ bindTieredUI();
 // чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
 // ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
 // но визуально помечен как previous Build.
-const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'rtControllerInput', 'rtSecretInput', 'ptSpecInput', 'csImportInput', 'csDomainInput', 'csRuleProbe']);
+const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'vrgFocusSelect', 'policyPresetSelect', 'rtControllerInput', 'rtSecretInput', 'ptSpecInput', 'csImportInput', 'csDomainInput', 'csRuleProbe']);
 let lastBuildFingerprint = null;
 
 function buildStateFingerprint() {
   const parts = [];
   document.querySelectorAll('#tab-mihomo input, #tab-mihomo select, #tab-mihomo textarea').forEach(el => {
+    if (el.closest('#routingDiagnostics')) return; // read-only queries/navigation, включая lazy Explorer search
     if (BUILD_STALE_EXCLUDED_IDS.has(el.id)) return;
     if (el.type === 'file') return; // содержимое файлов отражено в wgProfiles
     parts.push((el.id || el.name || el.className) + '=' + (el.type === 'checkbox' ? String(el.checked) : el.value));
@@ -8236,14 +8263,58 @@ function updateRoutingDiagnostics(yaml) {
     renderRuleProviderExplorer(null);
   }
 }
+let diagnosticActionSeq = 0;
+let diagnosticPendingOut = null;
+function diagnosticsCurrent() {
+  return !!lastRoutingDoc && lastBuildFingerprint !== null && buildStateFingerprint() === lastBuildFingerprint;
+}
+function offerDiagnosticBuild(kind) {
+  const out = document.getElementById(kind === 'inspector' ? 'rdResult' : 'dcResults');
+  const button = document.getElementById(kind === 'inspector' ? 'rdBuildCheckBtn' : 'dcBuildCheckBtn');
+  button.hidden = false;
+  if (kind === 'inspector') document.getElementById('rdEffectiveInput').textContent = '';
+  out.textContent = lastRoutingDoc
+    ? '⚠ Настройки изменены: предыдущая сборка не актуальна. Пересоберите конфигурацию для проверки.'
+    : 'Проверка анализирует YAML офлайн. Сначала соберите конфигурацию кнопкой ниже.';
+}
+async function buildAndRunDiagnostic(kind) {
+  const seq = ++diagnosticActionSeq;
+  const inputId = kind === 'inspector' ? 'rdTestInput' : 'dcInput';
+  const out = document.getElementById(kind === 'inspector' ? 'rdResult' : 'dcResults');
+  const input = document.getElementById(inputId).value;
+  const sources = document.getElementById('mihomoInput').value + '\n' +
+    (document.getElementById('cfgAutoWhitelist').checked ? document.getElementById('whitelistInput').value : '');
+  if (/https?:\/\//i.test(sources) && !window.confirm('Собрать конфигурацию и продолжить офлайн-проверку? Вход содержит URL: нормальный Build может загрузить подписки напрямую, а при сетевом отказе — через проектный fallback-воркер, которому будет виден URL подписки. Проверяемые домены по сети не запрашиваются.')) return;
+  const buttons = ['rdBuildCheckBtn', 'dcBuildCheckBtn'].map(id => document.getElementById(id));
+  buttons.forEach(b => { b.disabled = true; });
+  diagnosticPendingOut = out;
+  out.textContent = 'Сборка конфигурации… После успешной сборки проверка продолжится офлайн.';
+  try {
+    const built = await buildMihomo();
+    if (seq !== diagnosticActionSeq || document.getElementById(inputId).value !== input) return;
+    if (!built || !diagnosticsCurrent() || MIHOMO_VALIDATION_STATE.state !== 'VALID') {
+      out.textContent = 'Проверка не выполнена: Build не завершился успешно. Проверьте сообщение Build, ссылки / URL-подписки, WG/AWG-профили и настройки. При изменении ввода во время сборки повторите действие.';
+      document.getElementById('mihomoInput').focus();
+      return;
+    }
+    if (kind === 'inspector') runRoutingInspector(); else runDomainCoverage();
+  } finally { buttons.forEach(b => { b.disabled = false; }); if (diagnosticPendingOut === out) diagnosticPendingOut = null; }
+}
+document.addEventListener('input', e => {
+  if (e.target && (e.target.id === 'rdTestInput' || e.target.id === 'dcInput')) {
+    diagnosticActionSeq++;
+    if (diagnosticPendingOut) diagnosticPendingOut.textContent = 'Запрос проверки изменён. После завершения Build повторите проверку нового ввода.';
+  }
+});
+
 function runRoutingInspector() {
+  diagnosticActionSeq++;
   const out = document.getElementById('rdResult');
   if (!out) return;
-  if (!lastRoutingDoc) {
-    out.textContent = 'Сначала выполните Build — Inspector анализирует итоговый сгенерированный конфиг.';
-    return;
-  }
-  const input = document.getElementById('rdTestInput').value;
+  if (!diagnosticsCurrent()) { offerDiagnosticBuild('inspector'); return; }
+  document.getElementById('rdBuildCheckBtn').hidden = true;
+  const input = document.getElementById('rdTestInput').value.trim() || 'gemini.google.com';
+  document.getElementById('rdEffectiveInput').textContent = 'Офлайн-проверка: ' + input;
   const res = routingInspect(lastRoutingDoc, input);
   const labelOf = (idx) => {
     const rule = lastRoutingDoc.rules[idx];
@@ -8279,6 +8350,8 @@ function runRoutingInspector() {
 document.addEventListener('click', (e) => {
   if (e.target && e.target.id === 'rdTestBtn') { e.preventDefault(); runRoutingInspector(); }
   if (e.target && e.target.id === 'dcRunBtn') { e.preventDefault(); runDomainCoverage(); }
+  if (e.target && e.target.id === 'rdBuildCheckBtn') { e.preventDefault(); buildAndRunDiagnostic('inspector'); }
+  if (e.target && e.target.id === 'dcBuildCheckBtn') { e.preventDefault(); buildAndRunDiagnostic('coverage'); }
 });
 
 // === Physical Topology UI (v1.11 PHASE 10): read-only вертикальный срез ===
@@ -8611,7 +8684,7 @@ async function ptRuntimeCheck() {
     const perNode = {};
     perNode[n.id] = { status: 'FETCHING' };
     if (seq !== ptRuntimeSeq) return; // начата новая проверка
-    if (!p.endpoint) {
+    if (!String(p.endpoint || '').trim()) {
       csRuntimeSet(n.id, { status: 'NOT_CHECKED', reason: 'endpoint не задан' }, seq);
       continue;
     }
@@ -8909,7 +8982,9 @@ function csClearStudio() {
   document.getElementById('csSecretsNote').style.display = 'none';
   document.getElementById('csEditorCard').style.display = 'none';
   const csVrg = document.getElementById('csVrgSvgWrap');
-  if (csVrg) csVrg.textContent = '';
+  if (csVrg) { vrgDispose(csVrg, true); csVrg.textContent = ''; }
+  const csNav = document.getElementById('csVrgSvgWrapNav');
+  if (csNav) csNav.querySelectorAll('button').forEach(b => { b.disabled = true; });
   const rbBtn = document.getElementById('csRestoreBtn');
   if (rbBtn) rbBtn.style.display = 'none';
   const rbOut = document.getElementById('csRestoreOut');
@@ -9490,6 +9565,90 @@ document.addEventListener('change', (e) => {
 const VRG_NS = 'http://www.w3.org/2000/svg';
 let vrgFocusId = '';
 const vrgStudioFocus = new WeakMap();
+const vrgNavigation = new WeakMap();
+
+function vrgDispose(wrap, forget) {
+  const old = vrgNavigation.get(wrap);
+  if (old) { old.abort.abort(); old.resize.disconnect(); }
+  if (forget) vrgNavigation.delete(wrap);
+}
+// Одна навигация для обоих consumers; масштаб меняет размеры SVG, pan —
+// scroll offsets. CDG/layout и YAML не пересчитываются на pointermove.
+function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
+  const previous = vrgNavigation.get(wrap);
+  let nav = document.getElementById(wrap.id + 'Nav');
+  if (!nav) {
+    nav = document.createElement('div'); nav.id = wrap.id + 'Nav'; nav.className = 'vrg-nav';
+    nav.setAttribute('role', 'group'); nav.setAttribute('aria-label', 'Навигация по графу');
+    for (const [action, label, aria] of [['out', '−', 'Уменьшить масштаб'], ['in', '+', 'Увеличить масштаб'],
+      ['reset', '100%', 'Исходный масштаб 100%'], ['fit', 'Вписать граф', 'Вписать весь граф в область'],
+      ['all', 'Весь граф', 'Сбросить фокус графа']]) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-gray';
+      b.textContent = label; b.dataset.vrgAction = action; b.setAttribute('aria-label', aria); nav.appendChild(b);
+    }
+    const indicator = document.createElement('output'); indicator.className = 'vrg-scale';
+    indicator.setAttribute('aria-label', 'Текущий масштаб графа'); indicator.setAttribute('aria-live', 'polite');
+    nav.appendChild(indicator);
+    const hint = document.createElement('span'); hint.className = 'hint';
+    hint.textContent = 'Перетаскивайте пустую область · Alt + колесо: масштаб · все данные доступны в текстовой альтернативе';
+    nav.appendChild(hint); wrap.before(nav);
+  }
+  nav.querySelectorAll('button').forEach(b => { b.disabled = false; });
+  wrap.classList.add('vrg-viewport'); wrap.setAttribute('role', 'region');
+  const abort = new AbortController(), options = { signal: abort.signal };
+  const state = { doc, abort, resize: null, scale: previous?.doc === doc ? previous.scale : 1,
+    fit: previous?.doc === doc ? previous.fit : true };
+  const viewport = () => {
+    wrap.style.height = Math.min(view.height, Math.max(120, window.innerHeight * (wrap.id === 'vrgSvgWrap' ? .7 : .5))) + 'px';
+  };
+  const apply = (scale, center) => {
+    const old = state.scale;
+    const x = (wrap.scrollLeft + wrap.clientWidth / 2) / old;
+    const y = (wrap.scrollTop + wrap.clientHeight / 2) / old;
+    state.scale = Math.max(.05, Math.min(2.5, scale));
+    svg.setAttribute('width', String(view.width * state.scale));
+    svg.setAttribute('height', String(view.height * state.scale));
+    nav.querySelector('.vrg-scale').textContent = Math.round(state.scale * 100) + '%';
+    if (center) { wrap.scrollLeft = x * state.scale - wrap.clientWidth / 2; wrap.scrollTop = y * state.scale - wrap.clientHeight / 2; }
+  };
+  const fit = () => { viewport(); apply(Math.min(1, (wrap.clientWidth - 2) / view.width, (wrap.clientHeight - 2) / view.height), false); wrap.scrollLeft = wrap.scrollTop = 0; };
+  nav.addEventListener('click', e => {
+    const action = e.target.closest('[data-vrg-action]')?.dataset.vrgAction;
+    if (!action) return;
+    if (action === 'all') { resetFocus(); return; }
+    state.fit = action === 'fit';
+    if (state.fit) fit();
+    else apply(action === 'reset' ? 1 : state.scale + (action === 'in' ? .25 : -.25), true);
+  }, options);
+  let drag = null, suppressClick = false;
+  svg.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || !e.isPrimary) return;
+    suppressClick = false;
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, left: wrap.scrollLeft, top: wrap.scrollTop,
+      pan: !e.target.closest('g[tabindex]') };
+    if (drag.pan) { svg.setPointerCapture(e.pointerId); wrap.classList.add('vrg-panning'); e.preventDefault(); }
+  }, options);
+  svg.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.hypot(dx, dy) > 4) suppressClick = true;
+    if (drag.pan) { wrap.scrollLeft = drag.left - dx; wrap.scrollTop = drag.top - dy; }
+  }, options);
+  const finish = () => { drag = null; wrap.classList.remove('vrg-panning'); };
+  svg.addEventListener('pointerup', finish, options);
+  svg.addEventListener('pointercancel', finish, options);
+  svg.addEventListener('lostpointercapture', finish, options);
+  svg.addEventListener('click', e => { if (suppressClick) { e.preventDefault(); e.stopImmediatePropagation(); suppressClick = false; } }, { ...options, capture: true });
+  wrap.addEventListener('wheel', e => {
+    if (!e.altKey) return;
+    e.preventDefault(); state.fit = false; apply(state.scale + (e.deltaY < 0 ? .25 : -.25), true);
+  }, { ...options, passive: false });
+  state.resize = new ResizeObserver(() => { viewport(); if (state.fit && wrap.clientWidth) fit(); });
+  state.resize.observe(wrap);
+  vrgNavigation.set(wrap, state);
+  viewport();
+  if (state.fit && wrap.clientWidth) fit(); else apply(state.scale, false);
+}
 
 function vrgTruncateLabel(text, maxLen) {
   const s = String(text || '');
@@ -9503,15 +9662,20 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
   // полей маскируются и при повторении в имени/ID). Краскция ДО усечения —
   // обрезанный секрет не матчится и утёк бы частично.
   const R = typeof redact === 'function' ? redact : (s => csRedactText(s, doc));
+  vrgDispose(wrap);
   wrap.textContent = '';
+  const nav = document.getElementById(containerId + 'Nav');
+  if (nav) nav.querySelectorAll('button').forEach(b => { b.disabled = true; });
   const status = document.getElementById(containerId === 'vrgSvgWrap' ? 'vrgStatus' : containerId + 'Status');
   if (!doc) {
+    vrgNavigation.delete(wrap);
     if (status) status.textContent = stale ? '⚠ Snapshot предыдущей сборки.' : 'Сначала выполните Build / Разобрать.';
     if (textAltId) document.getElementById(textAltId).textContent = '';
     return;
   }
   let graph;
   try { graph = cdgBuildGraph(doc); } catch (e) {
+    vrgNavigation.delete(wrap);
     if (status) status.textContent = '✖ Не удалось построить граф: ' + String(e && e.message ? e.message : e).slice(0, 120);
     if (textAltId) document.getElementById(textAltId).textContent = '';
     return;
@@ -9590,6 +9754,11 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
     svg.appendChild(g);
   }
   wrap.appendChild(svg);
+  vrgAttachNavigation(wrap, svg, view, doc, () => {
+    if (containerId === 'vrgSvgWrap') { vrgFocusId = ''; vrgFillFocusSelect('vrgFocusSelect', doc); }
+    else vrgStudioFocus.delete(doc);
+    vrgRenderInto(containerId, doc, stale, textAltId, redact);
+  });
   // EVENING-03 A4: текстовая альтернатива
   if (textAltId) {
     const ta = document.getElementById(textAltId);
@@ -9650,7 +9819,7 @@ document.addEventListener('change', (e) => {
 
 function renderVrgBuilder() {
   const stale = document.getElementById('staleBuildWarn') && document.getElementById('staleBuildWarn').style.display === 'block';
-  vrgRenderInto('vrgSvgWrap', lastRoutingDoc, stale);
+  vrgRenderInto('vrgSvgWrap', lastRoutingDoc, stale, 'vrgTextAltOut');
   vrgFillFocusSelect('vrgFocusSelect', lastRoutingDoc);
 }
 
@@ -9658,12 +9827,12 @@ function renderVrgBuilder() {
 // Только отображение результатов ядра (cdgDomainCoverage); snapshot последнего
 // Build; STALE помечает каждую строку, скрытый Build не выполняется.
 function runDomainCoverage() {
+  diagnosticActionSeq++;
   const out = document.getElementById('dcResults');
   if (!out) return;
-  if (!lastRoutingDoc) {
-    out.textContent = 'Сначала выполните Build — покрытие анализирует итоговый сгенерированный конфиг.';
-    return;
-  }
+  if (!document.getElementById('dcInput').value.trim()) { out.textContent = 'Введите домены (по одному в строке).'; return; }
+  if (!diagnosticsCurrent()) { offerDiagnosticBuild('coverage'); return; }
+  document.getElementById('dcBuildCheckBtn').hidden = true;
   const stale = document.getElementById('staleBuildWarn') && document.getElementById('staleBuildWarn').style.display === 'block';
   const res = cdgDomainCoverage(lastRoutingDoc, document.getElementById('dcInput').value, { stale });
   if (!res.results.length) { out.textContent = 'Введите домены (по одному в строке).'; return; }
@@ -9972,6 +10141,7 @@ async function buildMihomo() {
   // не имеет права перезаписать более новый результат.
   mihomoValidationSeq++;
   const buildSeq = mihomoValidationSeq;
+  const buildFingerprint = buildStateFingerprint();
   setMihomoValidationState('VALIDATING');
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
@@ -9996,6 +10166,13 @@ async function buildMihomo() {
       }
       // Реестр dialer-целей от этого момента строится из inspected-ввода —
       // имена развёрнутых узлов совпадают с итоговым YAML (до инвалидиции).
+      // Click-only мутации (добавить/удалить карточку) не вызывают input/change.
+      // Проверяем пользовательский snapshot после последнего await и ДО
+      // собственных renderSubscriptionPreview/applyServerListFromSummary.
+      if (buildFingerprint !== buildStateFingerprint()) {
+        mihomoValidationSeq++; setMihomoValidationState('NOT_BUILT'); refreshBuildStaleness();
+        return false;
+      }
       mainInput = mainInspected.input;
       lastInspectedBuildInput = mainInput;
       lastInspectedFallbackInput = autoWhitelist ? fallbackPrepared : null;
@@ -10074,6 +10251,7 @@ async function buildMihomo() {
       yaml = yaml.replace(/^external-controller:\s*0\.0\.0\.0:9090\s*$/m, 'external-controller: 127.0.0.1:9090');
     }
 
+    if (buildSeq !== mihomoValidationSeq) return false;
     document.getElementById('mihomoOutput').value = yaml;
     updateRoutingDiagnostics(yaml);
     markBuildFresh();
@@ -10089,7 +10267,8 @@ async function buildMihomo() {
       showToast('⚠ Политики: ' + head + tail);
     }
     // Автоматическая проверка итогового YAML (после всех патчей), до Copy
-    runMihomoValidation(yaml);
+    await runMihomoValidation(yaml);
+    return buildSeq + 1 === mihomoValidationSeq && MIHOMO_VALIDATION_STATE.state === 'VALID';
   } catch (e) {
     if (buildSeq !== mihomoValidationSeq) return;
     resetCompatSummary();
@@ -10552,9 +10731,15 @@ document.getElementById('webUiSelect').addEventListener('change', updateWebUiVis
 document.getElementById('cfgPolicyRouting').addEventListener('change', updatePolicyRoutingVisibility);
 document.getElementById('cfgAutoWhitelist').addEventListener('change', updatePolicyRoutingVisibility);
 document.getElementById('cfgSubMode').addEventListener('change', updatePolicyRoutingVisibility);
-document.getElementById('btnPolicyAdd').addEventListener('click', () => {
+document.getElementById('btnPolicyAdd').addEventListener('click', (event) => {
+  // Второй click физического dblclick не создаёт лишнюю политику; отдельные
+  // нажатия/keyboard activation не блокируются временным debounce.
+  if (event.detail > 1) return;
   const preset = POLICY_PRESETS[document.getElementById('policyPresetSelect').value] || {};
-  addPolicyCard(preset);
+  const card = addPolicyCard({ ...preset, name: nextPolicyName(preset.name) });
+  card.querySelector('.policy-name').focus({ preventScroll: true });
+  card.scrollIntoView({ block: 'start', behavior: 'instant' });
+  document.getElementById('policyAddStatus').textContent = 'Политика добавлена: ' + card.querySelector('.policy-name').value;
 });
 updateExcludeFilterVisibility();
 // Идентичность устройства (#156/#163): стабильный HWID + явное управление локальным реестром.
