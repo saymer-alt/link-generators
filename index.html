@@ -10135,13 +10135,14 @@ async function rbLoadProject(file) {
   const beforeRead = rbProjectFingerprint(rbCollectProject());
   if (file.size > RB_PROJECT_MAX_BYTES) return showToast('❌ Проект: файл слишком большой', true);
   let text = '';
-  try { text = await file.text(); } catch (e) { return showToast('❌ Не удалось прочитать файл: ' + (e && e.message ? e.message : e), true); }
+  try { text = await file.text(); } catch (_) { return showToast('❌ Не удалось прочитать файл проекта (значения скрыты).', true); }
   const parsed = rbParseProjectText(text);
   if (!parsed.ok) return showToast('❌ Проект: ' + parsed.error, true);
   const project = parsed.project;
   if (beforeRead !== rbProjectFingerprint(rbCollectProject())) return showToast('Builder изменился во время чтения файла. Загрузите проект повторно.', true);
-  const hasState = document.getElementById('mihomoInput').value.trim() || wgProfiles.length;
-  if (hasState && !confirm('Загрузить проект вместо текущего состояния Builder? Прежнее состояние можно вернуть кнопкой «↩︎ Отменить восстановление».')) {
+  const counts = rbProjectCounts(project);
+  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
+  if (!confirm(preview)) {
     return showToast('Загрузка проекта отменена.');
   }
   const snapshot = rbCollectProject();

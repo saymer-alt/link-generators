@@ -52,7 +52,8 @@ function makeWgFiles() {
   page.setDefaultTimeout(25000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('dialog', d => d.accept());
+  const dialogs = [];
+  page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
   if (process.env.JS_YAML_PATH) await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ path: process.env.JS_YAML_PATH, contentType: 'text/javascript' }));
 
   const build = async (gate) => {
@@ -126,6 +127,7 @@ function makeWgFiles() {
   delete expected.meta.created;
   assert.deepEqual(restored, expected, 'Project Restore: состояние поле-в-поле');
   ok('Project Restore: состояние Builder восстановлено поле-в-поле');
+  assert.ok(dialogs.some(t => t.includes('Предпросмотр проекта: подписок 6') && t.includes('WG/AWG 8')), 'Load previews actual composition and requires explicit Confirm in a new session');
 
   await build(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state));
   assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'VALID');
