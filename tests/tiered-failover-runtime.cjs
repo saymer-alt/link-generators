@@ -1,7 +1,7 @@
 // NIGHT-01 #148 runtime lab: Tiered Failover semantics on real local Mihomo.
 // Deterministic: mock HTTP CONNECT outbounds (alive/dead switchable), local
 // health responder, file provider for the provider-tier scenario. No external
-// endpoints, no real credentials, no TUN, no watchdog.
+// endpoints, no real credentials, no TUN.
 //
 // Evidence model (CONSTITUTION.md): this harness produces RUNTIME-PROVEN facts
 // for TCP/HTTP health semantics on the exact binary under test; UDP and manual
@@ -20,23 +20,21 @@ const http = require('node:http');
 const { spawn, execFileSync } = require('node:child_process');
 const yaml = require(process.env.JS_YAML_PATH);
 const binary = process.env.MIHOMO_BIN;
+const observer = require('../tools/tiered-stability/observe.cjs');
+const { freeMixed } = require('../tools/tiered-stability/ports.cjs');
 assert.ok(binary && process.env.TEST_OUTPUT_DIR, 'Set MIHOMO_BIN, JS_YAML_PATH, TEST_OUTPUT_DIR');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const listen = server => new Promise(r => server.listen(0, '127.0.0.1', () => r(server.address().port)));
+const listen = server => new Promise((r, reject) => { server.once('error', e=>{observer.event('bind-error',observer.error(e));reject(e);}); server.listen(0, '127.0.0.1', () => { observer.event('listen', {port:server.address().port}); r(server.address().port); }); });
 async function freePort() { const s = net.createServer(); const p = await listen(s); await new Promise(r => s.close(r)); return p; }
-async function until(fn, message, budget = 15000) {
-  const end = Date.now() + budget;
-  let last;
-  while (Date.now() < end) { try { last = await fn(); if (last) return last; } catch {} await sleep(100); }
-  throw Error(message + ': last=' + JSON.stringify(last));
-}
+const until = observer.until;
 async function mock(name) {
-  const node = { name, alive: true, attempts: 0, requests: 0, sockets: new Set() };
+  const node = { name, alive: true, attempts: 0, requests: 0, connects:0, rejected:0, health:[], sockets: new Set() };
+  observer.mocks.push(node);
   node.server = net.createServer(socket => {
     node.attempts++;
     node.sockets.add(socket);
     socket.on('close', () => node.sockets.delete(socket));
-    socket.on('error', () => {});
+    socket.on('error', e => observer.event('mock-error',{name,...observer.error(e)}));
     if (!node.alive) { socket.destroy(); return; }
     let buffer = '', connected = false;
     socket.on('data', data => {
@@ -45,26 +43,31 @@ async function mock(name) {
       while ((end = buffer.indexOf('\r\n\r\n')) !== -1) {
         const request = buffer.slice(0, end); buffer = buffer.slice(end + 4);
         if (!connected) {
-          if (!request.startsWith('CONNECT 127.0.0.1:')) { socket.destroy(); return; }
+          if (!request.startsWith('CONNECT 127.0.0.1:')) { node.rejected++; observer.event('connect-rejected',{name}); socket.destroy(); return; }
+          node.connects++;
           connected = true;
           socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
         } else {
           node.requests++;
           const head = request.startsWith('HEAD ');
+          const healthObservation=request.split('\r\n')[0].includes('/health')?{requestedAt:Date.now(),method:head?'HEAD':'GET'}:null;
+          if(healthObservation) { node.health.push(healthObservation); if(node.health.length>100)node.health.shift(); }
           const body = head ? '' : name;
-          setTimeout(() => socket.end('HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: ' + body.length + '\r\n\r\n' + body), 5);
+          setTimeout(() => { if(healthObservation){healthObservation.responseAt=Date.now();observer.event('health-response',{name,latencyMs:healthObservation.responseAt-healthObservation.requestedAt,destroyed:socket.destroyed});} socket.end('HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: ' + body.length + '\r\n\r\n' + body); }, 5);
         }
       }
     });
   });
   node.port = await listen(node.server);
-  node.setAlive = alive => { node.alive = alive; if (!alive) for (const socket of node.sockets) socket.destroy(); };
+  observer.servers.push(node.server);
+  node.setAlive = alive => { node.alive = alive; observer.event('mock-alive',{name,alive}); if (!alive) for (const socket of node.sockets) socket.destroy(); };
   node.proxy = { name, type: 'http', server: '127.0.0.1', port: node.port, username: 'test', password: 'test' };
   return node;
 }
 function requestThrough(port) {
   return new Promise((resolve, reject) => {
     const req = http.get({ host: '127.0.0.1', port, path: 'http://127.0.0.1:18080/data', agent: false }, res => {
+      observer.event('http-response',{port,statusCode:res.statusCode});
       let text = ''; res.on('data', d => text += d); res.on('end', () => resolve(text));
     });
     req.setTimeout(3000, () => req.destroy(Error('request timeout'))); req.on('error', reject);
@@ -83,7 +86,8 @@ function group(name, type, proxies, use) {
 }
 async function session(mihomoGroups, label, extraDoc, leafProxies) {
   const dir = path.resolve(process.env.TEST_OUTPUT_DIR, label); fs.mkdirSync(dir, { recursive: true });
-  const control = await freePort(), mixed = await freePort();
+  const control = await freePort(), mixed = await freeMixed(data=>observer.event('port-candidate-rejected',data));
+  assert.notEqual(control,mixed,'controller and mixed ports must differ');
   const doc = Object.assign({
     'mixed-port': mixed,
     'bind-address': '127.0.0.1',
@@ -97,29 +101,29 @@ async function session(mihomoGroups, label, extraDoc, leafProxies) {
     rules: ['MATCH,ROOT']
   }, extraDoc || {});
   const config = path.join(dir, 'config.yaml'); fs.writeFileSync(config, yaml.dump(doc));
+  observer.ensureRunning();
   const child = spawn(binary, ['-d', dir, '-f', config], { windowsHide: true });
-  let logs = ''; child.stdout.on('data', d => logs += d); child.stderr.on('data', d => logs += d);
-  const get = async route => (await fetch(`http://127.0.0.1:${control}${route}`, { headers: { Authorization: 'Bearer local-test' }, signal: AbortSignal.timeout(3000) })).json();
-  return { dir, child, get, control, mixed, logs: () => logs, config };
+  let logs = ''; const append=d=>{logs=(logs+d).slice(-65536);s.startupLog=(s.startupLog+d).slice(0,8192);s.errorLines.push(...String(d).split(/\r?\n/).filter(line=>/level=(error|fatal)|bind:|panic:/i.test(line)));s.errorLines=s.errorLines.slice(-40);}; child.stdout.on('data', append); child.stderr.on('data', append);
+  const get = async route => { const response=await fetch(`http://127.0.0.1:${control}${route}`, { headers: { Authorization: 'Bearer local-test' }, signal: AbortSignal.timeout(3000) }); if(!response.ok)throw Error('controller HTTP '+response.status); return observer.controller(s,route,await response.json()); };
+  const s={ dir, child, get, control, mixed, logs: () => logs, config, startupLog:'', errorLines:[] }; observer.addSession(s); return s;
 }
 async function stopSession(s) {
-  // Windows: child.kill() может не завершить процесс/дерево — форсируем taskkill.
-  if (process.platform === 'win32') { try { require('node:child_process').execSync('taskkill /pid ' + s.child.pid + ' /T /F', { stdio: 'ignore' }); } catch {} }
-  else s.child.kill();
-  await new Promise(r => { const t = setTimeout(() => { try { s.child.kill('SIGKILL'); } catch {} r(); }, 3000); s.child.once('close', () => { clearTimeout(t); r(); }); });
+  await observer.stop(s);
   await sleep(300);
-  fs.writeFileSync(path.join(s.dir, 'mihomo.log'), s.logs());
 }
 
 // Global watchdog: a hung lab must never block the night queue.
-const LAB_WATCHDOG = setTimeout(() => { console.error('LAB WATCHDOG: hard timeout 180s'); process.exit(3); }, 180000);
+const LAB_WATCHDOG = setTimeout(() => { console.error('LAB WATCHDOG: hard timeout 180s'); observer.finish(Error('LAB WATCHDOG: hard timeout 180s')).finally(()=>process.exit(3)); }, 180000);
+for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>{clearTimeout(LAB_WATCHDOG);observer.finish(Error(signal)).finally(()=>process.exit(1));});
 
 (async () => {
   fs.mkdirSync(process.env.TEST_OUTPUT_DIR, { recursive: true });
   const version = execFileSync(binary, ['-v'], { encoding: 'utf8' }).trim();
+  observer.setVersion(version);
   const evidence = { version, startedAt: new Date().toISOString(), scenarios: {} };
   const health = http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ok'); });
   const healthPort = await listen(health);
+  observer.servers.push(health);
   PROBE.url = `http://127.0.0.1:${healthPort}/health`;
   let providerFile = '';
   const writeProvider = members => fs.writeFileSync(providerFile, yaml.dump({ proxies: members.map(m => m.proxy) }));
@@ -127,10 +131,10 @@ const LAB_WATCHDOG = setTimeout(() => { console.error('LAB WATCHDOG: hard timeou
   const mocks = await Promise.all(['T1A', 'T1B', 'T2A', 'T2B', 'T3A'].map(mock));
   const [t1a, t1b, t2a, t2b, t3a] = mocks;
   const rootNow = async s => (await s.get('/proxies/' + encodeURIComponent('ROOT'))).now;
-  const traffic = async s => await requestThrough(s.mixed);
+  const traffic = async s => { const t0=Date.now(); try { const body=await requestThrough(s.mixed); observer.traffic(s,t0,body); return body; } catch(e) { observer.traffic(s,t0,null,e); throw e; } };
   const wrap = async (s, label, fn) => {
     const t0 = Date.now();
-    await fn();
+    try { await fn(); } catch(e) { await observer.capture(e); throw e; }
     const ms = Date.now() - t0;
     evidence.scenarios[label] = evidence.scenarios[label] || {};
     evidence.scenarios[label].lastDurationMs = ms;
@@ -178,11 +182,13 @@ const LAB_WATCHDOG = setTimeout(() => { console.error('LAB WATCHDOG: hard timeou
       await wrap(s, 'H-restart', async () => {
         await stopSession(s);
         const s2 = await session(groups, 's1-urltest-restart', null, leaves);
+        try {
         await until(() => s2.get('/version'), 'controller restart', 25000);
         await until(async () => ['T1A', 'T1B'].includes(await traffic(s2)), 'H: traffic via T1 after restart');
         assert.equal(await rootNow(s2), 'T1', 'H: ROOT re-selected T1 after restart');
         evidence.scenarios.H = { note: 'fresh process re-probes and re-selects; no sticky tier state with store-selected=false' };
         console.log('  ok H-restart');
+        } finally { await stopSession(s2); }
       });
     } finally { if (s.child.exitCode === null) await stopSession(s); }
   }
@@ -270,11 +276,12 @@ const LAB_WATCHDOG = setTimeout(() => { console.error('LAB WATCHDOG: hard timeou
   fs.writeFileSync(path.join(process.env.TEST_OUTPUT_DIR, 'tiered-evidence.json'), JSON.stringify(evidence, null, 2));
   console.log('TIERED RUNTIME LAB: all scenarios PASS (' + version + ')');
   clearTimeout(LAB_WATCHDOG);
-  for (const n of mocks) { for (const s of n.sockets) s.destroy(); n.server.close(); }
-  health.close();
-  process.exit(0);
-})().catch(e => {
+  const diagnostic=await observer.finish();
+  process.exit(diagnostic.status==='PASS'?0:1);
+})().catch(async e => {
   console.error('LAB FAIL:', e.message);
   try { fs.writeFileSync(path.join(process.env.TEST_OUTPUT_DIR, 'tiered-failure.txt'), String(e.message || e)); } catch {}
+  clearTimeout(LAB_WATCHDOG);
+  await observer.finish(e);
   process.exit(1);
 });

@@ -1,0 +1,574 @@
+[
+  {
+    "series": "windows31",
+    "total": 20,
+    "pass": 20,
+    "failed": 0,
+    "controllerMs": {
+      "n": 20,
+      "min": 166,
+      "median": 185.5,
+      "p95": 207,
+      "max": 567
+    },
+    "firstT1Ms": {
+      "n": 20,
+      "min": 231,
+      "median": 266.5,
+      "p95": 285,
+      "max": 885
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 20,
+    "firstCompletedLeafHealthMs": {
+      "n": 20,
+      "min": 103,
+      "median": 121.5,
+      "p95": 184,
+      "max": 622
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 104,
+      "E2:request timeout": 28
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 20,
+        "min": 207,
+        "median": 240.5,
+        "p95": 256,
+        "max": 683
+      },
+      "A": {
+        "n": 20,
+        "min": 14,
+        "median": 28,
+        "p95": 31,
+        "max": 200
+      },
+      "B": {
+        "n": 20,
+        "min": 103,
+        "median": 11899,
+        "p95": 11982,
+        "max": 11982
+      },
+      "C": {
+        "n": 20,
+        "min": 1799,
+        "median": 2340.5,
+        "p95": 2770,
+        "max": 2829
+      },
+      "D": {
+        "n": 20,
+        "min": 890,
+        "median": 1636,
+        "p95": 1906,
+        "max": 1917
+      },
+      "controller restart": {
+        "n": 20,
+        "min": 130,
+        "median": 159.5,
+        "p95": 283,
+        "max": 292
+      },
+      "H": {
+        "n": 20,
+        "min": 12,
+        "median": 14,
+        "p95": 15,
+        "max": 16
+      },
+      "controller startup s2": {
+        "n": 20,
+        "min": 144,
+        "median": 170.5,
+        "p95": 283,
+        "max": 287
+      },
+      "F1": {
+        "n": 20,
+        "min": 2199,
+        "median": 3987.5,
+        "p95": 4061,
+        "max": 4067
+      },
+      "F2": {
+        "n": 20,
+        "min": 1001,
+        "median": 2282,
+        "p95": 2998,
+        "max": 3000
+      },
+      "F3": {
+        "n": 20,
+        "min": 909,
+        "median": 1651,
+        "p95": 1973,
+        "max": 2020
+      },
+      "controller startup s3": {
+        "n": 20,
+        "min": 126,
+        "median": 160.5,
+        "p95": 285,
+        "max": 389
+      },
+      "E1": {
+        "n": 20,
+        "min": 2173,
+        "median": 9959,
+        "p95": 10040,
+        "max": 10080
+      },
+      "E2": {
+        "n": 20,
+        "min": 26,
+        "median": 11323.5,
+        "p95": 11865,
+        "max": 12907
+      },
+      "E3": {
+        "n": 20,
+        "min": 10,
+        "median": 20,
+        "p95": 22,
+        "max": 22
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "windows32",
+    "total": 20,
+    "pass": 20,
+    "failed": 0,
+    "controllerMs": {
+      "n": 20,
+      "min": 171,
+      "median": 185.5,
+      "p95": 327,
+      "max": 422
+    },
+    "firstT1Ms": {
+      "n": 20,
+      "min": 244,
+      "median": 263,
+      "p95": 431,
+      "max": 685
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 20,
+    "firstCompletedLeafHealthMs": {
+      "n": 20,
+      "min": 107,
+      "median": 125,
+      "p95": 234,
+      "max": 575
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 99,
+      "E2:request timeout": 32
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 20,
+        "min": 214,
+        "median": 241,
+        "p95": 398,
+        "max": 621
+      },
+      "A": {
+        "n": 20,
+        "min": 16,
+        "median": 28.5,
+        "p95": 33,
+        "max": 63
+      },
+      "B": {
+        "n": 20,
+        "min": 251,
+        "median": 11887.5,
+        "p95": 11969,
+        "max": 11992
+      },
+      "C": {
+        "n": 20,
+        "min": 1913,
+        "median": 2420.5,
+        "p95": 2936,
+        "max": 2954
+      },
+      "D": {
+        "n": 20,
+        "min": 1028,
+        "median": 1598.5,
+        "p95": 2023,
+        "max": 2026
+      },
+      "controller restart": {
+        "n": 20,
+        "min": 126,
+        "median": 174.5,
+        "p95": 287,
+        "max": 291
+      },
+      "H": {
+        "n": 20,
+        "min": 11,
+        "median": 14,
+        "p95": 28,
+        "max": 36
+      },
+      "controller startup s2": {
+        "n": 20,
+        "min": 130,
+        "median": 164,
+        "p95": 285,
+        "max": 414
+      },
+      "F1": {
+        "n": 20,
+        "min": 2437,
+        "median": 4023,
+        "p95": 4073,
+        "max": 4099
+      },
+      "F2": {
+        "n": 20,
+        "min": 1920,
+        "median": 2354,
+        "p95": 2711,
+        "max": 2728
+      },
+      "F3": {
+        "n": 20,
+        "min": 1219,
+        "median": 1528,
+        "p95": 2031,
+        "max": 2072
+      },
+      "controller startup s3": {
+        "n": 20,
+        "min": 130,
+        "median": 173.5,
+        "p95": 290,
+        "max": 292
+      },
+      "E1": {
+        "n": 20,
+        "min": 2171,
+        "median": 9956,
+        "p95": 10018,
+        "max": 10034
+      },
+      "E2": {
+        "n": 20,
+        "min": 12,
+        "median": 11159.5,
+        "p95": 12063,
+        "max": 12673
+      },
+      "E3": {
+        "n": 20,
+        "min": 9,
+        "median": 18,
+        "p95": 22,
+        "max": 22
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "tiered-stability-1.19.31",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 42,
+      "median": 45,
+      "p95": 56,
+      "max": 56
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 66,
+      "median": 70.5,
+      "p95": 81,
+      "max": 81
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 10,
+    "firstCompletedLeafHealthMs": {
+      "n": 10,
+      "min": 45,
+      "median": 47,
+      "p95": 59,
+      "max": 59
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 13
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 54,
+        "median": 58,
+        "p95": 69,
+        "max": 69
+      },
+      "A": {
+        "n": 10,
+        "min": 11,
+        "median": 12,
+        "p95": 13,
+        "max": 13
+      },
+      "B": {
+        "n": 10,
+        "min": 118,
+        "median": 6128,
+        "p95": 12063,
+        "max": 12063
+      },
+      "C": {
+        "n": 10,
+        "min": 1774,
+        "median": 2165.5,
+        "p95": 2478,
+        "max": 2478
+      },
+      "D": {
+        "n": 10,
+        "min": 1295,
+        "median": 1770.5,
+        "p95": 2032,
+        "max": 2032
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 107,
+        "median": 108,
+        "p95": 109,
+        "max": 109
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 7,
+        "p95": 7,
+        "max": 7
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 106,
+        "median": 107,
+        "p95": 108,
+        "max": 108
+      },
+      "F1": {
+        "n": 10,
+        "min": 2806,
+        "median": 3946.5,
+        "p95": 4026,
+        "max": 4026
+      },
+      "F2": {
+        "n": 10,
+        "min": 1849,
+        "median": 2398.5,
+        "p95": 2941,
+        "max": 2941
+      },
+      "F3": {
+        "n": 10,
+        "min": 1071,
+        "median": 1553.5,
+        "p95": 2035,
+        "max": 2035
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 105,
+        "median": 106,
+        "p95": 108,
+        "max": 108
+      },
+      "E1": {
+        "n": 10,
+        "min": 2384,
+        "median": 9940.5,
+        "p95": 10013,
+        "max": 10013
+      },
+      "E2": {
+        "n": 10,
+        "min": 6,
+        "median": 11129,
+        "p95": 11620,
+        "max": 11620
+      },
+      "E3": {
+        "n": 10,
+        "min": 6,
+        "median": 6,
+        "p95": 7,
+        "max": 7
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "tiered-stability-1.19.32",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 41,
+      "median": 44,
+      "p95": 50,
+      "max": 50
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 66,
+      "median": 70.5,
+      "p95": 75,
+      "max": 75
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 10,
+    "firstCompletedLeafHealthMs": {
+      "n": 10,
+      "min": 43,
+      "median": 47,
+      "p95": 52,
+      "max": 52
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 15
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 54,
+        "median": 58,
+        "p95": 63,
+        "max": 63
+      },
+      "A": {
+        "n": 10,
+        "min": 11,
+        "median": 12,
+        "p95": 13,
+        "max": 13
+      },
+      "B": {
+        "n": 10,
+        "min": 171,
+        "median": 12031,
+        "p95": 12057,
+        "max": 12057
+      },
+      "C": {
+        "n": 10,
+        "min": 1867,
+        "median": 2108,
+        "p95": 2838,
+        "max": 2838
+      },
+      "D": {
+        "n": 10,
+        "min": 1180,
+        "median": 1825.5,
+        "p95": 2037,
+        "max": 2037
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 107,
+        "median": 109,
+        "p95": 110,
+        "max": 110
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 7,
+        "p95": 7,
+        "max": 7
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 106,
+        "median": 108,
+        "p95": 109,
+        "max": 109
+      },
+      "F1": {
+        "n": 10,
+        "min": 2406,
+        "median": 3969,
+        "p95": 4019,
+        "max": 4019
+      },
+      "F2": {
+        "n": 10,
+        "min": 1939,
+        "median": 2415,
+        "p95": 2988,
+        "max": 2988
+      },
+      "F3": {
+        "n": 10,
+        "min": 965,
+        "median": 1398,
+        "p95": 2036,
+        "max": 2036
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 106,
+        "median": 107,
+        "p95": 108,
+        "max": 108
+      },
+      "E1": {
+        "n": 10,
+        "min": 1962,
+        "median": 9953,
+        "p95": 10016,
+        "max": 10016
+      },
+      "E2": {
+        "n": 10,
+        "min": 179,
+        "median": 10997.5,
+        "p95": 12454,
+        "max": 12454
+      },
+      "E3": {
+        "n": 10,
+        "min": 5,
+        "median": 6,
+        "p95": 7,
+        "max": 7
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  }
+]
