@@ -47,26 +47,18 @@ async function check(name, fn) {
   const disclosure = await fresh();
   await check('UX09 chevrons follow native open state and nested keyboard toggles', async () => {
     const ids = ['wgDialerAdvanced', 'routingDiagnostics', 'ruleProviderExplorer',
-      'domainCoveragePanel', 'physicalTopologyPanel', 'ptRuntimePanel'];
+      'domainCoveragePanel', 'physicalTopologyPanel', 'ptRuntimePanel', 'perProxyAdvancedDetails'];
     for (const id of ids) {
-      const states = await disclosure.locator('#' + id).evaluate(async d => {
-        const marker = d.querySelector(':scope > summary > .disclosure-chevron');
-        if (!marker) return null;
-        const original = d.open;
-        // Chromium may defer native <details> rendering to the next frame.
-        // Observe the painted state instead of a same-task style snapshot.
-        d.open = false;
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        const closed = getComputedStyle(marker).transform;
-        d.open = true;
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        const opened = getComputedStyle(marker).transform;
-        d.open = original;
-        return { closed, opened, hiddenFromScreenReader: marker.getAttribute('aria-hidden') };
-      });
-      assert.ok(states, id + ': missing disclosure marker');
-      assert.notEqual(states.closed, states.opened, id + ': marker does not rotate on opening');
-      assert.equal(states.hiddenFromScreenReader, 'true');
+      const details = disclosure.locator('#' + id);
+      const marker = details.locator(':scope > summary > .disclosure-chevron');
+      assert.equal(await marker.count(), 1, id + ': missing marker');
+      assert.equal(await marker.getAttribute('aria-hidden'), 'true');
+      await details.evaluate(d => { d.open = false; });
+      await disclosure.waitForFunction(id => document.querySelector('#' + id + ' > summary > .disclosure-chevron').textContent === '▶', id);
+      await details.evaluate(d => { d.open = true; });
+      await disclosure.waitForFunction(id => document.querySelector('#' + id + ' > summary > .disclosure-chevron').textContent === '▼', id);
+      await details.evaluate(d => { d.open = false; });
+      await disclosure.waitForFunction(id => document.querySelector('#' + id + ' > summary > .disclosure-chevron').textContent === '▶', id);
     }
     const diag = disclosure.locator('#routingDiagnostics');
     await diag.locator(':scope > summary').click();
@@ -83,7 +75,7 @@ async function check(name, fn) {
     const runtime = disclosure.locator('#ptRuntimePanel');
     await runtime.locator(':scope > summary').click();
     assert.equal(await runtime.evaluate(d => d.open), true, 'mouse opens nested Runtime Evidence');
-    // Existing per-proxy disclosure has a separate text-switching contract.
+    // The shared native-toggle marker also covers the legacy per-proxy control.
     const perProxy = disclosure.locator('#perProxyAdvancedDetails');
     await perProxy.locator(':scope > summary').click();
     await disclosure.waitForFunction(() => document.getElementById('perProxyDisclosureMarker').textContent === '▼');
