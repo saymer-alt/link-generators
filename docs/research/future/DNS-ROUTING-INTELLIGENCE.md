@@ -17,6 +17,8 @@
 
 `dnsRoutingAudit` переиспользует `rdParseRule`. DOMAIN/DOMAIN-SUFFIX/DOMAIN-KEYWORD/MATCH идут в исходном порядке: первое совпадение выигрывает. Exact policy key и `+.`/`.` suffix base проверяются по этой модели. Непрозрачное предшествующее GEOSITE/RULE-SET/IP/logical rule делает результат UNKNOWN; содержимое внешних providers не загружается.
 
+Неподдерживаемые policy keys (GEOSITE/RULE-SET/wildcard) и неизвестные policy endpoints также дают явный UNKNOWN, даже когда rules состоят только из MATCH,DIRECT. Негативный тест сначала воспроизвёл отсутствие этого сообщения.
+
 Resolver и массивы nameserver-policy классифицируются по каждому endpoint: DIRECT / explicit-proxy / rules / UNKNOWN. Предупреждение о различии путей появляется только при доказанном DIRECT endpoint и поддерживаемом proxy-domain rule. Смешанный список не считается целиком проксированным. Окружение, bootstrap DNS, выбранный member группы, geolocation и реальные утечки **не наблюдались**.
 
 CONFIRMED относится к structural parse error; INFERRED — возможному влиянию разницы путей; UNKNOWN — непокрытой семантике. Отсутствие finding не доказывает безопасность сети.

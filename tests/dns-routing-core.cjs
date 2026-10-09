@@ -63,7 +63,7 @@ const ok = (msg) => { cases++; console.log('  ok — ' + msg); };
   ok('C: policy локально × правило в группу → warning; негативы чисты');
 }
 
-// --- 6. fake-ip + IP-правила → info (CONFIRMED) ---
+// --- 6. fake-ip + IP-правила → info (UNKNOWN) ---
 {
   const doc = { dns: { enable: true, 'enhanced-mode': 'fake-ip', nameserver: ['https://dns.google/dns-query'] }, rules: ['GEOIP,CN,DIRECT', 'MATCH,PROXY'] };
   const f = api.dnsRoutingAudit(doc).find(x => x.id === 'fake-ip-with-ip-rules');
@@ -145,6 +145,10 @@ const ok = (msg) => { cases++; console.log('  ok — ' + msg); };
  const unknown={...doc,rules:['RULE-SET,unobserved,DIRECT','DOMAIN,x.test,PROXY']};
  assert.equal(api.dnsEffectiveTarget('x.test',unknown.rules),null);
  assert.ok(ids(unknown).includes('dns-analysis-unknown'));
+ for (const policy of [{'geosite:cn':['192.0.2.53']},{'+.x.test':['https://192.0.2.53/#eth0']}]) {
+  const d={dns:{enable:true,nameserver:['192.0.2.53'],'nameserver-policy':policy},rules:['MATCH,DIRECT']};
+  assert.ok(ids(d).includes('dns-analysis-unknown'),'opaque policy/endpoint must not display a clean verdict');
+ }
  ok('unknown interface/opaque rule precedence stays UNKNOWN; fragment parameters are not selectors');
  const mixed=JSON.parse(JSON.stringify(doc)); mixed.dns.nameserver.push('https://192.0.2.54/#PROXY');
  assert.ok(ids(mixed).includes('dns-bypass-for-proxied-domains'));

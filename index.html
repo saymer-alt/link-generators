@@ -7312,16 +7312,14 @@ function csTraceText(doc) {
   return csRedactText(lines.join('\n'), doc);
 }
 // === DNS↔ROUTING AUDIT CORE (v1.11 CANDIDATE; SOURCE-PROVEN mihomo v1.19.32) — DNS-CORE-START ===
-// Статический аудит согласованности dns:-секции и rules:. Самодостаточен
-// (без зависимостей от RD-CORE). Источники: config/config.go:1420-1421
+// Статический аудит согласованности dns:-секции и rules:, с rdParseRule из RD-CORE.
+// Источники: config/config.go:1420-1421
 // (respect-rules требует proxy-server-nameserver), tunnel/dns_dialer.go:57
 // (RULES-маршрутизация DNS-соединений; без respect-rules — прямой dial),
 // tunnel/tunnel.go:337-350 (helper.ResolveIP — только при !resolved),
 // rules/common/ipcidr.go:35-45 (no-resolve). Доказательства и границы —
 // docs/research/future/DNS-ROUTING-INTELLIGENCE.md.
-const DNS_AUDIT_DIRECT_SCHEMES = new Set(['', 'system', 'dhcp', 'ip']);
 const DNS_AUDIT_BUILTIN_TARGETS = new Set(['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL']);
-const DNS_AUDIT_DOMAIN_RULES = new Set(['DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-REGEX', 'GEOSITE']);
 const DNS_AUDIT_IP_RULES = new Set(['IP-CIDR', 'IP-CIDR6', 'SRC-IP-CIDR', 'GEOIP', 'IP-ASN', 'SRC-GEOIP', 'SRC-IP-ASN']);
 // SOURCE-PROVEN: Mihomo config.go parseNameServer, v1.19.31/v1.19.32.
 // A fragment names a selector OR interface, never infer proxying from HTTPS.
@@ -7374,14 +7372,16 @@ function dnsRoutingAudit(doc) {
   const routes = endpoints.map(v => dnsResolverRoute(v,dns,doc));
   if (proxied.length && routes.includes('direct')) findings.push({id:'dns-bypass-for-proxied-domains',severity:'warning',evidence:'INFERRED',message:'Есть статически проксируемые домены и DIRECT-резолверы в nameserver/fallback. Путь DNS отличается от пути данных; утечка и влияние на сеть НЕ наблюдались. Явные #PROXY и respect-rules учитываются.',refs:'config.go:1202; dns_dialer.go:52-79'});
   const policy = dns['nameserver-policy'];
+  let policyUnknown = false;
   if (policy && typeof policy === 'object' && !Array.isArray(policy)) for (const [key,value] of Object.entries(policy)) {
-    if (/^(geosite:|rule-set:|\*)/i.test(key)) continue;
+    if (/^(geosite:|rule-set:|\*)/i.test(key)) { policyUnknown = true; continue; }
+    if (list(value).some(v=>dnsResolverRoute(v,dns,doc)==='unknown')) policyUnknown = true;
     const domain=key.toLowerCase().replace(/^\+?\./,'');
     const target=dnsEffectiveTarget(domain,rules);
     if (target && !DNS_AUDIT_BUILTIN_TARGETS.has(target) && list(value).some(v=>dnsResolverRoute(v,dns,doc)==='direct')) findings.push({id:'dns-policy-vs-rule-mismatch',severity:'warning',evidence:'INFERRED',message:'Домен «'+key+'»: nameserver-policy содержит DIRECT-резолвер, первое доказанное правило выбирает «'+target+'». Возможен гео-рассинхрон; окружение НЕ наблюдалось.',refs:'config.go:1202; dns_dialer.go:52-79'});
   }
   if (dns['enhanced-mode'] === 'fake-ip' && rules.some(raw=>DNS_AUDIT_IP_RULES.has(rdParseRule(raw).type))) findings.push({id:'fake-ip-with-ip-rules',severity:'info',evidence:'UNKNOWN',message:'fake-ip и IP-правила требуют проверки порядка/no-resolve. Mihomo восстанавливает hostname и очищает fake IP перед routing; при необходимости резолвится реальный IP. Результат конкретного запроса статически не доказан.',refs:'tunnel.go:296-299,337-350'});
-  if (routes.some(r=>r==='unknown') || rules.some(raw=>!['DOMAIN','DOMAIN-SUFFIX','DOMAIN-KEYWORD','MATCH'].includes(rdParseRule(raw).type))) findings.push({id:'dns-analysis-unknown',severity:'info',evidence:'UNKNOWN',message:'Часть resolver/routing semantics вне поддерживаемой статической модели (UNKNOWN). GEOSITE/RULE-SET, IP/logical rules, интерфейсы и runtime-выбор группы не угаданы.',refs:'static subset boundary'});
+  if (policyUnknown || routes.some(r=>r==='unknown') || rules.some(raw=>!['DOMAIN','DOMAIN-SUFFIX','DOMAIN-KEYWORD','MATCH'].includes(rdParseRule(raw).type))) findings.push({id:'dns-analysis-unknown',severity:'info',evidence:'UNKNOWN',message:'Часть resolver/routing semantics вне поддерживаемой статической модели (UNKNOWN). GEOSITE/RULE-SET, IP/logical rules, интерфейсы и runtime-выбор группы не угаданы.',refs:'static subset boundary'});
   return findings;
 }
 function csDnsRoutingText(doc) {
