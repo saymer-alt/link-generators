@@ -2,6 +2,8 @@
 
 Генератор конфигураций для [Mihomo](https://github.com/MetaCubeX/mihomo) (Clash Meta) и ссылок MASQUE для Cloudflare WARP. Статическое клиентское веб-приложение: разбор ссылок и сборка конфигов выполняются прямо в браузере — приватные ключи, ссылки и конфигурации никуда не отправляются.
 
+> **EN:** In-browser generator for WARP MASQUE links and Mihomo (Clash Meta) configs — parsing and generation run fully client-side, nothing is uploaded.
+
 Новый opt-in: **Автоматический режим белых списков**. Обычные выходы всегда имеют приоритет, отдельные БС-ссылки/подписки используются как резерв по health-check, а после восстановления primary Mihomo автоматически возвращается на него. Режим поддерживает ссылки, подписки и их смесь; опции «TUN на каждый прокси» и «SOCKS-порт на каждый прокси» в нём отключены; обычный TUN и MIPS доступны. Режим доступен только в профиле «Роутер / обычный TUN» — в VPS-профилях чекбокс выключен и заблокирован; выбранный профиль развёртывания никогда не подменяется. По умолчанию режим выключен. [Настройка, структура YAML и ограничения](docs/AUTO-WHITELIST.md).
 
 🌐 **Открыть генератор:** [saymer-alt.github.io/link-generators](https://saymer-alt.github.io/link-generators/) · **❓ Помощь / Быстрый старт:** [quick-start.html](https://saymer-alt.github.io/link-generators/quick-start.html)
@@ -191,6 +193,12 @@ mihomo -t -f config.yaml
 | [TESTING](docs/TESTING.md) | тестовая стратегия |
 
 ---
+
+## Связанные проекты
+
+- [saymer-alt/keenetic-auto-setup](https://github.com/saymer-alt/keenetic-auto-setup) — установка и обслуживание Mihomo на Keenetic + Entware; README установки сам предлагает собрать конфиг в этом генераторе.
+- [saymer-alt/amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway) — VPS-шлюз AmneziaWG → Mihomo TUN → WARP; для него предназначен профиль развёртывания «VPS Transparent Gateway».
+- [saymer-alt/keenetic-knowledge-base](https://github.com/saymer-alt/keenetic-knowledge-base) — база знаний по Keenetic/Entware/Mihomo/DPI с проверенными статьями.
 
 ## Credits
 
