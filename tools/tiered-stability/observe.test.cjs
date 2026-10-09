@@ -1,7 +1,8 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const {classify,until}=require('./observe.cjs');
-test('connection exceptions retain cause and original condition',async()=>{
-  await assert.rejects(until(async()=>{throw Object.assign(Error('connect refused'),{code:'ECONNREFUSED'});},'controller',1),/ECONNREFUSED/);
+test('connection exceptions retain cause and original condition',async t=>{
+  let clock=0;t.mock.method(Date,'now',()=>clock);
+  await assert.rejects(until(async()=>{clock=20000;throw Object.assign(Error('connect refused'),{code:'ECONNREFUSED'});},'controller'),/ECONNREFUSED/);
 });
 test('wrong body is distinct from unavailable mixed port and dead core',()=>{
   assert(classify({failure:{sessions:[]},lastFailure:{body:'UNEXPECTED'}}).includes('UNEXPECTED_RESPONSE'));
