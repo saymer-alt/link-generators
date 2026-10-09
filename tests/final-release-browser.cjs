@@ -12,6 +12,7 @@ const widths=[320,360,375,390,412,480,768,1024,1366,1440,1920,2560];
  const browser=await pw[engine].launch({headless:true,...(engine==='chromium'?{channel:process.env.BROWSER_CHANNEL||'msedge'}:{})});
  const result={engine,channel:process.env.BROWSER_CHANNEL||null,widths,layouts:[],journey:false,keyboard:false,accessibility:'focused controls only; not a WCAG certification',network:'NOT TESTED',externalRequests:0};
  const errors=[],logs=[];let accept=false,releasePage=null,stage='initialization';
+ fs.mkdirSync(process.env.TEST_OUTPUT_DIR||path.join(lab.dir,'results'),{recursive:true});
  try{
   const ctx=await browser.newContext({acceptDownloads:true,viewport:{width:1366,height:900}});
   await ctx.route(/^https?:/,r=>r.request().url().startsWith('https://cdn.jsdelivr.net/')?r.fulfill({path:process.env.JS_YAML_PATH,contentType:'text/javascript'}):(result.externalRequests++,r.abort()));
