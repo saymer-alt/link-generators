@@ -8915,7 +8915,7 @@ function csRenderForm() {
     inp.dataset.csField = f.key;
     inp.dataset.csOrig = f.secret ? '' : String(f.value);
     inp.setAttribute('aria-label', csRedactText('Поле ' + f.key + ' объекта ' + cur, csCurrentDoc));
-    inp.style.cssText = 'flex:1;min-width:160px;padding:4px 8px';
+    inp.style.cssText = 'width:100%;min-width:160px;padding:4px 8px';
     if (f.secret) { inp.placeholder = CS_SECRET_INPUT_HINT; inp.dataset.csSecret = '1'; }
     else inp.value = String(f.value);
     const inputWrap = document.createElement('span');

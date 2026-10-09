@@ -68,6 +68,7 @@ const widths=[320,360,375,390,412,480,768,1024,1366,1440,1920,2560];
   await p.click('#rbUndoBtn');same(await snap(),finalProject,'Undo drift');
   await studio(reversed);if(hasDns)assert.match(await p.locator('#csDnsRoutingOut').textContent(),/неактивна/);
   await p.selectOption('#csEditType','proxy');await reveal('#csSaveFieldsBtn');await layout('YAML Editor');
+  assert.equal(await p.locator('#csEditForm .cs-native-control input').evaluateAll(inputs=>inputs.filter(el=>el.getBoundingClientRect().width+3<el.parentElement.getBoundingClientRect().width).length),0,'Studio inputs must fill their wrappers (2px wrapper padding)');
   await p.locator('#csSaveFieldsBtn').focus();assert.equal(await p.locator('#csSaveFieldsBtn').evaluate(el=>el===document.activeElement),true);
   await p.locator('#csGraphPanel > summary').focus();await p.keyboard.press('Tab');await p.keyboard.press('Shift+Tab');const wasOpen=await p.locator('#csGraphPanel').evaluate(el=>el.open);await p.keyboard.press('Enter');assert.equal(await p.locator('#csGraphPanel').evaluate(el=>el.open),!wasOpen);
   await p.keyboard.press('Space');assert.equal(await p.locator('#csGraphPanel').evaluate(el=>el.open),wasOpen);
