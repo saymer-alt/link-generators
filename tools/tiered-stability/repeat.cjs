@@ -4,7 +4,7 @@ const {spawn}=require('node:child_process');
 const count=Number(process.argv[2]||20),out=path.resolve(process.argv[3]||'fieldtest-private/tiered-series');
 if(!Number.isInteger(count)||count<1||count>20)throw Error('count must be 1..20');
 fs.mkdirSync(out,{recursive:true});
-function stats(values){const a=values.filter(Number.isFinite).sort((a,b)=>a-b);return a.length?{n:a.length,min:a[0],median:a[Math.floor(a.length/2)],p95:a[Math.ceil(a.length*.95)-1],max:a.at(-1)}:null;}
+function stats(values){const a=values.filter(Number.isFinite).sort((a,b)=>a-b);return a.length?{n:a.length,min:a[0],median:(a[Math.floor((a.length-1)/2)]+a[Math.floor(a.length/2)])/2,p95:a[Math.ceil(a.length*.95)-1],max:a.at(-1)}:null;}
 function run(dir,mode='') { return new Promise(resolve=>{
   const child=spawn(process.execPath,[path.resolve(__dirname,'../../tests/tiered-failover-runtime.cjs')],{env:{...process.env,TEST_OUTPUT_DIR:dir,TIERED_EXPERIMENT:mode},windowsHide:true});
   let tail=''; for(const stream of [child.stdout,child.stderr])stream.on('data',d=>tail=(tail+d).slice(-12000));

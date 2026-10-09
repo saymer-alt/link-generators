@@ -166,6 +166,9 @@ jobs:
       - name: Fieldtest harness offline unit tests
         run: node --test tools/warp-dialer-fieldtest/fieldtest.test.mjs
 
+      - name: Tiered failure diagnostic regression
+        run: node --test tools/tiered-stability/observe.test.cjs tools/tiered-stability/ports.test.cjs
+
       - name: Fieldtest harness secret scan
         run: node tools/warp-dialer-fieldtest/check-secrets.mjs
 
@@ -400,6 +403,14 @@ jobs:
 
       - name: Tiered Failover runtime lab (#148)
         run: node tests/tiered-failover-runtime.cjs
+
+      - name: Preserve Tiered failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiered-diagnostic-${{ matrix.version }}
+          path: ${{ runner.temp }}/mihomo-output-${{ matrix.version }}/tiered-diagnostic.json
+          retention-days: 14
 
       - name: Config Studio export compat (#178)
         run: node tests/config-studio-compat.cjs
