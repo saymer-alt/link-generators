@@ -133,7 +133,7 @@ let cases = 0;
     const long = yaml.load(fixture); long.proxies[0].name = '🌐' + 'LongName'.repeat(40); long['proxy-groups'][0].proxies = [long.proxies[0].name];
     await studio(yaml.dump(long));
     for (const id of ['csDiagnosticsPanel', 'csGraphPanel', 'csTracePanel']) await page.locator('#' + id + ' > summary').click();
-    for (const width of [320, 360, 390, 412, 480, 1366, 1920, 2560]) {
+    for (const width of [320, 360, 375, 390, 412, 480, 768, 1024, 1366, 1440, 1920, 2560]) {
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'Studio overflow ' + width + ' ' + JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('body *')].filter(el => el.clientWidth && el.scrollWidth > el.clientWidth + 2).map(el => [el.id || el.tagName, el.clientWidth, el.scrollWidth]).slice(-18))));
       await page.locator('#csSaveFieldsBtn').focus();
@@ -214,7 +214,7 @@ let cases = 0;
     delay = 0;
     await page.click('#ptRuntimeCheckBtn'); assert.ok((await page.textContent('#ptRuntimeStatus')).includes('STALE'));
     assert.equal(JSON.stringify(await page.evaluate(() => ptLastModel)), canonical); cases++;
-    for (const width of [320, 360, 390, 412, 480, 1366, 1920, 2560]) {
+    for (const width of [320, 360, 375, 390, 412, 480, 768, 1024, 1366, 1440, 1920, 2560]) {
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'PT overflow ' + width); cases++;
     }
