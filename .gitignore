@@ -1,3 +1,4 @@
-downloaded-project.lgproject.json
 *.lgproject.json
-!docs/**
+/rb-restore-v2.txt
+/secret-toggle.txt
+/diff-wg-single.txt

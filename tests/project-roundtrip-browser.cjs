@@ -7,10 +7,13 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const { chromium } = require('playwright');
 
 const root = path.resolve(__dirname, '..');
+const outputDir = process.env.TEST_OUTPUT_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'lg-project-test-'));
+fs.mkdirSync(outputDir, { recursive: true });
 const fx = name => path.join(root, 'tests', 'fixtures', name);
 let passed = 0;
 const ok = name => { passed++; console.log('  ok —', name); };
@@ -75,7 +78,7 @@ const normalizeHwid = yaml => yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, '  - <HWI
     page.waitForEvent('download'),
     page.locator('button[onclick="rbSaveProject()"]').click()
   ]);
-  const projectPath = path.join(process.env.TEST_OUTPUT_DIR || root, 'downloaded-project.lgproject.json');
+  const projectPath = path.join(outputDir, 'downloaded-project.lgproject.json');
   await download.saveAs(projectPath);
   const project = JSON.parse(fs.readFileSync(projectPath, 'utf8'));
   assert.equal(project.schemaVersion, 1);
@@ -143,7 +146,7 @@ const normalizeHwid = yaml => yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, '  - <HWI
   ok('undo: прежнее состояние Builder возвращено');
 
   // --- 9. Битый проект: bounded-ошибка, состояние не тронуто ---
-  const badPath = path.join(process.env.TEST_OUTPUT_DIR || root, 'bad-project.lgproject.json');
+  const badPath = path.join(outputDir, 'bad-project.lgproject.json');
   fs.writeFileSync(badPath, JSON.stringify({ schemaVersion: 99, sources: {} }));
   await page.locator('#rbProjectFile').setInputFiles(badPath);
   await page.waitForFunction(() => (document.getElementById('toast').textContent || '').includes('Проект:'));
