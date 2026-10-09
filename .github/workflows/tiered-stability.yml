@@ -1,0 +1,57 @@
+name: Tiered stability investigation
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tests/tiered-failover-runtime.cjs'
+      - 'tools/tiered-stability/**'
+      - '.github/workflows/tiered-stability.yml'
+permissions:
+  contents: read
+jobs:
+  repeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: 1.19.31
+            sha256: 04cf9f09671704f839ddbee2e93069dc831a4123a75281e725d1d96ab9ac1afc
+          - version: 1.19.32
+            sha256: ba3ce607747a07f948fc35780e108a4a7c7f552a38b9bd4d115f313ebcb89c20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Prepare pinned local core and dependency
+        env:
+          VERSION: ${{ matrix.version }}
+          SHA256: ${{ matrix.sha256 }}
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/deps" --no-save --no-package-lock js-yaml@4.1.0
+          curl -fL "https://github.com/MetaCubeX/mihomo/releases/download/v${VERSION}/mihomo-linux-amd64-compatible-v${VERSION}.gz" -o "$RUNNER_TEMP/core.gz"
+          echo "$SHA256  $RUNNER_TEMP/core.gz" | sha256sum -c -
+          gzip -dc "$RUNNER_TEMP/core.gz" > "$RUNNER_TEMP/mihomo"
+          chmod +x "$RUNNER_TEMP/mihomo"
+          "$RUNNER_TEMP/mihomo" -v | grep -F "v${VERSION} "
+          echo "MIHOMO_BIN=$RUNNER_TEMP/mihomo" >> "$GITHUB_ENV"
+          echo "JS_YAML_PATH=$RUNNER_TEMP/deps/node_modules/js-yaml/dist/js-yaml.min.js" >> "$GITHUB_ENV"
+      - name: Ten independent runs, no retry
+        run: node tools/tiered-stability/repeat.cjs 10 "$RUNNER_TEMP/tiered-series"
+      - name: Preserve diagnostics including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiered-stability-${{ matrix.version }}
+          path: |
+            ${{ runner.temp }}/tiered-series/summary.json
+            ${{ runner.temp }}/tiered-series/runs.json
+            ${{ runner.temp }}/tiered-series/run-*/tiered-diagnostic.json
+            ${{ runner.temp }}/tiered-series/run-*/lab.log
+          retention-days: 14
