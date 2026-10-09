@@ -24,11 +24,11 @@ Baseline main: `89a046519b3492c450a4a0cf05f9fb4fbaf0c8c0`. UI-only scope; runtim
 
 ## План проверки и ограничения
 
-Owner Experience Gate v1.0, UX-01…09 сохраняются. Новые UX-ID: UX-10 — инженерные инструменты смешаны с первым Build; UX-11 — граф нельзя развернуть/изменить высоту; UX-12 — runtime-only label у правого края/длинные имена. Для каждого: baseline FAIL, candidate PASS, реальные browser visibility/focus/geometry checks. Chromium/Firefox/WebKit;1280×720,1366×768,1920×1080, узкие экраны и CSS zoom. Полный Generator CI, YAML byte parity, Save/Load, WG/AWG, subscription, DPR, Studio, graph, runtime reconciliation остаются обязательными.
+Owner Experience Gate v1.0, UX-01…09 сохраняются. Новые UX-ID: UX-10 — инженерные инструменты смешаны с первым Build; UX-11 — граф нельзя развернуть/изменить высоту; UX-12 — runtime-only label у правого края/длинные имена. Для каждого: baseline FAIL, candidate PASS, реальные browser visibility/focus/geometry checks. Chromium/Firefox/WebKit;1280×720,1366×768,1920×1080, узкие экраны и reduced-layout viewport для масштаба. Полный Generator CI, YAML byte parity, Save/Load, WG/AWG, subscription, DPR, Studio, graph, runtime reconciliation остаются обязательными.
 
 Скрытие native details само по себе не отключает параметры. Static graph показывает только доказанные CDG-зависимости; runtime-состояние не доказывает путь пакетов. Реальные controllers/VPS/Keenetic/подписки не используются. Stable/tags/releases не изменяются. Human Owner GO даёт только владелец.
 
-Результаты, точные SHA/PR/CI и визуальная приёмка будут добавлены после реализации и проверок. Следующее развитие: active-overrides summary для отдельного Simple/Expert PR и исследование поиска инструментов без сохранения пользовательских данных.
+Следующее развитие: active-overrides summary для отдельного Simple/Expert PR и исследование поиска инструментов без сохранения пользовательских данных.
 
 ### Проверки первой части (навигация)
 
@@ -42,4 +42,27 @@ UX-10: исходный89a0465 —0/4 FAIL; candidate —4/4 PASS. Полный 
 
 UX-11 baseline89a0465:0/2 FAIL (нет expand/height controls). Chromium/Firefox первоначально35/35 PASS; WebKit выявил ResizeObserver delivery loop и отсутствие фокуса после mouse-click (Escape не доходил до frame). ResizeObserver writes перенесены в отменяемый animation frame; expand явно фокусирует кнопку, Escape возвращает на неё. Проверки включают реальные pointer pan, keyboard,100-node Studio fixture, повторное раскрытие, mobile Fit и clear во время overlay.
 
+### Список узлов runtime
+
+В «Маршрутизация и DNS» включите «Показать серверы подписки», затем откройте импорт runtime. JSON можно загрузить локальным файлом. Длинные имена переносятся полностью; «ℹ только в runtime» означает отсутствие имени в browser preview, а не проверку пути пакетов. На узком экране метка переносится под имя. Список прокручивается и меняет высоту вертикальной ручкой; поиск меняет только отображение, checkbox — прежнюю модель исключений.
+
+UX-12: исходный89a0465 —0/1 FAIL (нет внутреннего отступа); candidate —1/1 PASS. Реальный file chooser импортирует46 узлов с длинным именем; проверяются геометрия/перенос/scroll на1280/1366/1920/320/390/640px, поиск/checkbox и неизменность имён, происхождения, выбора и YAML при изменении размеров. Semantics reconciliation/Exclude Filter не менялись.
+
+### Итог локальной проверки трёх частей
+
+Owner UX Chromium/Firefox/WebKit:36/36 PASS каждый; UX-01…09 сохранены. Firefox scroll assertion ожидает завершение browser scroll update. YAML parity:10/10 byte-identical против89a0465; runtime63/63; runtime import18/18; subscription preview17/17; основной browser suite PASS; final-release-browser journey и72 layout checks PASS; Owner Gate registry PASS. Скриншоты графа и списка проверены визуально. Машиночитаемые результаты: [evidence/ux-architecture-2.json](evidence/ux-architecture-2.json).
+
+PR: [230](https://github.com/saymer-alt/link-generators/pull/230) — навигация; [232](https://github.com/saymer-alt/link-generators/pull/232) — граф. Финальная интеграция требует green exact-head CI каждого PR и main; фактические SHA/CI фиксируются в handoff. Успех автоматических fixtures не заменяет ручную Owner acceptance и не доказывает real-network поведение.
 Review correction: Escape сохраняет текущий pan развёрнутой области; фактическое перетаскивание/обычная прокрутка снимают auto-Fit, чтобы resize не сбрасывал позицию. Browser UX-11 проверяет pan внутри expanded, затем точные offsets после Escape. Справка графа размещена внутри светлого wrapper quick-start.
+
+Каталог инструментов открывает runtime importer независимо от checkbox просмотра подписок: только раскрытие контейнера, без запроса, Build или изменения cfgServerList.
+
+### Инвентаризация и границы видимости
+
+Основные сценарии: WARP links; новый Builder из proxy/URL/WG/AWG; deployment profiles; ordered policy routing и Tiered; subscription/runtime reconciliation и исключения; диагностика статического Build; импорт/редактирование/экспорт Studio; экспериментальная topology/evidence; Save/Load проекта. Частые действия заканчиваются YAML в Quick Start. DNS audit, coverage и provider explorer объясняют уже созданный документ. Runtime importer читает имена, topology/evidence моделируют отдельный экспериментальный workflow.
+
+Дублированные независимые формы не создаются. Builder и Studio намеренно сохраняют отдельные input/document lifecycle; они не взаимозаменяемы. Каталог содержит ссылки на существующие controls. Validation/ошибки Build/STALE/compatibility, предупреждения о secret/controller/CORS, ограничениях AWG/MIPS и активных исключениях остаются в исходных функциональных блоках. Навигация не скрывает ошибку результата и не отменяет активную настройку.
+
+Названия пяти областей и короткие вводные объясняют назначение инструментов; технические названия сохранены для сопоставления с Mihomo. Дальнейший hide-mode требует списка активных overrides и проверок предупреждений во всех режимах. CSS resize не является фактическим browser chrome zoom; проверен reduced layout. Реальные URL/controllers не использовались.
+
+Review-corrected product81424e9: полный Owner UX suite36/36 PASS каждый Chromium/Firefox/WebKit. Runtime import18/18 PASS повторно; origin-entry comparison UX-12 PASS. Снимок mobile390px подтверждает перенос badge под длинным именем, внутреннее поле справа и вертикальную ручку. PR runtime list: [233](https://github.com/saymer-alt/link-generators/pull/233).

@@ -472,6 +472,13 @@ async function check(name, fn) {
     await n.locator('#workspaceDirectory a[href="#policyRoutingPanel"]').click();
     assert.equal(await n.locator('#cfgPolicyRouting').isChecked(), false);
     assert.equal(await n.locator('#cfgPolicyRouting').evaluate(el => el === document.activeElement), true);
+    let requests=0; n.on('request',()=>requests++);
+    const before=await n.evaluate(()=>{const p=rbCollectProject();delete p.meta.created;return JSON.stringify(p);});
+    await n.locator('#workspaceDirectory a[href="#runtimeImportDetails"]').click();
+    assert.equal(await n.locator('#rtUploadBtn').isVisible(),true);
+    assert.equal(await n.locator('#cfgServerList').isChecked(),false);
+    assert.equal(await n.locator('#runtimeImportDetails > summary').evaluate(el=>el===document.activeElement),true);
+    assert.equal(await n.evaluate(()=>{const p=rbCollectProject();delete p.meta.created;return JSON.stringify(p);}),before); assert.equal(requests,0);
     await n.locator('#workspaceDirectory a[href="#physicalTopologyPanel"]').click();
     assert.equal(await n.locator('#ptDemoBtn').isVisible(), true);
     await n.locator('#workspaceDirectory a[href="#perProxyAdvancedDetails"]').click();
@@ -537,6 +544,32 @@ async function check(name, fn) {
     assert.equal(await n.locator('#mihomoOutput').inputValue(),original); assert.equal(await n.locator('#csImportInput').inputValue(),source);
     await nav.locator('[data-vrg-action=size-reset]').click();
     if(consumer==='Studio'){await expand.click();await n.evaluate(()=>csClearStudio());assert.equal(await n.locator('.vrg-expanded').count(),0);assert.equal(await n.evaluate(()=>document.body.style.overflow),'');}
+  });
+  await check('UX12 runtime list long names badges selection and narrow scroll', async () => {
+    const n=await fresh(); await n.locator('#workspaceDirectory > summary').click();
+    await n.locator('#workspaceDirectory a[href="#runtimeImportDetails"]').click();
+    const long='Очень-длинное-имя-🇷🇺-'+ 'LongNode'.repeat(24);
+    const runtimeNames=[long,...Array.from({length:45},(_,i)=>'Runtime-'+i)];
+    const chooserPromise=n.waitForEvent('filechooser'); await n.locator('#rtUploadBtn').click();
+    await (await chooserPromise).setFiles({name:'runtime.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({providers:{LocalFixture:{proxies:runtimeNames.map(name=>({name,type:'Vless',alive:true}))}}}))});
+    const list=n.locator('#subscriptionPreviewNames'); assert.equal(await n.locator('#cfgServerList').isChecked(),false); await n.waitForFunction(()=>document.querySelectorAll('#subscriptionPreviewNames .sub-list-item').length===46);
+    const before=await n.evaluate(()=>({names:subscriptionListNames,origins:[...serverListNameOrigins],selected:[...subscriptionSelection]}));
+    assert.equal(await list.locator('.sub-list-item .hint').count(),46);
+    for(const width of [1280,1366,1920,320,390,640]) {
+      await n.setViewportSize({width,height:740}); await list.scrollIntoViewIfNeeded();
+      const geometry=await list.evaluate(el=>{const r=el.getBoundingClientRect(); const row=el.querySelector('.sub-list-item'),name=row.querySelector('span'),badge=row.querySelector('.hint');return {width:el.clientWidth,scroll:el.scrollWidth,padding:parseFloat(getComputedStyle(el).paddingRight),name:name.getBoundingClientRect().right-r.left,badge:badge.getBoundingClientRect().right-r.left,overflow:el.scrollHeight>el.clientHeight};});
+      assert.ok(geometry.padding>=10,'badge needs inner padding'); assert.ok(geometry.scroll<=geometry.width+1,'long name causes horizontal scrolling'); assert.ok(geometry.badge<=geometry.width-8); assert.ok(geometry.name<=geometry.width-8); assert.equal(geometry.overflow,true);
+      await list.evaluate(el=>el.scrollTop=el.scrollHeight); await n.waitForFunction(()=>document.getElementById('subscriptionPreviewNames').scrollTop>0);
+    }
+    assert.deepEqual(await n.evaluate(()=>({names:subscriptionListNames,origins:[...serverListNameOrigins],selected:[...subscriptionSelection]})),before);
+    await n.locator('#subListSearch').fill('Runtime-44'); assert.equal(await list.locator('.sub-list-item').count(),1);
+    const box=list.locator('input'); await box.check(); assert.equal(await n.evaluate(()=>subscriptionSelection.has('Runtime-44')),true);
+    await box.uncheck(); await n.locator('#subListSearch').fill(''); assert.equal(await list.locator('.sub-list-item').count(),46);
+    assert.deepEqual(await n.evaluate(()=>[...subscriptionSelection]),before.selected);
+    const beforeSize=await n.evaluate(()=>({yaml:document.getElementById('mihomoOutput').value,selected:[...subscriptionSelection],names:subscriptionListNames}));
+    await list.evaluate(el=>el.style.height='340px'); assert.equal(await list.evaluate(el=>getComputedStyle(el).resize),'vertical');
+    assert.deepEqual(await n.evaluate(()=>({yaml:document.getElementById('mihomoOutput').value,selected:[...subscriptionSelection],names:subscriptionListNames})),beforeSize);
+    await n.setViewportSize({width:390,height:740}); await list.evaluate(el=>el.scrollTop=0); await screenshot(n,'#serverListPanel','runtime-list-mobile');
   });
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });
   await browser.close();

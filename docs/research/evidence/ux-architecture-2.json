@@ -1,0 +1,547 @@
+{
+  "baseline": "89a046519b3492c450a4a0cf05f9fb4fbaf0c8c0",
+  "scope": "offline fixtures; no live infrastructure",
+  "results": {
+    "ux10_before": {
+      "passed": 0,
+      "failed": 4,
+      "checks": [
+        {
+          "name": "UX10 quick start ends at YAML before engineering sections",
+          "pass": false
+        },
+        {
+          "name": "UX10 keyboard workspace navigation preserves project YAML and generation",
+          "pass": false
+        },
+        {
+          "name": "UX10 expert directory reveals tools without enabling options",
+          "pass": false
+        },
+        {
+          "name": "UX10 quick start downloads exactly the validated YAML",
+          "pass": false
+        }
+      ]
+    },
+    "ux10_after": {
+      "passed": 4,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX10 quick start ends at YAML before engineering sections",
+          "pass": true
+        },
+        {
+          "name": "UX10 keyboard workspace navigation preserves project YAML and generation",
+          "pass": true
+        },
+        {
+          "name": "UX10 expert directory reveals tools without enabling options",
+          "pass": true
+        },
+        {
+          "name": "UX10 quick start downloads exactly the validated YAML",
+          "pass": true
+        }
+      ]
+    },
+    "ux11_before": {
+      "passed": 0,
+      "failed": 2,
+      "checks": [
+        {
+          "name": "UX11 expanded graph height Escape and focus Builder",
+          "pass": false
+        },
+        {
+          "name": "UX11 expanded graph height Escape and focus Studio",
+          "pass": false
+        }
+      ]
+    },
+    "ux12_before": {
+      "passed": 0,
+      "failed": 1,
+      "checks": [
+        {
+          "name": "UX12 runtime list long names badges selection and narrow scroll",
+          "pass": false
+        }
+      ]
+    },
+    "ux12_after": {
+      "passed": 1,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX12 runtime list long names badges selection and narrow scroll",
+          "pass": true
+        }
+      ]
+    },
+    "chromium": {
+      "passed": 36,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX09 chevrons follow native open state and nested keyboard toggles",
+          "pass": true
+        },
+        {
+          "name": "UX01 add controls precede cards and separate import",
+          "pass": true
+        },
+        {
+          "name": "UX01/02 four visible focused cards in append order",
+          "pass": true
+        },
+        {
+          "name": "UX01 doubleclick creates exactly one card",
+          "pass": true
+        },
+        {
+          "name": "UX02 delete and re-add reuses free name without renaming",
+          "pass": true
+        },
+        {
+          "name": "UX02 manual duplicate remains strict validation",
+          "pass": true
+        },
+        {
+          "name": "UX02 imported names and order survive manual addition",
+          "pass": true
+        },
+        {
+          "name": "UX02 project roundtrip retains policy names and priority",
+          "pass": true
+        },
+        {
+          "name": "UX04 no automatic request; empty field defaults only on Fetch",
+          "pass": true
+        },
+        {
+          "name": "UX04 default secret requires target confirmation and cancel sends nothing",
+          "pass": true
+        },
+        {
+          "name": "UX05 UI URL normalization, prefix, IPv6 and credentials rejection",
+          "pass": true
+        },
+        {
+          "name": "UX06 HTTP, malformed JSON and unknown network failure stay distinct",
+          "pass": true
+        },
+        {
+          "name": "UX06 timeout uses existing eight second abort",
+          "pass": true
+        },
+        {
+          "name": "UX07 empty Inspector offers normal Build then default offline probe",
+          "pass": true
+        },
+        {
+          "name": "UX08 stale coverage offers rebuild and retains chosen domains",
+          "pass": true
+        },
+        {
+          "name": "UX07 network Build cancel does not send or mutate project",
+          "pass": true
+        },
+        {
+          "name": "UX07 consent uses normal subscription Build and custom domain",
+          "pass": true
+        },
+        {
+          "name": "UX07 pending diagnostic cannot overwrite changed query/settings",
+          "pass": true
+        },
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
+          "pass": true
+        },
+        {
+          "name": "UX03 real normal Build with 19+ nodes and unchanged YAML",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=1",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=12",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=50",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=100",
+          "pass": true
+        },
+        {
+          "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+          "pass": true
+        },
+        {
+          "name": "UX03 Config Studio same controls, focus, reset and YAML invariant",
+          "pass": true
+        },
+        {
+          "name": "UX03 mobile 320/360/390 controls fit viewport",
+          "pass": true
+        },
+        {
+          "name": "UX03 repeated Parse/Focus and empty/error clear safely",
+          "pass": true
+        },
+        {
+          "name": "UX10 quick start ends at YAML before engineering sections",
+          "pass": true
+        },
+        {
+          "name": "UX10 keyboard workspace navigation preserves project YAML and generation",
+          "pass": true
+        },
+        {
+          "name": "UX10 expert directory reveals tools without enabling options",
+          "pass": true
+        },
+        {
+          "name": "UX10 quick start downloads exactly the validated YAML",
+          "pass": true
+        },
+        {
+          "name": "UX11 expanded graph height Escape and focus Builder",
+          "pass": true
+        },
+        {
+          "name": "UX11 expanded graph height Escape and focus Studio",
+          "pass": true
+        },
+        {
+          "name": "UX12 runtime list long names badges selection and narrow scroll",
+          "pass": true
+        },
+        {
+          "name": "no page errors",
+          "pass": true
+        }
+      ]
+    },
+    "firefox": {
+      "passed": 36,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX09 chevrons follow native open state and nested keyboard toggles",
+          "pass": true
+        },
+        {
+          "name": "UX01 add controls precede cards and separate import",
+          "pass": true
+        },
+        {
+          "name": "UX01/02 four visible focused cards in append order",
+          "pass": true
+        },
+        {
+          "name": "UX01 doubleclick creates exactly one card",
+          "pass": true
+        },
+        {
+          "name": "UX02 delete and re-add reuses free name without renaming",
+          "pass": true
+        },
+        {
+          "name": "UX02 manual duplicate remains strict validation",
+          "pass": true
+        },
+        {
+          "name": "UX02 imported names and order survive manual addition",
+          "pass": true
+        },
+        {
+          "name": "UX02 project roundtrip retains policy names and priority",
+          "pass": true
+        },
+        {
+          "name": "UX04 no automatic request; empty field defaults only on Fetch",
+          "pass": true
+        },
+        {
+          "name": "UX04 default secret requires target confirmation and cancel sends nothing",
+          "pass": true
+        },
+        {
+          "name": "UX05 UI URL normalization, prefix, IPv6 and credentials rejection",
+          "pass": true
+        },
+        {
+          "name": "UX06 HTTP, malformed JSON and unknown network failure stay distinct",
+          "pass": true
+        },
+        {
+          "name": "UX06 timeout uses existing eight second abort",
+          "pass": true
+        },
+        {
+          "name": "UX07 empty Inspector offers normal Build then default offline probe",
+          "pass": true
+        },
+        {
+          "name": "UX08 stale coverage offers rebuild and retains chosen domains",
+          "pass": true
+        },
+        {
+          "name": "UX07 network Build cancel does not send or mutate project",
+          "pass": true
+        },
+        {
+          "name": "UX07 consent uses normal subscription Build and custom domain",
+          "pass": true
+        },
+        {
+          "name": "UX07 pending diagnostic cannot overwrite changed query/settings",
+          "pass": true
+        },
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
+          "pass": true
+        },
+        {
+          "name": "UX03 real normal Build with 19+ nodes and unchanged YAML",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=1",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=12",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=50",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=100",
+          "pass": true
+        },
+        {
+          "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+          "pass": true
+        },
+        {
+          "name": "UX03 Config Studio same controls, focus, reset and YAML invariant",
+          "pass": true
+        },
+        {
+          "name": "UX03 mobile 320/360/390 controls fit viewport",
+          "pass": true
+        },
+        {
+          "name": "UX03 repeated Parse/Focus and empty/error clear safely",
+          "pass": true
+        },
+        {
+          "name": "UX10 quick start ends at YAML before engineering sections",
+          "pass": true
+        },
+        {
+          "name": "UX10 keyboard workspace navigation preserves project YAML and generation",
+          "pass": true
+        },
+        {
+          "name": "UX10 expert directory reveals tools without enabling options",
+          "pass": true
+        },
+        {
+          "name": "UX10 quick start downloads exactly the validated YAML",
+          "pass": true
+        },
+        {
+          "name": "UX11 expanded graph height Escape and focus Builder",
+          "pass": true
+        },
+        {
+          "name": "UX11 expanded graph height Escape and focus Studio",
+          "pass": true
+        },
+        {
+          "name": "UX12 runtime list long names badges selection and narrow scroll",
+          "pass": true
+        },
+        {
+          "name": "no page errors",
+          "pass": true
+        }
+      ]
+    },
+    "webkit": {
+      "passed": 36,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX09 chevrons follow native open state and nested keyboard toggles",
+          "pass": true
+        },
+        {
+          "name": "UX01 add controls precede cards and separate import",
+          "pass": true
+        },
+        {
+          "name": "UX01/02 four visible focused cards in append order",
+          "pass": true
+        },
+        {
+          "name": "UX01 doubleclick creates exactly one card",
+          "pass": true
+        },
+        {
+          "name": "UX02 delete and re-add reuses free name without renaming",
+          "pass": true
+        },
+        {
+          "name": "UX02 manual duplicate remains strict validation",
+          "pass": true
+        },
+        {
+          "name": "UX02 imported names and order survive manual addition",
+          "pass": true
+        },
+        {
+          "name": "UX02 project roundtrip retains policy names and priority",
+          "pass": true
+        },
+        {
+          "name": "UX04 no automatic request; empty field defaults only on Fetch",
+          "pass": true
+        },
+        {
+          "name": "UX04 default secret requires target confirmation and cancel sends nothing",
+          "pass": true
+        },
+        {
+          "name": "UX05 UI URL normalization, prefix, IPv6 and credentials rejection",
+          "pass": true
+        },
+        {
+          "name": "UX06 HTTP, malformed JSON and unknown network failure stay distinct",
+          "pass": true
+        },
+        {
+          "name": "UX06 timeout uses existing eight second abort",
+          "pass": true
+        },
+        {
+          "name": "UX07 empty Inspector offers normal Build then default offline probe",
+          "pass": true
+        },
+        {
+          "name": "UX08 stale coverage offers rebuild and retains chosen domains",
+          "pass": true
+        },
+        {
+          "name": "UX07 network Build cancel does not send or mutate project",
+          "pass": true
+        },
+        {
+          "name": "UX07 consent uses normal subscription Build and custom domain",
+          "pass": true
+        },
+        {
+          "name": "UX07 pending diagnostic cannot overwrite changed query/settings",
+          "pass": true
+        },
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
+          "pass": true
+        },
+        {
+          "name": "UX03 real normal Build with 19+ nodes and unchanged YAML",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=1",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=12",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=50",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=100",
+          "pass": true
+        },
+        {
+          "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+          "pass": true
+        },
+        {
+          "name": "UX03 Config Studio same controls, focus, reset and YAML invariant",
+          "pass": true
+        },
+        {
+          "name": "UX03 mobile 320/360/390 controls fit viewport",
+          "pass": true
+        },
+        {
+          "name": "UX03 repeated Parse/Focus and empty/error clear safely",
+          "pass": true
+        },
+        {
+          "name": "UX10 quick start ends at YAML before engineering sections",
+          "pass": true
+        },
+        {
+          "name": "UX10 keyboard workspace navigation preserves project YAML and generation",
+          "pass": true
+        },
+        {
+          "name": "UX10 expert directory reveals tools without enabling options",
+          "pass": true
+        },
+        {
+          "name": "UX10 quick start downloads exactly the validated YAML",
+          "pass": true
+        },
+        {
+          "name": "UX11 expanded graph height Escape and focus Builder",
+          "pass": true
+        },
+        {
+          "name": "UX11 expanded graph height Escape and focus Studio",
+          "pass": true
+        },
+        {
+          "name": "UX12 runtime list long names badges selection and narrow scroll",
+          "pass": true
+        },
+        {
+          "name": "no page errors",
+          "pass": true
+        }
+      ]
+    }
+  },
+  "yaml_parity": "10/10 byte-identical",
+  "runtime": 63,
+  "runtime_import": 18,
+  "subscription_preview": 17,
+  "release_ui": "72 layout checks plus reverse journey PASS",
+  "zoom_limit": "640x360 reduced layout; browser chrome zoom not exercised",
+  "review_corrections": [
+    "expanded pan retained on Escape; auto-Fit ends on manual pan",
+    "WebKit explicit expand focus and cancellable ResizeObserver writes",
+    "help inside readable wrapper",
+    "directory reveals runtime importer without project/network mutation; local upload remains visible"
+  ],
+  "tested_product_commit": "81424e9"
+}
