@@ -6577,7 +6577,7 @@ function ptNetworkDiagnostics(spec, model, opts) {
 const RB_PROJECT_SCHEMA_VERSION = 1;
 const RB_PROJECT_MAX_BYTES = 4 * 1024 * 1024;
 const RB_PROFILES = new Set(['router', 'vps-local', 'vps-gateway']);
-const RB_DASHBOARDS = new Set(['metacubexd', 'yacd-meta', 'zashboard', 'custom']);
+const RB_DASHBOARDS = new Set(['metacubexd', 'yacd', 'zashboard', 'custom']);
 const RB_STRATEGIES = new Set(['url-test', 'fallback', 'load-balance']);
 
 
@@ -6808,10 +6808,10 @@ function rbYamlToProject(doc) {
   for (const g of groups) {
     if (g && typeof g.url === 'string') urlTests.add(g.url);
   }
-  const URLTEST_KNOWN = ['https://www.gstatic.com/generate_204', 'https://cp.cloudflare.com/generate_204', 'https://connectivitycheck.platform.hicloud.com/generate_204'];
+  const URLTEST_KNOWN = (globalThis.web4core?.URLTEST_CHOICES || [{url:'https://www.gstatic.com/generate_204'}]).map(c => c.url);
   if (urlTests.size === 1) {
     const u = [...urlTests][0];
-    project.options.urlTestPreset = u;
+    project.options.urlTestPreset = URLTEST_KNOWN.includes(u) ? u : '__custom__';
     if (!URLTEST_KNOWN.includes(u)) project.options.urlTestCustomUrl = u;
   } else if (urlTests.size > 1) {
     findings.push({ field: 'urlTest', state: 'CONFLICT', note: 'разные health-check URL (' + urlTests.size + ' шт.) — восстановлен дефолт' });
@@ -6831,15 +6831,25 @@ function rbYamlToProject(doc) {
 
   // --- deployment-профиль (маркеры) ---
   const tun = (doc.tun && typeof doc.tun === 'object') ? doc.tun : null;
-  const hasTun = !!(tun && (tun.enable === true || tun.device));
+  const hasTun = !!(tun && tun.enable === true);
   const hijack = !!(tun && Array.isArray(tun['dns-hijack']) && tun['dns-hijack'].some(h => String(h).includes('any:53')));
   const storeFakeIp = !!(doc.profile && typeof doc.profile === 'object' && doc.profile['store-fake-ip'] === true);
   const controller = String(doc['external-controller'] || '');
-  if (hijack && storeFakeIp) {
+  const gatewayMarker = hasTun && tun['auto-route'] === false && controller === '127.0.0.1:9090';
+  if ((hijack && storeFakeIp) || gatewayMarker) {
     project.options.profile = 'vps-gateway';
     project.options.addTun = true;
-    project.options.vpsDnsEnabled = !!(doc.dns && typeof doc.dns === 'object');
-    findings.push({ field: 'options.vpsDns*', state: 'DERIVED', note: 'VPS-DNS поля (listen/nameservers) восстанавливаются из dns:-секции частично; сверить после Restore' });
+    project.options.vpsDevice = String(tun.device || '');
+    project.options.vpsMtu = tun.mtu === undefined ? '' : String(tun.mtu);
+    const dns = doc.dns && typeof doc.dns === 'object' ? doc.dns : null;
+    project.options.vpsDnsEnabled = !!(dns && dns.enable === true);
+    if (dns) {
+      project.options.vpsFakeIp = String(dns['fake-ip-range'] || '');
+      project.options.vpsDnsListen = String(dns.listen || '');
+      project.options.vpsDnsNs = Array.isArray(dns.nameserver) ? dns.nameserver.join(', ') : '';
+      project.options.vpsProxyNs = Array.isArray(dns['proxy-server-nameserver']) ? dns['proxy-server-nameserver'].join(', ') : '';
+    }
+    findings.push({ field: 'options.profile/vpsDns*', state: 'DERIVED', note: 'gateway по auto-route:false/controller и TUN; device/MTU/DNS восстановлены из исходника, проверьте перед применением' });
   } else if (!hasTun && controller === '127.0.0.1:9090') {
     project.options.profile = 'vps-local';
     project.options.addSocks = true;
@@ -6857,7 +6867,7 @@ function rbYamlToProject(doc) {
   if (doc['external-ui']) {
     project.options.webUI = true;
     const dash = String(doc['external-ui'] || '');
-    const known = ['metacubexd', 'yacd-meta', 'zashboard'];
+    const known = ['metacubexd', 'yacd', 'zashboard'];
     const match = known.find(k => dash.includes(k));
     if (match) project.options.webUiDashboard = match;
     else if (doc['external-ui-url']) { project.options.webUiDashboard = 'custom'; project.options.webUiCustomUrl = String(doc['external-ui-url']); }
@@ -6924,7 +6934,11 @@ function rbYamlToProject(doc) {
   const unknownKeys = Object.keys(doc).filter(k => !RB_GENERATOR_TOP_KEYS.has(k));
   for (const k of unknownKeys) passthrough[k] = doc[k];
   if (unknownKeys.length) findings.push({ field: 'top-level', state: 'UNSUPPORTED', note: unknownKeys.length + ' ключ(ей) вне модели Builder сохранены в passthrough — при пересборке НЕ переносятся автоматически' });
-  project.passthrough = Object.keys(passthrough).length ? passthrough : null;
+  // Полная исходная модель остаётся в проекте как recovery evidence, включая
+  // нестандартные поля внутри известных секций. Build её не накладывает.
+  passthrough['source-config'] = doc;
+  findings.push({ field: 'source-config', state: 'UNKNOWN', note: 'Исходная модель сохранена в проекте. Правила, группы, DNS и неизвестные вложенные поля новый Build формирует по модели Builder; parity произвольного YAML НЕ доказан. Сверьте результат с исходником.' });
+  project.passthrough = passthrough;
   return { project, findings };
 }
 
@@ -10154,6 +10168,7 @@ function rbWriteProject(project) {
   setOpt('pingSelect', o.urlTestPreset || 'https://www.gstatic.com/generate_204');
   const pingCustom = document.getElementById('pingCustomUrl');
   if (pingCustom) { pingCustom.value = o.urlTestCustomUrl || ''; pingCustom.dispatchEvent(new Event('change', { bubbles: true })); }
+  document.getElementById('pingSelect').dispatchEvent(new Event('change', { bubbles: true }));
   setOpt('excludeFilterInput', o.excludeFilter || '');
   subscriptionListNames = (o.serverList && Array.isArray(o.serverList.names)) ? o.serverList.names.slice() : [];
   subscriptionListNodes = (o.serverList && Number(o.serverList.nodes)) || 0;
@@ -10211,13 +10226,14 @@ async function rbLoadProject(file) {
   const beforeRead = rbProjectFingerprint(rbCollectProject());
   if (file.size > RB_PROJECT_MAX_BYTES) return showToast('❌ Проект: файл слишком большой', true);
   let text = '';
-  try { text = await file.text(); } catch (e) { return showToast('❌ Не удалось прочитать файл: ' + (e && e.message ? e.message : e), true); }
+  try { text = await file.text(); } catch (_) { return showToast('❌ Не удалось прочитать файл проекта (значения скрыты).', true); }
   const parsed = rbParseProjectText(text);
   if (!parsed.ok) return showToast('❌ Проект: ' + parsed.error, true);
   const project = parsed.project;
   if (beforeRead !== rbProjectFingerprint(rbCollectProject())) return showToast('Builder изменился во время чтения файла. Загрузите проект повторно.', true);
-  const hasState = document.getElementById('mihomoInput').value.trim() || wgProfiles.length;
-  if (hasState && !confirm('Загрузить проект вместо текущего состояния Builder? Прежнее состояние можно вернуть кнопкой «↩︎ Отменить восстановление».')) {
+  const counts = rbProjectCounts(project);
+  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
+  if (!confirm(preview)) {
     return showToast('Загрузка проекта отменена.');
   }
   const snapshot = rbCollectProject();

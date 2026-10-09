@@ -52,7 +52,8 @@ function makeWgFiles() {
   page.setDefaultTimeout(25000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('dialog', d => d.accept());
+  const dialogs = [];
+  page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
   if (process.env.JS_YAML_PATH) await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ path: process.env.JS_YAML_PATH, contentType: 'text/javascript' }));
 
   const build = async (gate) => {
@@ -126,6 +127,7 @@ function makeWgFiles() {
   delete expected.meta.created;
   assert.deepEqual(restored, expected, 'Project Restore: состояние поле-в-поле');
   ok('Project Restore: состояние Builder восстановлено поле-в-поле');
+  assert.ok(dialogs.some(t => t.includes('Предпросмотр проекта: подписок 6') && t.includes('WG/AWG 8')), 'Load previews actual composition and requires explicit Confirm in a new session');
 
   await build(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state));
   assert.equal(await page.evaluate(() => MIHOMO_VALIDATION_STATE.state), 'VALID');
@@ -182,6 +184,16 @@ function makeWgFiles() {
   }
   assert.equal(nC, nA, 'YAML Reverse: Restore → Build байт-эквивалентен (x-hwid нормализован)');
   ok('ФАЗА C: YAML Reverse Build byte-parity для 8-подписочного конфига');
+
+  if (process.env.MIHOMO_BIN) {
+    const { execFileSync } = require('node:child_process');
+    for (const [name, text] of [['modified', yamlB], ['reversed', yamlC]]) {
+      const file = path.join(outDir, 'core-' + name + '.yaml');
+      fs.writeFileSync(file, text);
+      execFileSync(process.env.MIHOMO_BIN, ['-t', '-d', outDir, '-f', file], {stdio:'pipe',timeout:20000});
+    }
+    ok('real Mihomo -t: modified 8+7 and reversed output');
+  }
 
   assert.deepEqual(errors, [], 'нет pageerror: ' + errors.join(' | '));
   console.log('PASS qa-reverse-integration: ' + passed + ' checks');

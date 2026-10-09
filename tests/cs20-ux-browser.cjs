@@ -53,10 +53,12 @@ const doc = {
   await revealBtn.click();
   assert.equal(await inp.getAttribute('type'), 'password', '🙈 скрывает значение');
   assert.equal(await inp.inputValue(), SECRET, 'скрытие сохраняет исходное значение');
+  await page.click('#csSaveFieldsBtn');
 
   // без изменений: ops пуст → экспорт = исходный текст (контракт «пусто = оставить исходное»)
   const export1 = await page.evaluate(() => csExportText());
   assert.ok(export1 && export1.includes(SECRET), 'без изменений: оригинальный ключ в экспорте');
+  assert.equal(export1, yaml.dump(doc), 'Save without edits preserves exact source bytes');
   ok('пустое поле: исходный ключ сохранён');
 
   // замена — в свежей странице (edit-сессия: одна правка секрета за сессию)
@@ -86,6 +88,9 @@ const doc = {
   assert.ok(!diffText.includes(NEW_SECRET) && !diffText.includes(SECRET), 'дифф без секретов');
   assert.ok(!(await page.textContent('#csStatus')).includes(NEW_SECRET), 'статус без секретов');
   ok('замена: новый ключ в экспорте, дифф/статус замаскированы');
+  await page.click('#csResetBtn');
+  assert.equal(await page.evaluate(() => csExportText()), yaml.dump(doc), 'отмена правок возвращает оригинальный секрет');
+  ok('отмена замены возвращает исходный секрет');
 
   assert.deepEqual(errors, [], 'нет pageerror: ' + errors.join(' | '));
   console.log('PASS cs20-ux-browser: ' + passed + ' checks');
