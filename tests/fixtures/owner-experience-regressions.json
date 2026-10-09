@@ -73,6 +73,16 @@
       "scenario_prefixes": [
         "UX09 chevrons follow native open state and nested keyboard toggles"
       ]
+    },
+    {
+      "id": "UX-10",
+      "summary": "Первый Build теряется среди инженерных инструментов, нет навигации по рабочим сценариям",
+      "scenario_prefixes": [
+        "UX10 quick start ends at YAML before engineering sections",
+        "UX10 keyboard workspace navigation preserves project YAML and generation",
+        "UX10 expert directory reveals tools without enabling options",
+        "UX10 quick start downloads exactly the validated YAML"
+      ]
     }
   ]
 }

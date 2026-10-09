@@ -435,6 +435,57 @@ async function check(name, fn) {
     assert.equal(await g.locator('#csVrgSvgWrapNav button:enabled').count(), 0);
     assert.equal(await g.evaluate(() => vrgNavigation.has(document.getElementById('csVrgSvgWrap'))), false);
   });
+  await check('UX10 quick start ends at YAML before engineering sections', async () => {
+    const n = await fresh();
+    assert.equal(await n.locator('#builderWorkspaceNav a').count(), 5);
+    assert.equal(await n.locator('.builder-workspace').count(), 5);
+    assert.equal(await n.locator('#ux-start').evaluate(el => el.parentElement.contains(document.getElementById('mihomoOutput'))), true);
+    assert.equal(await n.locator('#ux-start').evaluate(el => el.parentElement.contains(document.getElementById('physicalTopologyPanel'))), false);
+    assert.equal(await n.evaluate(() => !!(document.getElementById('mihomoOutput').compareDocumentPosition(document.getElementById('ux-routing')) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
+    await n.locator('#cfgPolicyRouting').uncheck();
+    await n.locator('#builderWorkspaceNav a[href="#ux-diagnostics"]').click();
+    await n.locator('#routingDiagnostics > summary').click();
+    assert.equal(await n.locator('#rdTestBtn').isVisible(), true, 'diagnostics independent of DPR enable');
+    await n.locator('#rdTestBtn').click(); assert.equal(await n.locator('#rdBuildCheckBtn').isVisible(), true);
+  });
+  await check('UX10 keyboard workspace navigation preserves project YAML and generation', async () => {
+    const n = await fresh(); await n.locator('#mihomoInput').fill(link); await n.locator('#btnPolicyAdd').click();
+    await n.locator('#wgFile').setInputFiles(path.join(root, 'tests/fixtures/wg-simple-a.conf'));
+    await n.waitForFunction(() => wgProfiles.length === 1); await build(n);
+    const snapshot = () => n.evaluate(() => { const project = rbCollectProject(); delete project.meta.created; return {project, yaml:document.getElementById('mihomoOutput').value, fingerprint:buildStateFingerprint(), seq:mihomoValidationSeq}; });
+    const before = await snapshot(); let requests = 0; n.on('request', r => { if (/^https?:/.test(r.url())) requests++; });
+    for (const [width, height] of [[1280,720],[1366,768],[1920,1080],[320,740],[390,740],[640,360]]) {
+      await n.setViewportSize({width,height});
+      for (const target of ['routing','diagnostics','lab','options','start']) {
+        const a = n.locator('#builderWorkspaceNav a[href="#ux-'+target+'"]'); await a.focus(); await n.keyboard.press('Enter');
+        assert.equal(await n.locator('#ux-'+target).evaluate(el => el === document.activeElement), true);
+        const box = await n.locator('#ux-'+target).boundingBox(); assert.ok(box.y >= 0 && box.y < height, 'target visible');
+      }
+      assert.equal(await n.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+    }
+    assert.deepEqual(await snapshot(), before); assert.equal(requests,0); assert.equal(await n.evaluate(() => diagnosticsCurrent()),true);
+    await screenshot(n, '#builderWorkspaceNav', 'workspace-mobile');
+  });
+  await check('UX10 expert directory reveals tools without enabling options', async () => {
+    const n = await fresh(); await n.locator('#cfgPolicyRouting').uncheck();
+    await n.locator('#workspaceDirectory > summary').click();
+    await n.locator('#workspaceDirectory a[href="#policyRoutingPanel"]').click();
+    assert.equal(await n.locator('#cfgPolicyRouting').isChecked(), false);
+    assert.equal(await n.locator('#cfgPolicyRouting').evaluate(el => el === document.activeElement), true);
+    await n.locator('#workspaceDirectory a[href="#physicalTopologyPanel"]').click();
+    assert.equal(await n.locator('#ptDemoBtn').isVisible(), true);
+    await n.locator('#workspaceDirectory a[href="#perProxyAdvancedDetails"]').click();
+    assert.equal(await n.locator('#cfgPerProxyMaster').isVisible(), true);
+    assert.equal(await n.locator('#cfgPerProxyMaster').isChecked(), false);
+  });
+  await check('UX10 quick start downloads exactly the validated YAML', async () => {
+    const n = await fresh(); assert.equal(await n.locator('#downloadYamlBtn').count(),1);
+    assert.equal(await n.locator('#downloadYamlBtn').isDisabled(),true);
+    await n.locator('#mihomoInput').fill(link); await build(n);
+    const [download] = await Promise.all([n.waitForEvent('download'),n.locator('#downloadYamlBtn').click()]);
+    assert.equal(download.suggestedFilename(),'config.yaml');
+    assert.equal(fs.readFileSync(await download.path(),'utf8'),await n.locator('#mihomoOutput').inputValue());
+  });
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });
   await browser.close();
   if (process.env.OWNER_UX_RESULTS) fs.writeFileSync(process.env.OWNER_UX_RESULTS, JSON.stringify({ engine, root, passed, failed, results }, null, 2));
