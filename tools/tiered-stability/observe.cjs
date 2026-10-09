@@ -8,7 +8,7 @@ let version, lastSuccess, lastFailure, failure, finishing;
 const error = e => ({ name: e.name, message: e.message, code: e.code || e.cause?.code });
 function event(type, data = {}) { timeline.push({ ms: Date.now() - started, type, ...data }); if (timeline.length > 2000) timeline.shift(); }
 function ensureRunning(){if(finishing)throw Error('LAB_STOPPING');}
-async function capture(e){if(!failure)failure={message:e.message,sessions:await Promise.all(sessions.map(snapshot))};}
+async function capture(e){if(!failure)failure={...error(e),sessions:await Promise.all(sessions.map(snapshot))};}
 function probe(port) { return new Promise(resolve => { const s = net.connect({host:'127.0.0.1',port}); let done=false; const end = value => { if(done)return; done=true; s.destroy(); resolve(value); }; s.setTimeout(300,()=>end({ready:false,code:'TIMEOUT'})); s.on('connect',()=>end({ready:true})); s.on('error',e=>end({ready:false,...error(e)})); }); }
 async function snapshot(s) {
   const state = { label:s.label, pid:s.child.pid, exitCode:s.child.exitCode, signal:s.child.signalCode, spawnError:s.spawnError,
@@ -37,6 +37,7 @@ function traffic(s,t0,body,e) {
 function classify(data) {
   const labels=[];
   if(!data.failure)return labels;
+  if(/EADDRINUSE|EACCES|bind:/i.test(data.failure.message))labels.push('BIND_ERROR');
   for(const s of data.failure?.sessions||[]) {
     if(!s.stopped && (s.spawnError || s.exitCode!==null || s.signal)) labels.push('CORE_EXIT');
     if(!s.stopped && s.controllerError) labels.push('CONTROLLER_NOT_READY');
@@ -46,8 +47,10 @@ function classify(data) {
     if([...(s.logTail||[]),...(s.errorLines||[])].some(line=>/address already in use|access permissions|server error: listen/i.test(line)))labels.push('BIND_ERROR');
   }
   for(const m of data.mocks||[]) { if(!m.alive)labels.push(m.name+'_DOWN'); if(!m.health?.length)labels.push(m.name+'_HEALTH_NOT_OBSERVED'); }
-  if(data.lastFailure?.error)labels.push(data.lastFailure.error.code||data.lastFailure.error.message);
-  else if(data.lastFailure?.body!==undefined)labels.push('UNEXPECTED_RESPONSE');
+  if(!labels.includes('BIND_ERROR')) {
+    if(data.lastFailure?.error)labels.push(data.lastFailure.error.code||data.lastFailure.error.message);
+    else if(data.lastFailure?.body!==undefined)labels.push('UNEXPECTED_RESPONSE');
+  }
   if(data.failure?.message?.includes('STALE_PROCESS'))labels.push('STALE_PROCESS');
   return [...new Set(labels)];
 }
@@ -78,7 +81,7 @@ async function finish(e) {
   if(finishing)return finishing;
   finishing=(async()=>{
     const cleanupErrors=[];
-    if(e && !failure) failure={message:e.message,sessions:await Promise.all(sessions.map(snapshot))};
+    if(e && !failure) failure={...error(e),sessions:await Promise.all(sessions.map(snapshot))};
     for(const s of sessions)try{await stop(s);}catch(err){cleanupErrors.push(error(err));}
     for(const m of mocks)for(const socket of m.sockets)socket.destroy();
     for(const server of servers) { server.closeAllConnections?.(); if(server.listening) await new Promise(r=>server.close(r)); }

@@ -86,7 +86,7 @@ function group(name, type, proxies, use) {
 }
 async function session(mihomoGroups, label, extraDoc, leafProxies) {
   const dir = path.resolve(process.env.TEST_OUTPUT_DIR, label); fs.mkdirSync(dir, { recursive: true });
-  const control = await freePort(), mixed = await freeMixed();
+  const control = await freePort(), mixed = await freeMixed(data=>observer.event('port-candidate-rejected',data));
   assert.notEqual(control,mixed,'controller and mixed ports must differ');
   const doc = Object.assign({
     'mixed-port': mixed,
