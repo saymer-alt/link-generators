@@ -210,6 +210,8 @@ jobs:
           echo "JS_YAML_PATH=$deps/node_modules/js-yaml/dist/js-yaml.min.js" >> "$GITHUB_ENV"
       - name: Owner UX browser matrix
         env:
+          # Container runs as root; GitHub's /github/home belongs to pwuser.
+          HOME: /root
           OWNER_UX_BROWSER: ${{ matrix.browser }}
         run: node tests/owner-ux-browser.cjs
 
