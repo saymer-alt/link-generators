@@ -536,5 +536,12 @@
   "runtime_import": 18,
   "subscription_preview": 17,
   "release_ui": "72 layout checks plus reverse journey PASS",
-  "zoom_limit": "640x360 reduced layout; browser chrome zoom not exercised"
+  "zoom_limit": "640x360 reduced layout; browser chrome zoom not exercised",
+  "review_corrections": [
+    "expanded pan retained on Escape; auto-Fit ends on manual pan",
+    "WebKit explicit expand focus and cancellable ResizeObserver writes",
+    "help inside readable wrapper",
+    "directory reveals runtime importer without project/network mutation; local upload remains visible"
+  ],
+  "tested_product_commit": "81424e9"
 }
