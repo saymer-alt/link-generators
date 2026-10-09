@@ -1,0 +1,3 @@
+downloaded-project.lgproject.json
+*.lgproject.json
+!docs/**

@@ -731,6 +731,10 @@
       <div class="btn-group">
         <button class="btn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" onclick="buildMihomo()">⚡ Build Config</button>
         <button class="btn btn-gray" id="copyYamlBtn" title="Скопировать итоговый YAML (доступно только после успешной проверки)" onclick="copyMihomo()">📋 Copy YAML</button>
+        <button class="btn btn-gray" title="Сохранить проект генератора (все подписки, WG/AWG-профили, настройки) в .lgproject.json. ВНИМАНИЕ: файл содержит приватные ключи и токены" onclick="rbSaveProject()">💾 Сохранить проект</button>
+        <button class="btn btn-gray" title="Загрузить проект генератора (.lgproject.json) и восстановить Builder" onclick="document.getElementById('rbProjectFile').click()">📂 Загрузить проект</button>
+        <button class="btn btn-gray" id="rbUndoBtn" style="display:none" title="Вернуть состояние Builder до загрузки проекта" onclick="rbUndoRestore()">↩︎ Отменить восстановление</button>
+        <input type="file" id="rbProjectFile" accept=".lgproject.json,.json" hidden>
       </div>
     </div>
 
@@ -751,6 +755,8 @@
       <textarea id="csImportInput" rows="12" aria-label="Mihomo config YAML для анализа" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="Вставьте содержимое config.yaml…"></textarea>
       <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
         <button type="button" class="btn btn-gray" id="csParseBtn">🔎 Разобрать</button>
+        <button type="button" class="btn btn-gray" id="csRestoreBtn" title="Восстановить состояние Builder из разобранного конфига (Reverse Build). Честный отчёт обратимости — см. панель ниже" style="display:none">🔁 Восстановить в Builder</button>
+        <div id="csRestoreOut" class="hint" style="display:none;margin-top:6px;white-space:pre-line;border:1px solid var(--border);padding:6px"></div>
         <label class="btn btn-gray" style="margin:0" for="csImportFile">📂 Загрузить .yaml / .yml</label>
         <input type="file" id="csImportFile" accept=".yaml,.yml" hidden>
         <button type="button" class="btn btn-gray" id="csClearBtn">Очистить</button>
@@ -2865,9 +2871,44 @@ function validateMihomoYaml(yaml) {
         }
       }
     });
-    // DPR-контракт: последнее правило — правило по умолчанию MATCH,GLOBAL
-    if (ruleProviderNames.size && doc.rules[doc.rules.length - 1] !== 'MATCH,GLOBAL') {
-      err('rules', '', fmtVal(doc.rules[doc.rules.length - 1]), 'последнее правило должно быть MATCH,GLOBAL (DEFAULT-правило)');
+    // DPR-контракт: последнее правило — дефолт в GLOBAL-достижимую группу.
+    // QA-01: с активным Tiered Failover финальное правило — MATCH,🪜 TIERED-AUTO
+    // (пост-патч), а сам корень входит в GLOBAL.proxies — контракт «дефолт
+    // завершается GLOBAL-веткой» сохранён. Принимаем tiered-дефолт только
+    // когда группа-корень реально существует в конфиге (структурная проверка,
+    // не подавление ошибки).
+    if (ruleProviderNames.size) {
+      const lastRule = doc.rules[doc.rules.length - 1];
+      const tieredRootExists = (Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []).some(g => g && g.name === '🪜 TIERED-AUTO');
+      const defaultOk = lastRule === 'MATCH,GLOBAL' || (tieredRootExists && lastRule === 'MATCH,🪜 TIERED-AUTO');
+      if (!defaultOk) {
+        err('rules', '', fmtVal(lastRule), 'последнее правило должно быть MATCH,GLOBAL (или MATCH,🪜 TIERED-AUTO при активном Tiered Failover с существующей группой-корнем)');
+      }
+    }
+  }
+
+  // --- QA-02: WG/AWG ключи — фактическое base64-декодирование и длина 32 байта ---
+  // Некорректный ключ page-валидатор раньше пропускал, а реальный mihomo -t
+  // отвергал («decode private key: illegal base64 data»). Сообщение БЕЗ значения.
+  function wgKeyFormatError(value, fieldLabel) {
+    if (typeof value !== 'string' || !value) return fieldLabel + ': ключ отсутствует или пуст';
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return fieldLabel + ': недопустимые символы (ожидается base64)';
+    if (value.length % 4 !== 0 || value.length > 44) return fieldLabel + ': некорректная длина base64 (' + value.length + ' символов)';
+    let decoded;
+    try { decoded = atob(value); } catch (_) { return fieldLabel + ': некорректное base64-кодирование'; }
+    if (decoded.length !== 32) return fieldLabel + ': ключ декодируется в ' + decoded.length + ' байт — контракт WireGuard требует 32';
+    return null;
+  }
+  for (const p of (Array.isArray(doc.proxies) ? doc.proxies : [])) {
+    if (!p || p.type !== 'wireguard') continue;
+    const name = String(p.name || '?');
+    const pkErr = wgKeyFormatError(p['private-key'], 'WireGuard ' + name + ': private-key');
+    if (pkErr) err('proxies[' + name + ']', 'private-key', 'присутствует', pkErr);
+    const pubErr = wgKeyFormatError(p['public-key'], 'WireGuard ' + name + ': public-key');
+    if (pubErr) err('proxies[' + name + ']', 'public-key', 'присутствует', pubErr);
+    if (p['pre-shared-key'] !== undefined && p['pre-shared-key'] !== '' && p['pre-shared-key'] !== null) {
+      const pskErr = wgKeyFormatError(p['pre-shared-key'], 'WireGuard ' + name + ': pre-shared-key');
+      if (pskErr) err('proxies[' + name + ']', 'pre-shared-key', 'присутствует', pskErr);
     }
   }
 
@@ -6528,6 +6569,366 @@ function ptNetworkDiagnostics(spec, model, opts) {
   };
 }
 // === PHYSICAL TOPOLOGY NETWORK DIAGNOSTICS — PT-DIAG-END ===
+// === REVERSE BUILD CORE (OWNER-REVERSE-01, PR B) — RB-CORE-START ===
+// Портативный проект генератора (.lgproject.json v1): валидация/миграция/
+// bounded-разбор — pure-функции (без DOM). Контракт формата:
+// docs/research/PORTABLE-BUILDER-PROJECT.md. Сбор/применение состояния
+// Builder (DOM) живёт в RB-UI, здесь только данные.
+const RB_PROJECT_SCHEMA_VERSION = 1;
+const RB_PROJECT_MAX_BYTES = 4 * 1024 * 1024;
+const RB_PROFILES = new Set(['router', 'vps-local', 'vps-gateway']);
+const RB_DASHBOARDS = new Set(['metacubexd', 'yacd-meta', 'zashboard', 'custom']);
+const RB_STRATEGIES = new Set(['url-test', 'fallback', 'load-balance']);
+
+
+function rbValidateProject(p) {
+  const errors = [];
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return ['project: not an object'];
+  if (typeof p.schemaVersion !== 'number' || !Number.isInteger(p.schemaVersion) || p.schemaVersion < 1) {
+    errors.push('schemaVersion: positive integer expected');
+  }
+  if (p.schemaVersion > RB_PROJECT_SCHEMA_VERSION) {
+    errors.push('файл создан более новой версией генератора (schemaVersion ' + p.schemaVersion + ' > ' + RB_PROJECT_SCHEMA_VERSION + ')');
+  }
+  const sources = p.sources;
+  if (!sources || typeof sources !== 'object') errors.push('sources: object expected');
+  else {
+    if (typeof sources.mainInput !== 'string') errors.push('sources.mainInput: string expected');
+    if (typeof sources.fallbackInput !== 'string') errors.push('sources.fallbackInput: string expected');
+    if (typeof sources.subMode !== 'boolean') errors.push('sources.subMode: boolean expected');
+    if (typeof sources.autoWhitelist !== 'boolean') errors.push('sources.autoWhitelist: boolean expected');
+  }
+  if (!Array.isArray(p.wgProfiles)) errors.push('wgProfiles: array expected');
+  else {
+    for (const w of p.wgProfiles) {
+      if (!w || typeof w !== 'object') { errors.push('wgProfiles[]: object expected'); continue; }
+      if (typeof w.filename !== 'string') errors.push('wgProfiles.filename: string expected');
+      if (!w.bean || typeof w.bean !== 'object') { errors.push('wgProfiles.bean: object expected'); continue; }
+      if (typeof w.bean.name !== 'string') errors.push('wgProfiles.bean.name: string expected');
+      if (w.mode !== 'direct' && w.mode !== 'proxy') errors.push('wgProfiles.mode: direct|proxy expected');
+      if (typeof w.target !== 'string') errors.push('wgProfiles.target: string expected');
+    }
+  }
+  if (!p.options || typeof p.options !== 'object') errors.push('options: object expected');
+  else {
+    if (!RB_PROFILES.has(p.options.profile)) errors.push('options.profile: router|vps-local|vps-gateway expected');
+    if (p.options.webUiDashboard !== undefined && p.options.webUiDashboard !== '' && !RB_DASHBOARDS.has(p.options.webUiDashboard)) {
+      errors.push('options.webUiDashboard: unknown dashboard');
+    }
+    if (p.options.serverList !== undefined) {
+      const sl = p.options.serverList;
+      if (!sl || typeof sl !== 'object' || !Array.isArray(sl.names) || !Array.isArray(sl.selected)) {
+        errors.push('options.serverList: {names[], selected[]} expected');
+      }
+    }
+  }
+  if (!p.dialer || typeof p.dialer !== 'object') errors.push('dialer: object expected');
+  else {
+    for (const k of ['name', 'members', 'providers']) {
+      if (typeof p.dialer[k] !== 'string') errors.push('dialer.' + k + ': string expected');
+    }
+  }
+  if (!p.domainPolicy || typeof p.domainPolicy !== 'object') errors.push('domainPolicy: object expected');
+  else {
+    if (typeof p.domainPolicy.enabled !== 'boolean') errors.push('domainPolicy.enabled: boolean expected');
+    if (!Array.isArray(p.domainPolicy.cards)) errors.push('domainPolicy.cards: array expected');
+    else for (const c of p.domainPolicy.cards) {
+      if (!c || typeof c !== 'object' || typeof c.name !== 'string' || typeof c.domains !== 'string' || typeof c.target !== 'string') {
+        errors.push('domainPolicy.cards[]: {name, domains, target} strings expected');
+        break;
+      }
+    }
+  }
+  if (!p.tiered || typeof p.tiered !== 'object') errors.push('tiered: object expected');
+  else {
+    if (typeof p.tiered.enabled !== 'boolean') errors.push('tiered.enabled: boolean expected');
+    if (!Array.isArray(p.tiered.cards)) errors.push('tiered.cards: array expected');
+    else for (const c of p.tiered.cards) {
+      if (!c || typeof c !== 'object' || typeof c.name !== 'string' || typeof c.strategy !== 'string') {
+        errors.push('tiered.cards[]: {name, strategy, members} expected');
+        break;
+      }
+      if (!RB_STRATEGIES.has(c.strategy)) errors.push('tiered.cards[].strategy: url-test|fallback|load-balance expected');
+      if (!Array.isArray(c.members)) { errors.push('tiered.cards[].members: array expected'); break; }
+    }
+  }
+  return errors;
+}
+
+// Миграции: v1 — текущая; >1 отвергается валидацией. Новые версии добавляют
+// упорядоченные шаги rbMigrations[1→2] и т.д.
+const RB_MIGRATIONS = {};
+function rbMigrateProject(p) {
+  let cur = p;
+  while (cur && cur.schemaVersion < RB_PROJECT_SCHEMA_VERSION) {
+    const step = RB_MIGRATIONS[cur.schemaVersion];
+    if (!step) return { ok: false, error: 'нет миграции schemaVersion ' + cur.schemaVersion };
+    cur = step(cur);
+    cur.schemaVersion = (cur.schemaVersion || 0) + 1;
+  }
+  return { ok: true, project: cur };
+}
+
+// Bounded-разбор: размер → JSON → миграция → валидация. Ничего не бросает:
+// результат {ok, project|error}.
+function rbParseProjectText(text) {
+  const s = String(text || '');
+  if (!s.length) return { ok: false, error: 'файл проекта пуст' };
+  if (s.length > RB_PROJECT_MAX_BYTES) return { ok: false, error: 'файл проекта слишком большой (>' + Math.floor(RB_PROJECT_MAX_BYTES / 1024 / 1024) + ' МБ)' };
+  let raw;
+  try { raw = JSON.parse(s); } catch (e) {
+    return { ok: false, error: 'не JSON: ' + String(e && e.message ? e.message : e).slice(0, 120) };
+  }
+  const migrated = rbMigrateProject(raw);
+  if (!migrated.ok) return { ok: false, error: migrated.error };
+  const errors = rbValidateProject(migrated.project);
+  if (errors.length) return { ok: false, error: 'структура проекта: ' + errors[0] + (errors.length > 1 ? ' (и ещё ' + (errors.length - 1) + ')' : '') };
+  return { ok: true, project: migrated.project };
+}
+// === REVERSE BUILD CORE — RB-CORE-END ===
+
+// === REVERSE BUILD YAML ENGINE (OWNER-REVERSE-01, PR C) — RBY-CORE-START ===
+// YAML → CanonicalProject (v1) + findings. Только детерминированные маркеры
+// (REVERSE-BUILD-RECOVERABILITY.md §2): никакого угадывания галочек по
+// «похожим структурам». Границы честны:
+//  - развёрнутые подписки (Sub OFF): URL — MISSING (NOT RECOVERABLE);
+//  - прямые прокси-узлы (не wireguard): link-emitter'а нет — passthrough
+//    (переносятся через «Расширенное редактирование YAML»), silent loss запрещён;
+//  - dialer-ГРУППА (кастомное имя): маркеров недостаточно — finding, не restore.
+const RB_GENERATOR_TOP_KEYS = new Set(['mixed-port', 'port', 'socks-port', 'allow-lan', 'bind-address', 'mode', 'log-level', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url', 'secret', 'tun', 'dns', 'sniffer', 'profile', 'proxies', 'proxy-groups', 'proxy-providers', 'rule-providers', 'rules']);
+
+// computeProviderName — точный порт web4core (mihomo.js:31/42) для CONFLICT-детекта.
+function rbSanitizeProviderName(name) {
+  const raw = String(name || '').trim().toLowerCase();
+  if (!raw) return '';
+  return raw
+    .replace(/^www\./, '')
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/[._-]{2,}/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 48);
+}
+function rbComputeProviderName(url, index, total, used) {
+  let base = '';
+  try { base = rbSanitizeProviderName(new URL(String(url || '').trim()).hostname || ''); } catch (_) {}
+  if (!base) base = total === 1 ? 'my_subscription' : `subscription_${index + 1}`;
+  let name = base;
+  let i = 2;
+  while (used.has(name)) name = `${base}-${i++}`;
+  used.add(name);
+  return name;
+}
+
+function rbYamlToProject(doc) {
+  const findings = [];
+  const passthrough = {};
+  const project = {
+    schemaVersion: RB_PROJECT_SCHEMA_VERSION,
+    meta: { app: 'link-generators', created: new Date().toISOString(), generatorVersion: String((globalThis.GENERATOR_META && GENERATOR_META.version) || ''), origin: 'yaml-reverse', wgProfileSeq: 0 },
+    sources: { subMode: false, mainInput: '', fallbackInput: '', autoWhitelist: false },
+    wgProfiles: [],
+    options: {
+      profile: 'router', addTun: false, tunMips: false, tunStackAdvanced: false, tunStackEx: 'gvisor',
+      addSocks: false, lan: false, perProxyMaster: false, perProxyTun: false, perProxySocks: false,
+      webUI: false, webUiDashboard: 'metacubexd', webUiCustomUrl: '',
+      urlTestPreset: 'https://www.gstatic.com/generate_204', urlTestCustomUrl: '',
+      excludeFilter: '', serverList: { names: [], nodes: 0, selected: [] },
+      realityModern: '', deviceModel: '', wgCustomDns: '', awgKeepalive: false, awgRtDiag: false,
+      vpsDnsEnabled: true, vpsDevice: '', vpsMtu: '', vpsFakeIp: '', vpsDnsListen: '', vpsDnsNs: '', vpsProxyNs: ''
+    },
+    dialer: { name: '', members: '', providers: '' },
+    domainPolicy: { enabled: false, cards: [] },
+    tiered: { enabled: false, cards: [] },
+    passthrough: null
+  };
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    return { project, findings: [{ field: 'document', state: 'INVALID', note: 'не YAML-объект' }] };
+  }
+
+  // --- источники: proxy-providers → URL-подписки (порядок ключей = порядок ввода) ---
+  const providers = (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object' && !Array.isArray(doc['proxy-providers'])) ? doc['proxy-providers'] : null;
+  const urls = [];
+  let excludeFilters = new Set();
+  let urlTests = new Set();
+  if (providers) {
+    const used = new Set();
+    let idx = 0;
+    for (const [name, prov] of Object.entries(providers)) {
+      if (!prov || typeof prov !== 'object' || prov.type !== 'http' || typeof prov.url !== 'string' || !/^https?:\/\//i.test(prov.url)) {
+        findings.push({ field: 'proxy-providers.' + name, state: 'UNSUPPORTED', note: 'не http-провайдер генератора — passthrough' });
+        passthrough['proxy-providers.' + name] = prov;
+        continue;
+      }
+      urls.push(prov.url);
+      // CONFLICT-детект: имя провайдера ≠ пересчёт из URL+порядка
+      const expected = rbComputeProviderName(prov.url, idx, Object.keys(providers).length, used);
+      if (name !== expected) findings.push({ field: 'proxy-providers.' + name, state: 'CONFLICT', note: 'имя провайдера «' + name + '» ≠ пересчёту «' + expected + '» — YAML правился вручную; после Restore имя будет пересчитано' });
+      idx++;
+      if (prov['exclude-filter'] !== undefined) excludeFilters.add(String(prov['exclude-filter']));
+      const hc = prov['health-check'];
+      if (hc && typeof hc.url === 'string') urlTests.add(hc.url);
+    }
+  }
+  project.sources.subMode = urls.length > 0;
+  project.sources.mainInput = urls.join('\n');
+  if (!urls.length) {
+    findings.push({ field: 'sources.mainInput', state: 'MISSING', note: 'URL развёрнутых подписок в YAML отсутствуют (Sub OFF) — NOT RECOVERABLE; узлы восстанавливаются как passthrough' });
+  }
+  if (excludeFilters.size === 1) project.options.excludeFilter = [...excludeFilters][0];
+  else if (excludeFilters.size > 1) findings.push({ field: 'excludeFilter', state: 'CONFLICT', note: 'у провайдеров разные exclude-filter (' + excludeFilters.size + ' шт.) — в Builder одно общее поле; не восстановлено' });
+
+  // urlTest: health-check провайдеров + url-test групп; согласованные → restore.
+  const groups = Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : [];
+  for (const g of groups) {
+    if (g && typeof g.url === 'string') urlTests.add(g.url);
+  }
+  const URLTEST_KNOWN = ['https://www.gstatic.com/generate_204', 'https://cp.cloudflare.com/generate_204', 'https://connectivitycheck.platform.hicloud.com/generate_204'];
+  if (urlTests.size === 1) {
+    const u = [...urlTests][0];
+    project.options.urlTestPreset = u;
+    if (!URLTEST_KNOWN.includes(u)) project.options.urlTestCustomUrl = u;
+  } else if (urlTests.size > 1) {
+    findings.push({ field: 'urlTest', state: 'CONFLICT', note: 'разные health-check URL (' + urlTests.size + ' шт.) — восстановлен дефолт' });
+  }
+
+  // --- AWL-режим ---
+  const proxies = Array.isArray(doc.proxies) ? doc.proxies : [];
+  const globalGroup = groups.find(g => g && g.name === 'GLOBAL') || null;
+  const awlProxy = proxies.some(p => p && /^(PRIMARY|FALLBACK)-\d+: /.test(String(p.name || '')));
+  if ((globalGroup && globalGroup.filter === '^(PRIMARY-|primary-)`^(FALLBACK-|fallback-)') || awlProxy) {
+    project.sources.autoWhitelist = true;
+    findings.push({ field: 'sources.fallbackInput', state: 'MISSING', note: 'URL fallback-подписок (AWL) развёрнуты — NOT RECOVERABLE' });
+  }
+
+  // socks/mixed-port: генератор эмитит mixed-port при addSocks (SOURCE-PROVEN emitter)
+  project.options.addSocks = !!(doc['mixed-port'] || doc['socks-port'] || doc.port);
+
+  // --- deployment-профиль (маркеры) ---
+  const tun = (doc.tun && typeof doc.tun === 'object') ? doc.tun : null;
+  const hasTun = !!(tun && (tun.enable === true || tun.device));
+  const hijack = !!(tun && Array.isArray(tun['dns-hijack']) && tun['dns-hijack'].some(h => String(h).includes('any:53')));
+  const storeFakeIp = !!(doc.profile && typeof doc.profile === 'object' && doc.profile['store-fake-ip'] === true);
+  const controller = String(doc['external-controller'] || '');
+  if (hijack && storeFakeIp) {
+    project.options.profile = 'vps-gateway';
+    project.options.addTun = true;
+    project.options.vpsDnsEnabled = !!(doc.dns && typeof doc.dns === 'object');
+    findings.push({ field: 'options.vpsDns*', state: 'DERIVED', note: 'VPS-DNS поля (listen/nameservers) восстанавливаются из dns:-секции частично; сверить после Restore' });
+  } else if (!hasTun && controller === '127.0.0.1:9090') {
+    project.options.profile = 'vps-local';
+    project.options.addSocks = true;
+  } else if (!hasTun && !controller) {
+    findings.push({ field: 'options.profile', state: 'UNKNOWN', note: 'нет маркеров профиля — восстановлен router (умолчание); проверьте вручную' });
+  } else {
+    project.options.profile = 'router';
+    if (hasTun) project.options.addTun = true;
+  }
+  if (hasTun) {
+    if (tun.stack === 'mips') project.options.tunMips = true;
+    else if (tun.stack === 'system' || tun.stack === 'mixed') { project.options.tunStackAdvanced = true; project.options.tunStackEx = tun.stack; }
+  }
+  if (doc['allow-lan'] === true) project.options.lan = true;
+  if (doc['external-ui']) {
+    project.options.webUI = true;
+    const dash = String(doc['external-ui'] || '');
+    const known = ['metacubexd', 'yacd-meta', 'zashboard'];
+    const match = known.find(k => dash.includes(k));
+    if (match) project.options.webUiDashboard = match;
+    else if (doc['external-ui-url']) { project.options.webUiDashboard = 'custom'; project.options.webUiCustomUrl = String(doc['external-ui-url']); }
+  }
+
+  // --- WG/AWG профили ---
+  let wgDnsSeen = new Set();
+  let seq = 0;
+  for (const p of proxies) {
+    if (!p || p.type !== 'wireguard') continue;
+    const restored = rbWgProxyToBean(p);
+    if (!restored) { findings.push({ field: 'proxies.' + (p && p.name), state: 'UNSUPPORTED', note: 'wireguard-узел без обязательных полей — passthrough' }); continue; }
+    seq++;
+    project.wgProfiles.push({ id: seq, filename: 'UNKNOWN', bean: restored.bean, mode: p['dialer-proxy'] ? 'proxy' : 'direct', target: p['dialer-proxy'] ? String(p['dialer-proxy']) : '' });
+    if (Array.isArray(restored.bean.wireguard.dns) && restored.bean.wireguard.dns.length) wgDnsSeen.add(restored.bean.wireguard.dns.join(','));
+    findings.push({ field: 'wg:' + restored.bean.name, state: 'EXACT', note: 'исходное имя файла: UNKNOWN, форматирование: NOT RECOVERABLE' + (restored.keepaliveRawLost ? '; raw-диапазон keepalive NOT RECOVERABLE (восстановлено эффективное значение)' : '') });
+  }
+  project.meta.wgProfileSeq = seq;
+  if (wgDnsSeen.size === 1) project.options.wgCustomDns = [...wgDnsSeen][0];
+  else if (wgDnsSeen.size > 1) findings.push({ field: 'wgCustomDns', state: 'CONFLICT', note: 'разные dns на WG-узлах — в Builder поле общее; не восстановлено' });
+
+  // --- прямые прокси (не wireguard): link-emitter отсутствует — passthrough ---
+  const direct = proxies.filter(p => p && p.type !== 'wireguard');
+  if (direct.length) {
+    passthrough['proxies:direct'] = direct;
+    findings.push({ field: 'proxies (прямые узлы)', state: 'UNSUPPORTED', note: direct.length + ' узл(ов) без link-emitter не переносятся в поле ввода Builder; доступны через «Расширенное редактирование YAML» — НЕ теряются' });
+  }
+
+  // --- DPR ---
+  const rps = (doc['rule-providers'] && typeof doc['rule-providers'] === 'object' && !Array.isArray(doc['rule-providers'])) ? doc['rule-providers'] : {};
+  const dprSlugs = Object.keys(rps).filter(n => /^policy-/.test(n));
+  const rules = Array.isArray(doc.rules) ? doc.rules : [];
+  if (dprSlugs.length) {
+    project.domainPolicy.enabled = true;
+    for (const slug of dprSlugs) {
+      const rp = rps[slug] || {};
+      const payload = Array.isArray(rp.payload) ? rp.payload.join('\n') : String(rp.payload || '');
+      const target = rules.map(r => String(r).split(',')).filter(pp => pp[0] === 'RULE-SET' && pp[1] === slug).map(pp => pp[2])[0] || 'SELECT';
+      project.domainPolicy.cards.push({ name: slug.slice('policy-'.length), domains: payload, target: ['GLOBAL', 'DIRECT', 'REJECT'].includes(target) ? target : 'SELECT' });
+      if (!['GLOBAL', 'DIRECT', 'REJECT'].includes(target)) findings.push({ field: 'domainPolicy.' + slug, state: 'DERIVED', note: 'цель «' + target + '» — группа; в карточке восстановлена SELECT-семантика, сверьте вручную' });
+    }
+  }
+
+  // --- Tiered ---
+  const tieredGroups = groups.filter(g => g && /^🪜 /.test(String(g.name || '')));
+  if (tieredGroups.some(g => g.name === '🪜 TIERED-AUTO')) {
+    project.tiered.enabled = true;
+    for (const g of tieredGroups) {
+      if (g.name === '🪜 TIERED-AUTO') continue;
+      project.tiered.cards.push({
+        name: String(g.name).replace(/^🪜\s+\d+\s+/, ''),
+        strategy: ['url-test', 'fallback', 'load-balance'].includes(g.type) ? g.type : 'url-test',
+        members: Array.isArray(g.proxies) ? g.proxies.slice() : []
+      });
+    }
+  }
+
+  // --- dialer-ГРУППА: маркеров недостаточно (кастомное имя) — честный finding ---
+  if (groups.some(g => g && Array.isArray(g.use) && g.use.length && !/^🪜 /.test(String(g.name || '')))) {
+    findings.push({ field: 'dialer.name/members/providers', state: 'UNKNOWN', note: 'dialer-группа не различима от прочих select-групп с use: — восстановите вручную при необходимости' });
+  }
+
+  // --- passthrough: верхнеуровневые ключи вне модели генератора ---
+  const unknownKeys = Object.keys(doc).filter(k => !RB_GENERATOR_TOP_KEYS.has(k));
+  for (const k of unknownKeys) passthrough[k] = doc[k];
+  if (unknownKeys.length) findings.push({ field: 'top-level', state: 'UNSUPPORTED', note: unknownKeys.length + ' ключ(ей) вне модели Builder сохранены в passthrough — при пересборке НЕ переносятся автоматически' });
+  project.passthrough = Object.keys(passthrough).length ? passthrough : null;
+  return { project, findings };
+}
+
+// YAML wireguard-узел → bean (форма parseWireGuardConf, camelCase).
+// SOURCE-PROVEN по фактическому emit (см. research-фикстуры PR A).
+function rbWgProxyToBean(p) {
+  if (!p || typeof p.server !== 'string' || typeof p['private-key'] !== 'string') return null;
+  const wg = {
+    ip: String(p.ip || ''), ipv6: String(p.ipv6 || ''),
+    addresses: [p.ip, p.ipv6].filter(Boolean),
+    privateKey: String(p['private-key']),
+    publicKey: String(p['public-key'] || ''),
+    preSharedKey: String(p['pre-shared-key'] || ''),
+    allowedIPs: Array.isArray(p['allowed-ips']) ? p['allowed-ips'].slice() : [],
+    dns: Array.isArray(p.dns) ? p.dns.slice() : [],
+    remoteDnsResolve: !!p['remote-dns-resolve']
+  };
+  let keepaliveRawLost = false;
+  if (p.mtu !== undefined) wg.mtu = p.mtu;
+  if (p['persistent-keepalive'] !== undefined) wg.persistentKeepalive = p['persistent-keepalive'];
+  if (p.reserved !== undefined) wg.reserved = p.reserved;
+  const awg = (p['amnezia-wg-option'] && typeof p['amnezia-wg-option'] === 'object') ? p['amnezia-wg-option'] : null;
+  if (awg) wg['amnezia-wg-option'] = Object.assign({}, awg);
+  return {
+    keepaliveRawLost: p['persistent-keepalive'] !== undefined,
+    bean: { proto: 'wireguard', name: String(p.name || ''), host: p.server, port: p.port, ipVersion: p['ip-version'] || 'ipv4', wireguard: wg }
+  };
+}
+// === REVERSE BUILD YAML ENGINE — RBY-CORE-END ===
+
 // === CONFIG STUDIO CORE (pure, deterministic; v1.11 #176/#178/#177) — CS-CORE-START ===
 // Анализ импортированного Mihomo-конфига. Дизайн: docs/research/CONFIG-STUDIO.md.
 // Ключевое переиспользование: импортированный doc после jsyaml.load скармливается
@@ -8362,6 +8763,8 @@ function csRunAnalysis(sourceText) {
   ptRuntimeRender();
   if (csCurrentDoc) vrgRenderInto('csVrgSvgWrap', csCurrentDoc, false, 'csVrgTextAltOut', l => csRedactText(l, csCurrentDoc));
   status.textContent = '✓ Разобрано: анализ готов (локально, без сети).';
+  const rb = document.getElementById('csRestoreBtn');
+  if (rb) rb.style.display = '';
 }
 
 // Покрытие доменов по ИМПОРТИРОВАННОМУ конфигу (cdgDomainCoverage — то же ядро,
@@ -8422,6 +8825,10 @@ function csClearStudio() {
   document.getElementById('csEditorCard').style.display = 'none';
   const csVrg = document.getElementById('csVrgSvgWrap');
   if (csVrg) csVrg.textContent = '';
+  const rbBtn = document.getElementById('csRestoreBtn');
+  if (rbBtn) rbBtn.style.display = 'none';
+  const rbOut = document.getElementById('csRestoreOut');
+  if (rbOut) { rbOut.style.display = 'none'; rbOut.textContent = ''; }
   const csVrgAlt = document.getElementById('csVrgTextAltOut');
   if (csVrgAlt) csVrgAlt.textContent = '';
   const csDnsAudit = document.getElementById('csDnsRoutingOut');
@@ -8551,6 +8958,27 @@ function csRenderForm() {
     if (f.secret) { inp.placeholder = CS_SECRET_INPUT_HINT; inp.dataset.csSecret = '1'; }
     else inp.value = String(f.value);
     row.append(lbl, inp);
+    if (f.secret) {
+      // TRACK C: явный показать/скрыть ТЕКУЩЕГО значения (владелец вправе его
+      // видеть и править). Показ = подстановка оригинала в input; скрытие =
+      // возврат к семантике «пусто = оставить исходное». В диагностику/логи
+      // значение по-прежнему не попадает.
+      const reveal = document.createElement('button');
+      reveal.type = 'button';
+      reveal.className = 'btn btn-gray';
+      reveal.textContent = '👁';
+      reveal.setAttribute('aria-label', 'Показать или скрыть значение поля ' + f.key + ' объекта ' + cur);
+      reveal.title = 'Показать/скрыть текущее значение';
+      let shown = false;
+      reveal.addEventListener('click', () => {
+        shown = !shown;
+        inp.type = shown ? 'text' : 'password';
+        inp.value = shown ? String(f.value) : '';
+        inp.placeholder = shown ? '' : CS_SECRET_INPUT_HINT;
+        reveal.textContent = shown ? '🙈' : '👁';
+      });
+      row.append(reveal);
+    }
     form.appendChild(row);
   }
   const saveBtn = document.createElement('button');
@@ -9584,6 +10012,279 @@ function copyMihomo() {
 function copyText(text) {
   navigator.clipboard.writeText(text).then(() => showToast('Скопировано!'));
 }
+
+// === REVERSE BUILD UI (OWNER-REVERSE-01, PR B) — RB-UI-START ===
+// DOM ↔ .lgproject.json (контракт: docs/research/PORTABLE-BUILDER-PROJECT.md).
+// Файл проекта содержит секреты (приватные ключи WG, токены подписок):
+// сохранение — только по явному действию с предупреждением; импорт —
+// bounded (rbParseProjectText) с подтверждением и undo; ни localStorage,
+// ни сети, ни секретов в логах/статусах.
+let rbUndoProjectState = null;
+
+function rbReadPolicyCardsRaw() {
+  return Array.from(document.querySelectorAll('#policyCards .policy-card')).map(card => {
+    const t = sel => { const el = card.querySelector(sel); return el ? el.value : ''; };
+    return { name: t('.policy-name'), domains: t('.policy-domains'), target: t('.policy-target') || 'SELECT' };
+  });
+}
+
+// Builder → проект. Зеркалирует DOM 1:1, без нормализаций: значения —
+// как ввёл пользователь (валидацию делает Build).
+function rbCollectProject() {
+  const opt = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const chk = id => { const el = document.getElementById(id); return !!(el && el.checked); };
+  return {
+    schemaVersion: RB_PROJECT_SCHEMA_VERSION,
+    meta: {
+      app: 'link-generators',
+      created: new Date().toISOString(),
+      generatorVersion: String((globalThis.GENERATOR_META && GENERATOR_META.version) || ''),
+      origin: 'builder',
+      wgProfileSeq: wgProfileSeq
+    },
+    sources: {
+      subMode: chk('cfgSubMode'),
+      mainInput: opt('mihomoInput'),
+      fallbackInput: opt('whitelistInput'),
+      autoWhitelist: chk('cfgAutoWhitelist')
+    },
+    wgProfiles: wgProfiles.map(p => ({ id: p.id, filename: p.filename, bean: JSON.parse(JSON.stringify(p.bean)), mode: p.mode, target: p.target })),
+    options: {
+      profile: opt('cfgProfile'),
+      addTun: chk('cfgTun'), tunMips: chk('cfgTunMips'), tunStackAdvanced: chk('cfgTunStackAdvanced'), tunStackEx: opt('cfgTunStackEx'),
+      addSocks: chk('cfgSocks'), lan: chk('cfgLan'),
+      perProxyMaster: chk('cfgPerProxyMaster'), perProxyTun: chk('cfgPerProxyTun'), perProxySocks: chk('cfgPerProxySocks'),
+      webUI: chk('cfgWebUI'), webUiDashboard: opt('webUiSelect'), webUiCustomUrl: opt('webUiCustomUrl'),
+      urlTestPreset: opt('pingSelect'), urlTestCustomUrl: opt('pingCustomUrl'),
+      excludeFilter: opt('excludeFilterInput'),
+      serverList: { names: subscriptionListNames.slice(), nodes: subscriptionListNodes, selected: Array.from(subscriptionSelection) },
+      realityModern: opt('realityModernInput'),
+      deviceModel: opt('deviceModelInput'),
+      wgCustomDns: opt('wgCustomDns'),
+      awgKeepalive: chk('cfgAwgKeepalive'), awgRtDiag: chk('cfgAwgRtDiag'),
+      vpsDnsEnabled: chk('vpsDnsEnabled'),
+      vpsDevice: opt('vpsDevice'), vpsMtu: opt('vpsMtu'), vpsFakeIp: opt('vpsFakeIp'), vpsDnsListen: opt('vpsDnsListen'), vpsDnsNs: opt('vpsDnsNs'), vpsProxyNs: opt('vpsProxyNs')
+    },
+    dialer: { name: opt('wgDialerInput'), members: opt('wgDialerMembers'), providers: opt('wgDialerProviders') },
+    domainPolicy: { enabled: chk('cfgPolicyRouting'), cards: rbReadPolicyCardsRaw() },
+    tiered: { enabled: chk('cfgTieredFailover'), cards: (window.__tierCardsState || []).map(t => ({ name: t.name, strategy: t.strategy, members: (t.members || []).slice() })) }
+  };
+}
+
+// Проект → Builder. Значения присваиваются напрямую, зависимый UI
+// пересчитывается существующими update-функциями (тот же путь, что после
+// ручного ввода; клемпы профиля применяются ими же).
+function rbApplyProject(project) {
+  const setOpt = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+  const s = project.sources, o = project.options;
+  setOpt('mihomoInput', s.mainInput);
+  setOpt('whitelistInput', s.fallbackInput);
+  setChk('cfgSubMode', s.subMode);
+  setChk('cfgAutoWhitelist', s.autoWhitelist);
+  // WG-профили: полная замена (подтверждение — в rbLoadProject).
+  wgProfiles = (project.wgProfiles || []).map(w => ({ id: w.id, filename: w.filename, bean: JSON.parse(JSON.stringify(w.bean)), mode: w.mode, target: w.target }));
+  wgProfileSeq = Math.max(Number(project.meta && project.meta.wgProfileSeq) || 0, wgProfiles.reduce((m, w) => Math.max(m, Number(w.id) || 0), 0));
+  setOpt('cfgProfile', o.profile);
+  setChk('cfgTun', o.addTun); setChk('cfgTunMips', o.tunMips); setChk('cfgTunStackAdvanced', o.tunStackAdvanced); setOpt('cfgTunStackEx', o.tunStackEx || 'gvisor');
+  setChk('cfgSocks', o.addSocks); setChk('cfgLan', o.lan);
+  setChk('cfgPerProxyMaster', o.perProxyMaster); setChk('cfgPerProxyTun', o.perProxyTun); setChk('cfgPerProxySocks', o.perProxySocks);
+  setChk('cfgWebUI', o.webUI); setOpt('webUiSelect', o.webUiDashboard || 'metacubexd'); setOpt('webUiCustomUrl', o.webUiCustomUrl || '');
+  setOpt('pingSelect', o.urlTestPreset || 'https://www.gstatic.com/generate_204');
+  const pingCustom = document.getElementById('pingCustomUrl');
+  if (pingCustom) { pingCustom.value = o.urlTestCustomUrl || ''; pingCustom.dispatchEvent(new Event('change', { bubbles: true })); }
+  setOpt('excludeFilterInput', o.excludeFilter || '');
+  subscriptionListNames = (o.serverList && Array.isArray(o.serverList.names)) ? o.serverList.names.slice() : [];
+  subscriptionListNodes = (o.serverList && Number(o.serverList.nodes)) || 0;
+  subscriptionSelection = new Set((o.serverList && Array.isArray(o.serverList.selected)) ? o.serverList.selected : []);
+  setOpt('realityModernInput', o.realityModern || '');
+  setOpt('deviceModelInput', o.deviceModel || '');
+  setOpt('wgCustomDns', o.wgCustomDns || '');
+  setChk('cfgAwgKeepalive', o.awgKeepalive); setChk('cfgAwgRtDiag', o.awgRtDiag);
+  setChk('vpsDnsEnabled', o.vpsDnsEnabled);
+  setOpt('vpsDevice', o.vpsDevice || ''); setOpt('vpsMtu', o.vpsMtu || ''); setOpt('vpsFakeIp', o.vpsFakeIp || '');
+  setOpt('vpsDnsListen', o.vpsDnsListen || ''); setOpt('vpsDnsNs', o.vpsDnsNs || ''); setOpt('vpsProxyNs', o.vpsProxyNs || '');
+  setOpt('wgDialerInput', project.dialer.name);
+  setOpt('wgDialerMembers', project.dialer.members);
+  setOpt('wgDialerProviders', project.dialer.providers);
+  const pc = document.getElementById('policyCards');
+  if (pc) {
+    pc.textContent = '';
+    (project.domainPolicy.cards || []).forEach(c => addPolicyCard({ name: c.name, domains: c.domains, target: c.target }));
+  }
+  setChk('cfgPolicyRouting', project.domainPolicy.enabled);
+  window.__tierCardsState = (project.tiered.cards || []).map(t => ({ name: t.name, strategy: t.strategy, members: (t.members || []).slice() }));
+  setChk('cfgTieredFailover', project.tiered.enabled);
+  // Зависимый UI — те же update-функции, что после ручного ввода.
+  updateExcludeFilterVisibility();
+  updateSubModeHint();
+  onProfileChange();
+  onWhitelistChange();
+  updateVpsDnsFields();
+  updateMihomoOptionStates();
+  updatePolicyRoutingVisibility();
+  if (typeof renderWgList === 'function') renderWgList();
+  if (typeof renderServerList === 'function') renderServerList();
+  updateServerListStats();
+  renderTierCards();
+  refreshWgTargetSelectors();
+  syncWgCollections();
+  refreshBuildStaleness();
+}
+
+function rbSaveProject() {
+  const project = rbCollectProject();
+  const json = JSON.stringify(project, null, 2);
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + 'Z';
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'mihomo-project-' + stamp + '.lgproject.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  showToast('💾 Проект сохранён. В файле приватные ключи WG/AWG и токены подписок — никому его не передавайте.');
+}
+
+async function rbLoadProject(file) {
+  let text = '';
+  try { text = await file.text(); } catch (e) { return showToast('❌ Не удалось прочитать файл: ' + (e && e.message ? e.message : e), true); }
+  const parsed = rbParseProjectText(text);
+  if (!parsed.ok) return showToast('❌ Проект: ' + parsed.error, true);
+  const project = parsed.project;
+  const hasState = document.getElementById('mihomoInput').value.trim() || wgProfiles.length;
+  if (hasState && !confirm('Загрузить проект вместо текущего состояния Builder? Прежнее состояние можно вернуть кнопкой «↩︎ Отменить восстановление».')) {
+    return showToast('Загрузка проекта отменена.');
+  }
+  rbUndoProjectState = rbCollectProject();
+  rbApplyProject(project);
+  const undoBtn = document.getElementById('rbUndoBtn');
+  if (undoBtn) undoBtn.style.display = '';
+  const subs = project.sources.mainInput.split('\n').filter(x => x.trim()).length;
+  showToast('✅ Проект загружен: ' + project.wgProfiles.length + ' WG/AWG, ' + subs + ' строк источников. Нажмите ⚡ Build Config.');
+}
+
+function rbUndoRestore() {
+  if (!rbUndoProjectState) return;
+  const snapshot = rbUndoProjectState;
+  rbUndoProjectState = null;
+  rbApplyProject(snapshot);
+  const undoBtn = document.getElementById('rbUndoBtn');
+  if (undoBtn) undoBtn.style.display = 'none';
+  showToast('↩︎ Восстановление отменено — прежнее состояние Builder возвращено.');
+}
+
+document.getElementById('rbProjectFile').addEventListener('change', (e) => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (f) rbLoadProject(f);
+});
+
+// Сравнение «было → будет» (TRACK B4): компактные счётчики и ключевые опции.
+function rbProjectCounts(p) {
+  return {
+    subs: (p.sources.mainInput || '').split('\n').filter(s => s.trim()).length,
+    wg: p.wgProfiles.length,
+    awg: p.wgProfiles.filter(w => w.bean && w.bean.wireguard && w.bean.wireguard['amnezia-wg-option']).length,
+    dpr: p.domainPolicy.enabled ? p.domainPolicy.cards.length : 0,
+    tiered: p.tiered.enabled ? p.tiered.cards.length : 0
+  };
+}
+function rbCompareWithCurrent(project) {
+  const cur = rbCollectProject();
+  const a = rbProjectCounts(cur);
+  const b = rbProjectCounts(project);
+  const hasState = (cur.sources.mainInput || '').trim() || cur.wgProfiles.length;
+  if (!hasState) return 'Текущий Builder: пуст — восстановление нечего затирать.';
+  const diff = [];
+  const fmt = (c) => 'подписок ' + c.subs + ' · WG ' + (c.wg - c.awg) + ' · AWG ' + c.awg + ' · DPR-политик ' + c.dpr + ' · Tiered-карточек ' + c.tiered;
+  if (a.subs !== b.subs || a.wg !== b.wg || a.dpr !== b.dpr || a.tiered !== b.tiered) {
+    diff.push('Было: ' + fmt(a));
+    diff.push('Станет: ' + fmt(b));
+  } else {
+    diff.push('Состав источников и карточек совпадает с текущим Builder (' + fmt(a) + ').');
+  }
+  const optChecks = [['profile', 'профиль'], ['addTun', 'TUN'], ['tunMips', 'MIPS'], ['webUI', 'WebUI'], ['lan', 'allow-lan'], ['subMode', 'URL-подписки']];
+  const changedOpts = optChecks.filter(([k]) => String(cur.options[k]) !== String(project.options[k])).map(([, label]) => label + ': ' + (cur.options[k] ? 'вкл' : 'выкл') + ' → ' + (project.options[k] ? 'вкл' : 'выкл'));
+  if (changedOpts.length) diff.push('Настройки изменятся: ' + changedOpts.join('; '));
+  else diff.push('Ключевые настройки не изменятся.');
+  return diff.join('\n');
+}
+// Человеческие пояснения статусов (TRACK B2) — одна строка на класс.
+const RB_STATUS_HINTS = {
+  EXACT: 'восстановится точно',
+  DERIVED: 'восстановится с нормализацией (проверьте после Restore)',
+  AMBIGUOUS: 'однозначно восстановить нельзя — выбран безопасный вариант',
+  MISSING: 'информации в источнике нет — восстановить невозможно',
+  UNSUPPORTED: 'Builder не имеет представления — сохранено в отчёте, не теряется',
+  CONFLICT: 'данные противоречат друг другу — показано, не чинится молча'
+};
+function rbRestoreFromStudio() {
+  const text = document.getElementById('csImportInput').value;
+  if (!text.trim()) return showToast('Сначала вставьте и разберите config.yaml', true);
+  let doc;
+  try { doc = jsyaml.load(text); } catch (e) { return showToast('❌ YAML не разбирается: ' + String(e && e.message ? e.message : e).slice(0, 100), true); }
+  const res = rbYamlToProject(doc);
+  const project = res.project;
+  const counts = rbProjectCounts(project);
+  // Компактный предпросмотр (TRACK B2): счётчики + настройки + статусы;
+  // подробный перечень — по раскрытию, не простыня.
+  const byStatus = {};
+  for (const f of res.findings) (byStatus[f.state] = byStatus[f.state] || []).push(f);
+  const statusOrder = ['EXACT', 'DERIVED', 'AMBIGUOUS', 'MISSING', 'UNSUPPORTED', 'CONFLICT'];
+  const attention = statusOrder.filter(s => s !== 'EXACT' && byStatus[s] && byStatus[s].length);
+  const preview = [];
+  preview.push('Подписки: ' + counts.subs + ' · WireGuard: ' + (counts.wg - counts.awg) + ' · AmneziaWG: ' + counts.awg + ' · DPR-политик: ' + counts.dpr + ' · Tiered-карточек: ' + counts.tiered);
+  preview.push('Настройки: профиль ' + project.options.profile + ' · TUN ' + (project.options.addTun ? 'вкл' + (project.options.tunMips ? ' (MIPS)' : '') : 'выкл') + ' · WebUI ' + (project.options.webUI ? 'вкл' : 'выкл') + ' · allow-lan ' + (project.options.lan ? 'вкл' : 'выкл'));
+  const statusLine = statusOrder.filter(s => byStatus[s]).map(s => {
+    const hint = RB_STATUS_HINTS[s];
+    return s + ': ' + byStatus[s].length + ' (' + hint + ')';
+  }).join(' · ');
+  preview.push(statusLine ? 'Восстановление: ' + statusLine : 'Восстановление: всё точно (EXACT).');
+  if (attention.length) preview.push('⚠ Требует внимания: ' + attention.map(s => s + ' (' + byStatus[s].length + ')').join(', ') + ' — список ниже.');
+  const detailLines = res.findings.map(f => {
+    const icon = f.state === 'EXACT' ? '✓' : f.state === 'MISSING' ? '∅' : f.state === 'CONFLICT' ? '⚠' : f.state === 'UNSUPPORTED' ? '✖' : 'ℹ';
+    return icon + ' [' + f.state + '] ' + f.field + ' — ' + f.note;
+  });
+  const out = document.getElementById('csRestoreOut');
+  if (out) {
+    out.style.display = 'block';
+    out.textContent = '';
+    const head = document.createElement('div');
+    head.textContent = '🔁 Предпросмотр восстановления\n' + csRedactText(preview.join('\n') + '\n\n' + rbCompareWithCurrent(project), project);
+    out.appendChild(head);
+    const det = document.createElement('details');
+    det.style.marginTop = '4px';
+    const sum = document.createElement('summary');
+    sum.textContent = 'Подробный отчёт обратимости (' + res.findings.length + ')';
+    const body = document.createElement('div');
+    body.className = 'hint';
+    body.style.whiteSpace = 'pre-line';
+    body.textContent = csRedactText(detailLines.join('\n') || 'находок нет', project);
+    det.append(sum, body);
+    out.appendChild(det);
+  }
+  const hasState = document.getElementById('mihomoInput').value.trim() || wgProfiles.length;
+  if (hasState && !confirm('Восстановить Builder из этого источника? Текущее состояние можно вернуть через «↩︎ Отменить восстановление».')) {
+    return showToast('Восстановление отменено.');
+  }
+  rbUndoProjectState = rbCollectProject();
+  rbApplyProject(project);
+  const undoBtn = document.getElementById('rbUndoBtn');
+  if (undoBtn) undoBtn.style.display = '';
+  showToast('🔁 Восстановлено: ' + project.wgProfiles.length + ' WG/AWG, ' + counts.subs + ' подписок' + (attention.length ? '; ' + attention.length + ' класса(ов) требуют внимания — см. отчёт в Studio.' : '. Builder готов — нажмите ⚡ Build.'));
+  switchTab(null, 'mihomo');
+}
+document.addEventListener('click', (e) => {
+  if (!e.target) return;
+  if (e.target.id === 'csRestoreBtn') {
+    e.preventDefault();
+    rbRestoreFromStudio();
+  }
+});
+
+// === REVERSE BUILD UI — RB-UI-END ===
 
 // === INIT ===
 initPingSelector();
