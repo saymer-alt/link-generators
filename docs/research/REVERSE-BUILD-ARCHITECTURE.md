@@ -2,6 +2,14 @@
 
 Дата: 2026-10-09. Связанные: [REVERSE-BUILD-RECOVERABILITY.md](REVERSE-BUILD-RECOVERABILITY.md) (поле-за-полем карта), [PORTABLE-BUILDER-PROJECT.md](PORTABLE-BUILDER-PROJECT.md) (формат проектного файла), [CONFIG-STUDIO.md](CONFIG-STUDIO.md) (существующий Studio), CONSTITUTION.md §2/§3/§5/§8.
 
+## Текущая реализация после независимого аудита (2026-10-09)
+
+Ниже сохранён исходный план PHASE A; фактическая карта — [REVERSE-BUILD-RECOVERABILITY.md](REVERSE-BUILD-RECOVERABILITY.md). Реальные entrypoints: `rbParseProjectText` / `rbYamlToProject` → Preview → `rbApplyProject` / `rbWriteProject`; сериализация `rbCollectProject`, Undo `rbUndoRestore`. Поле schemaVersion находится в корне; meta.origin = builder либо yaml-reverse.
+
+Project Load использует native confirm с counts/Compare до применения. YAML Reverse использует отдельный Preview с Cancel/Confirm и acknowledgment потерь; stale snapshot отклоняется, CONFLICT/INVALID блокируются. Preview не является вторым редактируемым Builder: менять источники можно после Apply в обычных полях.
+
+Apply валидирует/клонирует до мутации, откатывает ошибку и инвалидирует поздний Build. Passthrough сохраняет parsed source-config и переживает проект/Undo; это evidence, не автоматический merge в следующий YAML. Наличие поля в исходнике не означает реализованного reverse assignment. Исходный план ниже не является acceptance evidence.
+
 ## 1. Граница (по заданию, §PHASE H)
 
 ```text

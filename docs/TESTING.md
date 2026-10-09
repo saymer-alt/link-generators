@@ -714,9 +714,23 @@ Manual-сюиты (`*.manual.cjs`: reality-handshake matrix, awl-soak) — по 
   подписочных конфигов, честный UNSUPPORTED/MISSING для прямых узлов.
 - `tests/qa-reverse-integration.cjs` — полный сценарий владельца
   6 подписок + 8 WG/AWG + DPR: Save/Load/модификация −1 AWG +2 подписки;
-  фаза A — известный DPR×Tiered конфликт (до фикса DAY-01).
+  фаза A сохраняет проверку отсутствия прежнего DPR×Tiered конфликта; native Load Preview/Cancel/Confirm проверяется в новой сессии. При MIHOMO_BIN итоговые modified и reversed YAML проходят реальный -t.
 - `tests/qa-fixes-browser.cjs` — матрица DPR ON/OFF × Tiered ON/OFF
   (все комбинации VALID) + WG base64-ключи (32 байта, сообщение без
   значения ключа).
 - `tests/cs20-ux-browser.cjs` — секреты редактора Studio: показать/
   скрыть/заменить, замаскированность диффа и статусов.
+
+
+## Независимый аудит v1.11 (2026-10-09)
+
+- `independent-product-browser.cjs`: 6 групп — настоящий Preview/Cancel/Confirm, stale YAML/Builder, loss acknowledgment, blocked conflict, atomic Apply fault injection, Undo/passthrough, async Build invalidation, typed Compare/source classification. CI browser.
+- `independent-boundaries-browser.cjs`: 7 проверок — типы JSON, depth/nodes/unsafe keys, WG IDs/shape, Builder/Studio SVG/aria/select redaction, keyboard focus и изоляция focus. CI browser.
+- `independent-reverse-profiles-browser.cjs`: 3 группы — реальный Build → Reverse → Build byte parity gateway DNS OFF/ON, custom device/MTU/resolvers, Yacd/custom health-check; disabled TUN. CI browser и обе Mihomo matrix jobs.
+- `cs20-ux-browser.cjs`: 4 проверки, включая Save без изменений (исходные байты) и Reset секретной замены.
+- `qa-reverse-integration.cjs`: 6 browser checks либо 7 с MIHOMO_BIN; 6+8 → новая сессия Load Preview/Confirm → 8+7 → YAML Reverse. С MIHOMO_BIN modified и reversed outputs проходят -t. Теперь входит в обе matrix jobs.
+- `security-stress.cjs`: 49 групп; browser: 59 проверок. Viewports 320/360/375/390/412/480/768/1024/1366/1440/1920/2560, Studio и PT overflow.
+
+Локально: 53 CJS suites в общем прогоне + отдельный parity (10/10 vs main955ecdf) = 54; harness node:test 31/31. Последующие focused reruns покрывают final Load consent, секреты и расширенные widths. Linux runtime labs выполняются в CI с pinned Mihomo 1.19.31/32; локально Windows 1.19.31 parse-only. Это не Firefox/WebKit, не WAN/handshake и не owner field test. Ненулевых Edge exits в этом прогоне не было.
+
+PR #207 проверяется отдельно: dns-routing-core (15 групп), dns-routing-browser (10 проверок), dns-routing-mihomo-compat (5 parse-only cases, обе версии). Эти файлы остаются на candidate branch до OWNER GO; наличие записи в этом разделе не означает promotion. Отчёт: [V1.11-CODEX-INDEPENDENT-AUDIT-AND-REPAIR](research/V1.11-CODEX-INDEPENDENT-AUDIT-AND-REPAIR.md).

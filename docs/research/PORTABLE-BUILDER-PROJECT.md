@@ -5,7 +5,7 @@
 ## 1. Требования
 
 - Versioned (`schemaVersion`), явная миграция вперёд.
-- Сохраняет ВСЁ состояние Builder, включая то, чего в YAML не бывает (URL развёрнутых подписок, имена WG-файлов) — т.е. восполняет все MISSING из RECOVERABILITY §2.
+- Сохраняет поддерживаемое состояние `rbCollectProject`, включая то, чего в YAML не бывает (URL развёрнутых подписок, имена WG-файлов) — т.е. восполняет все MISSING из RECOVERABILITY §2.
 - Секреты (ключи WG, токены подписок) — ВНУТРИ файла по необходимости (иначе восстановление бессмысленно), поэтому: экспорт только по явному действию; предупреждение о конфиденциальном содержимом; никаких auto-save/upload/localStorage; никаких секретов в логах.
 - Круглыйtrip: import → Build (тот же движок, те же входные данные) = эквивалент первоначальной сборки; для детерминированных synthetic fixtures — byte-for-byte (единственный недетерминизм известен: `header.x-hwid` — случайный 32-hex на сборку, SOURCE-PROVEN mihomo.js:757; паритет проверяется с нормализацией этой строки, как в существующих тестах).
 
@@ -41,15 +41,17 @@
     "addSocks": false, "lan": false,
     "perProxyMaster": false, "perProxyTun": false, "perProxySocks": false,
     "webUI": false, "webUiDashboard": "metacubexd", "webUiCustomUrl": "",
-    "urlTest": "https://www.gstatic.com/generate_204", "urlTestCustom": false,
+    "urlTestPreset": "https://www.gstatic.com/generate_204", "urlTestCustomUrl": "",
     "excludeFilter": "",                // ручное поле; выбор server-list — отдельно
-    "serverList": { "names": [], "selected": [] },   // выбор из списка серверов
+    "serverList": { "names": [], "nodes": 0, "selected": [] },   // выбор из списка серверов
     "realityModern": "",                // исходный текст realityModernInput
     "deviceModel": "",
     "wgCustomDns": "",
-    "awgKeepalive": false, "awgRtDiag": false
+    "awgKeepalive": false, "awgRtDiag": false,
+    "vpsDnsEnabled": true, "vpsDevice": "", "vpsMtu": "", "vpsFakeIp": "",
+    "vpsDnsListen": "", "vpsDnsNs": "", "vpsProxyNs": ""
   },
-  "dialer": { "name": "", "members": [], "providers": [] },
+  "dialer": { "name": "", "members": "", "providers": "" },
   "domainPolicy": { "enabled": true, "cards": [ { "name": "ai", "domains": "…", "target": "SELECT" } ] },
   "tiered": { "enabled": false, "cards": [ { "name": "…", "strategy": "url-test", "members": [] } ] },
   "passthrough": null                   // для yaml-reverse: UNSUPPORTED raw-объекты (§4)
@@ -60,15 +62,15 @@
 - JSON-структуры зеркалят DOM-поля 1:1 (id элемента → имя поля задокументировано в реализации); никакой «умной» нормализации при экспорте.
 - `bean` WG-профиля — структура web4core (совместима с `wgProfiles` напрямую); приватные ключи не маскируются В ФАЙЛЕ (иначе Restore бесполезен), но маскируются во всех отображениях.
 - Порядок массивов значим (подписки, профили, карточки, tier-члены) — часть контракта.
-- Не сохраняются runtime-снимки (preview-списки серверов, runtime evidence, dialer-targets cache) — только пользовательский ввод.
+- Сохраняются serverList names/nodes/selected для продолжения выбора фильтра. Не сохраняются runtime evidence, controller secrets и dialer-targets cache; это не полный снимок вкладки.
 
 ## 3. Миграция
 
-`schemaVersion` целочисленный. Reader принимает N ≤ текущего; N < current → прогон упорядоченных миграций; N > current → явный отказ «файл создан более новой версией». Миграции — чистые функции с тестами.
+`schemaVersion` целочисленный. Текущий reader поддерживает schemaVersion 1. Более новая версия отклоняется, неподдерживаемая старая — тоже. Будущие миграции не реализованы и не обещаются.
 
 ## 4. Passthrough (UNSUPPORTED из YAML-reverse)
 
-Если проект создан через YAML Reverse Build, объекты вне модели Builder (`passthrough`) сохраняются в файл как raw-YAML-фрагменты с доказуемой привязкой (ключ верхнего уровня / индекс в массиве) и статусом UNSUPPORTED. Повторный экспорт после Build НЕ претендует на них: они присутствуют в отчёте сравнения как «не перенесено» (CONSTITUTION §3 — raw-факт не исчезает молча).
+Если проект создан через YAML Reverse Build, объекты вне модели Builder (`passthrough`) сохраняются как JSON-совместимые parsed-объекты; полная исходная модель находится в `passthrough['source-config']`. Это evidence для восстановления, а не raw YAML: комментарии, порядок форматирования и исходные байты не сохраняются. Save Project сохраняет passthrough; новый Build его не накладывает. Предупреждение об этом показывается до подтверждения Restore (CONSTITUTION §3 — raw-факт не исчезает молча).
 
 ## 5. Безопасность
 
@@ -84,3 +86,7 @@
 3. Секреты: ключи в bean не меняются ни на одном шаге; ни одно отображение их не показывает.
 4. Миграция: v1 файл читается; битый/чужой JSON — bounded-ошибка.
 5. Мобильные 320–480 и клавиатура — в PR E (browser-сюита).
+
+## 7. Фактические границы reader после независимого аудита
+
+Размер до 2 МБ, глубина до 64, до 50000 посещений; опасные ключи отклоняются. Boolean/string options проверяются по типу, WG IDs положительные и уникальные; до 2000 WG profiles, 256 cards, 5000 элементов в ограниченных списках. Dashboard values: metacubexd / yacd / zashboard / custom. Load всегда показывает counts/typed Compare и требует Confirm, даже в пустой сессии; Cancel ничего не меняет. Состояние, изменённое за время чтения файла, не перезаписывается. Apply валидирует до мутации, откатывает ошибку и инвалидирует async Build. Undo хранится только в памяти. Поддерживаемое состояние — поля `rbCollectProject`, а не весь UI или running core.
