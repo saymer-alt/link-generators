@@ -472,6 +472,13 @@ async function check(name, fn) {
     await n.locator('#workspaceDirectory a[href="#policyRoutingPanel"]').click();
     assert.equal(await n.locator('#cfgPolicyRouting').isChecked(), false);
     assert.equal(await n.locator('#cfgPolicyRouting').evaluate(el => el === document.activeElement), true);
+    let requests=0; n.on('request',()=>requests++);
+    const before=await n.evaluate(()=>JSON.stringify(rbCollectProject()));
+    await n.locator('#workspaceDirectory a[href="#runtimeImportDetails"]').click();
+    assert.equal(await n.locator('#rtUploadBtn').isVisible(),true);
+    assert.equal(await n.locator('#cfgServerList').isChecked(),false);
+    assert.equal(await n.locator('#runtimeImportDetails > summary').evaluate(el=>el===document.activeElement),true);
+    assert.equal(await n.evaluate(()=>JSON.stringify(rbCollectProject())),before); assert.equal(requests,0);
     await n.locator('#workspaceDirectory a[href="#physicalTopologyPanel"]').click();
     assert.equal(await n.locator('#ptDemoBtn').isVisible(), true);
     await n.locator('#workspaceDirectory a[href="#perProxyAdvancedDetails"]').click();
@@ -514,7 +521,9 @@ async function check(name, fn) {
     assert.equal(await height.isDisabled(),true); assert.equal(await nav.locator('output').textContent(),scale);
     const box=await frame.boundingBox(); assert.ok(box.width>=1278&&box.height>=718);
     assert.equal(await n.evaluate(()=>document.body.style.overflow),'hidden');
-    await n.keyboard.press('Escape');assert.deepEqual(await wrap.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop})),panBefore);
+    const expandedBox=await wrap.boundingBox(); await n.mouse.move(expandedBox.x+10,expandedBox.y+180); await n.mouse.down(); await n.mouse.move(expandedBox.x+10,expandedBox.y+20,{steps:6}); await n.mouse.up();
+    const expandedPan=await wrap.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop})); assert.ok(expandedPan.top>panBefore.top);
+    await n.keyboard.press('Escape');assert.deepEqual(await wrap.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop})),expandedPan);
     await expand.click();
     await nav.locator('[data-vrg-action=fit]').click();
     await wrap.locator('g[tabindex]').first().focus(); await n.keyboard.press('Enter'); assert.equal(await frame.count(),1,'expanded after node Enter');
