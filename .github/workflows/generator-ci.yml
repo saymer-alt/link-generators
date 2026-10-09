@@ -272,6 +272,9 @@ jobs:
       - name: Config Studio 2.0 UX regression (DAY-01 TRACK B/C)
         run: node tests/cs20-ux-browser.cjs
 
+      - name: Independent product repair regression
+        run: node tests/independent-product-browser.cjs
+
       - name: Security and download end-to-end regression (CODEX-02)
         run: node tests/security-stress-browser.cjs
 
