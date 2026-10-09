@@ -6,6 +6,7 @@
 
 ### Added
 
+- **DNS ↔ Routing (#207, v1.11 CANDIDATE, OWNER GO required):** независимая ревизия исправила disabled default, unconditional structural checks, fragments/array policies, first-match precedence и explicit proxy classification; ложное объяснение fake-IP заменено UNKNOWN. Quick Start и source provenance синхронизированы; 17 core groups, 12 browser checks, 7 parse cases; PASS и non-rule mode исправлены; parse-only CI matrix 1.19.31/1.19.32. Реальная сеть не проверялась; кандидат не объединён.
 - **Evening Chaos audit (v1.11-dev):** атомарный rollback динамических карточек при повторном отказе рендера; устаревшие Studio/runtime file imports не возвращаются после Clear/нового Parse/import; runtime fetch ограничен 8 секундами; Reset Studio очищает несохранённые поля; поздний отказ старого Build не сбрасывает новую успешную сборку. Регрессии: barriers, seeded metamorphic checks и loopback-only Mihomo lab, без TUN и production-сети. Отчёт: docs/research/V1.11-EVENING-CHAOS-AUDIT.md.
 
 - **Final release hardening (v1.11-dev):** восстановление имени DPR SELECT-группы из поддерживаемого YAML; сводка Studio учитывает именно `dns.enable: true`; устранён overflow длинных native controls в WebKit (DPR/Studio/WG), минимальные touch targets 24 px. Offline click journey 6+8 → 8+7, Save/Load/Cancel/Confirm, Reverse/Undo и 12 ширин; отдельная матрица Chromium/Edge/Firefox/WebKit. Отчёт: docs/research/V1.11-FINAL-RELEASE-READINESS.md. Релиз не опубликован; DNS-кандидат #207 требует отдельного OWNER GO.

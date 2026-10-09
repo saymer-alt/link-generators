@@ -1,57 +1,46 @@
-# DNS↔Routing Intelligence (v1.12 candidate)
+# DNS ↔ Routing Intelligence — v1.11 CANDIDATE
 
-Дата: 2026-10-08 (NIGHT-MEGA-01, TRACK B1). Статус: **RESEARCHED + PoC WORKING** (анализатор на синтетике 13/13; реальный конфиг не прогонялся). Версии-источники: mihomo **v1.19.32**. Всё ниже — кандидат v1.12, **не утверждённый scope**; начало работ — только по явному owner GO после релиза v1.11.
+Дата независимой ревизии: 2026-10-09. PR #207 остаётся открытым: merge только после отдельного OWNER GO. Это диагностика Config Studio, не изменение YAML и не измерение сети.
 
-## 1. Вопрос
+## Источники и исправленные выводы
 
-Генератор производит `dns:` и `rules:` согласованно для своих профилей, но Config Studio принимает **чужие** конфиги, где эти секции рассинхронизированы. Типовые реальные дефекты: DNS-утечка при прокси-маршрутизации, невалидный `respect-rules`, гео-рассинхрон `nameserver-policy` против правил, «слепые» IP-правила в fake-ip. v1.12-кандидат: статический аудитор `dnsRoutingAudit(doc)` для Config Studio (диагностика рядом с `csDiagnostics`) и Builder.
+Проверены обе версии: [Mihomo 1.19.31 config.go](https://github.com/MetaCubeX/mihomo/blob/v1.19.31/config/config.go), [1.19.32 config.go](https://github.com/MetaCubeX/mihomo/blob/v1.19.32/config/config.go).
 
-## 2. SOURCE-PROVEN факты (mihomo v1.19.32)
+- `DefaultRawConfig` задаёт `DNS.Enable=false`. Наличие mapping `dns:` не включает DNS.
+- `parseDNS` проверяет `respect-rules` и обязательный `proxy-server-nameserver` независимо от Enable. Структурная ошибка показывается даже при выключенном DNS.
+- `parseNameServer` извлекает ProxyName из fragment: последний bare-компонент `#PROXY&ecs=...`; параметры `key=value` не являются селекторами. HTTPS/TLS/QUIC описывают транспорт DNS. Без fragment и respect-rules запрос прямой; с respect-rules используется RULES. Известный селектор означает explicit proxy selection, не доказанный tunnel (группа может выбрать DIRECT).
+- Неизвестное имя fragment может быть интерфейсом: UNKNOWN, без догадки о прокси.
+- [DNSDialer](https://github.com/MetaCubeX/mihomo/blob/v1.19.32/tunnel/dns_dialer.go) выбирает named proxy либо интерфейс; пустой ProxyName использует dialer напрямую. Прямой encrypted resolver не является автоматически доказанной утечкой.
+- Предыдущий вывод PoC «IP-правила всегда видят fake 198.18/16» **опровергнут**: [preHandleMetadata и resolveMetadata](https://github.com/MetaCubeX/mihomo/blob/v1.19.32/tunnel/tunnel.go#L296) восстанавливают hostname и очищают fake DstIP до routing; ResolveIP при необходимости получает реальный IP. Панель сообщает UNKNOWN результата конкретного запроса.
 
-| # | Факт | Источник |
-|---|---|---|
-| F1 | `dns.respect-rules: true` при пустом `dns.proxy-server-nameserver` → конфиг невалиден, mihomo не стартует: `if “respect-rules” is turned on, “proxy-server-nameserver” cannot be empty` | `config/config.go:1420-1421` |
-| F2 | nameserver без `proxy-name` при `respect-rules: true` получает proxyName `RULES` (`dns.RespectRules`) — и его соединения маршрутизируются через rule engine (`resolveMetadata`) | `config/config.go:1291`, `tunnel/dns_dialer.go:18,57-70` |
-| F3 | nameserver без `proxy-name` и без respect-rules → `proxyAdapter == nil` → прямое соединение (`dialer.DialContext`), минуя туннель | `tunnel/dns_dialer.go:88-91,103-107` |
-| F4 | `proxy-server-nameserver-policy` без `proxy-server-nameserver` → ошибка конфигурации `disallow empty "proxy-server-nameserver" when "proxy-server-nameserver-policy" is set` | `config/config.go:1457-1459` |
-| F5 | IP-правила (`IP-CIDR`, `GEOIP`, …): при `no-resolve` пропускают разрешение и матчатся по текущему `DstIP`; без него дёргают `helper.ResolveIP()` | `rules/common/ipcidr.go:35-45` |
-| F6 | `ResolveIP`-хелпер резолвит хост ТОЛЬКО если `!resolved` — соединение с fake-ip уже имеет `DstIP` из 198.18.0.0/16, IP-правила видят фейковый адрес | `tunnel/tunnel.go:337-350` |
+## Поддерживаемая модель
 
-Проверка исходников: `raw.githubusercontent.com/MetaCubeX/mihomo/v1.19.32/...` (NIGHT-MEGA-01, копии в `%TEMP%\mega-b-src` в момент исследования).
+`dnsRoutingAudit` переиспользует `rdParseRule`. DOMAIN/DOMAIN-SUFFIX/DOMAIN-KEYWORD/MATCH идут в исходном порядке: первое совпадение выигрывает. Exact policy key и `+.`/`.` suffix base проверяются по этой модели. Непрозрачное предшествующее GEOSITE/RULE-SET/IP/logical rule делает результат UNKNOWN; содержимое внешних providers не загружается.
 
-## 3. Каталог находок PoC
+Неподдерживаемые policy keys (GEOSITE/RULE-SET/wildcard) и неизвестные policy endpoints также дают явный UNKNOWN, даже когда rules состоят только из MATCH,DIRECT. Негативный тест сначала воспроизвёл отсутствие этого сообщения.
 
-| id | severity | evidence | Условие | Обоснование |
-|---|---|---|---|---|
-| `dns-respect-rules-no-psns` | error | CONFIRMED | F1 | копия валидатора mihomo до деплоя |
-| `dns-bypass-for-proxied-domains` | warning | INFERRED | есть прокси-доменные правила ∧ ¬respect-rules | F3: DNS идёт напрямую; влияние зависит от окружения (утечка/подмена резолвером) |
-| `dns-policy-vs-rule-mismatch` | warning | INFERRED | `nameserver-policy[dom]` — direct-цель ∧ правило на `dom` → прокси-группа | F2/F3: гео-рассинхрон ответа и пути |
-| `fake-ip-with-ip-rules` | info | CONFIRMED | `enhanced-mode: fake-ip` ∧ есть IP-правила | F5/F6: IP-правила видят 198.18/16 |
+Resolver и массивы nameserver-policy классифицируются по каждому endpoint: DIRECT / explicit-proxy / rules / UNKNOWN. Предупреждение о различии путей появляется только при доказанном DIRECT endpoint и поддерживаемом proxy-domain rule. Смешанный список не считается целиком проксированным. Окружение, bootstrap DNS, выбранный member группы, geolocation и реальные утечки **не наблюдались**.
 
-INFERRED = код-уровень доказан, влияние — гипотеза об окружении; формулировки находок это честно называют (без «утечка гарантирована»).
+CONFIRMED относится к structural parse error; INFERRED — возможному влиянию разницы путей; UNKNOWN — непокрытой семантике. Отсутствие finding не доказывает безопасность сети.
 
-## 4. PoC
+## UI и snapshot
 
-`research/poc/dns-routing/dns-routing-audit.mjs` — чистая функция, вход: разобранный doc (объект), выход: findings с `id/severity/evidence/message/refs`. Реестр `AUDIT_FINDINGS` — стабильные id для UI. Тесты: `research/poc/dns-routing/dns-routing-audit.test.mjs` (node --test, 13 проверок: позитив/негатив каждой находки, мусорный вход, согласованность реестра).
+Config Studio → Разобрать → DNS ↔ Routing. Анализ локальный; никаких запросов к nameservers/controllers. Изменение source/editor не обновляет snapshot автоматически: повторите Разобрать. Clear очищает панель. Все строки проходят csRedactText. Ошибки этой панели не подменяют validator/export gate. Quick Start синхронизирован.
 
-Запуск: `node --test research/poc/dns-routing/dns-routing-audit.test.mjs`
+## Проверки
 
-## 5. Путь интеграции (v1.12, эскиз)
+- `dns-routing-core.cjs`: 17 групп, включая omitted/disabled Enable, безусловную structural check, URI fragments/parameters, policy arrays, first-match/duplicates/MATCH/suffix, unknown interface/provider, mixed endpoints, redaction.
+- `dns-routing-browser.cjs`: rendering, redaction, disabled/structural, explicit-proxy, snapshot/clear.
+- `dns-routing-mihomo-compat.cjs`: 7 parse-only synthetic cases; CI matrix 1.19.31/1.19.32. `-t` не запускает сервер и не доказывает трафик.
+- Historical `research/poc/dns-routing` не является текущим semantic acceptance gate: его исходные выводы о схемах, first-match и fake-IP superseded этой ревизией. Research не переносился в production.
 
-1. Ядро переносится в Config Studio CS-CORE (как PT-DIAG: маркер-блок, экспорт в api).
-2. Точка вызова: после `csRunAnalysis`, выход — секция в `csDiagOut` или отдельная панель «DNS↔Routing»; тексты находок проходят `csRedactText`.
-3. Builder: аудит после Build (те же API) — предупреждения рядом с Routing Intelligence.
-4. UI-правило: `error`-находки не блокируют Copy (валидатор конфига остаётся единственным блокером) — но показываются до экспорта.
+Финальный READY/NOT READY фиксируется в комментарии PR на точном head после завершения всех обязательных CI jobs. mergeable=true недостаточно. Field-test с реальными данными владельца NOT RUN.
+## Дополнительная подтверждённая находка независимой ревизии
 
-## 6. Ограничения (честные)
+P2, `index.html:dnsRoutingAudit` (policy loop / dns-analysis-unknown). Repro: enabled DNS, nameserver 192.0.2.53, rules MATCH,DIRECT и nameserver-policy с geosite:cn либо endpoint #eth0. Expected: явный UNKNOWN непокрытой policy; actual до фикса: чистый verdict без UNKNOWN. Причина: общий unknown guard учитывал только nameserver/fallback и rules, но не policy keys/endpoints. Fix: policyUnknown входит в guard; неподдерживаемая policy не интерпретируется. Regression: дополнительные negative assertions в unknown группе dns-routing-core (17 групп суммарно); тест сначала упал, затем прошёл. Это gap статической диагностики, не наблюдённая DNS leak.
 
-- DOMAIN-SUFFIX-семантика против wildcard-ключей политики сведена к точному совпадению после снятия `+.`/`.`-префикса — суффиксные совпадения (`a.b` политика против `x.a.b` правило) НЕ матчатся (ложноотрицательный gap, не ложное срабатывание).
-- GEOSITE/RULE-SET/под-правила/sub-rules не разворачиваются — домены внутри провайдеров недоступны статически; это честный UNKNOWN (как в RD-кондишенах).
-- `no-resolve`-зависимость обхода правил (частичное разрешение в порядке правил) не моделируется — PoC не претендует на предсказание мэтча, только на рассинхрон секций.
-- Аудит не знает о реальном окружении (доверенный ли локальный резолвер) — поэтому INFERRED-находки не «ошибка», а предупреждение.
+## Final hardening (2026-10-09)
 
-## 7. Тест-план до v1.12
+Новые подтверждённые P2 в кандидатном анализаторе: literal PASS ошибочно завершал поиск первого совпадения; mode direct/global ошибочно анализировались как rule. Негативные регрессии сначала упали. Теперь PASS продолжает поиск, а non-rule mode явно даёт UNKNOWN без утверждений о пути неисполняемых правил. Structural checks остаются безусловными. Основание: resolveMetadata mode switch и match/GetRules в [Mihomo1.19.31](https://github.com/MetaCubeX/mihomo/blob/v1.19.31/tunnel/tunnel.go) и [1.19.32](https://github.com/MetaCubeX/mihomo/blob/v1.19.32/tunnel/tunnel.go). Это source proof, не наблюдение трафика.
 
-1. Прогон на реальных конфигах владельца (read-only, локально) — подтвердить отсутствие ложных срабатываний на живых fleet-профилях.
-2. Позитивные контроль-кейсы из §2 источников (ошибка respect-rules воспроизводится `mihomo -t`).
-3. Сравнение с `mihomo -t`: каждая `error`-находка должна соответствовать отказу `-t` (и наоборот — расхождения задокументировать).
+Актуальные gates: core17 групп; browser12 проверок, включая PASS/mode, повторный Parse, DNS-only URL credentials/path/query tokens, unsupported policy и неизменность source/Builder; compat7 parse-only cases, включая disabled PSNS policy и PASS. Generic field49 проверяет свежесть DNS snapshot и отсутствие YAML mutation во всех29 positive cases; final-release-browser проверяет UI Reverse/Undo и повторный Parse в браузерной матрице. Точные final head и completed CI фиксируются в описании #207 после синхронизации с финальным main. PR остаётся OPEN до отдельного OWNER GO.
