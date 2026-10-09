@@ -6672,7 +6672,7 @@ function rbParseProjectText(text) {
   if (s.length > RB_PROJECT_MAX_BYTES) return { ok: false, error: 'файл проекта слишком большой (>' + Math.floor(RB_PROJECT_MAX_BYTES / 1024 / 1024) + ' МБ)' };
   let raw;
   try { raw = JSON.parse(s); } catch (e) {
-    return { ok: false, error: 'не JSON: ' + String(e && e.message ? e.message : e).slice(0, 120) };
+    return { ok: false, error: 'не JSON (значения скрыты)' };
   }
   const migrated = rbMigrateProject(raw);
   if (!migrated.ok) return { ok: false, error: migrated.error };
@@ -6852,7 +6852,7 @@ function rbYamlToProject(doc) {
   const direct = proxies.filter(p => p && p.type !== 'wireguard');
   if (direct.length) {
     passthrough['proxies:direct'] = direct;
-    findings.push({ field: 'proxies (прямые узлы)', state: 'UNSUPPORTED', note: direct.length + ' узл(ов) без link-emitter не переносятся в поле ввода Builder; доступны через «Расширенное редактирование YAML» — НЕ теряются' });
+    findings.push({ field: 'proxies (прямые узлы)', state: 'UNSUPPORTED', note: direct.length + ' узл(ов) без link-emitter не переносятся в поле ввода Builder; сохранены в проекте и исходном YAML, но новый Build их НЕ переносит' });
   }
 
   // --- DPR ---
@@ -8859,8 +8859,8 @@ function csRenderForm() {
     row.append(lbl, inp);
     if (f.secret) {
       // TRACK C: явный показать/скрыть ТЕКУЩЕГО значения (владелец вправе его
-      // видеть и править). Показ = подстановка оригинала в input; скрытие =
-      // возврат к семантике «пусто = оставить исходное». В диагностику/логи
+      // видеть и править). Оригинал подставляется только при первом Reveal;
+      // Hide меняет тип input, сохраняя несохранённый ввод. В диагностику/логи
       // значение по-прежнему не попадает.
       const reveal = document.createElement('button');
       reveal.type = 'button';
@@ -8869,12 +8869,15 @@ function csRenderForm() {
       reveal.setAttribute('aria-label', 'Показать или скрыть значение поля ' + f.key + ' объекта ' + cur);
       reveal.title = 'Показать/скрыть текущее значение';
       let shown = false;
+      let initialized = false;
+      inp.addEventListener('input', () => { initialized = true; inp.dataset.csChanged = '1'; });
       reveal.addEventListener('click', () => {
+        if (!initialized) { inp.value = String(f.value); initialized = true; }
         shown = !shown;
         inp.type = shown ? 'text' : 'password';
-        inp.value = shown ? String(f.value) : '';
         inp.placeholder = shown ? '' : CS_SECRET_INPUT_HINT;
         reveal.textContent = shown ? '🙈' : '👁';
+        reveal.setAttribute('aria-pressed', String(shown));
       });
       row.append(reveal);
     }
@@ -9008,7 +9011,7 @@ function csCollectFieldEdits(origName, type) {
     const secret = inp.dataset.csSecret === '1';
     const origVal = inp.dataset.csOrig;
     const val = inp.value;
-    if (secret) { if (!val) return; }
+    if (secret) { if (!val || inp.dataset.csChanged !== '1') return; }
     else if (val === origVal) return;
     // путь health-check.* при хранении в op — поле с точкой недопустимо; планируем только простые поля
     if (field.includes('.')) return;
@@ -9966,7 +9969,8 @@ function rbCollectProject() {
     },
     dialer: { name: opt('wgDialerInput'), members: opt('wgDialerMembers'), providers: opt('wgDialerProviders') },
     domainPolicy: { enabled: chk('cfgPolicyRouting'), cards: rbReadPolicyCardsRaw() },
-    tiered: { enabled: chk('cfgTieredFailover'), cards: (window.__tierCardsState || []).map(t => ({ name: t.name, strategy: t.strategy, members: (t.members || []).slice() })) }
+    tiered: { enabled: chk('cfgTieredFailover'), cards: (window.__tierCardsState || []).map(t => ({ name: t.name, strategy: t.strategy, members: (t.members || []).slice() })) },
+    passthrough: rbPassthrough ? JSON.parse(JSON.stringify(rbPassthrough)) : null
   };
 }
 
@@ -9974,9 +9978,42 @@ function rbCollectProject() {
 // пересчитывается существующими update-функциями (тот же путь, что после
 // ручного ввода; клемпы профиля применяются ими же).
 function rbApplyProject(project) {
+  const copy = rbParseProjectText(JSON.stringify(project));
+  if (!copy.ok) throw new Error('Проект не применён: ' + copy.error);
+  const before = rbCollectProject();
+  const profileState = { selectedProfile, effectiveProfile, snapshots: JSON.parse(JSON.stringify(profileSnapshots)) };
+  const controls = Array.from(document.querySelectorAll('#tab-mihomo input:not([type=file]), #tab-mihomo select, #tab-mihomo textarea')).map(el => ({ el, value: el.value, checked: el.checked, disabled: el.disabled }));
+  try { rbWriteProject(copy.project); }
+  catch (_) {
+    // Повторный рендер — best effort; исходные поля восстанавливаются даже
+    // при отказе того же render/update hook. Undo не расходуется при ошибке.
+    try { rbWriteProject(before); } catch (_) {}
+    for (const c of controls) { c.el.value = c.value; c.el.checked = c.checked; c.el.disabled = c.disabled; }
+    wgProfiles = before.wgProfiles;
+    wgProfileSeq = before.meta.wgProfileSeq;
+    subscriptionListNames = before.options.serverList.names;
+    subscriptionListNodes = before.options.serverList.nodes;
+    subscriptionSelection = new Set(before.options.serverList.selected);
+    window.__tierCardsState = before.tiered.cards;
+    selectedProfile = profileState.selectedProfile; effectiveProfile = profileState.effectiveProfile;
+    for (const k of Object.keys(profileSnapshots)) delete profileSnapshots[k];
+    Object.assign(profileSnapshots, profileState.snapshots);
+    syncWgCollections();
+    throw new Error('Восстановление не применено; прежнее состояние Builder возвращено.');
+  }
+  // Даже если значения совпадают, старый async Build не должен публиковать
+  // результат после восстановления другого bean/проекта.
+  mihomoValidationSeq++;
+  setMihomoValidationState('NOT_BUILT');
+  rbPassthrough = copy.project.passthrough || null;
+}
+let rbPassthrough = null;
+function rbWriteProject(project) {
   const setOpt = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
   const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
   const s = project.sources, o = project.options;
+  setOpt('cfgProfile', o.profile);
+  onProfileChange();
   setOpt('mihomoInput', s.mainInput);
   setOpt('whitelistInput', s.fallbackInput);
   setChk('cfgSubMode', s.subMode);
@@ -10017,7 +10054,6 @@ function rbApplyProject(project) {
   // Зависимый UI — те же update-функции, что после ручного ввода.
   updateExcludeFilterVisibility();
   updateSubModeHint();
-  onProfileChange();
   onWhitelistChange();
   updateVpsDnsFields();
   updateMihomoOptionStates();
@@ -10047,17 +10083,21 @@ function rbSaveProject() {
 }
 
 async function rbLoadProject(file) {
+  const beforeRead = rbProjectFingerprint(rbCollectProject());
+  if (file.size > RB_PROJECT_MAX_BYTES) return showToast('❌ Проект: файл слишком большой', true);
   let text = '';
   try { text = await file.text(); } catch (e) { return showToast('❌ Не удалось прочитать файл: ' + (e && e.message ? e.message : e), true); }
   const parsed = rbParseProjectText(text);
   if (!parsed.ok) return showToast('❌ Проект: ' + parsed.error, true);
   const project = parsed.project;
+  if (beforeRead !== rbProjectFingerprint(rbCollectProject())) return showToast('Builder изменился во время чтения файла. Загрузите проект повторно.', true);
   const hasState = document.getElementById('mihomoInput').value.trim() || wgProfiles.length;
   if (hasState && !confirm('Загрузить проект вместо текущего состояния Builder? Прежнее состояние можно вернуть кнопкой «↩︎ Отменить восстановление».')) {
     return showToast('Загрузка проекта отменена.');
   }
-  rbUndoProjectState = rbCollectProject();
-  rbApplyProject(project);
+  const snapshot = rbCollectProject();
+  try { rbApplyProject(project); } catch (e) { return showToast(e.message, true); }
+  rbUndoProjectState = snapshot;
   const undoBtn = document.getElementById('rbUndoBtn');
   if (undoBtn) undoBtn.style.display = '';
   const subs = project.sources.mainInput.split('\n').filter(x => x.trim()).length;
@@ -10067,8 +10107,8 @@ async function rbLoadProject(file) {
 function rbUndoRestore() {
   if (!rbUndoProjectState) return;
   const snapshot = rbUndoProjectState;
+  try { rbApplyProject(snapshot); } catch (e) { return showToast(e.message, true); }
   rbUndoProjectState = null;
-  rbApplyProject(snapshot);
   const undoBtn = document.getElementById('rbUndoBtn');
   if (undoBtn) undoBtn.style.display = 'none';
   showToast('↩︎ Восстановление отменено — прежнее состояние Builder возвращено.');
@@ -10082,30 +10122,58 @@ document.getElementById('rbProjectFile').addEventListener('change', (e) => {
 
 // Сравнение «было → будет» (TRACK B4): компактные счётчики и ключевые опции.
 function rbProjectCounts(p) {
+  const source = rbClassifySources(p.sources.mainInput, globalThis.web4core);
   return {
-    subs: (p.sources.mainInput || '').split('\n').filter(s => s.trim()).length,
+    subs: source.subs, direct: source.direct, unknown: source.unknown,
     wg: p.wgProfiles.length,
     awg: p.wgProfiles.filter(w => w.bean && w.bean.wireguard && w.bean.wireguard['amnezia-wg-option']).length,
     dpr: p.domainPolicy.enabled ? p.domainPolicy.cards.length : 0,
     tiered: p.tiered.enabled ? p.tiered.cards.length : 0
   };
 }
+function rbClassifySources(text, api) {
+  const counts = { subs: 0, direct: 0, unknown: 0 };
+  for (const item of splitSubscriptionInputForPreview(text)) {
+    if (!item.line.trim()) continue;
+    if (item.subscription) { counts.subs++; continue; }
+    try {
+      const beans = api && api.buildBeansFromInput(item.line);
+      if (!beans || beans.length !== 1) { counts.unknown++; continue; }
+      api.validateBean(beans[0]); counts.direct++;
+    } catch (_) { counts.unknown++; }
+  }
+  return counts;
+}
+function rbProjectFingerprint(project) {
+  const p = JSON.parse(JSON.stringify(project));
+  if (p.meta) delete p.meta.created;
+  return JSON.stringify(p);
+}
+function rbCompareValue(key, value) {
+  if (typeof value === 'boolean') return value ? 'вкл' : 'выкл';
+  const enums = { profile: RB_PROFILES, tunStackEx: new Set(['gvisor', 'system', 'mixed']), webUiDashboard: RB_DASHBOARDS };
+  if (enums[key] && enums[key].has(value)) return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value)) return 'список (' + value.length + ')';
+  if (typeof value === 'string') return value ? 'строка (' + value.length + ' символов; значение скрыто)' : 'пусто';
+  return value == null ? 'не задано' : 'структура (значения скрыты)';
+}
 function rbCompareWithCurrent(project) {
   const cur = rbCollectProject();
   const a = rbProjectCounts(cur);
   const b = rbProjectCounts(project);
-  const hasState = (cur.sources.mainInput || '').trim() || cur.wgProfiles.length;
-  if (!hasState) return 'Текущий Builder: пуст — восстановление нечего затирать.';
   const diff = [];
-  const fmt = (c) => 'подписок ' + c.subs + ' · WG ' + (c.wg - c.awg) + ' · AWG ' + c.awg + ' · DPR-политик ' + c.dpr + ' · Tiered-карточек ' + c.tiered;
-  if (a.subs !== b.subs || a.wg !== b.wg || a.dpr !== b.dpr || a.tiered !== b.tiered) {
+  const fmt = (c) => 'подписок ' + c.subs + ' · прямых ссылок ' + c.direct + ' · UNKNOWN ' + c.unknown + ' · WG ' + (c.wg - c.awg) + ' · AWG ' + c.awg + ' · DPR-политик ' + c.dpr + ' · Tiered-карточек ' + c.tiered;
+  const compositionChanged = ['sources', 'wgProfiles', 'dialer', 'domainPolicy', 'tiered', 'passthrough'].some(k => JSON.stringify(cur[k]) !== JSON.stringify(project[k]));
+  if (compositionChanged) {
     diff.push('Было: ' + fmt(a));
     diff.push('Станет: ' + fmt(b));
+    diff.push('Состав, порядок или параметры источников/карточек изменятся (значения скрыты).');
   } else {
     diff.push('Состав источников и карточек совпадает с текущим Builder (' + fmt(a) + ').');
   }
-  const optChecks = [['profile', 'профиль'], ['addTun', 'TUN'], ['tunMips', 'MIPS'], ['webUI', 'WebUI'], ['lan', 'allow-lan'], ['subMode', 'URL-подписки']];
-  const changedOpts = optChecks.filter(([k]) => String(cur.options[k]) !== String(project.options[k])).map(([, label]) => label + ': ' + (cur.options[k] ? 'вкл' : 'выкл') + ' → ' + (project.options[k] ? 'вкл' : 'выкл'));
+  const changedOpts = Object.keys(project.options).filter(k => JSON.stringify(cur.options[k]) !== JSON.stringify(project.options[k])).map(k => k + ': ' + rbCompareValue(k, cur.options[k]) + ' → ' + rbCompareValue(k, project.options[k]));
+  if (cur.sources.subMode !== project.sources.subMode) changedOpts.push('URL-подписки: ' + rbCompareValue('subMode', cur.sources.subMode) + ' → ' + rbCompareValue('subMode', project.sources.subMode));
   if (changedOpts.length) diff.push('Настройки изменятся: ' + changedOpts.join('; '));
   else diff.push('Ключевые настройки не изменятся.');
   return diff.join('\n');
@@ -10116,22 +10184,23 @@ const RB_STATUS_HINTS = {
   DERIVED: 'восстановится с нормализацией (проверьте после Restore)',
   AMBIGUOUS: 'однозначно восстановить нельзя — выбран безопасный вариант',
   MISSING: 'информации в источнике нет — восстановить невозможно',
-  UNSUPPORTED: 'Builder не имеет представления — сохранено в отчёте, не теряется',
+  UNSUPPORTED: 'сохранено в проекте/исходном YAML; новый Build НЕ переносит эти данные',
   CONFLICT: 'данные противоречат друг другу — показано, не чинится молча'
 };
 function rbRestoreFromStudio() {
   const text = document.getElementById('csImportInput').value;
   if (!text.trim()) return showToast('Сначала вставьте и разберите config.yaml', true);
   let doc;
-  try { doc = jsyaml.load(text); } catch (e) { return showToast('❌ YAML не разбирается: ' + String(e && e.message ? e.message : e).slice(0, 100), true); }
+  try { doc = csLoadBounded(text, jsyaml); } catch (_) { return showToast('❌ YAML не принят: проверьте структуру и лимиты (значения скрыты).', true); }
   const res = rbYamlToProject(doc);
   const project = res.project;
   const counts = rbProjectCounts(project);
+  rbPendingRestore = { project, source: text, builder: rbProjectFingerprint(rbCollectProject()), findings: res.findings };
   // Компактный предпросмотр (TRACK B2): счётчики + настройки + статусы;
   // подробный перечень — по раскрытию, не простыня.
   const byStatus = {};
   for (const f of res.findings) (byStatus[f.state] = byStatus[f.state] || []).push(f);
-  const statusOrder = ['EXACT', 'DERIVED', 'AMBIGUOUS', 'MISSING', 'UNSUPPORTED', 'CONFLICT'];
+  const statusOrder = ['EXACT', 'DERIVED', 'AMBIGUOUS', 'MISSING', 'UNSUPPORTED', 'CONFLICT', 'UNKNOWN', 'INVALID'];
   const attention = statusOrder.filter(s => s !== 'EXACT' && byStatus[s] && byStatus[s].length);
   const preview = [];
   preview.push('Подписки: ' + counts.subs + ' · WireGuard: ' + (counts.wg - counts.awg) + ' · AmneziaWG: ' + counts.awg + ' · DPR-политик: ' + counts.dpr + ' · Tiered-карточек: ' + counts.tiered);
@@ -10163,17 +10232,46 @@ function rbRestoreFromStudio() {
     body.textContent = csRedactText(detailLines.join('\n') || 'находок нет', project);
     det.append(sum, body);
     out.appendChild(det);
+    const blocked = !!(byStatus.CONFLICT || byStatus.INVALID);
+    const confirmBtn = document.createElement('button');
+    confirmBtn.id = 'rbConfirmRestoreBtn'; confirmBtn.className = 'btn'; confirmBtn.type = 'button';
+    confirmBtn.textContent = 'Подтвердить восстановление'; confirmBtn.disabled = blocked;
+    const cancelBtn = document.createElement('button');
+    cancelBtn.id = 'rbCancelRestoreBtn'; cancelBtn.className = 'btn btn-gray'; cancelBtn.type = 'button'; cancelBtn.textContent = 'Отмена';
+    if (attention.length) {
+      const label = document.createElement('label');
+      const ack = document.createElement('input'); ack.type = 'checkbox'; ack.id = 'rbLossAck';
+      label.append(ack, document.createTextNode(' Я понимаю: MISSING/UNKNOWN не восстановлены; UNSUPPORTED не попадёт в новый YAML. Исходный YAML доступен в Studio.'));
+      out.appendChild(label); confirmBtn.disabled = true;
+      ack.addEventListener('change', () => { confirmBtn.disabled = blocked || !ack.checked; });
+    }
+    if (blocked) out.appendChild(document.createTextNode(' Исправьте CONFLICT/INVALID в исходном YAML и повторите предпросмотр.'));
+    confirmBtn.addEventListener('click', rbConfirmRestore);
+    cancelBtn.addEventListener('click', () => { rbPendingRestore = null; out.textContent = 'Восстановление отменено. Builder не изменён.'; document.getElementById('csRestoreBtn').focus(); });
+    out.append(confirmBtn, cancelBtn);
+    cancelBtn.focus();
   }
-  const hasState = document.getElementById('mihomoInput').value.trim() || wgProfiles.length;
-  if (hasState && !confirm('Восстановить Builder из этого источника? Текущее состояние можно вернуть через «↩︎ Отменить восстановление».')) {
-    return showToast('Восстановление отменено.');
+}
+let rbPendingRestore = null;
+function rbConfirmRestore() {
+  const pending = rbPendingRestore;
+  if (!pending) return;
+  if (pending.findings.some(f => f.state === 'CONFLICT' || f.state === 'INVALID')) return;
+  if (pending.findings.some(f => f.state !== 'EXACT') && !document.getElementById('rbLossAck')?.checked) return;
+  if (pending.source !== document.getElementById('csImportInput').value || pending.builder !== rbProjectFingerprint(rbCollectProject())) {
+    rbPendingRestore = null;
+    document.getElementById('csRestoreOut').textContent = 'Предпросмотр устарел: YAML или Builder изменён. Повторите восстановление.';
+    return;
   }
-  rbUndoProjectState = rbCollectProject();
-  rbApplyProject(project);
+  const snapshot = rbCollectProject();
+  try { rbApplyProject(pending.project); } catch (e) { return showToast(e.message, true); }
+  rbUndoProjectState = snapshot;
+  rbPendingRestore = null;
   const undoBtn = document.getElementById('rbUndoBtn');
   if (undoBtn) undoBtn.style.display = '';
-  showToast('🔁 Восстановлено: ' + project.wgProfiles.length + ' WG/AWG, ' + counts.subs + ' подписок' + (attention.length ? '; ' + attention.length + ' класса(ов) требуют внимания — см. отчёт в Studio.' : '. Builder готов — нажмите ⚡ Build.'));
+  showToast('🔁 Builder восстановлен. Проверьте отчёт потерь и нажмите ⚡ Build.');
   switchTab(null, 'mihomo');
+  if (undoBtn) undoBtn.focus();
 }
 document.addEventListener('click', (e) => {
   if (!e.target) return;

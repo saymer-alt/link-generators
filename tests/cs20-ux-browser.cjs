@@ -52,7 +52,7 @@ const doc = {
   // скрыть → возврат к «пусто = оставить исходное»
   await revealBtn.click();
   assert.equal(await inp.getAttribute('type'), 'password', '🙈 скрывает значение');
-  assert.equal(await inp.inputValue(), '', 'после скрытия — пусто (семантика «оставить»)');
+  assert.equal(await inp.inputValue(), SECRET, 'скрытие сохраняет исходное значение');
 
   // без изменений: ops пуст → экспорт = исходный текст (контракт «пусто = оставить исходное»)
   const export1 = await page.evaluate(() => csExportText());
@@ -73,6 +73,11 @@ const doc = {
   await page.locator('button[aria-label*="password"]').click();
   assert.equal(await inp2.inputValue(), SECRET, '👁 показывает оригинал');
   await inp2.fill(NEW_SECRET);
+  await page.locator('button[aria-label*="password"]').click();
+  assert.equal(await inp2.inputValue(), NEW_SECRET, 'Hide сохраняет несохранённый новый секрет');
+  await page.locator('button[aria-label*="password"]').click();
+  assert.equal(await inp2.inputValue(), NEW_SECRET, 'Reveal не подменяет новый секрет оригиналом');
+  await page.locator('button[aria-label*="password"]').click();
   await page.click('#csSaveFieldsBtn');
   await page.waitForFunction(() => document.getElementById('csExportStatus').textContent.includes('PASS') && csWorking && !csWorkingErr);
   const export2 = await page.evaluate(() => csExportText());

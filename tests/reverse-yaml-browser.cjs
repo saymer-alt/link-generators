@@ -55,6 +55,8 @@ const normalizeHwid = yaml => yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, '  - <HWI
   assert.ok(report.includes('Текущий Builder: пуст') || report.includes('Было:') || report.includes('Состав источников и карточек совпадает'), 'предпросмотр: сравнение было/стало');
   assert.ok(report.includes('[EXACT] wg:wg-simple-a'), 'отчёт: WG EXACT');
   assert.ok(report.includes('имя файла: UNKNOWN'), 'отчёт: честное filename UNKNOWN');
+  await page.check('#rbLossAck');
+  await page.click('#rbConfirmRestoreBtn');
   await page.waitForFunction(() => document.getElementById('tab-mihomo').classList.contains('active'));
   assert.equal(await page.evaluate(() => document.getElementById('mihomoInput').value), ['https://sub1.example/feed', 'https://sub2.example/feed'].join('\n'), 'подписки восстановлены дословно с порядком');
   assert.equal(await page.evaluate(() => wgProfiles.length), 2, 'WG/AWG восстановлены');
@@ -89,6 +91,8 @@ const normalizeHwid = yaml => yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, '  - <HWI
   const reportB = await page.textContent('#csRestoreOut');
   assert.ok(reportB.includes('[UNSUPPORTED] proxies (прямые узлы)'), 'отчёт: прямой узел = UNSUPPORTED (не потерян молча)');
   assert.ok(reportB.includes('[MISSING] sources.mainInput'), 'отчёт: URL развёрнутой подписки отсутствуют = MISSING');
+  await page.check('#rbLossAck');
+  await page.click('#rbConfirmRestoreBtn');
   assert.equal(await page.evaluate(() => wgProfiles.length), 1, 'WG при этом восстановлен');
   ok('Сценарий B: прямой узел — честный passthrough-finding, WG восстановлен');
 

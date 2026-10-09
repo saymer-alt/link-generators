@@ -164,6 +164,8 @@ function makeWgFiles() {
   await page.click('#csParseBtn');
   await page.waitForFunction(() => document.getElementById('csStatus').textContent.includes('Разобрано'));
   await page.click('#csRestoreBtn');
+  await page.check('#rbLossAck');
+  await page.click('#rbConfirmRestoreBtn');
   await page.waitForFunction(() => document.getElementById('tab-mihomo').classList.contains('active'));
   assert.equal(await page.evaluate(() => wgProfiles.length), 7, 'YAML-reverse: 7 WG восстановлено');
   await build(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state));
