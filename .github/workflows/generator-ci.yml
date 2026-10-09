@@ -284,6 +284,9 @@ jobs:
       - name: Synthetic field acceptance matrix
         run: node tests/field-acceptance-browser.cjs
 
+      - name: Final release UI journey and viewport matrix
+        run: node tests/final-release-browser.cjs
+
       - name: Security and download end-to-end regression (CODEX-02)
         run: node tests/security-stress-browser.cjs
 

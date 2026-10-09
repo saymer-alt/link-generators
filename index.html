@@ -92,9 +92,10 @@
   .resizable-node-list{resize:vertical;min-height:140px;max-height:70vh;overflow:auto} /* #166 */
   /* === конец Tiered/#165 === */
   .policy-domains{width:100%;padding:6px 8px;box-sizing:border-box;font-family:monospace;font-size:.85rem}
-  .policy-target{padding:5px 8px;font-size:.85rem}
+  .policy-target{padding:5px 8px;font-size:.85rem;overflow:hidden;text-overflow:ellipsis}
   .policy-target-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
   .policy-target-row .label{margin:0}
+  .policy-target-wrap{width:100%;min-width:0;padding:1px;overflow:hidden}
   .mt-group-row{display:flex;gap:8px;align-items:center;padding:3px 0;flex-wrap:wrap}
   .mt-group-row .mt-iface{color:var(--muted)}
   .mt-mapping-row{display:flex;gap:8px;align-items:center;padding:4px 0;flex-wrap:wrap}
@@ -151,10 +152,12 @@
   .cs-subpanel > summary{cursor:pointer;font-size:.85rem}
   #csDangerPanel > summary{color:var(--red)}
   .cs-subpanel > summary:focus-visible,.advanced-panel > summary:focus-visible,details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px;box-shadow:0 0 0 4px rgba(0,84,227,.14)}
+  button,summary{min-width:24px;min-height:24px}
   #csOpsBox{background:rgba(0,84,227,.045);border-top-color:var(--accent)!important;padding:10px!important}
   #csExportBox{background:rgba(10,122,10,.045);border:1px solid var(--green)!important;padding:10px!important}
   #tab-studio,#physicalTopologyPanel{overflow-wrap:anywhere}
   #csEditObject{max-width:100%}
+  .cs-native-control{display:block;min-width:0;max-width:100%;padding:1px;overflow:hidden}
   .cs-flash{animation:cs-flash-anim 1.6s ease-out}
   @keyframes cs-flash-anim{0%{background:rgba(255,200,0,.25)}100%{background:transparent}}
   .advanced-panel summary .advanced-badge{flex:none}
@@ -181,6 +184,7 @@
   .wg-target-row{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
   .wg-target-row label{margin:0;color:var(--text);font-size:.8rem}
   .wg-target{flex:1;min-width:160px;padding:4px 8px;font-size:.85rem}
+  .wg-native-control{flex:1;min-width:160px;max-width:100%;padding:1px;overflow:hidden}
   .wg-list-del{padding:5px 14px;font-size:.85rem;line-height:1.2;font-family:inherit;background:linear-gradient(180deg,#fdfdfa,#e8e5d6);border:1px solid #a07070;border-radius:3px;color:var(--red);cursor:pointer;flex:none;align-self:flex-start}
   .wg-list-del:hover{box-shadow:inset 0 0 0 2px #ffc0c0}
   .wg-rejected{margin:10px 0 0;padding:10px 12px;border:1px solid var(--red);border-radius:0;background:var(--red-bg)}
@@ -814,7 +818,7 @@
             <option value="rule-providers">Rule-провайдеры</option>
           </select></span>
         <span style="flex:1;min-width:200px"><label class="label" for="csEditObject" style="display:inline">Объект:</label><br>
-          <select id="csEditObject" aria-label="Объект конфига" style="width:100%"></select></span>
+          <span class="cs-native-control"><select id="csEditObject" aria-label="Объект конфига" style="width:100%"></select></span></span>
       </div>
       <div id="csEditForm" style="margin-top:8px"></div>
       <div id="csImpactBox" class="hint" style="margin-top:6px;white-space:pre-line"></div>
@@ -2493,7 +2497,10 @@ function renderWgList() {
     if (p.vanishedTarget) targetWarn.textContent = '⚠ Цель «' + p.vanishedTarget + '» недоступна для этого профиля — выберите заново.';
     const targetDegraded = document.createElement('div');
     targetDegraded.className = 'wg-target-degraded';
-    targetRow.append(targetLabel, targetSel, targetManual, targetWarn, targetDegraded);
+    const targetWrap = document.createElement('div');
+    targetWrap.className = 'wg-native-control';
+    targetWrap.appendChild(targetSel);
+    targetRow.append(targetLabel, targetWrap, targetManual, targetWarn, targetDegraded);
     fillWgTargetSelect(targetSel, p, i);
 
     li.append(head, info, modeRow, targetRow);
@@ -4507,7 +4514,11 @@ function policyCardDom(card, index) {
   }
   targetSel.value = card.target === 'GLOBAL' || card.target === 'DIRECT' || card.target === 'REJECT' ? card.target : 'SELECT';
   targetLabel.appendChild(makeCtxHelp('Создаёт отдельную proxy-group с именем категории. После запуска Mihomo маршрут этой категории можно переключать между доступными выходами без пересборки конфига. GLOBAL/DIRECT/REJECT ведут RULE-SET напрямую на цель; семантика таргетов не менялась.', 'Куда направлять'));
-  targetRow.append(targetLabel, targetSel);
+  const targetWrap = document.createElement('div');
+  targetWrap.className = 'policy-target-wrap';
+  targetSel.setAttribute('aria-label', 'Куда направлять политику');
+  targetWrap.appendChild(targetSel);
+  targetRow.append(targetLabel, targetWrap);
   const domainsLabel = document.createElement('label');
   domainsLabel.className = 'label';
   domainsLabel.style.cssText = 'display:block;margin-top:8px';
@@ -6910,7 +6921,9 @@ function rbYamlToProject(doc) {
       const rp = rps[slug] || {};
       const payload = Array.isArray(rp.payload) ? rp.payload.join('\n') : String(rp.payload || '');
       const target = rules.map(r => String(r).split(',')).filter(pp => pp[0] === 'RULE-SET' && pp[1] === slug).map(pp => pp[2])[0] || 'SELECT';
-      project.domainPolicy.cards.push({ name: slug.slice('policy-'.length), domains: payload, target: ['GLOBAL', 'DIRECT', 'REJECT'].includes(target) ? target : 'SELECT' });
+      const selectGroup = !['GLOBAL', 'DIRECT', 'REJECT'].includes(target) && groups.find(g => g && g.name === target && g.type === 'select');
+      const namedSlugs = selectGroup && target.length <= 64 ? routingDprHumanNames(project.domainPolicy.cards.concat({ name: target })) : {};
+      project.domainPolicy.cards.push({ name: namedSlugs[slug] === target ? target : slug.slice('policy-'.length), domains: payload, target: ['GLOBAL', 'DIRECT', 'REJECT'].includes(target) ? target : 'SELECT' });
       if (!['GLOBAL', 'DIRECT', 'REJECT'].includes(target)) findings.push({ field: 'domainPolicy.' + slug, state: 'DERIVED', note: 'цель «' + target + '» — группа; в карточке восстановлена SELECT-семантика, сверьте вручную' });
     }
   }
@@ -7086,7 +7099,7 @@ function csSummarize(doc) {
     providers: doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object' ? Object.keys(doc['proxy-providers']).length : 0,
     ruleProviders: doc['rule-providers'] && typeof doc['rule-providers'] === 'object' ? Object.keys(doc['rule-providers']).length : 0,
     rules: arrLen(doc.rules),
-    dns: !!dns,
+    dns: !!(dns && dns.enable === true),
     tun: !!(tun && tun.enable !== false && (tun.enable === true || tun.device)),
     sniffer: !!(sniffer && sniffer.enable !== false && (sniffer.enable === true || sniffer['parse-pure-ip'] !== undefined)),
     mode: typeof doc.mode === 'string' ? doc.mode : null,
@@ -8902,10 +8915,14 @@ function csRenderForm() {
     inp.dataset.csField = f.key;
     inp.dataset.csOrig = f.secret ? '' : String(f.value);
     inp.setAttribute('aria-label', csRedactText('Поле ' + f.key + ' объекта ' + cur, csCurrentDoc));
-    inp.style.cssText = 'flex:1;min-width:160px;padding:4px 8px';
+    inp.style.cssText = 'width:100%;min-width:160px;padding:4px 8px';
     if (f.secret) { inp.placeholder = CS_SECRET_INPUT_HINT; inp.dataset.csSecret = '1'; }
     else inp.value = String(f.value);
-    row.append(lbl, inp);
+    const inputWrap = document.createElement('span');
+    inputWrap.className = 'cs-native-control';
+    inputWrap.style.cssText = 'flex:1;min-width:160px';
+    inputWrap.appendChild(inp);
+    row.append(lbl, inputWrap);
     if (f.secret) {
       // TRACK C: явный показать/скрыть ТЕКУЩЕГО значения (владелец вправе его
       // видеть и править). Оригинал подставляется только при первом Reveal;
