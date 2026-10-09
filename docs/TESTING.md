@@ -703,3 +703,20 @@ deployed worker `sub.saymer-87.workers.dev` (POST-контракт с device hea
 реальные CORS/сетевые особенности браузера, живой Keenetic/VPS при необходимости.
 Manual-сюиты (`*.manual.cjs`: reality-handshake matrix, awl-soak) — по явному
 запросу владельца, guard не даёт их случайно подключить к CI.
+
+## Reverse Build / Config Studio 2.0 (DAY-01)
+
+- `tests/project-roundtrip-browser.cjs` — сохранить/загрузить проект,
+  поле-в-поле равенство, byte-parity повторного Build, модификация
+  состава, undo, bounded-ошибка битого файла.
+- `tests/reverse-yaml-browser.cjs` — YAML Reverse: предпросмотр
+  восстановления (счётчики/статусы/сравнение), byte-parity для
+  подписочных конфигов, честный UNSUPPORTED/MISSING для прямых узлов.
+- `tests/qa-reverse-integration.cjs` — полный сценарий владельца
+  6 подписок + 8 WG/AWG + DPR: Save/Load/модификация −1 AWG +2 подписки;
+  фаза A — известный DPR×Tiered конфликт (до фикса DAY-01).
+- `tests/qa-fixes-browser.cjs` — матрица DPR ON/OFF × Tiered ON/OFF
+  (все комбинации VALID) + WG base64-ключи (32 байта, сообщение без
+  значения ключа).
+- `tests/cs20-ux-browser.cjs` — секреты редактора Studio: показать/
+  скрыть/заменить, замаскированность диффа и статусов.

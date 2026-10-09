@@ -60,7 +60,7 @@ function makeWgFiles() {
   };
   const output = () => page.evaluate(() => document.getElementById('mihomoOutput').value);
 
-  // ================= ФАЗА A: DPR+Tiered вместе (известный QA-01) =================
+  // ================= ФАЗА A: DPR+Tiered вместе (QA-01, ИСПРАВЛЕНО в DAY-01 #211) =================
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
   await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
   await page.fill('#mihomoInput', 'https://sub1.example/feed');
@@ -74,10 +74,10 @@ function makeWgFiles() {
   });
   await build(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state));
   const stateA = await page.evaluate(() => MIHOMO_VALIDATION_STATE.state);
-  assert.equal(stateA, 'INVALID', 'QA-01 воспроизведён: DPR+Tiered вместе → INVALID (не молчаливая порча — есть понятная ошибка)');
-  const errText = await page.evaluate(() => document.getElementById('mihomoValidationBox').textContent);
-  assert.ok(errText.includes('MATCH,GLOBAL'), 'ошибка понятна пользователю: ' + errText.slice(0, 120).replace(/\n/g, ' '));
-  ok('ФАЗА A: QA-01 (DPR+Tiered → валидатор отвергает сборку) воспроизведён, ошибка явная');
+  assert.equal(stateA, 'VALID', 'QA-01 исправлен: DPR+Tiered вместе → VALID');
+  const yamlA0 = await output();
+  assert.ok(yamlA0.includes('MATCH,🪜 TIERED-AUTO') && yamlA0.includes('RULE-SET,policy-ai'), 'финальный tiered-дефолт и DPR-правила на месте');
+  ok('ФАЗА A: QA-01 исправлен (DAY-01 #211) — DPR+Tiered собираются, дефолт 🪜 TIERED-AUTO');
 
   // ================= ФАЗА B: полный сценарий (Tiered OFF, DPR ON) =================
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
@@ -164,6 +164,8 @@ function makeWgFiles() {
   await page.click('#csParseBtn');
   await page.waitForFunction(() => document.getElementById('csStatus').textContent.includes('Разобрано'));
   await page.click('#csRestoreBtn');
+  await page.check('#rbLossAck');
+  await page.click('#rbConfirmRestoreBtn');
   await page.waitForFunction(() => document.getElementById('tab-mihomo').classList.contains('active'));
   assert.equal(await page.evaluate(() => wgProfiles.length), 7, 'YAML-reverse: 7 WG восстановлено');
   await build(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state));
