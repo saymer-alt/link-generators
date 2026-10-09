@@ -97,6 +97,9 @@ function parseCore(text,id,valid=true){
    let reverseInput=original;
    if(c.unknown||c.serverYaml){const d=yaml.load(original);d['x-synthetic-evidence']={nested:['preserved-only-in-project']};if(c.serverYaml){d['proxy-groups']=[{name:'SERVER-ONLY',type:'select',proxies:['DIRECT',...d.proxies.map(p=>p.name)]}];d.rules=['DOMAIN-SUFFIX,example.invalid,SERVER-ONLY','MATCH,DIRECT'];d.sniffer={enable:false,'force-domain':['+.example.invalid']};}reverseInput=yaml.dump(d);parseCore(reverseInput,c.id+'-input');fs.writeFileSync(path.join(out,'fixtures','reverse-build',c.id+'.yaml'),reverseInput);}
    await q.locator('.tab',{hasText:'Config Studio'}).click();await q.fill('#csImportInput',reverseInput);await q.click('#csParseBtn');
+   const dnsSnapshot=await q.evaluate(()=>typeof csDnsRoutingText==='function'?{actual:document.getElementById('csDnsRoutingOut').textContent,expected:csDnsRoutingText(csCurrentDoc)}:null);
+   if(dnsSnapshot)same(dnsSnapshot.actual,dnsSnapshot.expected,c.id+': DNS snapshot stale after Parse');
+   same(await q.locator('#csImportInput').inputValue(),reverseInput,c.id+': Studio/DNS mutated YAML');
    const before=await snap(q);await q.click('#csRestoreBtn');same(await snap(q),before,c.id+': Reverse Preview mutated Builder');
    const analysis=await q.evaluate(text=>rbYamlToProject(jsyaml.load(text)),reverseInput);
    same(analysis.project.passthrough['source-config'],yaml.load(reverseInput),c.id+': source evidence lost');
@@ -116,7 +119,7 @@ function parseCore(text,id,valid=true){
     await q.evaluate(()=>rbUndoRestore());same(await snap(q),before,c.id+': Reverse Undo drift');
    }else if(blocked){await q.click('#csRestoreBtn');assert.ok(await q.locator('#rbConfirmRestoreBtn').isDisabled());}
    else assert.ok(analysis.findings.some(f=>f.state==='MISSING'&&f.field==='sources.fallbackInput'),'AWL missing source must be explicit');
-   results.push({case:c.id,parameters:c,status:'PASS',webValidation:'VALID',project:'PASS',manualInbound:!!c.perProxy,reverse:blocked?'BLOCKED_CONFLICT':c.awl?'UNSUPPORTED_MISSING_FALLBACK':reverseParity?'PARITY':'EXPLICIT_LIMITS',states:[...new Set(analysis.findings.map(f=>f.state))]});
+   results.push({case:c.id,parameters:c,status:'PASS',webValidation:'VALID',project:'PASS',dnsSnapshot:dnsSnapshot?'PASS':'NOT PRESENT MAIN',manualInbound:!!c.perProxy,reverse:blocked?'BLOCKED_CONFLICT':c.awl?'UNSUPPORTED_MISSING_FALLBACK':reverseParity?'PARITY':'EXPLICIT_LIMITS',states:[...new Set(analysis.findings.map(f=>f.state))]});
    fs.writeFileSync(path.join(out,'results','partial.json'),JSON.stringify({cases:results,coreResults},null,2));
    console.log('PASS field case '+c.id+' project; reverse '+results.at(-1).reverse);
    await first.ctx.close();await second.ctx.close();

@@ -733,9 +733,17 @@ Manual-сюиты (`*.manual.cjs`: reality-handshake matrix, awl-soak) — по 
 
 Локально: 53 CJS suites в общем прогоне + отдельный parity (10/10 vs main955ecdf) = 54; harness node:test 31/31. Последующие focused reruns покрывают final Load consent, секреты и расширенные widths. Linux runtime labs выполняются в CI с pinned Mihomo 1.19.31/32; локально Windows 1.19.31 parse-only. Это не Firefox/WebKit, не WAN/handshake и не owner field test. Ненулевых Edge exits в этом прогоне не было.
 
-PR #207 проверяется отдельно: dns-routing-core (15 групп), dns-routing-browser (10 проверок), dns-routing-mihomo-compat (5 parse-only cases, обе версии). Эти файлы остаются на candidate branch до OWNER GO; наличие записи в этом разделе не означает promotion. Отчёт: [V1.11-CODEX-INDEPENDENT-AUDIT-AND-REPAIR](research/V1.11-CODEX-INDEPENDENT-AUDIT-AND-REPAIR.md).
+PR #207 проверяется отдельно: после final hardening dns-routing-core (17 групп), dns-routing-browser (12 проверок), dns-routing-mihomo-compat (7 parse-only cases, обе версии в CI). Эти файлы остаются на candidate branch до OWNER GO; наличие записи в этом разделе не означает promotion. Исторический отчёт: [V1.11-CODEX-INDEPENDENT-AUDIT-AND-REPAIR](research/V1.11-CODEX-INDEPENDENT-AUDIT-AND-REPAIR.md).
 
 
 ## Synthetic field acceptance (2026-10-09)
 
 `tests/field-acceptance-browser.cjs`: 29 positive +20 negative scenarios, deterministic generator `tools/synthetic-fieldtest/generate.cjs`, инструкция `tools/synthetic-fieldtest/README.md`. Suite входит в browser и обе pinned Mihomo matrix jobs. Новые negative regressions: WG dialer на непереносимый direct node блокирует YAML Restore; emitted WG invalid IPv4/endpoint port не получает web VALID. Project Save/новый context/Load Cancel/Confirm/Build/Undo, edits после обоих путей, unknown sections/independent synthetic server YAML и honest unsupported boundaries. HTTP(S) requests вне локального js-yaml route блокируются; subscription expansion — in-memory mock. Local persistent lab исключительно в ignored fieldtest-private; CI использует временный каталог. Real owner data/handshakes не используются. Отчёт: [V1.11-REAL-FIXTURE-ACCEPTANCE](research/V1.11-REAL-FIXTURE-ACCEPTANCE.md).
+
+### Final release journey and cross-browser acceptance (2026-10-09)
+
+`tests/final-release-browser.cjs` performs actual upload/fill/click/download actions for 6 subscriptions +8 WG/AWG →8 +7, Save/reload/Load Cancel/Confirm, option preservation, WG dialer editing, DPR SELECT Reverse parity, Studio/VRG, Reverse Cancel/Confirm/Undo and Physical Topology. It checks six sections at 12 widths (72 layouts), root overflow, visible 24px targets, real keyboard modality and DNS enable summary. On #207 it also checks fresh DNS snapshots. No live network is allowed.
+
+Run `node tools/synthetic-fieldtest/browser-matrix.cjs` with external Playwright dependencies and `PLAYWRIGHT_BROWSERS_PATH`; `AUDIT_ROOT` selects another checkout. Results are written to ignored `fieldtest-private/results/browser-matrix` unless overridden. Each engine launches independently; unavailable engines are NOT RUN, failures are FAIL. Chromium runs in Generator CI; four engines were exercised locally. Viewport and focus checks are not real mobile hardware or full WCAG certification.
+
+Full local final regression: 55 suites PASS; parity separate. Final source SHAs and exact-head CI are recorded in the audit handoff. See [release readiness](research/V1.11-FINAL-RELEASE-READINESS.md).
