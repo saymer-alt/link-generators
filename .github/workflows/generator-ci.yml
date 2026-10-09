@@ -62,6 +62,7 @@ jobs:
           node --check tools/check-architect-upstream.mjs
           node --check tools/synthetic-fieldtest/mutation-audit.cjs
           node --check tools/synthetic-fieldtest/loopback-runtime.cjs
+          node --check tools/tiered-health-order.cjs
 
       - name: Every deterministic test is wired into CI
         shell: bash

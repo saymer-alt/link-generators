@@ -1,0 +1,1718 @@
+[
+  {
+    "series": "windows31",
+    "total": 20,
+    "pass": 20,
+    "failed": 0,
+    "controllerMs": {
+      "n": 20,
+      "min": 166,
+      "median": 185.5,
+      "p95": 207,
+      "max": 567
+    },
+    "firstT1Ms": {
+      "n": 20,
+      "min": 231,
+      "median": 266.5,
+      "p95": 285,
+      "max": 885
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 20,
+    "firstCompletedLeafHealthMs": {
+      "n": 20,
+      "min": 103,
+      "median": 121.5,
+      "p95": 184,
+      "max": 622
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 104,
+      "E2:request timeout": 28
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 20,
+        "min": 207,
+        "median": 240.5,
+        "p95": 256,
+        "max": 683
+      },
+      "A": {
+        "n": 20,
+        "min": 14,
+        "median": 28,
+        "p95": 31,
+        "max": 200
+      },
+      "B": {
+        "n": 20,
+        "min": 103,
+        "median": 11899,
+        "p95": 11982,
+        "max": 11982
+      },
+      "C": {
+        "n": 20,
+        "min": 1799,
+        "median": 2340.5,
+        "p95": 2770,
+        "max": 2829
+      },
+      "D": {
+        "n": 20,
+        "min": 890,
+        "median": 1636,
+        "p95": 1906,
+        "max": 1917
+      },
+      "controller restart": {
+        "n": 20,
+        "min": 130,
+        "median": 159.5,
+        "p95": 283,
+        "max": 292
+      },
+      "H": {
+        "n": 20,
+        "min": 12,
+        "median": 14,
+        "p95": 15,
+        "max": 16
+      },
+      "controller startup s2": {
+        "n": 20,
+        "min": 144,
+        "median": 170.5,
+        "p95": 283,
+        "max": 287
+      },
+      "F1": {
+        "n": 20,
+        "min": 2199,
+        "median": 3987.5,
+        "p95": 4061,
+        "max": 4067
+      },
+      "F2": {
+        "n": 20,
+        "min": 1001,
+        "median": 2282,
+        "p95": 2998,
+        "max": 3000
+      },
+      "F3": {
+        "n": 20,
+        "min": 909,
+        "median": 1651,
+        "p95": 1973,
+        "max": 2020
+      },
+      "controller startup s3": {
+        "n": 20,
+        "min": 126,
+        "median": 160.5,
+        "p95": 285,
+        "max": 389
+      },
+      "E1": {
+        "n": 20,
+        "min": 2173,
+        "median": 9959,
+        "p95": 10040,
+        "max": 10080
+      },
+      "E2": {
+        "n": 20,
+        "min": 26,
+        "median": 11323.5,
+        "p95": 11865,
+        "max": 12907
+      },
+      "E3": {
+        "n": 20,
+        "min": 10,
+        "median": 20,
+        "p95": 22,
+        "max": 22
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "windows32",
+    "total": 20,
+    "pass": 20,
+    "failed": 0,
+    "controllerMs": {
+      "n": 20,
+      "min": 171,
+      "median": 185.5,
+      "p95": 327,
+      "max": 422
+    },
+    "firstT1Ms": {
+      "n": 20,
+      "min": 244,
+      "median": 263,
+      "p95": 431,
+      "max": 685
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 20,
+    "firstCompletedLeafHealthMs": {
+      "n": 20,
+      "min": 107,
+      "median": 125,
+      "p95": 234,
+      "max": 575
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 99,
+      "E2:request timeout": 32
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 20,
+        "min": 214,
+        "median": 241,
+        "p95": 398,
+        "max": 621
+      },
+      "A": {
+        "n": 20,
+        "min": 16,
+        "median": 28.5,
+        "p95": 33,
+        "max": 63
+      },
+      "B": {
+        "n": 20,
+        "min": 251,
+        "median": 11887.5,
+        "p95": 11969,
+        "max": 11992
+      },
+      "C": {
+        "n": 20,
+        "min": 1913,
+        "median": 2420.5,
+        "p95": 2936,
+        "max": 2954
+      },
+      "D": {
+        "n": 20,
+        "min": 1028,
+        "median": 1598.5,
+        "p95": 2023,
+        "max": 2026
+      },
+      "controller restart": {
+        "n": 20,
+        "min": 126,
+        "median": 174.5,
+        "p95": 287,
+        "max": 291
+      },
+      "H": {
+        "n": 20,
+        "min": 11,
+        "median": 14,
+        "p95": 28,
+        "max": 36
+      },
+      "controller startup s2": {
+        "n": 20,
+        "min": 130,
+        "median": 164,
+        "p95": 285,
+        "max": 414
+      },
+      "F1": {
+        "n": 20,
+        "min": 2437,
+        "median": 4023,
+        "p95": 4073,
+        "max": 4099
+      },
+      "F2": {
+        "n": 20,
+        "min": 1920,
+        "median": 2354,
+        "p95": 2711,
+        "max": 2728
+      },
+      "F3": {
+        "n": 20,
+        "min": 1219,
+        "median": 1528,
+        "p95": 2031,
+        "max": 2072
+      },
+      "controller startup s3": {
+        "n": 20,
+        "min": 130,
+        "median": 173.5,
+        "p95": 290,
+        "max": 292
+      },
+      "E1": {
+        "n": 20,
+        "min": 2171,
+        "median": 9956,
+        "p95": 10018,
+        "max": 10034
+      },
+      "E2": {
+        "n": 20,
+        "min": 12,
+        "median": 11159.5,
+        "p95": 12063,
+        "max": 12673
+      },
+      "E3": {
+        "n": 20,
+        "min": 9,
+        "median": 18,
+        "p95": 22,
+        "max": 22
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "linux-ci-wave1/tiered-stability-1.19.31",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 42,
+      "median": 45,
+      "p95": 56,
+      "max": 56
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 66,
+      "median": 70.5,
+      "p95": 81,
+      "max": 81
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 10,
+    "firstCompletedLeafHealthMs": {
+      "n": 10,
+      "min": 45,
+      "median": 47,
+      "p95": 59,
+      "max": 59
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 13
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 54,
+        "median": 58,
+        "p95": 69,
+        "max": 69
+      },
+      "A": {
+        "n": 10,
+        "min": 11,
+        "median": 12,
+        "p95": 13,
+        "max": 13
+      },
+      "B": {
+        "n": 10,
+        "min": 118,
+        "median": 6128,
+        "p95": 12063,
+        "max": 12063
+      },
+      "C": {
+        "n": 10,
+        "min": 1774,
+        "median": 2165.5,
+        "p95": 2478,
+        "max": 2478
+      },
+      "D": {
+        "n": 10,
+        "min": 1295,
+        "median": 1770.5,
+        "p95": 2032,
+        "max": 2032
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 107,
+        "median": 108,
+        "p95": 109,
+        "max": 109
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 7,
+        "p95": 7,
+        "max": 7
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 106,
+        "median": 107,
+        "p95": 108,
+        "max": 108
+      },
+      "F1": {
+        "n": 10,
+        "min": 2806,
+        "median": 3946.5,
+        "p95": 4026,
+        "max": 4026
+      },
+      "F2": {
+        "n": 10,
+        "min": 1849,
+        "median": 2398.5,
+        "p95": 2941,
+        "max": 2941
+      },
+      "F3": {
+        "n": 10,
+        "min": 1071,
+        "median": 1553.5,
+        "p95": 2035,
+        "max": 2035
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 105,
+        "median": 106,
+        "p95": 108,
+        "max": 108
+      },
+      "E1": {
+        "n": 10,
+        "min": 2384,
+        "median": 9940.5,
+        "p95": 10013,
+        "max": 10013
+      },
+      "E2": {
+        "n": 10,
+        "min": 6,
+        "median": 11129,
+        "p95": 11620,
+        "max": 11620
+      },
+      "E3": {
+        "n": 10,
+        "min": 6,
+        "median": 6,
+        "p95": 7,
+        "max": 7
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "linux-ci-wave1/tiered-stability-1.19.32",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 41,
+      "median": 44,
+      "p95": 50,
+      "max": 50
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 66,
+      "median": 70.5,
+      "p95": 75,
+      "max": 75
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 10,
+    "firstCompletedLeafHealthMs": {
+      "n": 10,
+      "min": 43,
+      "median": 47,
+      "p95": 52,
+      "max": 52
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 15
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 54,
+        "median": 58,
+        "p95": 63,
+        "max": 63
+      },
+      "A": {
+        "n": 10,
+        "min": 11,
+        "median": 12,
+        "p95": 13,
+        "max": 13
+      },
+      "B": {
+        "n": 10,
+        "min": 171,
+        "median": 12031,
+        "p95": 12057,
+        "max": 12057
+      },
+      "C": {
+        "n": 10,
+        "min": 1867,
+        "median": 2108,
+        "p95": 2838,
+        "max": 2838
+      },
+      "D": {
+        "n": 10,
+        "min": 1180,
+        "median": 1825.5,
+        "p95": 2037,
+        "max": 2037
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 107,
+        "median": 109,
+        "p95": 110,
+        "max": 110
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 7,
+        "p95": 7,
+        "max": 7
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 106,
+        "median": 108,
+        "p95": 109,
+        "max": 109
+      },
+      "F1": {
+        "n": 10,
+        "min": 2406,
+        "median": 3969,
+        "p95": 4019,
+        "max": 4019
+      },
+      "F2": {
+        "n": 10,
+        "min": 1939,
+        "median": 2415,
+        "p95": 2988,
+        "max": 2988
+      },
+      "F3": {
+        "n": 10,
+        "min": 965,
+        "median": 1398,
+        "p95": 2036,
+        "max": 2036
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 106,
+        "median": 107,
+        "p95": 108,
+        "max": 108
+      },
+      "E1": {
+        "n": 10,
+        "min": 1962,
+        "median": 9953,
+        "p95": 10016,
+        "max": 10016
+      },
+      "E2": {
+        "n": 10,
+        "min": 179,
+        "median": 10997.5,
+        "p95": 12454,
+        "max": 12454
+      },
+      "E3": {
+        "n": 10,
+        "min": 5,
+        "median": 6,
+        "p95": 7,
+        "max": 7
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "linux-ci-wave2/tiered-stability-1.19.31",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 25,
+      "median": 26.5,
+      "p95": 35,
+      "max": 35
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 42,
+      "median": 44.5,
+      "p95": 54,
+      "max": 54
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 7,
+    "firstCompletedLeafHealthMs": {
+      "n": 10,
+      "min": 27,
+      "median": 27.5,
+      "p95": 36,
+      "max": 36
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 16
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 32,
+        "median": 34.5,
+        "p95": 43,
+        "max": 43
+      },
+      "A": {
+        "n": 10,
+        "min": 8,
+        "median": 10,
+        "p95": 11,
+        "max": 11
+      },
+      "B": {
+        "n": 10,
+        "min": 264,
+        "median": 12004,
+        "p95": 12072,
+        "max": 12072
+      },
+      "C": {
+        "n": 10,
+        "min": 1812,
+        "median": 2222.5,
+        "p95": 2990,
+        "max": 2990
+      },
+      "D": {
+        "n": 10,
+        "min": 968,
+        "median": 1759.5,
+        "p95": 2025,
+        "max": 2025
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 105,
+        "median": 106,
+        "p95": 109,
+        "max": 109
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 6,
+        "p95": 7,
+        "max": 7
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 105,
+        "median": 106,
+        "p95": 116,
+        "max": 116
+      },
+      "F1": {
+        "n": 10,
+        "min": 2723,
+        "median": 3995.5,
+        "p95": 4021,
+        "max": 4021
+      },
+      "F2": {
+        "n": 10,
+        "min": 1439,
+        "median": 2381.5,
+        "p95": 2976,
+        "max": 2976
+      },
+      "F3": {
+        "n": 10,
+        "min": 969,
+        "median": 1554,
+        "p95": 1943,
+        "max": 1943
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 104,
+        "median": 106,
+        "p95": 107,
+        "max": 107
+      },
+      "E1": {
+        "n": 10,
+        "min": 2800,
+        "median": 9948.5,
+        "p95": 10009,
+        "max": 10009
+      },
+      "E2": {
+        "n": 10,
+        "min": 239,
+        "median": 11402,
+        "p95": 12046,
+        "max": 12046
+      },
+      "E3": {
+        "n": 10,
+        "min": 6,
+        "median": 6,
+        "p95": 7,
+        "max": 7
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "linux-ci-wave2/tiered-stability-1.19.32",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 25,
+      "median": 28,
+      "p95": 35,
+      "max": 35
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 43,
+      "median": 47,
+      "p95": 55,
+      "max": 55
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 4,
+    "firstCompletedLeafHealthMs": {
+      "n": 9,
+      "min": 26,
+      "median": 30,
+      "p95": 42,
+      "max": 42
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 15
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 33,
+        "median": 36.5,
+        "p95": 45,
+        "max": 45
+      },
+      "A": {
+        "n": 10,
+        "min": 9,
+        "median": 9.5,
+        "p95": 12,
+        "max": 12
+      },
+      "B": {
+        "n": 10,
+        "min": 114,
+        "median": 6106.5,
+        "p95": 12073,
+        "max": 12073
+      },
+      "C": {
+        "n": 10,
+        "min": 1736,
+        "median": 2497.5,
+        "p95": 2907,
+        "max": 2907
+      },
+      "D": {
+        "n": 10,
+        "min": 970,
+        "median": 1397.5,
+        "p95": 1825,
+        "max": 1825
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 106,
+        "median": 107,
+        "p95": 107,
+        "max": 107
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 6.5,
+        "p95": 7,
+        "max": 7
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 105,
+        "median": 106,
+        "p95": 107,
+        "max": 107
+      },
+      "F1": {
+        "n": 10,
+        "min": 3922,
+        "median": 3974,
+        "p95": 4020,
+        "max": 4020
+      },
+      "F2": {
+        "n": 10,
+        "min": 1914,
+        "median": 2487.5,
+        "p95": 2906,
+        "max": 2906
+      },
+      "F3": {
+        "n": 10,
+        "min": 1076,
+        "median": 1499.5,
+        "p95": 2037,
+        "max": 2037
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 105,
+        "median": 106,
+        "p95": 107,
+        "max": 107
+      },
+      "E1": {
+        "n": 10,
+        "min": 1975,
+        "median": 9914,
+        "p95": 10005,
+        "max": 10005
+      },
+      "E2": {
+        "n": 10,
+        "min": 10685,
+        "median": 11563,
+        "p95": 11858,
+        "max": 11858
+      },
+      "E3": {
+        "n": 10,
+        "min": 6,
+        "median": 6,
+        "p95": 7,
+        "max": 7
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "linux-ci-wave3/tiered-stability-1.19.31",
+    "total": 10,
+    "pass": 9,
+    "failed": 1,
+    "controllerMs": {
+      "n": 10,
+      "min": 22,
+      "median": 24.5,
+      "p95": 32,
+      "max": 32
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 39,
+      "median": 41.5,
+      "p95": 50,
+      "max": 50
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 4,
+    "firstCompletedLeafHealthMs": {
+      "n": 7,
+      "min": 25,
+      "median": 27,
+      "p95": 33,
+      "max": 33
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 27,
+      "E2:request timeout": 14
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 28,
+        "median": 32,
+        "p95": 39,
+        "max": 39
+      },
+      "A": {
+        "n": 10,
+        "min": 9,
+        "median": 10,
+        "p95": 11,
+        "max": 11
+      },
+      "B": {
+        "n": 10,
+        "min": 11980,
+        "median": 12029,
+        "p95": 12068,
+        "max": 12068
+      },
+      "C": {
+        "n": 10,
+        "min": 1960,
+        "median": 2377,
+        "p95": 3047,
+        "max": 3047
+      },
+      "D": {
+        "n": 10,
+        "min": 961,
+        "median": 1595.5,
+        "p95": 2022,
+        "max": 2022
+      },
+      "controller restart": {
+        "n": 9,
+        "min": 104,
+        "median": 105,
+        "p95": 107,
+        "max": 107
+      },
+      "H": {
+        "n": 9,
+        "min": 6,
+        "median": 6,
+        "p95": 6,
+        "max": 6
+      },
+      "controller startup s2": {
+        "n": 9,
+        "min": 104,
+        "median": 105,
+        "p95": 106,
+        "max": 106
+      },
+      "F1": {
+        "n": 9,
+        "min": 3945,
+        "median": 3970,
+        "p95": 4008,
+        "max": 4008
+      },
+      "F2": {
+        "n": 9,
+        "min": 1624,
+        "median": 2060,
+        "p95": 2986,
+        "max": 2986
+      },
+      "F3": {
+        "n": 9,
+        "min": 1065,
+        "median": 1595,
+        "p95": 2017,
+        "max": 2017
+      },
+      "controller startup s3": {
+        "n": 9,
+        "min": 103,
+        "median": 104,
+        "p95": 105,
+        "max": 105
+      },
+      "E1": {
+        "n": 9,
+        "min": 1505,
+        "median": 2561,
+        "p95": 10014,
+        "max": 10014
+      },
+      "E2": {
+        "n": 9,
+        "min": 157,
+        "median": 11003,
+        "p95": 12732,
+        "max": 12732
+      },
+      "E3": {
+        "n": 9,
+        "min": 5,
+        "median": 6,
+        "p95": 6,
+        "max": 6
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "linux-ci-wave3/tiered-stability-1.19.32",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 44,
+      "median": 46,
+      "p95": 53,
+      "max": 53
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 70,
+      "median": 72,
+      "p95": 79,
+      "max": 79
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 10,
+    "firstCompletedLeafHealthMs": {
+      "n": 10,
+      "min": 46,
+      "median": 48,
+      "p95": 55,
+      "max": 55
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 17
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 58,
+        "median": 60,
+        "p95": 65,
+        "max": 65
+      },
+      "A": {
+        "n": 10,
+        "min": 11,
+        "median": 12,
+        "p95": 14,
+        "max": 14
+      },
+      "B": {
+        "n": 10,
+        "min": 154,
+        "median": 231,
+        "p95": 12032,
+        "max": 12032
+      },
+      "C": {
+        "n": 10,
+        "min": 1820,
+        "median": 2485,
+        "p95": 2943,
+        "max": 2943
+      },
+      "D": {
+        "n": 10,
+        "min": 970,
+        "median": 1346,
+        "p95": 1939,
+        "max": 1939
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 107,
+        "median": 109,
+        "p95": 110,
+        "max": 110
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 6.5,
+        "p95": 7,
+        "max": 7
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 107,
+        "median": 108,
+        "p95": 110,
+        "max": 110
+      },
+      "F1": {
+        "n": 10,
+        "min": 2410,
+        "median": 3952,
+        "p95": 4027,
+        "max": 4027
+      },
+      "F2": {
+        "n": 10,
+        "min": 351,
+        "median": 2615,
+        "p95": 2830,
+        "max": 2830
+      },
+      "F3": {
+        "n": 10,
+        "min": 1180,
+        "median": 1396.5,
+        "p95": 1616,
+        "max": 1616
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 106,
+        "median": 108,
+        "p95": 109,
+        "max": 109
+      },
+      "E1": {
+        "n": 10,
+        "min": 2275,
+        "median": 9959.5,
+        "p95": 10011,
+        "max": 10011
+      },
+      "E2": {
+        "n": 10,
+        "min": 6,
+        "median": 11243,
+        "p95": 11861,
+        "max": 11861
+      },
+      "E3": {
+        "n": 10,
+        "min": 6,
+        "median": 7,
+        "p95": 7,
+        "max": 7
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "linux-ci-wave4/tiered-stability-1.19.31",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 23,
+      "median": 24.5,
+      "p95": 57,
+      "max": 57
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 38,
+      "median": 41.5,
+      "p95": 74,
+      "max": 74
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 2,
+    "firstCompletedLeafHealthMs": {
+      "n": 8,
+      "min": 24,
+      "median": 25.5,
+      "p95": 58,
+      "max": 58
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 19
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 30,
+        "median": 32,
+        "p95": 64,
+        "max": 64
+      },
+      "A": {
+        "n": 10,
+        "min": 8,
+        "median": 9.5,
+        "p95": 10,
+        "max": 10
+      },
+      "B": {
+        "n": 10,
+        "min": 131,
+        "median": 224.5,
+        "p95": 12080,
+        "max": 12080
+      },
+      "C": {
+        "n": 10,
+        "min": 1841,
+        "median": 2355,
+        "p95": 2777,
+        "max": 2777
+      },
+      "D": {
+        "n": 10,
+        "min": 1064,
+        "median": 1384.5,
+        "p95": 1917,
+        "max": 1917
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 104,
+        "median": 105,
+        "p95": 106,
+        "max": 106
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 6,
+        "p95": 6,
+        "max": 6
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 104,
+        "median": 105,
+        "p95": 106,
+        "max": 106
+      },
+      "F1": {
+        "n": 10,
+        "min": 2939,
+        "median": 3978,
+        "p95": 4022,
+        "max": 4022
+      },
+      "F2": {
+        "n": 10,
+        "min": 254,
+        "median": 2409.5,
+        "p95": 2990,
+        "max": 2990
+      },
+      "F3": {
+        "n": 10,
+        "min": 960,
+        "median": 1539.5,
+        "p95": 2023,
+        "max": 2023
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 104,
+        "median": 104,
+        "p95": 105,
+        "max": 105
+      },
+      "E1": {
+        "n": 10,
+        "min": 1948,
+        "median": 9937,
+        "p95": 9988,
+        "max": 9988
+      },
+      "E2": {
+        "n": 10,
+        "min": 157,
+        "median": 11644.5,
+        "p95": 12519,
+        "max": 12519
+      },
+      "E3": {
+        "n": 10,
+        "min": 5,
+        "median": 6,
+        "p95": 6,
+        "max": 6
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "linux-ci-wave4/tiered-stability-1.19.32",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 44,
+      "median": 46.5,
+      "p95": 59,
+      "max": 59
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 69,
+      "median": 73,
+      "p95": 85,
+      "max": 85
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 10,
+    "firstCompletedLeafHealthMs": {
+      "n": 10,
+      "min": 46,
+      "median": 49,
+      "p95": 62,
+      "max": 62
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 17
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 58,
+        "median": 60.5,
+        "p95": 73,
+        "max": 73
+      },
+      "A": {
+        "n": 10,
+        "min": 10,
+        "median": 12,
+        "p95": 14,
+        "max": 14
+      },
+      "B": {
+        "n": 10,
+        "min": 155,
+        "median": 244.5,
+        "p95": 12068,
+        "max": 12068
+      },
+      "C": {
+        "n": 10,
+        "min": 1585,
+        "median": 2078.5,
+        "p95": 2642,
+        "max": 2642
+      },
+      "D": {
+        "n": 10,
+        "min": 1188,
+        "median": 1716.5,
+        "p95": 2046,
+        "max": 2046
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 107,
+        "median": 108,
+        "p95": 109,
+        "max": 109
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 7,
+        "p95": 8,
+        "max": 8
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 105,
+        "median": 107.5,
+        "p95": 109,
+        "max": 109
+      },
+      "F1": {
+        "n": 10,
+        "min": 3938,
+        "median": 3998,
+        "p95": 4023,
+        "max": 4023
+      },
+      "F2": {
+        "n": 10,
+        "min": 2042,
+        "median": 2467.5,
+        "p95": 2996,
+        "max": 2996
+      },
+      "F3": {
+        "n": 10,
+        "min": 1076,
+        "median": 1502.5,
+        "p95": 1940,
+        "max": 1940
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 106,
+        "median": 107,
+        "p95": 108,
+        "max": 108
+      },
+      "E1": {
+        "n": 10,
+        "min": 2199,
+        "median": 2766,
+        "p95": 9982,
+        "max": 9982
+      },
+      "E2": {
+        "n": 10,
+        "min": 208,
+        "median": 11444.5,
+        "p95": 12413,
+        "max": 12413
+      },
+      "E3": {
+        "n": 10,
+        "min": 5,
+        "median": 7,
+        "p95": 7,
+        "max": 7
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "linux-ci-wave5/tiered-stability-1.19.31",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 27,
+      "median": 30.5,
+      "p95": 37,
+      "max": 37
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 47,
+      "median": 50.5,
+      "p95": 54,
+      "max": 54
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 6,
+    "firstCompletedLeafHealthMs": {
+      "n": 9,
+      "min": 30,
+      "median": 34,
+      "p95": 44,
+      "max": 44
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 11
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 37,
+        "median": 40,
+        "p95": 45,
+        "max": 45
+      },
+      "A": {
+        "n": 10,
+        "min": 8,
+        "median": 10,
+        "p95": 12,
+        "max": 12
+      },
+      "B": {
+        "n": 10,
+        "min": 172,
+        "median": 12030,
+        "p95": 12075,
+        "max": 12075
+      },
+      "C": {
+        "n": 10,
+        "min": 1886,
+        "median": 2702.5,
+        "p95": 3010,
+        "max": 3010
+      },
+      "D": {
+        "n": 10,
+        "min": 970,
+        "median": 1128.5,
+        "p95": 1931,
+        "max": 1931
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 105,
+        "median": 107.5,
+        "p95": 108,
+        "max": 108
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 6,
+        "p95": 7,
+        "max": 7
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 106,
+        "median": 106.5,
+        "p95": 107,
+        "max": 107
+      },
+      "F1": {
+        "n": 10,
+        "min": 3926,
+        "median": 3958.5,
+        "p95": 4016,
+        "max": 4016
+      },
+      "F2": {
+        "n": 10,
+        "min": 2063,
+        "median": 2639,
+        "p95": 2873,
+        "max": 2873
+      },
+      "F3": {
+        "n": 10,
+        "min": 1077,
+        "median": 1393.5,
+        "p95": 1930,
+        "max": 1930
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 106,
+        "median": 106.5,
+        "p95": 108,
+        "max": 108
+      },
+      "E1": {
+        "n": 10,
+        "min": 2015,
+        "median": 9951.5,
+        "p95": 9995,
+        "max": 9995
+      },
+      "E2": {
+        "n": 10,
+        "min": 144,
+        "median": 11451,
+        "p95": 12053,
+        "max": 12053
+      },
+      "E3": {
+        "n": 10,
+        "min": 6,
+        "median": 6,
+        "p95": 8,
+        "max": 8
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  },
+  {
+    "series": "linux-ci-wave5/tiered-stability-1.19.32",
+    "total": 10,
+    "pass": 10,
+    "failed": 0,
+    "controllerMs": {
+      "n": 10,
+      "min": 45,
+      "median": 45,
+      "p95": 55,
+      "max": 55
+    },
+    "firstT1Ms": {
+      "n": 10,
+      "min": 69,
+      "median": 73.5,
+      "p95": 86,
+      "max": 86
+    },
+    "initialRootNotT1": 0,
+    "initialBothLeafHealthComplete": 10,
+    "firstCompletedLeafHealthMs": {
+      "n": 10,
+      "min": 47,
+      "median": 48.5,
+      "p95": 57,
+      "max": 57
+    },
+    "errors": {
+      "controller:ECONNREFUSED": 30,
+      "E2:request timeout": 17
+    },
+    "stages": {
+      "controller startup s1": {
+        "n": 10,
+        "min": 58,
+        "median": 60,
+        "p95": 73,
+        "max": 73
+      },
+      "A": {
+        "n": 10,
+        "min": 11,
+        "median": 12.5,
+        "p95": 14,
+        "max": 14
+      },
+      "B": {
+        "n": 10,
+        "min": 119,
+        "median": 12010,
+        "p95": 12042,
+        "max": 12042
+      },
+      "C": {
+        "n": 10,
+        "min": 1799,
+        "median": 2659,
+        "p95": 3021,
+        "max": 3021
+      },
+      "D": {
+        "n": 10,
+        "min": 972,
+        "median": 1344.5,
+        "p95": 2046,
+        "max": 2046
+      },
+      "controller restart": {
+        "n": 10,
+        "min": 107,
+        "median": 108.5,
+        "p95": 110,
+        "max": 110
+      },
+      "H": {
+        "n": 10,
+        "min": 6,
+        "median": 6.5,
+        "p95": 7,
+        "max": 7
+      },
+      "controller startup s2": {
+        "n": 10,
+        "min": 106,
+        "median": 108,
+        "p95": 109,
+        "max": 109
+      },
+      "F1": {
+        "n": 10,
+        "min": 2607,
+        "median": 3963,
+        "p95": 4029,
+        "max": 4029
+      },
+      "F2": {
+        "n": 10,
+        "min": 1505,
+        "median": 2717,
+        "p95": 3019,
+        "max": 3019
+      },
+      "F3": {
+        "n": 10,
+        "min": 968,
+        "median": 1289,
+        "p95": 2044,
+        "max": 2044
+      },
+      "controller startup s3": {
+        "n": 10,
+        "min": 106,
+        "median": 108,
+        "p95": 108,
+        "max": 108
+      },
+      "E1": {
+        "n": 10,
+        "min": 1937,
+        "median": 9950,
+        "p95": 10008,
+        "max": 10008
+      },
+      "E2": {
+        "n": 10,
+        "min": 10883,
+        "median": 11693.5,
+        "p95": 12243,
+        "max": 12243
+      },
+      "E3": {
+        "n": 10,
+        "min": 6,
+        "median": 7,
+        "p95": 7,
+        "max": 7
+      }
+    },
+    "cleanupErrors": 0,
+    "openMockSockets": 0,
+    "portsStillOpen": 0
+  }
+]
