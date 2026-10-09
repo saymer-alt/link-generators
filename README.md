@@ -2,7 +2,7 @@
 
 Генератор конфигураций для [Mihomo](https://github.com/MetaCubeX/mihomo) (Clash Meta) и ссылок MASQUE для Cloudflare WARP. Статическое клиентское веб-приложение: разбор ссылок и сборка конфигов выполняются прямо в браузере — приватные ключи, ссылки и конфигурации никуда не отправляются.
 
-> **EN:** In-browser generator for WARP MASQUE links and Mihomo (Clash Meta) configs — parsing and generation run fully client-side, nothing is uploaded.
+> **EN:** In-browser generator for WARP MASQUE links and Mihomo (Clash Meta) configs — parsing and generation run client-side; keys and configs stay on your device. Explicitly initiated network features (subscription preview, diagnostics of your own Mihomo controller) and the storage model are documented in [docs/DATAFLOW.md](docs/DATAFLOW.md).
 
 Новый opt-in: **Автоматический режим белых списков**. Обычные выходы всегда имеют приоритет, отдельные БС-ссылки/подписки используются как резерв по health-check, а после восстановления primary Mihomo автоматически возвращается на него. Режим поддерживает ссылки, подписки и их смесь; опции «TUN на каждый прокси» и «SOCKS-порт на каждый прокси» в нём отключены; обычный TUN и MIPS доступны. Режим доступен только в профиле «Роутер / обычный TUN» — в VPS-профилях чекбокс выключен и заблокирован; выбранный профиль развёртывания никогда не подменяется. По умолчанию режим выключен. [Настройка, структура YAML и ограничения](docs/AUTO-WHITELIST.md).
 
