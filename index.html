@@ -4243,7 +4243,15 @@ function normalizeRuntimeController(input) {
   return u.origin + (u.pathname && u.pathname !== '/' ? u.pathname.replace(/\/+$/, '') : '');
 }
 
+let rtImportSeq = 0, rtImportAbort = null;
+function cancelRuntimeImport() {
+  rtImportSeq++;
+  if (rtImportAbort) rtImportAbort.abort();
+  rtImportAbort = null;
+}
 async function fetchRuntimeProviders() {
+  cancelRuntimeImport();
+  const seq = rtImportSeq;
   const status = document.getElementById('rtStatus');
   const say = (text) => { status.textContent = text; status.style.display = text ? '' : 'none'; };
   let base;
@@ -4254,10 +4262,14 @@ async function fetchRuntimeProviders() {
   const headers = { Accept: 'application/json' };
   if (secret) headers.Authorization = 'Bearer ' + secret;
   say('Загрузка…');
+  const controller = new AbortController();
+  rtImportAbort = controller;
+  const deadline = setTimeout(() => controller.abort(), 8000);
   try {
     // Прямой браузер → контроллер. Никаких fallback-воркеров для controller
     // credentials/runtime JSON — принципиально (security contract #159).
-    const resp = await fetch(base + '/providers/proxies', { headers, cache: 'no-store' });
+    const resp = await fetch(base + '/providers/proxies', { headers, cache: 'no-store', signal: controller.signal });
+    if (seq !== rtImportSeq) return;
     if (!resp.ok) {
       // HTTP-ответ — можно утверждать точно.
       const label = resp.status === 401 ? 'HTTP 401: секрет не принят (auth failed)'
@@ -4267,16 +4279,23 @@ async function fetchRuntimeProviders() {
       return;
     }
     const text = await resp.text();
+    if (seq !== rtImportSeq || controller.signal.aborted) return;
     applyRuntimePayload(text, 'fetch');
     say('✔ Список узлов получен из Mihomo runtime.');
   } catch (e) {
+    if (seq !== rtImportSeq) return;
+    if (controller.signal.aborted) { say('❌ Время ожидания Mihomo controller истекло. Повторите запрос или загрузите JSON локально.'); return; }
     // Generic TypeError браузера не раскрывает причину: не выдумываем
     // «CORS_DENIED»/«LOCAL_NETWORK_PERMISSION_DENIED» без доказательств.
     say('❌ Не удалось обратиться к Mihomo controller. Причиной может быть адрес/listen, CORS, разрешение браузера на локальную сеть или обычная сетевая недоступность. Используйте «Вставить JSON»/«Загрузить .json» — ответ откройте в соседней вкладке http://<контроллер>/providers/proxies.');
+  } finally {
+    clearTimeout(deadline);
+    if (rtImportAbort === controller) rtImportAbort = null;
   }
 }
 
 function applyRuntimePayload(rawJson, how) {
+  cancelRuntimeImport();
   const status = document.getElementById('rtStatus');
   const say = (text) => { status.textContent = text; status.style.display = text ? '' : 'none'; };
   let model;
@@ -4290,6 +4309,7 @@ function applyRuntimePayload(rawJson, how) {
 }
 
 function clearRuntimeList() {
+  cancelRuntimeImport();
   runtimeProviderModel = { providers: [], fetchedAt: null };
   serverListNameOrigins = null;
   renderRuntimeSummary();
@@ -4314,8 +4334,11 @@ function initRuntimeImport() {
   if (!fetchBtn) return;
   fetchBtn.addEventListener('click', fetchRuntimeProviders);
   document.getElementById('rtPasteBtn').addEventListener('click', async () => {
+    cancelRuntimeImport();
+    const seq = rtImportSeq;
     let text = '';
     try { text = await navigator.clipboard.readText(); } catch (_) {}
+    if (seq !== rtImportSeq) return;
     if (!text) text = window.prompt('Вставьте JSON из GET /providers/proxies:', '') || '';
     if (!text) return;
     applyRuntimePayload(text, 'paste');
@@ -4324,9 +4347,11 @@ function initRuntimeImport() {
   document.getElementById('rtFile').addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    cancelRuntimeImport();
+    const seq = rtImportSeq;
     const reader = new FileReader();
-    reader.onload = () => applyRuntimePayload(String(reader.result || ''), 'upload');
-    reader.onerror = () => {};
+    reader.onload = () => { if (seq === rtImportSeq) applyRuntimePayload(String(reader.result || ''), 'upload'); };
+    reader.onerror = () => { if (seq === rtImportSeq) { const status = document.getElementById('rtStatus'); status.textContent = '❌ Не удалось прочитать runtime JSON. Предыдущий список сохранён.'; status.style.display = ''; } };
     reader.readAsText(file);
     e.target.value = '';
   });
@@ -8762,7 +8787,9 @@ document.addEventListener('input', (e) => {
 let csCurrentDoc = null;
 let csImportText = '';
 
+let csFileReadSeq = 0;
 function csRunAnalysis(sourceText) {
+  csFileReadSeq++;
   const input = document.getElementById('csImportInput');
   const status = document.getElementById('csStatus');
   const note = document.getElementById('csSecretsNote');
@@ -8869,6 +8896,7 @@ function runCsRuleProbe() {
 }
 
 function csClearStudio() {
+  csFileReadSeq++;
   csEditorSeq++;
   document.getElementById('csImportInput').value = '';
   csCurrentDoc = null;
@@ -8903,6 +8931,8 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('change', (e) => {
   if (!e.target || e.target.id !== 'csImportFile') return;
+  const seq = ++csFileReadSeq;
+  const source = document.getElementById('csImportInput').value, editorSeq = csEditorSeq;
   const file = e.target.files && e.target.files[0];
   e.target.value = ''; // повторный выбор того же файла снова генерирует change
   if (!file) return;
@@ -8915,10 +8945,12 @@ document.addEventListener('change', (e) => {
     return;
   }
   file.arrayBuffer().then(bytes => {
+    if (seq !== csFileReadSeq || editorSeq !== csEditorSeq || source !== document.getElementById('csImportInput').value) return;
     const t = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
     document.getElementById('csImportInput').value = t;
     csRunAnalysis(t);
   }).catch(() => {
+    if (seq !== csFileReadSeq || editorSeq !== csEditorSeq || source !== document.getElementById('csImportInput').value) return;
     document.getElementById('csStatus').textContent = '✖ Не удалось прочитать файл: ожидается корректный UTF-8 YAML. Предыдущий рабочий документ сохранён.';
   });
 });
@@ -9391,7 +9423,7 @@ function csEditorClick(e) {
   if (id === 'csResetBtn') {
     e.preventDefault();
     csOps = [];
-    csAfterOpsChange();
+    csRefreshEditor();
     return;
   }
   if (id === 'csExportCopy' || id === 'csExportDownload') {
@@ -10059,6 +10091,7 @@ async function buildMihomo() {
     // Автоматическая проверка итогового YAML (после всех патчей), до Copy
     runMihomoValidation(yaml);
   } catch (e) {
+    if (buildSeq !== mihomoValidationSeq) return;
     resetCompatSummary();
     setMihomoValidationState('NOT_BUILT');
     let message = String(e && e.message ? e.message : e);
@@ -10152,12 +10185,15 @@ function rbApplyProject(project) {
   if (!copy.ok) throw new Error('Проект не применён: ' + copy.error);
   const before = rbCollectProject();
   const profileState = { selectedProfile, effectiveProfile, snapshots: JSON.parse(JSON.stringify(profileSnapshots)) };
+  // Старые узлы сохраняют обработчики и поля даже при повторном отказе рендера.
+  const lists = ['policyCards', 'tierCards', 'wgList', 'subscriptionPreviewNames'].map(id => document.getElementById(id)).filter(Boolean).map(el => ({ el, children: Array.from(el.childNodes) }));
   const controls = Array.from(document.querySelectorAll('#tab-mihomo input:not([type=file]), #tab-mihomo select, #tab-mihomo textarea')).map(el => ({ el, value: el.value, checked: el.checked, disabled: el.disabled }));
   try { rbWriteProject(copy.project); }
   catch (_) {
     // Повторный рендер — best effort; исходные поля восстанавливаются даже
     // при отказе того же render/update hook. Undo не расходуется при ошибке.
     try { rbWriteProject(before); } catch (_) {}
+    for (const list of lists) list.el.replaceChildren(...list.children);
     for (const c of controls) { c.el.value = c.value; c.el.checked = c.checked; c.el.disabled = c.disabled; }
     wgProfiles = before.wgProfiles;
     wgProfileSeq = before.meta.wgProfileSeq;

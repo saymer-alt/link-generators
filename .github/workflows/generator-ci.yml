@@ -60,6 +60,8 @@ jobs:
           node --check tools/warp-dialer-fieldtest/lib.mjs
           node --check tools/warp-dialer-fieldtest/check-secrets.mjs
           node --check tools/check-architect-upstream.mjs
+          node --check tools/synthetic-fieldtest/mutation-audit.cjs
+          node --check tools/synthetic-fieldtest/loopback-runtime.cjs
 
       - name: Every deterministic test is wired into CI
         shell: bash
@@ -292,6 +294,9 @@ jobs:
       - name: Final release UI journey and viewport matrix
         run: node tests/final-release-browser.cjs
 
+      - name: Evening chaos barriers and metamorphic invariants
+        run: node tests/evening-chaos-browser.cjs
+
       - name: Security and download end-to-end regression (CODEX-02)
         run: node tests/security-stress-browser.cjs
 
@@ -407,6 +412,9 @@ jobs:
 
       - name: Synthetic field acceptance against real Mihomo
         run: node tests/field-acceptance-browser.cjs
+
+      - name: Loopback-only runtime chaos lab
+        run: node tools/synthetic-fieldtest/loopback-runtime.cjs
 
       - name: Physical Topology per-node artifacts compat (#187)
         run: node tests/per-node-mihomo-compat.cjs

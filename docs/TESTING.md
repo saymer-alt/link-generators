@@ -747,3 +747,11 @@ PR #207 проверяется отдельно: после final hardening dns-
 `node tools/synthetic-fieldtest/browser-matrix.cjs` использует внешние Playwright dependencies и PLAYWRIGHT_BROWSERS_PATH; AUDIT_ROOT выбирает другой checkout. Результаты по умолчанию в ignored fieldtest-private/results/browser-matrix. Каждый браузер запускается независимо: недоступный NOT RUN, ошибка FAIL. Chromium включён в Generator CI; четыре браузера проверены локально. Это не реальные телефоны и не полная WCAG-сертификация.
 
 Полная локальная регрессия: 55 suites PASS; parity отдельно 10/10, harness 31/31. Окончательные SHA и exact-head CI фиксируются в итоговой передаче владельцу. См. [готовность к приёмке](research/V1.11-FINAL-RELEASE-READINESS.md).
+
+### Evening chaos (2026-10-09)
+
+`tests/evening-chaos-browser.cjs`: 21 барьерный/отказный/метаморфный сценарий, seed111009. Проверяет late file/fetch/rejection, повторный render failure, secret Reset, typed/fail-closed guards и 3000-rule YAML. AUDIT_ROOT позволяет проверить DNS-кандидат; CHAOS_CASE — адресный диагностический фильтр. HTTP(S) блокируется, фикстуры synthetic, pageerror и deadline не считаются PASS.
+
+`tools/synthetic-fieldtest/loopback-runtime.cjs` требует MIHOMO_BIN и JS_YAML_PATH, запускает только loopback proxy/target/mock DNS, TUN/sniffer выключены. Выполняется в обеих pinned Mihomo CI jobs. Разделяет parse/process/traffic/failover/recovery; remote handshake NOT RUN.
+
+`tools/synthetic-fieldtest/mutation-audit.cjs <v111-chaos-mutants> <ignored-output>` запускается вручную только в отдельном чистом worktree. Unmutated controls обязательны; index.html возвращается в finally. Raw mutation logs не публиковать: при выключенной redaction отрицательные assertions могут содержать synthetic credentials. См. [Evening Chaos Audit](research/V1.11-EVENING-CHAOS-AUDIT.md).
