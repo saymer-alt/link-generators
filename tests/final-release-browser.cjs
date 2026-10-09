@@ -11,11 +11,12 @@ const widths=[320,360,375,390,412,480,768,1024,1366,1440,1920,2560];
 (async()=>{
  const browser=await pw[engine].launch({headless:true,...(engine==='chromium'?{channel:process.env.BROWSER_CHANNEL||'msedge'}:{})});
  const result={engine,channel:process.env.BROWSER_CHANNEL||null,widths,layouts:[],journey:false,keyboard:false,accessibility:'focused controls only; not a WCAG certification',network:'NOT TESTED',externalRequests:0};
- const errors=[],logs=[];let accept=false;
+ const errors=[],logs=[];let accept=false,releasePage=null,stage='initialization';
+ fs.mkdirSync(process.env.TEST_OUTPUT_DIR||path.join(lab.dir,'results'),{recursive:true});
  try{
   const ctx=await browser.newContext({acceptDownloads:true,viewport:{width:1366,height:900}});
   await ctx.route(/^https?:/,r=>r.request().url().startsWith('https://cdn.jsdelivr.net/')?r.fulfill({path:process.env.JS_YAML_PATH,contentType:'text/javascript'}):(result.externalRequests++,r.abort()));
-  const p=await ctx.newPage();p.setDefaultTimeout(25000);
+  const p=await ctx.newPage();releasePage=p;p.setDefaultTimeout(25000);
   p.on('pageerror',()=>errors.push('pageerror'));p.on('console',m=>logs.push(m.text()));
   p.on('dialog',async d=>accept?d.accept():d.dismiss());
   const snap=()=>p.evaluate(()=>{const x=rbCollectProject();delete x.meta.created;return x;});
@@ -24,6 +25,7 @@ const widths=[320,360,375,390,412,480,768,1024,1366,1440,1920,2560];
   const build=async()=>{await p.locator('button[onclick="buildMihomo()"]').click();await p.waitForFunction(()=>['VALID','INVALID'].includes(MIHOMO_VALIDATION_STATE.state));assert.equal(await p.evaluate(()=>MIHOMO_VALIDATION_STATE.state),'VALID');return p.locator('#mihomoOutput').inputValue();};
   const studio=async text=>{await p.locator('.tab',{hasText:'Config Studio'}).click();await p.fill('#csImportInput',text);await p.click('#csParseBtn');assert.match(await p.locator('#csStatus').textContent(),/Разобрано/);};
   const layout=async section=>{
+   stage='layout: '+section;
    for(const width of widths){
     await p.setViewportSize({width,height:900});
     const d=await p.evaluate(()=>({width:innerWidth,scrollX,body:document.body.getBoundingClientRect().toJSON(),wide:[...document.querySelectorAll('body *')].filter(e=>e.namespaceURI==='http://www.w3.org/1999/xhtml'&&e.clientWidth&&e.scrollWidth>e.clientWidth+2).map(e=>({id:e.id,tag:e.tagName,client:e.clientWidth,scroll:e.scrollWidth,overflow:getComputedStyle(e).overflow})).slice(0,30),scroll:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return e.namespaceURI==='http://www.w3.org/1999/xhtml'&&r.width&&r.right>innerWidth+2;}).map(e=>({id:e.id,tag:e.tagName,classes:typeof e.className==='string'?e.className:'',right:Math.round(e.getBoundingClientRect().right),width:Math.round(e.getBoundingClientRect().width)})).slice(0,30),small:[...document.querySelectorAll('button,summary')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.height&&getComputedStyle(e).visibility!=='hidden'&&(r.width<24||r.height<24);}).map(e=>e.id||e.className||e.tagName)}));
@@ -62,7 +64,7 @@ const widths=[320,360,375,390,412,480,768,1024,1366,1440,1920,2560];
   for(const id of ['csGraphPanel','csTracePanel','csVrgPanel','csDnsRoutingPanel'])if(await p.locator('#'+id).count())await p.locator('#'+id).evaluate(el=>el.open=true);
   await layout('Studio/VRG/DNS');
   await p.click('#csRestoreBtn');same(await snap(),finalProject,'Reverse Preview mutated Builder');await layout('Reverse Preview');
-  await p.click('#rbCancelRestoreBtn');same(await snap(),finalProject,'Reverse Cancel drift');
+  stage='Reverse Preview cancel';await p.click('#rbCancelRestoreBtn');same(await snap(),finalProject,'Reverse Cancel drift');
   await p.click('#csRestoreBtn');await p.check('#rbLossAck');await p.click('#rbConfirmRestoreBtn');
   const reversed=await build();fs.writeFileSync(path.join(lab.dir,'generated','before-reverse.yaml'),finalYaml);fs.writeFileSync(path.join(lab.dir,'generated','after-reverse.yaml'),reversed);same(normalized(reversed),normalized(finalYaml),'Supported Reverse YAML drift');
   await p.click('#rbUndoBtn');same(await snap(),finalProject,'Undo drift');
@@ -80,5 +82,28 @@ const widths=[320,360,375,390,412,480,768,1024,1366,1440,1920,2560];
   assert.equal(result.externalRequests,0);result.journey=true;result.status='PASS';
   const dest=process.env.TEST_OUTPUT_DIR||path.join(lab.dir,'results');fs.mkdirSync(dest,{recursive:true});fs.writeFileSync(path.join(dest,'final-release-browser.json'),JSON.stringify(result,null,2));
   console.log('PASS final-release-browser: '+engine+'; journey6+8→8+7; '+result.layouts.length+' layout checks; DNS candidate '+!!hasDns);
+ }catch(error){
+  // Geometry only: never persist project/YAML/DOM text or synthetic credentials.
+  // Preserve the original failure and timeout; diagnostics do not retry a click.
+  const failure={status:'FAIL',stage,errorType:error.name,engine,geometry:null};
+  if(releasePage&&!releasePage.isClosed()){
+   let timer;
+   try{failure.geometry=await Promise.race([releasePage.evaluate(async()=>{
+    const samples=[];
+    for(let i=0;i<12;i++){
+     const elements={};
+     for(const id of ['csRestoreOut','rbCancelRestoreBtn','csVrgSvgWrap','csGraphPanel']){
+      const el=document.getElementById(id),s=el&&getComputedStyle(el);
+      elements[id]=el?{rect:el.getBoundingClientRect().toJSON(),display:s.display,visibility:s.visibility,disabled:!!el.disabled,scrollWidth:el.scrollWidth,scrollHeight:el.scrollHeight,clientWidth:el.clientWidth,clientHeight:el.clientHeight}:null;
+     }
+     samples.push({viewport:{width:innerWidth,height:innerHeight,scrollX,scrollY},activeTab:document.querySelector('.tab-content.active')?.id||null,elements});
+     await new Promise(requestAnimationFrame);
+    }
+    return samples;
+   }),new Promise(resolve=>{timer=setTimeout(()=>resolve({unavailable:'renderer diagnostic deadline'}),2000);})]);}
+   catch(_){failure.geometry={unavailable:'diagnostic evaluation failed'};}finally{clearTimeout(timer);}
+  }
+  if(process.env.TEST_OUTPUT_DIR){fs.mkdirSync(process.env.TEST_OUTPUT_DIR,{recursive:true});fs.writeFileSync(path.join(process.env.TEST_OUTPUT_DIR,'final-release-failure.json'),JSON.stringify(failure,null,2));}
+  throw error;
  }finally{await browser.close();if(ephemeral){assert.equal(path.dirname(lab.dir),path.resolve(os.tmpdir()));fs.rmSync(lab.dir,{recursive:true,force:true});}}
 })().catch(e=>{console.error(e);process.exitCode=1;});

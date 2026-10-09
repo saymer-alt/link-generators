@@ -332,7 +332,18 @@ jobs:
         run: node tests/field-acceptance-browser.cjs
 
       - name: Final release UI journey and viewport matrix
+        env:
+          TEST_OUTPUT_DIR: ${{ runner.temp }}/final-ui-diagnostics
         run: node tests/final-release-browser.cjs
+
+      - name: Preserve release UI failure geometry
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-ui-failure-geometry
+          path: ${{ runner.temp }}/final-ui-diagnostics/final-release-failure.json
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Post-merge DNS cross-feature integration
         run: node tests/post-merge-dns-browser.cjs
