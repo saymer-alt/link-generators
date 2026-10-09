@@ -50,6 +50,9 @@ jobs:
             exit 1
           fi
 
+      - name: Owner Experience Gate — owner UX regression registry
+        run: python3 tools/owner-experience-gate.py
+
       - name: JavaScript syntax
         shell: bash
         run: |

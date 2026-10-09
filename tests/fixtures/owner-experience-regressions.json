@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "project": "link-generators",
+  "user_findings": [
+    {
+      "id": "UX-01",
+      "summary": "Карточка политики появляется вне видимой области",
+      "scenario_prefixes": [
+        "UX01 add controls precede cards and separate import",
+        "UX01/02 four visible focused cards in append order"
+      ]
+    },
+    {
+      "id": "UX-02",
+      "summary": "Повторное создание политики даёт дублирующееся имя",
+      "scenario_prefixes": [
+        "UX02 delete and re-add reuses free name without renaming",
+        "UX02 imported names and order survive manual addition",
+        "UX02 project roundtrip retains policy names and priority"
+      ]
+    },
+    {
+      "id": "UX-03",
+      "summary": "Visual Routing Graph без Zoom/Pan/Fit",
+      "scenario_prefixes": [
+        "UX03 real normal Build with 19+ nodes and unchanged YAML",
+        "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+        "UX03 Config Studio same controls, focus, reset and YAML invariant"
+      ]
+    },
+    {
+      "id": "UX-04",
+      "summary": "Пустой адрес Mihomo Controller отвергается",
+      "scenario_prefixes": [
+        "UX04 no automatic request; empty field defaults only on Fetch",
+        "UX04 default secret requires target confirmation and cancel sends nothing"
+      ]
+    },
+    {
+      "id": "UX-05",
+      "summary": "URL /ui/#/overview не приводится к API контроллера",
+      "scenario_prefixes": [
+        "UX05 UI URL normalization, prefix, IPv6 and credentials rejection"
+      ]
+    },
+    {
+      "id": "UX-06",
+      "summary": "Неясная ошибка обращения к контроллеру",
+      "scenario_prefixes": [
+        "UX06 HTTP, malformed JSON and unknown network failure stay distinct",
+        "UX06 timeout uses existing eight second abort"
+      ]
+    },
+    {
+      "id": "UX-07",
+      "summary": "Routing Inspector неудобен до Build и с пустым полем",
+      "scenario_prefixes": [
+        "UX07 empty Inspector offers normal Build then default offline probe",
+        "UX07 network Build cancel does not send or mutate project",
+        "UX07 async policy mutation rejects old Build commit"
+      ]
+    },
+    {
+      "id": "UX-08",
+      "summary": "Domain Coverage применяет устаревший или отсутствующий Build",
+      "scenario_prefixes": [
+        "UX08 stale coverage offers rebuild and retains chosen domains"
+      ]
+    }
+  ]
+}
