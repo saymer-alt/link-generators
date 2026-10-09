@@ -35,3 +35,6 @@ Config Studio → Разобрать → DNS ↔ Routing. Анализ лока�
 - Historical `research/poc/dns-routing` не является текущим semantic acceptance gate: его исходные выводы о схемах, first-match и fake-IP superseded этой ревизией. Research не переносился в production.
 
 Финальный READY/NOT READY фиксируется в комментарии PR на точном head после завершения всех обязательных CI jobs. mergeable=true недостаточно. Field-test с реальными данными владельца NOT RUN.
+## Дополнительная подтверждённая находка независимой ревизии
+
+P2, `index.html:dnsRoutingAudit` (policy loop / dns-analysis-unknown). Repro: enabled DNS, nameserver 192.0.2.53, rules MATCH,DIRECT и nameserver-policy с geosite:cn либо endpoint #eth0. Expected: явный UNKNOWN непокрытой policy; actual до фикса: чистый verdict без UNKNOWN. Причина: общий unknown guard учитывал только nameserver/fallback и rules, но не policy keys/endpoints. Fix: policyUnknown входит в guard; неподдерживаемая policy не интерпретируется. Regression: дополнительные negative assertions в unknown группе dns-routing-core (15 групп суммарно); тест сначала упал, затем прошёл. Это gap статической диагностики, не наблюдённая DNS leak.
