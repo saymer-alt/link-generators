@@ -8857,6 +8857,27 @@ function csRenderForm() {
     if (f.secret) { inp.placeholder = CS_SECRET_INPUT_HINT; inp.dataset.csSecret = '1'; }
     else inp.value = String(f.value);
     row.append(lbl, inp);
+    if (f.secret) {
+      // TRACK C: явный показать/скрыть ТЕКУЩЕГО значения (владелец вправе его
+      // видеть и править). Показ = подстановка оригинала в input; скрытие =
+      // возврат к семантике «пусто = оставить исходное». В диагностику/логи
+      // значение по-прежнему не попадает.
+      const reveal = document.createElement('button');
+      reveal.type = 'button';
+      reveal.className = 'btn btn-gray';
+      reveal.textContent = '👁';
+      reveal.setAttribute('aria-label', 'Показать или скрыть значение поля ' + f.key + ' объекта ' + cur);
+      reveal.title = 'Показать/скрыть текущее значение';
+      let shown = false;
+      reveal.addEventListener('click', () => {
+        shown = !shown;
+        inp.type = shown ? 'text' : 'password';
+        inp.value = shown ? String(f.value) : '';
+        inp.placeholder = shown ? '' : CS_SECRET_INPUT_HINT;
+        reveal.textContent = shown ? '🙈' : '👁';
+      });
+      row.append(reveal);
+    }
     form.appendChild(row);
   }
   const saveBtn = document.createElement('button');
@@ -10059,32 +10080,99 @@ document.getElementById('rbProjectFile').addEventListener('change', (e) => {
   if (f) rbLoadProject(f);
 });
 
+// Сравнение «было → будет» (TRACK B4): компактные счётчики и ключевые опции.
+function rbProjectCounts(p) {
+  return {
+    subs: (p.sources.mainInput || '').split('\n').filter(s => s.trim()).length,
+    wg: p.wgProfiles.length,
+    awg: p.wgProfiles.filter(w => w.bean && w.bean.wireguard && w.bean.wireguard['amnezia-wg-option']).length,
+    dpr: p.domainPolicy.enabled ? p.domainPolicy.cards.length : 0,
+    tiered: p.tiered.enabled ? p.tiered.cards.length : 0
+  };
+}
+function rbCompareWithCurrent(project) {
+  const cur = rbCollectProject();
+  const a = rbProjectCounts(cur);
+  const b = rbProjectCounts(project);
+  const hasState = (cur.sources.mainInput || '').trim() || cur.wgProfiles.length;
+  if (!hasState) return 'Текущий Builder: пуст — восстановление нечего затирать.';
+  const diff = [];
+  const fmt = (c) => 'подписок ' + c.subs + ' · WG ' + (c.wg - c.awg) + ' · AWG ' + c.awg + ' · DPR-политик ' + c.dpr + ' · Tiered-карточек ' + c.tiered;
+  if (a.subs !== b.subs || a.wg !== b.wg || a.dpr !== b.dpr || a.tiered !== b.tiered) {
+    diff.push('Было: ' + fmt(a));
+    diff.push('Станет: ' + fmt(b));
+  } else {
+    diff.push('Состав источников и карточек совпадает с текущим Builder (' + fmt(a) + ').');
+  }
+  const optChecks = [['profile', 'профиль'], ['addTun', 'TUN'], ['tunMips', 'MIPS'], ['webUI', 'WebUI'], ['lan', 'allow-lan'], ['subMode', 'URL-подписки']];
+  const changedOpts = optChecks.filter(([k]) => String(cur.options[k]) !== String(project.options[k])).map(([, label]) => label + ': ' + (cur.options[k] ? 'вкл' : 'выкл') + ' → ' + (project.options[k] ? 'вкл' : 'выкл'));
+  if (changedOpts.length) diff.push('Настройки изменятся: ' + changedOpts.join('; '));
+  else diff.push('Ключевые настройки не изменятся.');
+  return diff.join('\n');
+}
+// Человеческие пояснения статусов (TRACK B2) — одна строка на класс.
+const RB_STATUS_HINTS = {
+  EXACT: 'восстановится точно',
+  DERIVED: 'восстановится с нормализацией (проверьте после Restore)',
+  AMBIGUOUS: 'однозначно восстановить нельзя — выбран безопасный вариант',
+  MISSING: 'информации в источнике нет — восстановить невозможно',
+  UNSUPPORTED: 'Builder не имеет представления — сохранено в отчёте, не теряется',
+  CONFLICT: 'данные противоречат друг другу — показано, не чинится молча'
+};
 function rbRestoreFromStudio() {
   const text = document.getElementById('csImportInput').value;
   if (!text.trim()) return showToast('Сначала вставьте и разберите config.yaml', true);
   let doc;
   try { doc = jsyaml.load(text); } catch (e) { return showToast('❌ YAML не разбирается: ' + String(e && e.message ? e.message : e).slice(0, 100), true); }
   const res = rbYamlToProject(doc);
-  // Отчёт обратимости: только отображение; секреты в находках не фигурируют,
-  // но текст прогоняется через csRedactText как вся студия.
-  const lines = res.findings.map(f => {
+  const project = res.project;
+  const counts = rbProjectCounts(project);
+  // Компактный предпросмотр (TRACK B2): счётчики + настройки + статусы;
+  // подробный перечень — по раскрытию, не простыня.
+  const byStatus = {};
+  for (const f of res.findings) (byStatus[f.state] = byStatus[f.state] || []).push(f);
+  const statusOrder = ['EXACT', 'DERIVED', 'AMBIGUOUS', 'MISSING', 'UNSUPPORTED', 'CONFLICT'];
+  const attention = statusOrder.filter(s => s !== 'EXACT' && byStatus[s] && byStatus[s].length);
+  const preview = [];
+  preview.push('Подписки: ' + counts.subs + ' · WireGuard: ' + (counts.wg - counts.awg) + ' · AmneziaWG: ' + counts.awg + ' · DPR-политик: ' + counts.dpr + ' · Tiered-карточек: ' + counts.tiered);
+  preview.push('Настройки: профиль ' + project.options.profile + ' · TUN ' + (project.options.addTun ? 'вкл' + (project.options.tunMips ? ' (MIPS)' : '') : 'выкл') + ' · WebUI ' + (project.options.webUI ? 'вкл' : 'выкл') + ' · allow-lan ' + (project.options.lan ? 'вкл' : 'выкл'));
+  const statusLine = statusOrder.filter(s => byStatus[s]).map(s => {
+    const hint = RB_STATUS_HINTS[s];
+    return s + ': ' + byStatus[s].length + ' (' + hint + ')';
+  }).join(' · ');
+  preview.push(statusLine ? 'Восстановление: ' + statusLine : 'Восстановление: всё точно (EXACT).');
+  if (attention.length) preview.push('⚠ Требует внимания: ' + attention.map(s => s + ' (' + byStatus[s].length + ')').join(', ') + ' — список ниже.');
+  const detailLines = res.findings.map(f => {
     const icon = f.state === 'EXACT' ? '✓' : f.state === 'MISSING' ? '∅' : f.state === 'CONFLICT' ? '⚠' : f.state === 'UNSUPPORTED' ? '✖' : 'ℹ';
     return icon + ' [' + f.state + '] ' + f.field + ' — ' + f.note;
   });
   const out = document.getElementById('csRestoreOut');
   if (out) {
     out.style.display = 'block';
-    out.textContent = csRedactText('Отчёт обратимости (' + res.findings.length + '):\n' + (lines.join('\n') || 'находок нет'), res.project);
+    out.textContent = '';
+    const head = document.createElement('div');
+    head.textContent = '🔁 Предпросмотр восстановления\n' + csRedactText(preview.join('\n') + '\n\n' + rbCompareWithCurrent(project), project);
+    out.appendChild(head);
+    const det = document.createElement('details');
+    det.style.marginTop = '4px';
+    const sum = document.createElement('summary');
+    sum.textContent = 'Подробный отчёт обратимости (' + res.findings.length + ')';
+    const body = document.createElement('div');
+    body.className = 'hint';
+    body.style.whiteSpace = 'pre-line';
+    body.textContent = csRedactText(detailLines.join('\n') || 'находок нет', project);
+    det.append(sum, body);
+    out.appendChild(det);
   }
   const hasState = document.getElementById('mihomoInput').value.trim() || wgProfiles.length;
-  if (hasState && !confirm('Восстановить Builder из этого конфига? Текущее состояние можно вернуть через «↩︎ Отменить восстановление».')) {
+  if (hasState && !confirm('Восстановить Builder из этого источника? Текущее состояние можно вернуть через «↩︎ Отменить восстановление».')) {
     return showToast('Восстановление отменено.');
   }
   rbUndoProjectState = rbCollectProject();
-  rbApplyProject(res.project);
+  rbApplyProject(project);
   const undoBtn = document.getElementById('rbUndoBtn');
   if (undoBtn) undoBtn.style.display = '';
-  showToast('🔁 Восстановлено: ' + res.project.wgProfiles.length + ' WG/AWG, ' + (res.findings.filter(f => f.state === 'MISSING' || f.state === 'UNSUPPORTED').length) + ' пунктов требуют внимания (отчёт в Studio). Перейдите в Builder и нажмите ⚡ Build.');
+  showToast('🔁 Восстановлено: ' + project.wgProfiles.length + ' WG/AWG, ' + counts.subs + ' подписок' + (attention.length ? '; ' + attention.length + ' класса(ов) требуют внимания — см. отчёт в Studio.' : '. Builder готов — нажмите ⚡ Build.'));
   switchTab(null, 'mihomo');
 }
 document.addEventListener('click', (e) => {

@@ -48,8 +48,11 @@ const normalizeHwid = yaml => yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, '  - <HWI
   const restoreVisible = await page.evaluate(() => document.getElementById('csRestoreBtn').style.display !== 'none');
   assert.ok(restoreVisible, 'кнопка восстановления видна после «Разобрать»');
   await page.click('#csRestoreBtn');
-  await page.waitForFunction(() => (document.getElementById('csRestoreOut').textContent || '').includes('Отчёт обратимости'));
+  await page.waitForFunction(() => (document.getElementById('csRestoreOut').textContent || '').includes('Предпросмотр восстановления'));
   const report = await page.textContent('#csRestoreOut');
+  assert.ok(report.includes('Подписки: 2') && report.includes('AmneziaWG: 1'), 'предпросмотр: счётчики подписок и AWG');
+  assert.ok(report.includes('EXACT: 2') && report.includes('восстановится точно'), 'предпросмотр: статусы с человеческим пояснением');
+  assert.ok(report.includes('Текущий Builder: пуст') || report.includes('Было:') || report.includes('Состав источников и карточек совпадает'), 'предпросмотр: сравнение было/стало');
   assert.ok(report.includes('[EXACT] wg:wg-simple-a'), 'отчёт: WG EXACT');
   assert.ok(report.includes('имя файла: UNKNOWN'), 'отчёт: честное filename UNKNOWN');
   await page.waitForFunction(() => document.getElementById('tab-mihomo').classList.contains('active'));
@@ -82,7 +85,7 @@ const normalizeHwid = yaml => yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, '  - <HWI
   await page.click('#csParseBtn');
   await page.waitForFunction(() => document.getElementById('csStatus').textContent.includes('Разобрано'));
   await page.click('#csRestoreBtn');
-  await page.waitForFunction(() => (document.getElementById('csRestoreOut').textContent || '').includes('Отчёт обратимости'));
+  await page.waitForFunction(() => (document.getElementById('csRestoreOut').textContent || '').includes('Предпросмотр восстановления'));
   const reportB = await page.textContent('#csRestoreOut');
   assert.ok(reportB.includes('[UNSUPPORTED] proxies (прямые узлы)'), 'отчёт: прямой узел = UNSUPPORTED (не потерян молча)');
   assert.ok(reportB.includes('[MISSING] sources.mainInput'), 'отчёт: URL развёрнутой подписки отсутствуют = MISSING');
