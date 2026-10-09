@@ -281,6 +281,9 @@ jobs:
       - name: Independent reverse profile integrity
         run: node tests/independent-reverse-profiles-browser.cjs
 
+      - name: Synthetic field acceptance matrix
+        run: node tests/field-acceptance-browser.cjs
+
       - name: Security and download end-to-end regression (CODEX-02)
         run: node tests/security-stress-browser.cjs
 
@@ -390,6 +393,9 @@ jobs:
 
       - name: Reverse gateway profile parity
         run: node tests/independent-reverse-profiles-browser.cjs
+
+      - name: Synthetic field acceptance against real Mihomo
+        run: node tests/field-acceptance-browser.cjs
 
       - name: Physical Topology per-node artifacts compat (#187)
         run: node tests/per-node-mihomo-compat.cjs

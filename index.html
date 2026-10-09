@@ -2897,6 +2897,11 @@ function validateMihomoYaml(yaml) {
   for (const p of (Array.isArray(doc.proxies) ? doc.proxies : [])) {
     if (!p || p.type !== 'wireguard') continue;
     const name = String(p.name || '?');
+    // Validate the emitted address/port, not a second WireGuard protocol parser.
+    if (p.ip !== undefined && (typeof p.ip !== 'string' || rdIsIPv4(p.ip) === null || p.ip.split('.').some(part => String(Number(part)) !== part))) {
+      err('proxies[' + name + ']', 'ip', '(значение скрыто)', 'WireGuard ip должен быть IPv4-адресом без CIDR и ведущих нулей');
+    }
+    if (p.server !== undefined) checkPort('proxies[' + name + ']', 'port', p.port);
     const pkErr = wgKeyFormatError(p['private-key'], 'WireGuard ' + name + ': private-key');
     if (pkErr) err('proxies[' + name + ']', 'private-key', 'присутствует', pkErr);
     const pubErr = wgKeyFormatError(p['public-key'], 'WireGuard ' + name + ': public-key');
@@ -6889,6 +6894,10 @@ function rbYamlToProject(doc) {
   if (direct.length) {
     passthrough['proxies:direct'] = direct;
     findings.push({ field: 'proxies (прямые узлы)', state: 'UNSUPPORTED', note: direct.length + ' узл(ов) без link-emitter не переносятся в поле ввода Builder; сохранены в проекте и исходном YAML, но новый Build их НЕ переносит' });
+    const omittedNames = new Set(direct.map(p => p && p.name).filter(n => typeof n === 'string'));
+    for (const w of project.wgProfiles) if (w.mode === 'proxy' && omittedNames.has(w.target)) {
+      findings.push({ field: 'wg:' + w.bean.name + '.dialer-proxy', state: 'CONFLICT', note: 'dialer-target не переносится в Builder (прямой узел без link-emitter). Восстановление создаст отсутствующую цель; используйте исходный YAML или проект с исходными ссылками.' });
+    }
   }
 
   // --- DPR ---
