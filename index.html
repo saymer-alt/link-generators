@@ -2866,9 +2866,44 @@ function validateMihomoYaml(yaml) {
         }
       }
     });
-    // DPR-контракт: последнее правило — правило по умолчанию MATCH,GLOBAL
-    if (ruleProviderNames.size && doc.rules[doc.rules.length - 1] !== 'MATCH,GLOBAL') {
-      err('rules', '', fmtVal(doc.rules[doc.rules.length - 1]), 'последнее правило должно быть MATCH,GLOBAL (DEFAULT-правило)');
+    // DPR-контракт: последнее правило — дефолт в GLOBAL-достижимую группу.
+    // QA-01: с активным Tiered Failover финальное правило — MATCH,🪜 TIERED-AUTO
+    // (пост-патч), а сам корень входит в GLOBAL.proxies — контракт «дефолт
+    // завершается GLOBAL-веткой» сохранён. Принимаем tiered-дефолт только
+    // когда группа-корень реально существует в конфиге (структурная проверка,
+    // не подавление ошибки).
+    if (ruleProviderNames.size) {
+      const lastRule = doc.rules[doc.rules.length - 1];
+      const tieredRootExists = (Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []).some(g => g && g.name === '🪜 TIERED-AUTO');
+      const defaultOk = lastRule === 'MATCH,GLOBAL' || (tieredRootExists && lastRule === 'MATCH,🪜 TIERED-AUTO');
+      if (!defaultOk) {
+        err('rules', '', fmtVal(lastRule), 'последнее правило должно быть MATCH,GLOBAL (или MATCH,🪜 TIERED-AUTO при активном Tiered Failover с существующей группой-корнем)');
+      }
+    }
+  }
+
+  // --- QA-02: WG/AWG ключи — фактическое base64-декодирование и длина 32 байта ---
+  // Некорректный ключ page-валидатор раньше пропускал, а реальный mihomo -t
+  // отвергал («decode private key: illegal base64 data»). Сообщение БЕЗ значения.
+  function wgKeyFormatError(value, fieldLabel) {
+    if (typeof value !== 'string' || !value) return fieldLabel + ': ключ отсутствует или пуст';
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return fieldLabel + ': недопустимые символы (ожидается base64)';
+    if (value.length % 4 !== 0 || value.length > 44) return fieldLabel + ': некорректная длина base64 (' + value.length + ' символов)';
+    let decoded;
+    try { decoded = atob(value); } catch (_) { return fieldLabel + ': некорректное base64-кодирование'; }
+    if (decoded.length !== 32) return fieldLabel + ': ключ декодируется в ' + decoded.length + ' байт — контракт WireGuard требует 32';
+    return null;
+  }
+  for (const p of (Array.isArray(doc.proxies) ? doc.proxies : [])) {
+    if (!p || p.type !== 'wireguard') continue;
+    const name = String(p.name || '?');
+    const pkErr = wgKeyFormatError(p['private-key'], 'WireGuard ' + name + ': private-key');
+    if (pkErr) err('proxies[' + name + ']', 'private-key', 'присутствует', pkErr);
+    const pubErr = wgKeyFormatError(p['public-key'], 'WireGuard ' + name + ': public-key');
+    if (pubErr) err('proxies[' + name + ']', 'public-key', 'присутствует', pubErr);
+    if (p['pre-shared-key'] !== undefined && p['pre-shared-key'] !== '' && p['pre-shared-key'] !== null) {
+      const pskErr = wgKeyFormatError(p['pre-shared-key'], 'WireGuard ' + name + ': pre-shared-key');
+      if (pskErr) err('proxies[' + name + ']', 'pre-shared-key', 'присутствует', pskErr);
     }
   }
 
