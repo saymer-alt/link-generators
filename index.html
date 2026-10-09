@@ -239,7 +239,7 @@
   g:focus .vrg-node-rect,g:focus-visible .vrg-node-rect{stroke:var(--accent,#0074d9);stroke-width:2.5}
   .vrg-nav{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;min-width:0}
   .vrg-nav .btn{padding:5px 10px;flex:0 1 auto}
-  .vrg-viewport{max-width:100%;min-width:0;overscroll-behavior:contain}
+  .vrg-viewport{max-width:100%;min-width:0}
   .vrg-viewport svg{display:block;max-width:none;touch-action:none}
   .vrg-viewport.vrg-panning{cursor:grabbing;user-select:none}
 </style>
@@ -9618,7 +9618,7 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     if (action === 'all') { resetFocus(); return; }
     state.fit = action === 'fit';
     if (state.fit) fit();
-    else apply(action === 'reset' ? 1 : Math.max(.25, Math.round(state.scale * 4) / 4 + (action === 'in' ? .25 : -.25)), true);
+    else apply(action === 'reset' ? 1 : state.scale + (action === 'in' ? .25 : -.25), true);
   }, options);
   let drag = null, suppressClick = false;
   svg.addEventListener('pointerdown', e => {

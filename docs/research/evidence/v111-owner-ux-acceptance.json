@@ -549,5 +549,66 @@
     "conclusion": "success",
     "jobs": 6,
     "runtimeRun": 37968565201
+  },
+  "reviewWheel": {
+    "comment": "https://github.com/saymer-alt/link-generators/pull/225#discussion_r4232970497",
+    "reviewedHead": "0ab781192f4a38578d7327e1c80ba112fb8c47cf",
+    "before": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 0,
+      "failed": 1,
+      "checks": [
+        {
+          "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+          "pass": false
+        }
+      ]
+    },
+    "after": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 1,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+          "pass": true
+        }
+      ]
+    }
+  },
+  "zoomBelow25": {
+    "before": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 0,
+      "failed": 1,
+      "checks": [
+        {
+          "name": "UX03 Builder graph navigation/redaction count=50",
+          "pass": false
+        }
+      ]
+    },
+    "after": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 1,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX03 Builder graph navigation/redaction count=50",
+          "pass": true
+        }
+      ]
+    }
+  },
+  "secondPRCI": {
+    "head": "c0fbd1423b42455ace033d2dff424f59b9be1725",
+    "generatorRun": 37969797727,
+    "conclusion": "success",
+    "jobs": 6,
+    "runtimeRun": 37969797688
   }
 }
