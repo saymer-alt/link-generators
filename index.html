@@ -6595,17 +6595,28 @@ function rbValidateProject(p) {
   }
   if (!Array.isArray(p.wgProfiles)) errors.push('wgProfiles: array expected');
   else {
+    const ids = new Set();
+    if (p.wgProfiles.length > 2000) errors.push('wgProfiles: limit 2000');
     for (const w of p.wgProfiles) {
       if (!w || typeof w !== 'object') { errors.push('wgProfiles[]: object expected'); continue; }
       if (typeof w.filename !== 'string') errors.push('wgProfiles.filename: string expected');
       if (!w.bean || typeof w.bean !== 'object') { errors.push('wgProfiles.bean: object expected'); continue; }
       if (typeof w.bean.name !== 'string') errors.push('wgProfiles.bean.name: string expected');
+      if (w.bean.proto !== 'wireguard' || !w.bean.wireguard || typeof w.bean.wireguard !== 'object' || Array.isArray(w.bean.wireguard)) errors.push('wgProfiles.bean: wireguard object expected');
+      if (!Number.isSafeInteger(w.id) || w.id < 1 || ids.has(w.id)) errors.push('wgProfiles.id: unique positive integer expected');
+      ids.add(w.id);
       if (w.mode !== 'direct' && w.mode !== 'proxy') errors.push('wgProfiles.mode: direct|proxy expected');
       if (typeof w.target !== 'string') errors.push('wgProfiles.target: string expected');
     }
   }
   if (!p.options || typeof p.options !== 'object') errors.push('options: object expected');
   else {
+    for (const key of ['addTun', 'tunMips', 'tunStackAdvanced', 'addSocks', 'lan', 'perProxyMaster', 'perProxyTun', 'perProxySocks', 'webUI', 'awgKeepalive', 'awgRtDiag', 'vpsDnsEnabled']) {
+      if (p.options[key] !== undefined && typeof p.options[key] !== 'boolean') errors.push('options.' + key + ': boolean expected');
+    }
+    for (const key of ['tunStackEx', 'webUiCustomUrl', 'urlTestPreset', 'urlTestCustomUrl', 'excludeFilter', 'realityModern', 'deviceModel', 'wgCustomDns', 'vpsDevice', 'vpsMtu', 'vpsFakeIp', 'vpsDnsListen', 'vpsDnsNs', 'vpsProxyNs']) {
+      if (p.options[key] !== undefined && typeof p.options[key] !== 'string') errors.push('options.' + key + ': string expected');
+    }
     if (!RB_PROFILES.has(p.options.profile)) errors.push('options.profile: router|vps-local|vps-gateway expected');
     if (p.options.webUiDashboard !== undefined && p.options.webUiDashboard !== '' && !RB_DASHBOARDS.has(p.options.webUiDashboard)) {
       errors.push('options.webUiDashboard: unknown dashboard');
@@ -6614,6 +6625,8 @@ function rbValidateProject(p) {
       const sl = p.options.serverList;
       if (!sl || typeof sl !== 'object' || !Array.isArray(sl.names) || !Array.isArray(sl.selected)) {
         errors.push('options.serverList: {names[], selected[]} expected');
+      } else if (sl.names.length > 5000 || sl.selected.length > 5000 || [...sl.names, ...sl.selected].some(v => typeof v !== 'string')) {
+        errors.push('options.serverList: bounded string lists expected');
       }
     }
   }
@@ -6645,8 +6658,10 @@ function rbValidateProject(p) {
       }
       if (!RB_STRATEGIES.has(c.strategy)) errors.push('tiered.cards[].strategy: url-test|fallback|load-balance expected');
       if (!Array.isArray(c.members)) { errors.push('tiered.cards[].members: array expected'); break; }
+      if (c.members.length > 5000 || c.members.some(v => typeof v !== 'string')) errors.push('tiered.cards[].members: bounded string list expected');
     }
   }
+  if (p.domainPolicy?.cards?.length > 256 || p.tiered?.cards?.length > 256) errors.push('cards: limit 256');
   return errors;
 }
 
@@ -6673,6 +6688,17 @@ function rbParseProjectText(text) {
   let raw;
   try { raw = JSON.parse(s); } catch (e) {
     return { ok: false, error: 'не JSON (значения скрыты)' };
+  }
+  const pending = [{v: raw, depth: 0}];
+  let visits = 0;
+  while (pending.length) {
+    const {v, depth} = pending.pop();
+    if (++visits > 50000 || depth > 64) return {ok:false, error:'структура проекта слишком сложная'};
+    if (!v || typeof v !== 'object') continue;
+    for (const k of Object.keys(v)) {
+      if (['__proto__', 'prototype', 'constructor'].includes(k)) return {ok:false, error:'структура проекта: недопустимый ключ (значения скрыты)'};
+      pending.push({v:v[k], depth:depth+1});
+    }
   }
   const migrated = rbMigrateProject(raw);
   if (!migrated.ok) return { ok: false, error: migrated.error };
@@ -6716,7 +6742,7 @@ function rbComputeProviderName(url, index, total, used) {
 
 function rbYamlToProject(doc) {
   const findings = [];
-  const passthrough = {};
+  const passthrough = Object.create(null);
   const project = {
     schemaVersion: RB_PROJECT_SCHEMA_VERSION,
     meta: { app: 'link-generators', created: new Date().toISOString(), generatorVersion: String((globalThis.GENERATOR_META && GENERATOR_META.version) || ''), origin: 'yaml-reverse', wgProfileSeq: 0 },
@@ -8838,7 +8864,7 @@ function csRenderForm() {
   const head = document.createElement('div');
   head.className = 'label';
   head.style.fontWeight = 'bold';
-  head.textContent = (type === 'proxy' ? 'Прокси «' : type === 'group' ? 'Группа «' : 'Провайдер «') + cur + '»';
+  head.textContent = csRedactText((type === 'proxy' ? 'Прокси «' : type === 'group' ? 'Группа «' : 'Провайдер «') + cur + '»', csCurrentDoc);
   form.appendChild(head);
   for (const f of fields) {
     const row = document.createElement('div');
@@ -8846,13 +8872,13 @@ function csRenderForm() {
     const lbl = document.createElement('label');
     lbl.className = 'label';
     lbl.style.cssText = 'display:inline;min-width:130px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-    lbl.title = f.key;
-    lbl.textContent = f.key + ':';
+    lbl.title = csRedactText(f.key, csCurrentDoc);
+    lbl.textContent = csRedactText(f.key + ':', csCurrentDoc);
     const inp = document.createElement('input');
     inp.type = f.secret ? 'password' : 'text';
     inp.dataset.csField = f.key;
     inp.dataset.csOrig = f.secret ? '' : String(f.value);
-    inp.setAttribute('aria-label', 'Поле ' + f.key + ' объекта ' + cur);
+    inp.setAttribute('aria-label', csRedactText('Поле ' + f.key + ' объекта ' + cur, csCurrentDoc));
     inp.style.cssText = 'flex:1;min-width:160px;padding:4px 8px';
     if (f.secret) { inp.placeholder = CS_SECRET_INPUT_HINT; inp.dataset.csSecret = '1'; }
     else inp.value = String(f.value);
@@ -8866,7 +8892,7 @@ function csRenderForm() {
       reveal.type = 'button';
       reveal.className = 'btn btn-gray';
       reveal.textContent = '👁';
-      reveal.setAttribute('aria-label', 'Показать или скрыть значение поля ' + f.key + ' объекта ' + cur);
+      reveal.setAttribute('aria-label', csRedactText('Показать или скрыть значение поля ' + f.key + ' объекта ' + cur, csCurrentDoc));
       reveal.title = 'Показать/скрыть текущее значение';
       let shown = false;
       let initialized = false;
@@ -9295,6 +9321,7 @@ document.addEventListener('change', (e) => {
 // Строится из lastRoutingDoc (Builder snapshot) или csCurrentDoc (Config Studio).
 const VRG_NS = 'http://www.w3.org/2000/svg';
 let vrgFocusId = '';
+const vrgStudioFocus = new WeakMap();
 
 function vrgTruncateLabel(text, maxLen) {
   const s = String(text || '');
@@ -9307,7 +9334,7 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
   // Config Studio: метки узлов проходят через csRedactText (значения из секретных
   // полей маскируются и при повторении в имени/ID). Краскция ДО усечения —
   // обрезанный секрет не матчится и утёк бы частично.
-  const R = typeof redact === 'function' ? redact : (s => String(s));
+  const R = typeof redact === 'function' ? redact : (s => csRedactText(s, doc));
   wrap.textContent = '';
   const status = document.getElementById(containerId === 'vrgSvgWrap' ? 'vrgStatus' : containerId + 'Status');
   if (!doc) {
@@ -9321,7 +9348,8 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
     if (textAltId) document.getElementById(textAltId).textContent = '';
     return;
   }
-  const view = vrgBuildView(graph, { maxNodes: VRG_MAX_NODES, focus: vrgFocusId || undefined });
+  const focus = containerId === 'vrgSvgWrap' ? vrgFocusId : (vrgStudioFocus.get(doc) || '');
+  const view = vrgBuildView(graph, { maxNodes: VRG_MAX_NODES, focus: focus || undefined });
   const svg = document.createElementNS(VRG_NS, 'svg');
   svg.setAttribute('viewBox', '0 0 ' + view.width + ' ' + view.height);
   svg.setAttribute('width', String(view.width));
@@ -9360,7 +9388,8 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
     g.setAttribute('transform', 'translate(' + n.x + ',' + n.y + ')');
     g.setAttribute('tabindex', '0');
     g.setAttribute('role', 'group');
-    g.setAttribute('aria-label', R(vrgKindLabel(n.kind) + ': ' + vrgTruncateLabel(vrgNodeLabel(n), 60)));
+    g.setAttribute('aria-label', vrgKindLabel(n.kind) + ': ' + vrgTruncateLabel(R(vrgNodeLabel(n)), 60));
+    g._vrgId = n.id;
     const rect = document.createElementNS(VRG_NS, 'rect');
     rect.setAttribute('width', String(VRG_NODE_W)); rect.setAttribute('height', String(VRG_NODE_H));
     rect.setAttribute('rx', '4');
@@ -9377,13 +9406,17 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
     labelText.textContent = vrgTruncateLabel(R(vrgNodeLabel(n)), 28);
     g.appendChild(labelText);
     // EVENING-03 A3: клик и клавиатура — выбор узла как фокуса
-    g.addEventListener('click', () => { vrgFocusId = n.id; vrgFillFocusSelect('vrgFocusSelect', doc); vrgRenderInto(containerId, doc, stale, textAltId, redact); });
+    const focusNode = () => {
+      if (containerId === 'vrgSvgWrap') { vrgFocusId = n.id; vrgFillFocusSelect('vrgFocusSelect', doc); }
+      else vrgStudioFocus.set(doc, n.id);
+      vrgRenderInto(containerId, doc, stale, textAltId, redact);
+      Array.from(wrap.querySelectorAll('g[tabindex]')).find(el => el._vrgId === n.id)?.focus();
+    };
+    g.addEventListener('click', focusNode);
     g.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter' || ev.key === ' ') {
         ev.preventDefault();
-        vrgFocusId = n.id;
-        vrgFillFocusSelect('vrgFocusSelect', doc);
-        vrgRenderInto(containerId, doc, stale, textAltId, redact);
+        focusNode();
       }
     });
     svg.appendChild(g);
@@ -9404,14 +9437,14 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
     if (view.focused) parts.push('Фокус: ' + view.focused);
     if (view.cyclePresent) parts.push('⚠ Обнаружены циклы в зависимостях');
     if (stale) parts.push('⚠ Snapshot предыдущей сборки');
-    status.textContent = parts.join(' · ');
+    status.textContent = R(parts.join(' · '));
   }
 }
 
 function vrgFillFocusSelect(selId, doc) {
   const sel = document.getElementById(selId);
   if (!sel || !doc) return;
-  const prev = sel.value;
+  const prev = vrgFocusId;
   sel.textContent = '';
   const def = document.createElement('option');
   def.value = ''; def.textContent = '— весь граф —';
@@ -9428,12 +9461,13 @@ function vrgFillFocusSelect(selId, doc) {
     og.label = kl;
     for (const id of groupsByKind.get(kl)) {
       const o = document.createElement('option');
-      o.value = id; o.textContent = vrgTruncateLabel(id, 50);
+      o.value = String(sel.querySelectorAll('option').length + og.children.length);
+      o._vrgId = id; o.textContent = vrgTruncateLabel(csRedactText(id, doc), 50);
+      if (id === prev) o.selected = true;
       og.appendChild(o);
     }
     sel.appendChild(og);
   }
-  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
 }
 
 document.addEventListener('click', (e) => {
@@ -9443,7 +9477,7 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('change', (e) => {
   if (!e.target) return;
-  if (e.target.id === 'vrgFocusSelect') { e.preventDefault(); vrgFocusId = e.target.value; renderVrgBuilder(); }
+  if (e.target.id === 'vrgFocusSelect') { e.preventDefault(); vrgFocusId = e.target.selectedOptions[0]?._vrgId || ''; renderVrgBuilder(); }
 });
 
 function renderVrgBuilder() {
