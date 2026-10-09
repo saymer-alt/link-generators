@@ -157,7 +157,7 @@ jobs:
       - name: Visual Routing Graph core regression (#125→#177)
         run: node tests/visual-routing-graph.cjs
 
-      - name: DNS-Routing audit core regression (v1.11 CANDIDATE)
+      - name: DNS-Routing audit core regression
         run: node tests/dns-routing-core.cjs
 
       - name: Rule Provider Explorer core regression
@@ -262,7 +262,7 @@ jobs:
       - name: Visual Routing Graph integration browser regression (#177/MEGA-01)
         run: node tests/vrg-integration-browser.cjs
 
-      - name: DNS-Routing audit browser regression (v1.11 CANDIDATE)
+      - name: DNS-Routing audit browser regression
         run: node tests/dns-routing-browser.cjs
       - name: Project roundtrip browser regression (OWNER-REVERSE-01)
         run: node tests/project-roundtrip-browser.cjs
@@ -293,6 +293,9 @@ jobs:
 
       - name: Final release UI journey and viewport matrix
         run: node tests/final-release-browser.cjs
+
+      - name: Post-merge DNS cross-feature integration
+        run: node tests/post-merge-dns-browser.cjs
 
       - name: Evening chaos barriers and metamorphic invariants
         run: node tests/evening-chaos-browser.cjs
@@ -401,7 +404,7 @@ jobs:
       - name: Config Studio export compat (#178)
         run: node tests/config-studio-compat.cjs
 
-      - name: DNS candidate parse-only semantic contracts
+      - name: DNS parse-only semantic contracts
         run: node tests/dns-routing-mihomo-compat.cjs
 
       - name: Owner reverse journey against real Mihomo

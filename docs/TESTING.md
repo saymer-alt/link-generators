@@ -755,3 +755,11 @@ PR #207 проверяется отдельно: после final hardening dns-
 `tools/synthetic-fieldtest/loopback-runtime.cjs` требует MIHOMO_BIN и JS_YAML_PATH, запускает только loopback proxy/target/mock DNS, TUN/sniffer выключены. Выполняется в обеих pinned Mihomo CI jobs. Разделяет parse/process/traffic/failover/recovery; remote handshake NOT RUN.
 
 `tools/synthetic-fieldtest/mutation-audit.cjs <v111-chaos-mutants> <ignored-output>` запускается вручную только в отдельном чистом worktree. Unmutated controls обязательны; index.html возвращается в finally. Raw mutation logs не публиковать: при выключенной redaction отрицательные assertions могут содержать synthetic credentials. См. [Evening Chaos Audit](research/V1.11-EVENING-CHAOS-AUDIT.md).
+
+### Post-merge DNS acceptance (2026-10-09)
+
+OWNER GO #207 выполнен: merge 1296a05935b0b37bd24f5a857d45888b5c1ddfe7. На точном post-merge main повторены field49 (149 Windows1.19.31 parse checks), chaos21, DNS17/12/7; полный Generator CI с обеими Linux pinned версиями SUCCESS.
+
+`node tests/post-merge-dns-browser.cjs` — три дополнительные browser integration группы: Router AWL/DPR/Tiered/WG + imported DNS policy arrays; Gateway DNS OFF editor/export/Parse/Reverse Confirm/Build; unreachable rule/consistent rename/disabled structural metamorphic properties. AUDIT_ROOT позволяет проверить точный post-merge checkout до включения suite в main. HTTP(S) блокируется, output metadata-only в ignored fieldtest-private/results/post-merge-integration. Suite включена в обязательный browser CI.
+
+См. [post-merge acceptance и Windows checklist](research/V1.11-POST-MERGE-ACCEPTANCE.md), [release notes DRAFT](research/V1.11.0-RELEASE-NOTES-DRAFT.md). Production version/stable/tag/release не менялись.
