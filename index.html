@@ -9654,9 +9654,7 @@ function vrgSetExpanded(frame, expanded) {
   const height = frame.querySelector('input[type="range"]');
   if (expanded) {
     if (vrgExpandedView) vrgSetExpanded(vrgExpandedView.frame, false);
-    const wrap = frame.querySelector('.vrg-viewport');
-    vrgExpandedView = { frame, opener: button, overflow: document.body.style.overflow,
-      left: wrap.scrollLeft, top: wrap.scrollTop };
+    vrgExpandedView = { frame, opener: button, overflow: document.body.style.overflow };
     frame.classList.add('vrg-expanded'); frame.setAttribute('role', 'dialog');
     frame.setAttribute('aria-modal', 'true'); frame.setAttribute('aria-label', 'Развёрнутый граф зависимостей — Escape для возврата');
     document.body.style.overflow = 'hidden';
@@ -9664,10 +9662,10 @@ function vrgSetExpanded(frame, expanded) {
   } else {
     if (vrgExpandedView?.frame !== frame) return;
     const previous = vrgExpandedView; vrgExpandedView = null;
+    const wrap = frame.querySelector('.vrg-viewport'), left = wrap.scrollLeft, top = wrap.scrollTop;
     frame.classList.remove('vrg-expanded'); frame.removeAttribute('role'); frame.removeAttribute('aria-modal'); frame.removeAttribute('aria-label');
     document.body.style.overflow = previous.overflow;
-    const wrap = frame.querySelector('.vrg-viewport');
-    if (!vrgNavigation.get(wrap)?.fit) { wrap.scrollLeft = previous.left; wrap.scrollTop = previous.top; }
+    if (!vrgNavigation.get(wrap)?.fit) { wrap.scrollLeft = left; wrap.scrollTop = top; }
     if (previous.opener?.isConnected) previous.opener.focus({ preventScroll: true });
   }
   button.textContent = expanded ? '⛶ Свернуть граф (Esc)' : '⛶ Развернуть граф';
@@ -9769,7 +9767,7 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     if (!drag || e.pointerId !== drag.id) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (Math.hypot(dx, dy) > 4) suppressClick = true;
-    if (drag.pan) { wrap.scrollLeft = drag.left - dx; wrap.scrollTop = drag.top - dy; }
+    if (drag.pan) { if (Math.hypot(dx, dy) > 4) state.fit = false; wrap.scrollLeft = drag.left - dx; wrap.scrollTop = drag.top - dy; }
   }, options);
   const finish = () => { drag = null; wrap.classList.remove('vrg-panning'); };
   svg.addEventListener('pointerup', finish, options);
@@ -9777,7 +9775,7 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
   svg.addEventListener('lostpointercapture', finish, options);
   svg.addEventListener('click', e => { if (suppressClick) { e.preventDefault(); e.stopImmediatePropagation(); suppressClick = false; } }, { ...options, capture: true });
   wrap.addEventListener('wheel', e => {
-    if (!e.altKey) return;
+    if (!e.altKey) { state.fit = false; return; }
     e.preventDefault(); state.fit = false; apply(state.scale + (e.deltaY < 0 ? .25 : -.25), true);
   }, { ...options, passive: false });
   state.resize = new ResizeObserver(() => {
