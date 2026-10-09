@@ -486,6 +486,56 @@ async function check(name, fn) {
     assert.equal(download.suggestedFilename(),'config.yaml');
     assert.equal(fs.readFileSync(await download.path(),'utf8'),await n.locator('#mihomoOutput').inputValue());
   });
+  for (const consumer of ['Builder','Studio']) await check('UX11 expanded graph height Escape and focus '+consumer, async () => {
+    const n = await fresh(); await n.setViewportSize({width:1280,height:720});
+    let id;
+    if (consumer === 'Builder') {
+      await n.locator('#mihomoInput').fill(Array.from({length:19},(_,i)=>link.replace('192.0.2.1','192.0.2.'+(i+1)).replace('#Owner-A','#N'+i)).join('\n'));
+      await build(n); await n.locator('#routingDiagnostics').evaluate(el=>el.open=true); await n.locator('#vrgPanel').evaluate(el=>el.open=true); id='vrgSvgWrap';
+    } else {
+      await n.locator('.tab',{hasText:'Config Studio'}).click();
+      await n.locator('#csImportInput').fill(await n.evaluate(doc=>jsyaml.dump(doc),graphDoc(100)));
+      await n.locator('#csParseBtn').click(); await n.locator('#csVrgPanel').evaluate(el=>el.open=true); id='csVrgSvgWrap';
+    }
+    const nav=n.locator('#'+id+'Nav'),wrap=n.locator('#'+id),height=nav.locator('input[type=range]'),expand=nav.locator('[data-vrg-action=expand]');
+    assert.equal(await expand.count(),1); assert.equal(await height.count(),1);
+    const original=await n.locator('#mihomoOutput').inputValue(),source=await n.locator('#csImportInput').inputValue();
+    await height.focus(); await n.keyboard.press('Home'); const small=await wrap.evaluate(el=>el.clientHeight);
+    await n.keyboard.press('End'); await n.waitForFunction(({id,small})=>document.getElementById(id).clientHeight>small+100,{id,small});
+    await nav.locator('[data-vrg-action=fit]').click();
+    assert.equal(await wrap.evaluate(el=>{const r=el.querySelector('svg').getBoundingClientRect();return r.width<=el.clientWidth+1&&r.height<=el.clientHeight+1;}),true);
+    await nav.locator('[data-vrg-action=reset]').click();
+    await wrap.scrollIntoViewIfNeeded(); const normalBox=await wrap.boundingBox();
+    await n.mouse.move(normalBox.x+10,normalBox.y+150);await n.mouse.down();await n.mouse.move(normalBox.x+10,normalBox.y+20,{steps:6});await n.mouse.up();
+    const panBefore=await wrap.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop}));assert.ok(panBefore.top>50);
+    const beforeHeight=await wrap.evaluate(el=>el.clientHeight),scale=await nav.locator('output').textContent();
+    await expand.click(); const frame=n.locator('.vrg-expanded');
+    assert.equal(await frame.count(),1); assert.equal(await frame.getAttribute('role'),'dialog');
+    assert.equal(await height.isDisabled(),true); assert.equal(await nav.locator('output').textContent(),scale);
+    const box=await frame.boundingBox(); assert.ok(box.width>=1278&&box.height>=718);
+    assert.equal(await n.evaluate(()=>document.body.style.overflow),'hidden');
+    await n.keyboard.press('Escape');assert.deepEqual(await wrap.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop})),panBefore);
+    await expand.click();
+    await nav.locator('[data-vrg-action=fit]').click();
+    await wrap.locator('g[tabindex]').first().focus(); await n.keyboard.press('Enter'); assert.equal(await frame.count(),1,'expanded after node Enter');
+    await nav.locator('[data-vrg-action=in]').click(); assert.equal(await frame.count(),1,'expanded after zoom');
+    assert.equal(await n.evaluate(consumer=>consumer==='Builder'?!!vrgFocusId:!!vrgStudioFocus.get(csCurrentDoc),consumer),true);
+    await nav.locator('[data-vrg-action=all]').click(); assert.equal(await frame.count(),1,'expanded after all'); await nav.locator('[data-vrg-action=fit]').click(); assert.equal(await frame.count(),1,'expanded after fit');
+    assert.equal(await wrap.evaluate(el=>{const r=el.querySelector('svg').getBoundingClientRect();return r.width<=el.clientWidth+1&&r.height<=el.clientHeight+1;}),true);
+    const last=frame.locator('g[tabindex]').last(); await last.focus(); await n.keyboard.press('Tab');
+    assert.equal(await nav.locator('button').first().evaluate(el=>el===document.activeElement),true,'Tab wraps to toolbar');
+    await n.keyboard.press('Shift+Tab'); assert.equal(await last.evaluate(el=>el===document.activeElement),true,'Shift Tab wraps to node');
+    await screenshot(n,'.vrg-expanded','expanded-'+consumer.toLowerCase());
+    await n.keyboard.press('Escape'); assert.equal(await n.locator('.vrg-expanded').count(),0);
+    assert.equal(await expand.evaluate(el=>el===document.activeElement),true,'Escape restores expand focus'); assert.equal(await height.isDisabled(),false);
+    assert.equal(await wrap.evaluate(el=>el.clientHeight),beforeHeight);
+    for (let i=0;i<4;i++){await expand.click();await n.keyboard.press('Escape');}
+    for(const width of [320,390]){await n.setViewportSize({width,height:740});await expand.click();await nav.locator('[data-vrg-action=fit]').click();assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);assert.equal(await wrap.evaluate(el=>{const r=el.querySelector('svg').getBoundingClientRect();return r.width<=el.clientWidth+1&&r.height<=el.clientHeight+1;}),true);await n.keyboard.press('Escape');}
+    assert.equal(await n.evaluate(()=>document.body.style.overflow),'');
+    assert.equal(await n.locator('#mihomoOutput').inputValue(),original); assert.equal(await n.locator('#csImportInput').inputValue(),source);
+    await nav.locator('[data-vrg-action=size-reset]').click();
+    if(consumer==='Studio'){await expand.click();await n.evaluate(()=>csClearStudio());assert.equal(await n.locator('.vrg-expanded').count(),0);assert.equal(await n.evaluate(()=>document.body.style.overflow),'');}
+  });
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });
   await browser.close();
   if (process.env.OWNER_UX_RESULTS) fs.writeFileSync(process.env.OWNER_UX_RESULTS, JSON.stringify({ engine, root, passed, failed, results }, null, 2));

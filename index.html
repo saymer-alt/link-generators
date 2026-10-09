@@ -249,6 +249,13 @@
   .builder-workspace h2{font-size:1.1rem;margin:0 0 8px;scroll-margin-top:180px}
   .workspace-directory{display:flex;flex-wrap:wrap;gap:10px;padding:12px 0}
   .workspace-directory a{flex:1 1 240px;min-width:0;padding:6px;overflow-wrap:anywhere}
+  .vrg-frame{min-width:0}
+  .vrg-viewport{resize:vertical;min-height:120px}
+  .vrg-height-control{display:flex;gap:6px;align-items:center;flex:0 1 250px;min-width:0;margin:0}
+  .vrg-height-control input{min-width:70px;max-width:130px;padding:0}
+  .vrg-frame.vrg-expanded{position:fixed;inset:0;z-index:1100;padding:12px;background:var(--face);display:flex;flex-direction:column;gap:6px}
+  .vrg-expanded .vrg-nav{flex:0 0 auto;margin:0;max-height:45vh;overflow:auto}
+  .vrg-expanded .vrg-viewport{flex:1 1 auto;height:auto!important;min-height:0;max-height:none!important;resize:none;margin:0!important}
 </style>
 </head>
 <body>
@@ -9057,7 +9064,7 @@ function csClearStudio() {
   const csVrg = document.getElementById('csVrgSvgWrap');
   if (csVrg) { vrgDispose(csVrg, true); csVrg.textContent = ''; }
   const csNav = document.getElementById('csVrgSvgWrapNav');
-  if (csNav) csNav.querySelectorAll('button').forEach(b => { b.disabled = true; });
+  if (csNav) csNav.querySelectorAll('button,input').forEach(b => { b.disabled = true; });
   const rbBtn = document.getElementById('csRestoreBtn');
   if (rbBtn) rbBtn.style.display = 'none';
   const rbOut = document.getElementById('csRestoreOut');
@@ -9639,40 +9646,84 @@ const VRG_NS = 'http://www.w3.org/2000/svg';
 let vrgFocusId = '';
 const vrgStudioFocus = new WeakMap();
 const vrgNavigation = new WeakMap();
+let vrgExpandedView = null;
+
+function vrgSetExpanded(frame, expanded) {
+  if (!frame) return;
+  const button = frame.querySelector('[data-vrg-action="expand"]');
+  const height = frame.querySelector('input[type="range"]');
+  if (expanded) {
+    if (vrgExpandedView) vrgSetExpanded(vrgExpandedView.frame, false);
+    const wrap = frame.querySelector('.vrg-viewport');
+    vrgExpandedView = { frame, opener: button, overflow: document.body.style.overflow,
+      left: wrap.scrollLeft, top: wrap.scrollTop };
+    frame.classList.add('vrg-expanded'); frame.setAttribute('role', 'dialog');
+    frame.setAttribute('aria-modal', 'true'); frame.setAttribute('aria-label', 'Развёрнутый граф зависимостей — Escape для возврата');
+    document.body.style.overflow = 'hidden';
+    button.focus({ preventScroll: true });
+  } else {
+    if (vrgExpandedView?.frame !== frame) return;
+    const previous = vrgExpandedView; vrgExpandedView = null;
+    frame.classList.remove('vrg-expanded'); frame.removeAttribute('role'); frame.removeAttribute('aria-modal'); frame.removeAttribute('aria-label');
+    document.body.style.overflow = previous.overflow;
+    const wrap = frame.querySelector('.vrg-viewport');
+    if (!vrgNavigation.get(wrap)?.fit) { wrap.scrollLeft = previous.left; wrap.scrollTop = previous.top; }
+    if (previous.opener?.isConnected) previous.opener.focus({ preventScroll: true });
+  }
+  button.textContent = expanded ? '⛶ Свернуть граф (Esc)' : '⛶ Развернуть граф';
+  button.setAttribute('aria-label', expanded ? 'Свернуть граф' : 'Развернуть граф');
+  button.setAttribute('aria-expanded', String(expanded));
+  if (height) height.disabled = expanded;
+}
 
 function vrgDispose(wrap, forget) {
   const old = vrgNavigation.get(wrap);
-  if (old) { old.abort.abort(); old.resize.disconnect(); }
-  if (forget) vrgNavigation.delete(wrap);
+  if (old) { old.abort.abort(); old.resize.disconnect(); cancelAnimationFrame(old.resizeFrame); }
+  if (forget) {
+    vrgSetExpanded(wrap.closest('.vrg-frame'), false);
+    vrgNavigation.delete(wrap);
+  }
 }
 // Одна навигация для обоих consumers; масштаб меняет размеры SVG, pan —
 // scroll offsets. CDG/layout и YAML не пересчитываются на pointermove.
 function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
   const previous = vrgNavigation.get(wrap);
+  let frame = wrap.closest('.vrg-frame');
+  if (!frame) { frame = document.createElement('div'); frame.className = 'vrg-frame'; wrap.before(frame); frame.appendChild(wrap); }
   let nav = document.getElementById(wrap.id + 'Nav');
   if (!nav) {
     nav = document.createElement('div'); nav.id = wrap.id + 'Nav'; nav.className = 'vrg-nav';
     nav.setAttribute('role', 'group'); nav.setAttribute('aria-label', 'Навигация по графу');
     for (const [action, label, aria] of [['out', '−', 'Уменьшить масштаб'], ['in', '+', 'Увеличить масштаб'],
       ['reset', '100%', 'Исходный масштаб 100%'], ['fit', 'Вписать граф', 'Вписать весь граф в область'],
-      ['all', 'Весь граф', 'Сбросить фокус графа']]) {
+      ['all', 'Весь граф', 'Сбросить фокус графа'], ['expand', '⛶ Развернуть граф', 'Развернуть граф'],
+      ['size-reset', 'Сбросить размер', 'Вернуть исходную высоту области графа']]) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-gray';
       b.textContent = label; b.dataset.vrgAction = action; b.setAttribute('aria-label', aria); nav.appendChild(b);
+      if (action === 'expand') b.setAttribute('aria-expanded', 'false');
     }
     const indicator = document.createElement('output'); indicator.className = 'vrg-scale';
     indicator.setAttribute('aria-label', 'Текущий масштаб графа'); indicator.setAttribute('aria-live', 'polite');
     nav.appendChild(indicator);
+    const label = document.createElement('label'); label.className = 'vrg-height-control'; label.appendChild(document.createTextNode('Высота:'));
+    const height = document.createElement('input'); height.type = 'range'; height.min = '120'; height.max = '900'; height.step = '20';
+    height.setAttribute('aria-label', 'Высота области графа'); label.appendChild(height); nav.appendChild(label);
     const hint = document.createElement('span'); hint.className = 'hint';
-    hint.textContent = 'Перетаскивайте пустую область · Alt + колесо: масштаб · все данные доступны в текстовой альтернативе';
+    hint.textContent = 'Пустая область: перетаскивание · Alt + колесо: масштаб · Escape: свернуть · граф зависимостей, не runtime-путь; текстовая версия доступна под графом';
     nav.appendChild(hint); wrap.before(nav);
   }
-  nav.querySelectorAll('button').forEach(b => { b.disabled = false; });
+  nav.querySelectorAll('button,input').forEach(b => { b.disabled = false; });
+  nav.querySelector('input[type="range"]').disabled = frame.classList.contains('vrg-expanded');
   wrap.classList.add('vrg-viewport'); wrap.setAttribute('role', 'region');
+  wrap.style.maxHeight = '85vh';
   const abort = new AbortController(), options = { signal: abort.signal };
   const state = { doc, abort, resize: null, scale: previous?.doc === doc ? previous.scale : 1,
-    fit: previous?.doc === doc ? previous.fit : true };
+    fit: previous?.doc === doc ? previous.fit : true, height: previous?.height ?? null, appliedHeight: wrap.style.height };
   const viewport = () => {
-    wrap.style.height = Math.min(view.height, Math.max(120, window.innerHeight * (wrap.id === 'vrgSvgWrap' ? .7 : .5))) + 'px';
+    const height = state.height === null ? Math.min(view.height, Math.max(120, window.innerHeight * (wrap.id === 'vrgSvgWrap' ? .7 : .5))) : Math.max(120, Math.min(state.height, innerHeight * .85));
+    if (wrap.style.height !== height + 'px') wrap.style.height = height + 'px';
+    state.appliedHeight = wrap.style.height;
+    nav.querySelector('input[type="range"]').value = String(height);
   };
   const apply = (scale, center) => {
     const old = state.scale;
@@ -9688,10 +9739,23 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
   nav.addEventListener('click', e => {
     const action = e.target.closest('[data-vrg-action]')?.dataset.vrgAction;
     if (!action) return;
+    if (action === 'expand') { vrgSetExpanded(frame, !frame.classList.contains('vrg-expanded')); return; }
+    if (action === 'size-reset') { state.height = null; viewport(); if (state.fit) fit(); return; }
     if (action === 'all') { resetFocus(); return; }
     state.fit = action === 'fit';
     if (state.fit) fit();
     else apply(action === 'reset' ? 1 : state.scale + (action === 'in' ? .25 : -.25), true);
+  }, options);
+  nav.querySelector('input[type="range"]').addEventListener('input', e => { state.height = Number(e.target.value); viewport(); if (state.fit) fit(); }, options);
+  frame.addEventListener('keydown', e => {
+    if (!frame.classList.contains('vrg-expanded')) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); vrgSetExpanded(frame, false); }
+    if (e.key === 'Tab') {
+      const controls = Array.from(frame.querySelectorAll('button:enabled,input:enabled,[tabindex="0"]')).filter(el => el.getClientRects().length);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
   }, options);
   let drag = null, suppressClick = false;
   svg.addEventListener('pointerdown', e => {
@@ -9716,7 +9780,13 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     if (!e.altKey) return;
     e.preventDefault(); state.fit = false; apply(state.scale + (e.deltaY < 0 ? .25 : -.25), true);
   }, { ...options, passive: false });
-  state.resize = new ResizeObserver(() => { viewport(); if (state.fit && wrap.clientWidth) fit(); });
+  state.resize = new ResizeObserver(() => {
+    cancelAnimationFrame(state.resizeFrame);
+    state.resizeFrame = requestAnimationFrame(() => {
+    if (!frame.classList.contains('vrg-expanded') && wrap.style.height !== state.appliedHeight) state.height = parseFloat(wrap.style.height);
+    viewport(); if (state.fit && wrap.clientWidth) fit();
+    });
+  });
   state.resize.observe(wrap);
   vrgNavigation.set(wrap, state);
   viewport();
@@ -9735,10 +9805,10 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
   // полей маскируются и при повторении в имени/ID). Краскция ДО усечения —
   // обрезанный секрет не матчится и утёк бы частично.
   const R = typeof redact === 'function' ? redact : (s => csRedactText(s, doc));
-  vrgDispose(wrap);
+  vrgDispose(wrap, !doc);
   wrap.textContent = '';
   const nav = document.getElementById(containerId + 'Nav');
-  if (nav) nav.querySelectorAll('button').forEach(b => { b.disabled = true; });
+  if (nav) nav.querySelectorAll('button,input').forEach(b => { b.disabled = true; });
   const status = document.getElementById(containerId === 'vrgSvgWrap' ? 'vrgStatus' : containerId + 'Status');
   if (!doc) {
     vrgNavigation.delete(wrap);
@@ -9748,7 +9818,7 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
   }
   let graph;
   try { graph = cdgBuildGraph(doc); } catch (e) {
-    vrgNavigation.delete(wrap);
+    vrgDispose(wrap, true);
     if (status) status.textContent = '✖ Не удалось построить граф: ' + String(e && e.message ? e.message : e).slice(0, 120);
     if (textAltId) document.getElementById(textAltId).textContent = '';
     return;
