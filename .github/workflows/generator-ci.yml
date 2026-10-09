@@ -278,6 +278,9 @@ jobs:
       - name: Independent boundary regression
         run: node tests/independent-boundaries-browser.cjs
 
+      - name: Independent reverse profile integrity
+        run: node tests/independent-reverse-profiles-browser.cjs
+
       - name: Security and download end-to-end regression (CODEX-02)
         run: node tests/security-stress-browser.cjs
 
@@ -381,6 +384,12 @@ jobs:
 
       - name: Config Studio export compat (#178)
         run: node tests/config-studio-compat.cjs
+
+      - name: Owner reverse journey against real Mihomo
+        run: node tests/qa-reverse-integration.cjs
+
+      - name: Reverse gateway profile parity
+        run: node tests/independent-reverse-profiles-browser.cjs
 
       - name: Physical Topology per-node artifacts compat (#187)
         run: node tests/per-node-mihomo-compat.cjs

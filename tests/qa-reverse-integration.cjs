@@ -183,6 +183,16 @@ function makeWgFiles() {
   assert.equal(nC, nA, 'YAML Reverse: Restore → Build байт-эквивалентен (x-hwid нормализован)');
   ok('ФАЗА C: YAML Reverse Build byte-parity для 8-подписочного конфига');
 
+  if (process.env.MIHOMO_BIN) {
+    const { execFileSync } = require('node:child_process');
+    for (const [name, text] of [['modified', yamlB], ['reversed', yamlC]]) {
+      const file = path.join(outDir, 'core-' + name + '.yaml');
+      fs.writeFileSync(file, text);
+      execFileSync(process.env.MIHOMO_BIN, ['-t', '-d', outDir, '-f', file], {stdio:'pipe',timeout:20000});
+    }
+    ok('real Mihomo -t: modified 8+7 and reversed output');
+  }
+
   assert.deepEqual(errors, [], 'нет pageerror: ' + errors.join(' | '));
   console.log('PASS qa-reverse-integration: ' + passed + ' checks');
   await browser.close();
