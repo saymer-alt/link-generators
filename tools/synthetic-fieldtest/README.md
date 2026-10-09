@@ -19,3 +19,16 @@
 Контролируемая случайность: synthetic keys/inputs фиксированы seed; browser HWID остаётся случайным штатным полем. Byte parity нормализует только hex HWID строки; результаты JSON/логи не содержат ключей или полных YAML. Hash comparisons не печатают project/secret values при ошибке.
 
 Полный сценарий 6+8 →8+7, stale/fault/rapid-action guards и secret editing дополнительно выполняются existing suites qa-reverse-integration, independent-product-browser, independent-boundaries-browser, cs20-ux-browser. Основная suite не выдаёт UNKNOWN/UNSUPPORTED Reverse за parity и не обходит guards.
+
+## Финальная браузерная матрица
+
+Установите браузеры Playwright во внешний cache и зависимости во внешний test runtime (production package.json не нужен). Задайте NODE_PATH, JS_YAML_PATH и PLAYWRIGHT_BROWSERS_PATH. Выполните:
+
+```powershell
+node tools/synthetic-fieldtest/browser-matrix.cjs
+# Для синхронизированного кандидата с тем же harness:
+$env:AUDIT_ROOT = (Resolve-Path ../v111-final-candidate).Path
+node tools/synthetic-fieldtest/browser-matrix.cjs fieldtest-private/results/browser-candidate
+```
+
+Chromium, Edge, Firefox и WebKit запускаются независимо. Результаты содержат фактическую версию и PASS/FAIL/NOT RUN; проекты фикстур временные, output содержит только metadata/logs. Настоящие клики проверяют 6+8 →8+7, Save/reload/Load Cancel/Confirm, изменения, Studio, Reverse Cancel/Confirm/Undo и 6 разделов на 12 ширинах. Keyboard и 24px targets — отдельные проверки, не полный accessibility audit. DNS проверяется, если target checkout содержит #207. Не публиковать fieldtest-private и не использовать секреты владельца как фикстуры.
