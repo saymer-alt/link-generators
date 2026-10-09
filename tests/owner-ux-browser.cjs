@@ -49,13 +49,17 @@ async function check(name, fn) {
     const ids = ['wgDialerAdvanced', 'routingDiagnostics', 'ruleProviderExplorer',
       'domainCoveragePanel', 'physicalTopologyPanel', 'ptRuntimePanel'];
     for (const id of ids) {
-      const states = await disclosure.locator('#' + id).evaluate(d => {
+      const states = await disclosure.locator('#' + id).evaluate(async d => {
         const marker = d.querySelector(':scope > summary > .disclosure-chevron');
         if (!marker) return null;
         const original = d.open;
+        // Chromium may defer native <details> rendering to the next frame.
+        // Observe the painted state instead of a same-task style snapshot.
         d.open = false;
+        await new Promise(resolve => requestAnimationFrame(resolve));
         const closed = getComputedStyle(marker).transform;
         d.open = true;
+        await new Promise(resolve => requestAnimationFrame(resolve));
         const opened = getComputedStyle(marker).transform;
         d.open = original;
         return { closed, opened, hiddenFromScreenReader: marker.getAttribute('aria-hidden') };
