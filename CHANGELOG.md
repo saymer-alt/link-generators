@@ -6,6 +6,8 @@
 
 ### Added
 
+- **Evening Chaos audit (v1.11-dev):** атомарный rollback динамических карточек при повторном отказе рендера; устаревшие Studio/runtime file imports не возвращаются после Clear/нового Parse/import; runtime fetch ограничен 8 секундами; Reset Studio очищает несохранённые поля; поздний отказ старого Build не сбрасывает новую успешную сборку. Регрессии: barriers, seeded metamorphic checks и loopback-only Mihomo lab, без TUN и production-сети. Отчёт: docs/research/V1.11-EVENING-CHAOS-AUDIT.md.
+
 - **Final release hardening (v1.11-dev):** восстановление имени DPR SELECT-группы из поддерживаемого YAML; сводка Studio учитывает именно `dns.enable: true`; устранён overflow длинных native controls в WebKit (DPR/Studio/WG), минимальные touch targets 24 px. Offline click journey 6+8 → 8+7, Save/Load/Cancel/Confirm, Reverse/Undo и 12 ширин; отдельная матрица Chromium/Edge/Firefox/WebKit. Отчёт: docs/research/V1.11-FINAL-RELEASE-READINESS.md. Релиз не опубликован; DNS-кандидат #207 требует отдельного OWNER GO.
 
 - **Synthetic field acceptance (v1.11-dev):** локальная воспроизводимая лаборатория, 29 positive /20 negative scenarios, Project/Reverse/edits/Undo и реальные Mihomo31/32 CI parse checks. Reverse блокирует WG dialer на непереносимый direct node; web validator отклоняет invalid emitted WG IPv4 и flat endpoint ports вне1..65535. Generated runtime не изменён; network/handshake не выполняются. Отчёт: docs/research/V1.11-REAL-FIXTURE-ACCEPTANCE.md.
