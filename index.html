@@ -141,9 +141,6 @@
   .advanced-panel{margin-top:14px;padding:10px 12px;border:1px solid var(--border);border-radius:0;background:rgba(255,255,255,.35)}
   .advanced-panel summary{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:bold;color:var(--info);cursor:pointer;list-style:none;padding:2px 0}
   .advanced-panel summary::-webkit-details-marker{display:none}
-  /* Native details state controls decorative disclosure glyphs, including nested panels. */
-  details > summary > .disclosure-chevron{display:inline-block;flex:0 0 auto;transform-origin:center;transform:rotate(0deg)}
-  details[open] > summary > .disclosure-chevron{transform:rotate(90deg)}
   .site-footer{width:min(1520px,100%);margin:18px auto 26px;padding:12px 14px;border:1px solid var(--border);background:var(--face);font-size:.8rem;color:var(--muted)}
   @media (min-width:2100px){.site-footer{width:min(1600px,100%)}}
   .site-footer-brand{font-weight:bold;color:var(--text)}
@@ -710,7 +707,7 @@
       <div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
       <div id="perProxyAdvancedPanel" class="advanced-panel">
         <details id="perProxyAdvancedDetails">
-          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Расширенные настройки</span></summary>
+          <summary id="perProxyAdvancedSummary"><span id="perProxyDisclosureMarker" class="disclosure-chevron" aria-hidden="true">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Расширенные настройки</span></summary>
           <div class="advanced-subsection">
             <div class="advanced-subsection-title">⚙ Расширенный TUN stack</div>
             <div class="advanced-stack-control">
@@ -10679,17 +10676,16 @@ initWgUpload();
 document.getElementById('cfgAutoWhitelist').addEventListener('change', onWhitelistChange);
 document.getElementById('cfgProfile').addEventListener('change', onProfileChange);
 
-// ADVANCED-спойлер: маркер раскрытия. Раскрытие не включает master,
-// закрытие не сбрасывает настройки — состояние master/children отдельно.
+// Decorative disclosure chevrons follow native <details> state consistently.
+// This does not change master checkbox, children or routing state.
 (function () {
-  const d = document.getElementById('perProxyAdvancedDetails');
-  const marker = document.getElementById('perProxyDisclosureMarker');
-  if (!d || !marker) return;
-  // маркер — отдельный span: badge-разметка summary не разрушается,
-  // повторные open/close не накапливают пробелы
-  const sync = () => { marker.textContent = d.open ? '▼' : '▶'; };
-  d.addEventListener('toggle', sync);
-  sync();
+  for (const d of document.querySelectorAll('details')) {
+    const marker = d.querySelector(':scope > summary > .disclosure-chevron');
+    if (!marker) continue;
+    const sync = () => { marker.textContent = d.open ? '▼' : '▶'; };
+    d.addEventListener('toggle', sync);
+    sync();
+  }
 })();
 document.getElementById('vpsDnsEnabled').addEventListener('change', updateVpsDnsFields);
 document.getElementById('cfgTun').addEventListener('change', updateMihomoOptionStates);
