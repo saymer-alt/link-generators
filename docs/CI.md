@@ -92,3 +92,6 @@ Generator CI не заменяет provenance workflow, а дополняет е
 4. owner явно запросил повторную полевую проверку.
 
 Green run другого SHA не переносится на текущий SHA. Перед merge/release нужно сверять checks именно текущего audited head / production candidate.
+## Owner Experience Gate v1.0
+
+Реестр обнаруженных владельцем UX-дефектов: `tests/fixtures/owner-experience-regressions.json`; проверка привязки реальных сценариев к CI: `python3 tools/owner-experience-gate.py`. Она не заменяет Playwright: фактические проверки `tests/owner-ux-browser.cjs` работают в Chromium/Firefox/WebKit, а `tests/final-release-browser.cjs` проверяет полный release UI journey. Критерии ручной приёмки, области `UNKNOWN/NOT RUN` и отдельное требование Owner GO описаны в [OWNER-EXPERIENCE-GATE.md](OWNER-EXPERIENCE-GATE.md). Каждая подтверждённая новая UX-ошибка должна получить воспроизведение на baseline и постоянный сценарий до выпуска следующего релиза.
