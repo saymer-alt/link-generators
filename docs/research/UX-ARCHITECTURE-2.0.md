@@ -32,4 +32,6 @@ Owner Experience Gate v1.0, UX-01…09 сохраняются. Новые UX-ID:
 
 ### Проверки первой части (навигация)
 
+Первый CI37983702692: пять jobs PASS, browser FAIL на устаревшем требовании WebUI→DeviceModel→ExcludeFilter одной карточки. Новая проверка сохраняет DeviceModel→ExcludeFilter и явно требует routing workspace для устройства/фильтра, options workspace для dashboard. Функциональные assertions не ослаблены; исходный failure сохранён, rerun не выполнялся.
+
 UX-10: исходный89a0465 —0/4 FAIL; candidate —4/4 PASS. Полный Owner UX suite —33/33 PASS каждый Chromium/Firefox/WebKit (включая UX-01…09). Desktop1280×720/1366×768/1920×1080, mobile320/390 и640×360 как reduced-layout viewport для200% масштаба1280px; реальное изменение browser chrome zoom не заявляется. Навигация проверяет фокус/видимость, отсутствие запросов и неизменность project/YAML/fingerprint/generation. YAML byte parity89a0465→candidate —10/10 ALL PARITY. Основной browser suite PASS, runtime63 PASS, Owner Gate registry PASS. Скриншот навигации проверен визуально. Существующие security/generation handlers не менялись; новая кнопка скачивания использует ту же VALID границу, что Copy.

@@ -284,14 +284,17 @@ async function listedCount(page) {
   assert.match(await upperStats(page), /исключается: 0/);
   ok('live-сводки: 0/1/3/union/Снять все/правка фильтра — обе сводки согласованы');
 
-  // === 11. Device Model DOM position ===
+  // === 11. UX Architecture 2.0: device/filter grouped with subscriptions ===
   const pos = await page.evaluate(() => {
     const t = id => document.getElementById(id).getBoundingClientRect().top;
-    return { webUi: t('webUiRow'), dm: t('deviceModelRow'), ex: t('excludeFilterRow') };
+    return { dm: t('deviceModelRow'), ex: t('excludeFilterRow'),
+      subscriptions: document.getElementById('deviceModelRow').closest('section').getAttribute('aria-labelledby'),
+      dashboard: document.getElementById('webUiRow').closest('section').getAttribute('aria-labelledby') };
   });
-  assert.ok(pos.webUi < pos.dm && pos.dm < pos.ex, 'порядок Web UI → Device Model → Exclude Filter: ' + JSON.stringify(pos));
+  assert.ok(pos.dm < pos.ex, 'Device Model перед Exclude Filter: ' + JSON.stringify(pos));
+  assert.equal(pos.subscriptions, 'ux-routing'); assert.equal(pos.dashboard, 'ux-options');
   assert.equal(await page.evaluate(() => document.getElementById('deviceModelRow').style.display), '', 'Device Model виден и в Sub Mode OFF');
-  ok('Device Model: webUiRow < deviceModelRow < excludeFilterRow');
+  ok('Device Model/Exclude Filter вместе в маршрутизации; Web UI в дополнительных параметрах');
 
   // === 12. mobile: панель списка без горизонтального overflow ===
   for (const w of [360, 412, 480]) {
