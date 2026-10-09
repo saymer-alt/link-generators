@@ -553,7 +553,7 @@ async function check(name, fn) {
     const chooserPromise=n.waitForEvent('filechooser'); await n.locator('#rtUploadBtn').click();
     await (await chooserPromise).setFiles({name:'runtime.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({providers:{LocalFixture:{proxies:runtimeNames.map(name=>({name,type:'Vless',alive:true}))}}}))});
     const list=n.locator('#subscriptionPreviewNames'); assert.equal(await n.locator('#cfgServerList').isChecked(),false); await n.waitForFunction(()=>document.querySelectorAll('#subscriptionPreviewNames .sub-list-item').length===46);
-    const before=await n.evaluate(()=>({names:subscriptionListNames,origins:serverListNameOrigins,selected:[...subscriptionSelection]}));
+    const before=await n.evaluate(()=>({names:subscriptionListNames,origins:[...serverListNameOrigins],selected:[...subscriptionSelection]}));
     assert.equal(await list.locator('.sub-list-item .hint').count(),46);
     for(const width of [1280,1366,1920,320,390,640]) {
       await n.setViewportSize({width,height:740}); await list.scrollIntoViewIfNeeded();
@@ -561,7 +561,7 @@ async function check(name, fn) {
       assert.ok(geometry.padding>=10,'badge needs inner padding'); assert.ok(geometry.scroll<=geometry.width+1,'long name causes horizontal scrolling'); assert.ok(geometry.badge<=geometry.width-8); assert.ok(geometry.name<=geometry.width-8); assert.equal(geometry.overflow,true);
       await list.evaluate(el=>el.scrollTop=el.scrollHeight); await n.waitForFunction(()=>document.getElementById('subscriptionPreviewNames').scrollTop>0);
     }
-    assert.deepEqual(await n.evaluate(()=>({names:subscriptionListNames,origins:serverListNameOrigins,selected:[...subscriptionSelection]})),before);
+    assert.deepEqual(await n.evaluate(()=>({names:subscriptionListNames,origins:[...serverListNameOrigins],selected:[...subscriptionSelection]})),before);
     await n.locator('#subListSearch').fill('Runtime-44'); assert.equal(await list.locator('.sub-list-item').count(),1);
     const box=list.locator('input'); await box.check(); assert.equal(await n.evaluate(()=>subscriptionSelection.has('Runtime-44')),true);
     await box.uncheck(); await n.locator('#subListSearch').fill(''); assert.equal(await list.locator('.sub-list-item').count(),46);

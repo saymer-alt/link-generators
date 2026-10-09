@@ -56,3 +56,11 @@ PR: [230](https://github.com/saymer-alt/link-generators/pull/230) — навиг
 Review correction: Escape сохраняет текущий pan развёрнутой области; фактическое перетаскивание/обычная прокрутка снимают auto-Fit, чтобы resize не сбрасывал позицию. Browser UX-11 проверяет pan внутри expanded, затем точные offsets после Escape. Справка графа размещена внутри светлого wrapper quick-start.
 
 Каталог инструментов открывает runtime importer независимо от checkbox просмотра подписок: только раскрытие контейнера, без запроса, Build или изменения cfgServerList.
+
+### Инвентаризация и границы видимости
+
+Основные сценарии: WARP links; новый Builder из proxy/URL/WG/AWG; deployment profiles; ordered policy routing и Tiered; subscription/runtime reconciliation и исключения; диагностика статического Build; импорт/редактирование/экспорт Studio; экспериментальная topology/evidence; Save/Load проекта. Частые действия заканчиваются YAML в Quick Start. DNS audit, coverage и provider explorer объясняют уже созданный документ. Runtime importer читает имена, topology/evidence моделируют отдельный экспериментальный workflow.
+
+Дублированные независимые формы не создаются. Builder и Studio намеренно сохраняют отдельные input/document lifecycle; они не взаимозаменяемы. Каталог содержит ссылки на существующие controls. Validation/ошибки Build/STALE/compatibility, предупреждения о secret/controller/CORS, ограничениях AWG/MIPS и активных исключениях остаются в исходных функциональных блоках. Навигация не скрывает ошибку результата и не отменяет активную настройку.
+
+Названия пяти областей и короткие вводные объясняют назначение инструментов; технические названия сохранены для сопоставления с Mihomo. Дальнейший hide-mode требует списка активных overrides и проверок предупреждений во всех режимах. CSS resize не является фактическим browser chrome zoom; проверен reduced layout. Реальные URL/controllers не использовались.
