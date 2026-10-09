@@ -1,96 +1,43 @@
-# Reverse Build Recoverability Map (OWNER-REVERSE-01, PHASE A)
+# Reverse Build: фактическая карта обратимости
 
-Дата: 2026-10-09. Базис: main `7f62e0f` (NIGHT-MEGA-01 смержен; PR #207 — открытый v1.11 CANDIDATE, не является базисом). Версии-источники семантики: web4core `src/core/mihomo.js` (ветка `link-generators`), `index.html` buildMihomo() (строки ~9207–9470).
+Проверено 2026-10-09, main после #218 (`00c4c334`). Эта карта заменяет проектные обещания PHASE A. Источник: `index.html`, `rbYamlToProject`, `rbWgProxyToBean`, `rbCollectProject`, `rbWriteProject`.
 
-Evidence-метки: SOURCE-PROVEN (прочитано в коде указанных функций) / INFERRED / UNKNOWN. Словарь состояний — CONSTITUTION.md §3: `EXACT` (достоверно восстановимо), `DERIVED` (восстановимо с нормализацией), `AMBIGUOUS` (несколько исходных состояний дают один YAML), `MISSING` (информация уничтожена Build), `UNSUPPORTED` (в Builder нет представления), `CONFLICT` (восстановленные данные противоречат друг другу).
+## Две разные гарантии
 
-## 0. Главный вывод
+`.lgproject.json` сохраняет поддерживаемое состояние Builder: исходный текст источников, WG/AWG beans и имена файлов, опции, выбранные серверы, dialer, DPR/Tiered и passthrough. Это предпочтительный путь продолжения работы; это не снимок работающего Mihomo, UI-фокуса или всех состояний вкладки.
 
-**Полный обратный цикл возможен только через проектный файл (`.lgproject.json`).** Build в режиме URL-подписок (Sub Mode ON) сохраняет в YAML все входы (URL провайдеров, порядок, опции); в режиме развёрнутых подписок (Sub Mode OFF) содержимое подписок разворачивается fetch'ем, и **оригинальные URL в YAML не попадают никогда** — это принципиальная потеря, которую Reverse Build обязан показывать честно (`MISSING`), а не заполнять догадками (CONSTITUTION §3).
+YAML Reverse восстанавливает только доступные признаки. **Новый Build генерирует конфигурацию по модели Builder; произвольные исходные правила, группы и вложенные настройки автоматически не накладываются.** EXACT finding отдельного WG-узла не доказывает parity всего документа.
 
-## 1. Прямой путь (что читает buildMihomo)
+## Реализованная карта
 
-```text
-Builder UI
-  ├─ mihomoInput (ссылки/URL, порядок значим)
-  ├─ whitelistInput (только при cfgAutoWhitelist; разворачивается fetch'ем)
-  ├─ cfgSubMode, excludeFilterInput + server-list выбор, deviceModelInput + deviceHwid
-  ├─ wgProfiles[]: {id, filename, bean (parseWireGuardConf), mode: direct|proxy, target}
-  │   └─ wgEngineBeans() = applyAwgStabilityPolicy(wgProfileBuildBean(p)) — dialerProxy в клоне
-  ├─ wgCustomDns (общее поле DNS всех WG), cfgAwgKeepalive/cfgAwgRtDiag
-  ├─ cfgTun/cfgSocks/cfgTunMips/cfgTunStackAdvanced/cfgTunStackEx/cfgPerProxy{Master,Tun,Socks}
-  ├─ cfgProfile (router|vps-local|vps-gateway), cfgLan, cfgAutoWhitelist
-  ├─ cfgWebUI + webUiSelect + webUiCustomUrl
-  ├─ pingSelect/pingCustomUrl (urlTest), realityModernInput
-  ├─ cfgPolicyRouting + policy-cards (collectPolicyRouting: {name, domains, target})
-  ├─ cfgTieredFailover + tier-cards (readTierCards: {name, strategy, members})
-  ├─ wgDialerInput/wgDialerMembers/wgDialerProviders (dialer-ГРУППА)
-  └─ options → web4core.buildFromRequest → пост-патчи (injectWgDns → applyProviderDialerTargets
-      → applyTieredFailover → applyDeploymentProfile(vps) → allow-lan → vps-controller-bind)
-```
+| Область | Что делает код | Ограничение / статус |
+|---|---|---|
+| HTTP proxy-providers | URL в порядке ключей → mainInput, Sub ON; имя пересчитывается | Изменённое имя → CONFLICT; произвольные provider headers/intervals не восстанавливаются |
+| Sub OFF / AWL fallback | Исходные URL неизвестны | MISSING; не выдумываются по узлам |
+| Прямые не-WG узлы | Passthrough `proxies:direct` и исходная модель | UNSUPPORTED: link-emitter отсутствует, новый Build их не переносит |
+| WG/AWG | Из известных outbound полей восстанавливаются bean, mode и dialer target | Ключи функциональны; filename UNKNOWN, форматирование NOT RECOVERABLE; raw keepalive-диапазон может быть потерян |
+| WG DNS | Одно согласованное значение → общее поле | Разные значения → CONFLICT; точность неизвестных вложенных полей не обещается |
+| Deployment | Gateway: TUN enable + auto-route:false + loopback controller; прежний DNS marker также поддержан. Local: нет enabled TUN + loopback controller | DERIVED; похожий произвольный YAML не доказывает намерение владельца |
+| Gateway device / MTU / DNS | Переносятся в соответствующие поля; DNS включён только при enable:true | Byte parity проверена для generated fixtures DNS OFF/ON и custom device/MTU/resolvers |
+| TUN / stack / socks / allow-lan | enable:true, известный stack, порты, allow-lan | enable:false с device не включает TUN; произвольные listeners не превращаются в Per-Proxy controls |
+| Dashboard | metacubexd / yacd / zashboard либо custom URL | Признаки пути не доказывают произвольное содержимое UI |
+| Health check | Единый URL → preset либо `__custom__` | Несколько URL → CONFLICT |
+| Exclude | Единое выражение → ручное поле | Manual/selected split неизвестен; разные выражения → CONFLICT |
+| AWL | Из известных маркеров восстанавливается режим | Не восстанавливает fallback URL и произвольную схему групп |
+| DPR | policy-* payload/rules → карточки | Неизвестная group target нормализуется к SELECT с DERIVED finding; исходный label из slug не доказан |
+| Tiered | Канонические группы `🪜 N …` и `🪜 TIERED-AUTO` → карточки | Произвольные use/filter/extra поля не обещаются |
+| Dialer-группа | Не различима от иных select/use групп | UNKNOWN, восстановить вручную |
+| REALITY modern list, device-model, Per-Proxy controls, AWG UI overrides | Нет полного обратного присваивания исходного пользовательского ввода | Не объявлять восстановленными; остаются defaults, исходная модель доступна как evidence |
+| Неизвестные top-level и вложенные поля | Полный parsed document → `passthrough['source-config']`; отдельные неизвестные keys также сохранены | Evidence в проекте, **не merge в Build**; JSON-модель не сохраняет комментарии/исходные байты |
 
-## 2. Обратная карта по полям
+## Подтверждение и потери
 
-### 2.1 Источники
+YAML → Preview не меняет Builder. Counts, typed Compare и findings видны до Apply. Для не-EXACT findings требуется acknowledgment; CONFLICT/INVALID блокируют Apply. Изменение YAML или Builder требует нового Preview. Cancel оставляет состояние прежним; после Apply доступен Undo.
 
-| Builder-поле | YAML-след | Обратимость | Обоснование |
-|---|---|---|---|
-| Подписки (Sub ON): URL список | `proxy-providers.<name>.url`, порядок ключей = порядок ввода | **EXACT** | computeProviderName — детерминированная функция (hostname→sanitize→дедуп `-N`, SOURCE-PROVEN mihomo.js:42); порядок объектов сохраняется при emite |
-| Имена провайдеров | ключи `proxy-providers` | **DERIVED-EXACT** | восстанавливаются пересчётом из URL+порядка; при ручной правке имени в YAML — CONFLICT-детект (пересчёт ≠ факт) |
-| Подписки (Sub OFF): URL | **нет следа** | **MISSING** | разворачивание делает inspectSubscriptionInput(expand) — в YAML только развёрнутые узлы; C2-кейс задания: «Источник: UNKNOWN / URL: NOT RECOVERABLE» |
-| Развёрнутые узлы (Sub OFF) | `proxies[]` | **EXACT** (как узлы) | каждый узел — самостоятельный объект Builder (строка ссылки); grouping в «бывшие подписки» запрещён |
-| whitelistInput (AWL) | узлы с префиксами `PRIMARY-N: `/`FALLBACK-N: `, провайдеры `primary-*`/`fallback-*` с additional-prefix, GLOBAL→fallback c фильтром `^(PRIMARY-…` | **EXACT** как узлы / **MISSING** как URL | маркер режима AWL SOURCE-PROVEN (mihomo.js:893–922); URL fallback-подписок развёрнуты fetch'ем — как Sub OFF |
-| mihomoInput: прямые ссылки | `proxies[]` | **EXACT** | ссылки парсятся в узлы 1:1 (vless/ss/…, ссылки-строки восстанавливаются линком-сериализатором web4core или из полей) |
-| deviceModelInput | provider `header` (device-model?) / x-hwid | **PARTIAL** | x-hwid — случайный 32-hex на сборку (identity не несёт); device-model — отдельная опция подписки, след в header проверяется; отсутствие следа → MISSING без догадок |
+Загрузка проекта тоже требует подтверждения с counts/Compare, даже в новой сессии. Ошибка применения откатывает Builder; поздний async Build не публикуется. Passthrough переживает Collect/Save/Load/Undo, но не попадает в выходной YAML автоматически.
 
-### 2.2 WG/AWG-профили
+Для произвольного YAML используйте source-preserving редактор Studio. Экспорт без правок сохраняет исходный текст; проект YAML Reverse сохраняет parsed evidence, а не форматирование.
 
-| Builder-поле | YAML-след | Обратимость | Обоснование |
-|---|---|---|---|
-| bean (PrivateKey, Endpoint, Address, MTU, keepalive, peers, AWG H1–H4/S1–S4) | wireguard-outbound `proxies[]` | **EXACT** | генератор эмитит ВСЕ поля bean, включая приватные ключи; обратный bean = поля узла; совместимость с wgProfiles — прямой структурой |
-| WG vs AWG различение | `amnezia-optimization`/H/S-поля наличие | **EXACT** | AWG-поля присутствуют ⟺ AWG (по фактическим признакам, не угадывание); чистый WG без них |
-| filename (.conf) | **нет следа** | **MISSING** | UI обязан показать «RECOVERED_FROM_YAML / Original filename: UNKNOWN / formatting: NOT RECOVERABLE» (C3) |
-| mode='proxy' + target | `dialer-proxy: <target>` на узле | **EXACT** | значение таргета в YAML байт-в-байт |
-| mode='direct' | нет `dialer-proxy` | **EXACT** | отсутствие следа = direct (генератор не эмитит dialer-proxy для direct) |
-| wgCustomDns (общее поле) | `dns` + `remote-dns-resolve` на WG-узлах | **DERIVED** | поле общее для всех профилей; восстанавливается как одно значение (разные dns на узлах = ручная правка → CONFLICT-флаг) |
-| cfgAwgKeepalive | persistent-keepalive в bean/узлах | **DERIVED** | значение в YAML; факт «override был включён» vs «значение из .conf» — AMBIGUOUS (восстанавливаем как override-значение) |
-| cfgAwgRtDiag | **нет следа** (UI-only WARN) | **MISSING** (не влияет на YAML) | восстанавливается в default OFF — поведение эквивалентно |
+## Проверка
 
-### 2.3 Опции и режимы
-
-| Builder-поле | YAML-след | Обратимость | Обоснование |
-|---|---|---|---|
-| cfgProfile | router: нет спец-следа; vps-local: no-TUN+socks+controller 127.0.0.1; vps-gateway: TUN(auto-route:false, dns-hijack, sniffer, store-fake-ip)+controller 127.0.0.1 | **DERIVED** | маркеры профилей детерминированы (applyDeploymentProfile); router = отсутствие VPS-маркеров — вывод по умолчанию, помечается как вывод |
-| cfgTun | секция `tun:` | **EXACT** | |
-| cfgTunMips | `stack: mips` | **EXACT** | gvisor/system — значения cfgTunStackEx; advanced-cover OFF + mips OFF → gvisor (default) — AMBIGUOUS только «default не трогали vs сбросили» — поведение эквивалентно, помечаем DERIVED |
-| cfgSocks | `mixed-port`/listeners | **EXACT** | |
-| cfgPerProxy{Master,Tun,Socks} | per-proxy TUN/listeners следы | **EXACT** (факт) / режим Master — DERIVED | router-only контракт и несовместимость с AWL известны |
-| cfgLan | `allow-lan: true` + `bind-address: "*"` | **EXACT** | пост-патч детерминирован; router-only |
-| cfgAutoWhitelist | AWL-маркеры (см. 2.1) | **EXACT** | |
-| cfgWebUI + выбор дашборда | `external-ui` + `external-ui-url` | **EXACT** | кастомный URL байт-в-байт; известный дашборд сопоставляется с пресетом (AMBIGUOUS только custom-vs-preset при совпадении URL — эквивалентно) |
-| pingSelect/pingCustomUrl | `url` в url-test группах / health-check | **EXACT** URL / **DERIVED** пресет | пресет восстанавливается если URL совпал с известным списком, иначе custom |
-| excludeFilterInput (+server-list выбор) | `exclude-filter` провайдеров (Sub ON) | **DERIVED** | восстанавливается суммарное выражение в ручное поле (нормализация: split ручное×выбор не различима — AMBIGUOUS, поведение эквивалентно); Sub OFF: фильтр применён при разворачивании — в YAML отсутствует → виден только по отсутствию отфильтрованных узлов → MISSING (факт фильтра) |
-| realityModernInput | `support-x25519mlkem768: true` на REALITY-узлах + provider override-expr | **DERIVED-EXACT** | хосты восстанавливаются из помеченных узлов (server:port); полный исходный список, включая не совпавшие узлы, — AMBIGUOUS |
-| cfgPolicyRouting + карточки | `rule-providers policy-<slug>` (inline payload=домены), категории-группы, RULE-SET правила | **EXACT** (name/domains/target) | структура DPR детерминирована; порядок карточек = порядок правил |
-| cfgTieredFailover + карточки | группы «🪜 N <name>» (strategy/members) + корень «🪜 TIERED-AUTO» + правило MATCH | **EXACT** | канонические имена SOURCE-PROVEN (index.html:7305/7322); порядок карточек = порядок групп |
-| dialer-группа (имя/members/providers) | provider-dialer select-группы (applyProviderDialerTargets) | **EXACT** | имя группы и use/members в YAML |
-| Опции с byte-parity OFF (v1.11 контракт) | отсутствие патча | **EXACT** | Tiered/DRP/vps-gateway патчи применяются только при явном включении; отсутствие маркеров = OFF |
-
-### 2.4 Классы объектов вне модели Builder (C5/UNSUPPORTED)
-
-Произвольные ключи верхнего уровня (`tproxy-config`, кастомные `dns:`-поля, `tunnels`, `script`, `listeners` вне контракта генератора), неизвестные типы прокси, правила с неизвестными целями, `proxy-providers` с полями вне генераторного контракта (отличные interval/health-check/заголовки) — **UNSUPPORTED**: сохраняются в отдельную модель `passthrough` (см. PORTABLE-BUILDER-PROJECT.md) и показываются списком с предупреждением о риске; повторная сборка НЕ претендует на них молча (CONSTITUTION §3: raw-факт сохраняется; §8: существенная потеря = отказ от авто-перехода в Builder).
-
-## 3. Сводка классов
-
-- **EXACT**: подписки (Sub ON), WG/AWG beans целиком (включая секреты), dialer-таргеты профилей, DPR-карточки, Tiered-карточки, WebUI, allow-lan, TUN/stack, socks, AWL-режим, dialer-группа, WG DNS.
-- **DERIVED**: имена провайдеров (пересчёт), пресеты health-check,Deployment-профиль (по маркерам), realityModern-хосты, cfgAwgKeepalive, exclude-filter (суммарно).
-- **AMBIGUOUS**: split ручной×серверный exclude; «default vs сброшен» для gvisor/advanced-cover; custom-vs-preset health-check при совпадении URL; поведение эквивалентно во всех случаях — помечается, не блокирует.
-- **MISSING**: URL подписок и whitelistInput в развёрнутых режимах; оригинальные имена WG-файлов; форматирование исходных .conf; deviceHwid (случайный); cfgAwgRtDiag (YAML-neutral).
-- **UNSUPPORTED**: произвольные ключи/объекты вне генераторной модели (→ passthrough-модель).
-- **CONFLICT**: обнаруживается на импорте (пересчитанное имя провайдера ≠ фактическое; разные dns на WG-узлах; правила, ссылающиеся на отсутствующие цели) — показывается, не чинится молча (CONSTITUTION §2).
-
-## 4. Что из этого следует для реализации
-
-1. Project Restore (`.lgproject.json`) — единственный путь к **EXACT-восстановлению всего**, включая MISSING-поля (URL развёрнутых подписок, имена файлов) — PHASE B.
-2. YAML Reverse Build — honest mapping по §2: EXACT-поля восстанавливаются, MISSING показываются как NOT RECOVERABLE, UNSUPPORTED — в passthrough — PHASE C.
-3. Никаких эвристических «подписок из развёрнутых узлов» и никакого угадывания галочек по похожим структурам (C4) — только детерминированные маркеры из §2.
+`project-roundtrip-browser`, `reverse-yaml-browser`, `qa-reverse-integration`, `independent-product-browser`, `independent-boundaries-browser`, `independent-reverse-profiles-browser`. Parity доказана для конкретных generated fixtures, включая gateway DNS OFF/ON; общая обратимость произвольного YAML — UNKNOWN. [Независимый аудит](V1.11-CODEX-INDEPENDENT-AUDIT-AND-REPAIR.md).
