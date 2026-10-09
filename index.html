@@ -982,6 +982,7 @@ function switchTab(e, name) {
   document.getElementById('tab-' + name).classList.add('active');
 }
 
+let runtimeImporterVisible = false; // Presentation only, outside project/Build state.
 // Навигация открывает существующие панели; не изменяет формы и не вызывает Build.
 document.getElementById('tab-mihomo').addEventListener('click', e => {
   const link = e.target.closest('#builderWorkspaceNav a, #workspaceDirectory a, .builder-workspace a[href^="#"]');
@@ -989,7 +990,7 @@ document.getElementById('tab-mihomo').addEventListener('click', e => {
   const target = document.getElementById(link.dataset.workspaceTarget || link.getAttribute('href').slice(1));
   if (!target) return;
   e.preventDefault();
-  if (target.id === 'runtimeImportDetails') document.getElementById('serverListPanel').style.display = '';
+  if (target.id === 'runtimeImportDetails') { runtimeImporterVisible = true; updateServerListVisibility(); }
   for (let el = target; el; el = el.parentElement) if (el.tagName === 'DETAILS') el.open = true;
   const focus = target.tagName === 'DETAILS' ? target.querySelector('summary') : target;
   if (!focus.matches('input,select,textarea,button,a,summary')) focus.tabIndex = -1;
@@ -4086,7 +4087,7 @@ function updateServerListVisibility() {
   const panel = document.getElementById('serverListPanel');
   const offHint = document.getElementById('serverListOffHint');
   if (!toggle || !panel) return;
-  panel.style.display = toggle.checked ? '' : 'none';
+  panel.style.display = toggle.checked || runtimeImporterVisible ? '' : 'none';
   document.getElementById('subListControls').style.display = subscriptionListNames.length ? '' : 'none';
   // Toggle выключен, но выбор осознанный — не теряем его молча: note показывает,
   // что выбранные исключения продолжают действовать.
@@ -4177,6 +4178,7 @@ function initServerList() {
   const btn = document.getElementById('subListFetchBtn');
   if (!toggle || !btn) return;
   toggle.addEventListener('change', () => {
+    runtimeImporterVisible = false;
     subscriptionPreviewSeq++; // toggle меняет эпоху preview-запросов
     invalidateServerListFetch();
     updateServerListVisibility();

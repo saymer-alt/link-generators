@@ -473,12 +473,12 @@ async function check(name, fn) {
     assert.equal(await n.locator('#cfgPolicyRouting').isChecked(), false);
     assert.equal(await n.locator('#cfgPolicyRouting').evaluate(el => el === document.activeElement), true);
     let requests=0; n.on('request',()=>requests++);
-    const before=await n.evaluate(()=>JSON.stringify(rbCollectProject()));
+    const before=await n.evaluate(()=>{const p=rbCollectProject();delete p.meta.created;return JSON.stringify(p);});
     await n.locator('#workspaceDirectory a[href="#runtimeImportDetails"]').click();
     assert.equal(await n.locator('#rtUploadBtn').isVisible(),true);
     assert.equal(await n.locator('#cfgServerList').isChecked(),false);
     assert.equal(await n.locator('#runtimeImportDetails > summary').evaluate(el=>el===document.activeElement),true);
-    assert.equal(await n.evaluate(()=>JSON.stringify(rbCollectProject())),before); assert.equal(requests,0);
+    assert.equal(await n.evaluate(()=>{const p=rbCollectProject();delete p.meta.created;return JSON.stringify(p);}),before); assert.equal(requests,0);
     await n.locator('#workspaceDirectory a[href="#physicalTopologyPanel"]').click();
     assert.equal(await n.locator('#ptDemoBtn').isVisible(), true);
     await n.locator('#workspaceDirectory a[href="#perProxyAdvancedDetails"]').click();
@@ -546,13 +546,13 @@ async function check(name, fn) {
     if(consumer==='Studio'){await expand.click();await n.evaluate(()=>csClearStudio());assert.equal(await n.locator('.vrg-expanded').count(),0);assert.equal(await n.evaluate(()=>document.body.style.overflow),'');}
   });
   await check('UX12 runtime list long names badges selection and narrow scroll', async () => {
-    const n=await fresh(); await n.locator('#cfgServerList').check();
-    await n.locator('#runtimeImportDetails').evaluate(el=>el.open=true);
+    const n=await fresh(); await n.locator('#workspaceDirectory > summary').click();
+    await n.locator('#workspaceDirectory a[href="#runtimeImportDetails"]').click();
     const long='Очень-длинное-имя-🇷🇺-'+ 'LongNode'.repeat(24);
     const runtimeNames=[long,...Array.from({length:45},(_,i)=>'Runtime-'+i)];
     const chooserPromise=n.waitForEvent('filechooser'); await n.locator('#rtUploadBtn').click();
     await (await chooserPromise).setFiles({name:'runtime.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({providers:{LocalFixture:{proxies:runtimeNames.map(name=>({name,type:'Vless',alive:true}))}}}))});
-    const list=n.locator('#subscriptionPreviewNames'); await n.waitForFunction(()=>document.querySelectorAll('#subscriptionPreviewNames .sub-list-item').length===46);
+    const list=n.locator('#subscriptionPreviewNames'); assert.equal(await n.locator('#cfgServerList').isChecked(),false); await n.waitForFunction(()=>document.querySelectorAll('#subscriptionPreviewNames .sub-list-item').length===46);
     const before=await n.evaluate(()=>({names:subscriptionListNames,origins:serverListNameOrigins,selected:[...subscriptionSelection]}));
     assert.equal(await list.locator('.sub-list-item .hint').count(),46);
     for(const width of [1280,1366,1920,320,390,640]) {
