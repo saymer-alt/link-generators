@@ -101,6 +101,7 @@ async function session(mihomoGroups, label, extraDoc, leafProxies) {
     rules: ['MATCH,ROOT']
   }, extraDoc || {});
   const config = path.join(dir, 'config.yaml'); fs.writeFileSync(config, yaml.dump(doc));
+  observer.ensureRunning();
   const child = spawn(binary, ['-d', dir, '-f', config], { windowsHide: true });
   let logs = ''; const append=d=>{logs=(logs+d).slice(-65536);s.startupLog=(s.startupLog+d).slice(0,8192);s.errorLines.push(...String(d).split(/\r?\n/).filter(line=>/level=(error|fatal)|bind:|panic:/i.test(line)));s.errorLines=s.errorLines.slice(-40);}; child.stdout.on('data', append); child.stderr.on('data', append);
   const get = async route => { const response=await fetch(`http://127.0.0.1:${control}${route}`, { headers: { Authorization: 'Bearer local-test' }, signal: AbortSignal.timeout(3000) }); if(!response.ok)throw Error('controller HTTP '+response.status); return observer.controller(s,route,await response.json()); };
@@ -113,6 +114,7 @@ async function stopSession(s) {
 
 // Global watchdog: a hung lab must never block the night queue.
 const LAB_WATCHDOG = setTimeout(() => { console.error('LAB WATCHDOG: hard timeout 180s'); observer.finish(Error('LAB WATCHDOG: hard timeout 180s')).finally(()=>process.exit(3)); }, 180000);
+for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>{clearTimeout(LAB_WATCHDOG);observer.finish(Error(signal)).finally(()=>process.exit(1));});
 
 (async () => {
   fs.mkdirSync(process.env.TEST_OUTPUT_DIR, { recursive: true });
@@ -132,7 +134,7 @@ const LAB_WATCHDOG = setTimeout(() => { console.error('LAB WATCHDOG: hard timeou
   const traffic = async s => { const t0=Date.now(); try { const body=await requestThrough(s.mixed); observer.traffic(s,t0,body); return body; } catch(e) { observer.traffic(s,t0,null,e); throw e; } };
   const wrap = async (s, label, fn) => {
     const t0 = Date.now();
-    await fn();
+    try { await fn(); } catch(e) { await observer.capture(e); throw e; }
     const ms = Date.now() - t0;
     evidence.scenarios[label] = evidence.scenarios[label] || {};
     evidence.scenarios[label].lastDurationMs = ms;

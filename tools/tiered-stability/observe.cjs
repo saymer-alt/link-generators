@@ -7,6 +7,8 @@ const started = Date.now(), sessions = [], mocks = [], servers = [], timeline = 
 let version, lastSuccess, lastFailure, failure, finishing;
 const error = e => ({ name: e.name, message: e.message, code: e.code || e.cause?.code });
 function event(type, data = {}) { timeline.push({ ms: Date.now() - started, type, ...data }); if (timeline.length > 2000) timeline.shift(); }
+function ensureRunning(){if(finishing)throw Error('LAB_STOPPING');}
+async function capture(e){if(!failure)failure={message:e.message,sessions:await Promise.all(sessions.map(snapshot))};}
 function probe(port) { return new Promise(resolve => { const s = net.connect({host:'127.0.0.1',port}); let done=false; const end = value => { if(done)return; done=true; s.destroy(); resolve(value); }; s.setTimeout(300,()=>end({ready:false,code:'TIMEOUT'})); s.on('connect',()=>end({ready:true})); s.on('error',e=>end({ready:false,...error(e)})); }); }
 async function snapshot(s) {
   const state = { label:s.label, pid:s.child.pid, exitCode:s.child.exitCode, signal:s.child.signalCode, spawnError:s.spawnError,
@@ -51,7 +53,7 @@ function classify(data) {
 }
 async function until(fn,message,budget=15000) {
   const t0=Date.now(), end=t0+budget, w={message,budget,attempts:0,errors:{}}; waits.push(w); let last;
-  while(Date.now()<end) { w.attempts++; try { last=await fn(); if(last) { w.durationMs=Date.now()-t0; return last; } } catch(e) { w.lastError=error(e); const key=e.code||e.cause?.code||e.message; w.errors[key]=(w.errors[key]||0)+1; } await new Promise(r=>setTimeout(r,100)); }
+  while(Date.now()<end) { ensureRunning(); w.attempts++; try { last=await fn(); if(last) { w.durationMs=Date.now()-t0; return last; } } catch(e) { w.lastError=error(e); const key=e.code||e.cause?.code||e.message; w.errors[key]=(w.errors[key]||0)+1; } await new Promise(r=>setTimeout(r,100)); }
   w.durationMs=Date.now()-t0; w.last=last; failure={message,last,lastError:w.lastError};
   // Состояние сохраняется до finally/остановки core; исходный бюджет не меняется.
   failure.sessions=await Promise.all(sessions.map(snapshot));
@@ -87,4 +89,4 @@ async function finish(e) {
     fs.writeFileSync(path.join(process.env.TEST_OUTPUT_DIR,'tiered-diagnostic.json'),JSON.stringify(data,null,2)); return data;
   })(); return finishing;
 }
-module.exports={event,error,until,addSession,controller,traffic,stop,finish,mocks,servers,classify,setVersion:v=>{version=v;}};
+module.exports={event,error,until,addSession,controller,traffic,stop,finish,capture,ensureRunning,mocks,servers,classify,setVersion:v=>{version=v;}};
