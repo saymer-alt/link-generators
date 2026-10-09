@@ -90,6 +90,11 @@
   .tier-add-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center}
   .tier-add-row .tier-member-select{flex:1 1 150px;min-width:0;padding:4px 6px}
   .resizable-node-list{resize:vertical;min-height:140px;max-height:70vh;overflow:auto} /* #166 */
+  #subscriptionPreviewNames{padding:8px 14px 16px 8px;box-sizing:border-box;min-width:0;max-width:100%;scrollbar-gutter:stable}
+  .sub-list-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px 8px;align-items:start;padding:5px 0;cursor:pointer}
+  .sub-list-name{min-width:0;overflow-wrap:anywhere}
+  .sub-list-origin{margin:0;max-width:100%;overflow-wrap:anywhere}
+  @media(max-width:480px){.sub-list-item{grid-template-columns:auto minmax(0,1fr)}.sub-list-origin{grid-column:2}}
   /* === конец Tiered/#165 === */
   .policy-domains{width:100%;padding:6px 8px;box-sizing:border-box;font-family:monospace;font-size:.85rem}
   .policy-target{padding:5px 8px;font-size:.85rem;overflow:hidden;text-overflow:ellipsis}
@@ -3997,7 +4002,6 @@ function renderServerList() {
     if (search && !name.toLowerCase().includes(search)) continue; // поиск фильтрует только отображение
     const label = document.createElement('label');
     label.className = 'sub-list-item';
-    label.style.cssText = 'display:flex;gap:6px;align-items:center;padding:1px 0;cursor:pointer';
     const box = document.createElement('input');
     box.type = 'checkbox';
     box.className = 'sub-list-check';
@@ -4011,6 +4015,7 @@ function renderServerList() {
       refreshSubscriptionPreviewStats();
     });
     const text = document.createElement('span');
+    text.className = 'sub-list-name';
     text.textContent = name; // только display name: никаких URI/UUID/кредов
     label.append(box, text);
     // Происхождение имени (#159): runtime-only имена помечаются — это прямая
@@ -4019,8 +4024,7 @@ function renderServerList() {
     if (origin === 'runtime-only') {
       const tag = document.createElement('span');
       tag.textContent = 'ℹ только в runtime';
-      tag.className = 'hint';
-      tag.style.cssText = 'margin-left:auto;white-space:nowrap';
+      tag.className = 'hint sub-list-origin';
       tag.title = 'Есть в Mihomo runtime, отсутствует в browser preview';
       label.appendChild(tag);
     }

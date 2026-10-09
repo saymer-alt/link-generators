@@ -87,7 +87,16 @@
     {
       "id": "UX-11",
       "summary": "Рабочую область графа нельзя развернуть или изменить по высоте",
-      "scenario_prefixes": ["UX11 expanded graph height Escape and focus"]
+      "scenario_prefixes": [
+        "UX11 expanded graph height Escape and focus"
+      ]
+    },
+    {
+      "id": "UX-12",
+      "summary": "Runtime-only метки прижаты к краю, длинные имена переполняют список",
+      "scenario_prefixes": [
+        "UX12 runtime list long names badges selection and narrow scroll"
+      ]
     }
   ]
 }
