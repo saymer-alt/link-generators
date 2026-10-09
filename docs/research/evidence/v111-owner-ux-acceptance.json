@@ -119,7 +119,7 @@
     {
       "platform": "Windows",
       "engine": "chromium",
-      "passed": 27,
+      "passed": 28,
       "failed": 0,
       "checks": [
         {
@@ -188,6 +188,10 @@
         },
         {
           "name": "UX07 pending diagnostic cannot overwrite changed query/settings",
+          "pass": true
+        },
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
           "pass": true
         },
         {
@@ -235,7 +239,7 @@
     {
       "platform": "Windows",
       "engine": "firefox",
-      "passed": 27,
+      "passed": 28,
       "failed": 0,
       "checks": [
         {
@@ -304,6 +308,10 @@
         },
         {
           "name": "UX07 pending diagnostic cannot overwrite changed query/settings",
+          "pass": true
+        },
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
           "pass": true
         },
         {
@@ -351,7 +359,7 @@
     {
       "platform": "Windows",
       "engine": "webkit",
-      "passed": 27,
+      "passed": 28,
       "failed": 0,
       "checks": [
         {
@@ -420,6 +428,10 @@
         },
         {
           "name": "UX07 pending diagnostic cannot overwrite changed query/settings",
+          "pass": true
+        },
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
           "pass": true
         },
         {
@@ -483,5 +495,59 @@
       "command": "node tests/rule-provider-explorer-browser.cjs",
       "passedCases": 51
     }
+  },
+  "asyncPolicyRace": {
+    "sourceBefore": "0ab781192f4a38578d7327e1c80ba112fb8c47cf",
+    "before": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 0,
+      "failed": 1,
+      "checks": [
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
+          "pass": false
+        }
+      ]
+    },
+    "after": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 1,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
+          "pass": true
+        }
+      ]
+    }
+  },
+  "intermediateFirefoxTimeout": {
+    "passed": 27,
+    "failed": 1,
+    "check": "UX06 timeout uses existing eight second abort",
+    "driverBudgetMs": 10000,
+    "mockClosedAfterMs": 8500,
+    "change": "Hold mocked route until the application abort is observed; then release. Driver budget 15000ms; application deadline unchanged at 8000ms.",
+    "focusedAfter": {
+      "platform": "Windows",
+      "engine": "firefox",
+      "passed": 1,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX06 timeout uses existing eight second abort",
+          "pass": true
+        }
+      ]
+    }
+  },
+  "firstPRCI": {
+    "head": "0ab781192f4a38578d7327e1c80ba112fb8c47cf",
+    "generatorRun": 37968565024,
+    "conclusion": "success",
+    "jobs": 6,
+    "runtimeRun": 37968565201
   }
 }

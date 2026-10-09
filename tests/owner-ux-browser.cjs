@@ -11,6 +11,7 @@ const link = 'vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#Owner-A
 let passed = 0, failed = 0;
 const results = [];
 async function check(name, fn) {
+  if (process.env.OWNER_UX_FILTER && !name.includes(process.env.OWNER_UX_FILTER)) return;
   try { await fn(); passed++; results.push({ name, pass: true }); console.log('PASS', name); }
   catch (e) { failed++; results.push({ name, pass: false, error: e.message }); console.error('FAIL', name, e.message); }
 }
@@ -154,9 +155,17 @@ async function check(name, fn) {
   });
   await check('UX06 timeout uses existing eight second abort', async () => {
     await c.locator('#rtControllerInput').fill('http://192.168.1.1:9090');
-    await c.route('**/providers/proxies', async r => { await new Promise(resolve => setTimeout(resolve, 8500)); try { await r.abort(); } catch (_) {} });
-    await c.locator('#rtFetchBtn').click();
-    await c.waitForFunction(() => /Время ожидания/.test(document.getElementById('rtStatus').textContent), null, { timeout: 10000 });
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    await c.route('**/providers/proxies', async r => { await gate; try { await r.abort(); } catch (_) {} });
+    try {
+      await c.locator('#rtFetchBtn').click();
+      // No competing 8.5s mock close: only the application's unchanged 8s abort.
+      await c.waitForFunction(() => /Время ожидания/.test(document.getElementById('rtStatus').textContent), null, { timeout: 15000 });
+    } catch (e) {
+      const state = await c.evaluate(() => ({ status: document.getElementById('rtStatus').textContent, aborted: rtImportAbort?.signal.aborted }));
+      throw new Error(e.message + '; captured state: ' + JSON.stringify(state));
+    } finally { release(); }
   });
 
   const d = await fresh();
@@ -218,6 +227,23 @@ async function check(name, fn) {
     assert.ok(!(await d.locator('#rdResult').textContent()).includes('Победившее правило'));
     assert.equal(await d.evaluate(() => diagnosticsCurrent()), false);
     assert.equal(await d.locator('#rdBuildCheckBtn').isEnabled(), true);
+  });
+
+  await check('UX07 async policy mutation rejects old Build commit', async () => {
+    await d.locator('#mihomoInput').fill('https://owner-policy-race.example.invalid/sub');
+    let release, started;
+    const ready = new Promise(resolve => { started = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    await d.route('https://owner-policy-race.example.invalid/sub', async r => { started(); await gate; await r.fulfill({ body: link }); });
+    await d.locator('#rdTestBtn').click();
+    const before = await d.locator('#mihomoOutput').inputValue();
+    d.once('dialog', dialog => dialog.accept());
+    await d.locator('#rdBuildCheckBtn').click(); await ready;
+    await d.locator('#btnPolicyAdd').click(); // DOM mutation via click, no input/change event
+    release();
+    await d.waitForFunction(() => !document.getElementById('rdBuildCheckBtn').disabled);
+    assert.equal(await d.locator('#mihomoOutput').inputValue(), before, 'old Build must not publish after policy insertion');
+    assert.equal(await d.evaluate(() => diagnosticsCurrent()), false);
   });
 
   const g = await fresh();

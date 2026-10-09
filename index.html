@@ -10141,6 +10141,7 @@ async function buildMihomo() {
   // не имеет права перезаписать более новый результат.
   mihomoValidationSeq++;
   const buildSeq = mihomoValidationSeq;
+  const buildFingerprint = buildStateFingerprint();
   setMihomoValidationState('VALIDATING');
   try {
     if (autoWhitelist && !api.buildMihomoPriorityConfig) throw new Error('Обновите web4core.runtime: требуется поддержка primary/fallback');
@@ -10165,6 +10166,13 @@ async function buildMihomo() {
       }
       // Реестр dialer-целей от этого момента строится из inspected-ввода —
       // имена развёрнутых узлов совпадают с итоговым YAML (до инвалидиции).
+      // Click-only мутации (добавить/удалить карточку) не вызывают input/change.
+      // Проверяем пользовательский snapshot после последнего await и ДО
+      // собственных renderSubscriptionPreview/applyServerListFromSummary.
+      if (buildFingerprint !== buildStateFingerprint()) {
+        mihomoValidationSeq++; setMihomoValidationState('NOT_BUILT'); refreshBuildStaleness();
+        return false;
+      }
       mainInput = mainInspected.input;
       lastInspectedBuildInput = mainInput;
       lastInspectedFallbackInput = autoWhitelist ? fallbackPrepared : null;
@@ -10243,6 +10251,7 @@ async function buildMihomo() {
       yaml = yaml.replace(/^external-controller:\s*0\.0\.0\.0:9090\s*$/m, 'external-controller: 127.0.0.1:9090');
     }
 
+    if (buildSeq !== mihomoValidationSeq) return false;
     document.getElementById('mihomoOutput').value = yaml;
     updateRoutingDiagnostics(yaml);
     markBuildFresh();
