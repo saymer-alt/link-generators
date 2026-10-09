@@ -63,8 +63,8 @@ const ok = name => { passed++; console.log('  ok —', name); };
   await page.locator('#policyCards .policy-card .policy-target').first().selectOption('DIRECT');
   await page.waitForTimeout(30);
   const res2 = await runCoverage('chat.openai.com');
-  assert.match(res2, /⚠ Snapshot предыдущей сборки/, 'stale заголовок');
-  assert.match(res2, /\(⚠ предыдущая сборка\)/, 'строчный stale-маркер');
+  assert.match(res2, /Настройки изменены/, 'stale предлагает rebuild');
+  assert.equal(await page.locator('#dcBuildCheckBtn').isVisible(), true, 'явное действие rebuild');
   ok('coverage: stale-build контракт — snapshot помечен, скрытого Build нет');
 
   // новый Build → снова current
@@ -89,7 +89,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   // до Build: честный отказ
   await page.evaluate(() => { lastRoutingDoc = null; });
   const res5 = await runCoverage('example.com');
-  assert.match(res5, /Сначала выполните Build/, 'без Build — «Сначала выполните Build»');
+  assert.match(res5, /Сначала соберите конфигурацию/, 'без Build — явное предложение сборки');
   ok('coverage: без Build — честный отказ, без выдумок');
 
   // 360px: панель не ломает layout
