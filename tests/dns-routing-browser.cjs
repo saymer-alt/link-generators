@@ -5,6 +5,7 @@
 // конфиг — «✓». Страница локальная (file://), сеть не трогается.
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const hash=value=>require('node:crypto').createHash('sha256').update(value).digest('hex');
 const { pathToFileURL } = require('node:url');
 const { chromium } = require('playwright');
 
@@ -125,6 +126,23 @@ const baseDoc = {
   await studio(yaml.dump(proxied));
   assert.ok(!(await panelText()).includes('[WARNING]'), 'unreachable duplicate never wins');
   ok('first-match duplicates respected in actual Studio flow');
+  const builderBefore=await page.evaluate(()=>buildStateFingerprint());
+  const passDoc=JSON.parse(JSON.stringify(baseDoc));
+  passDoc.rules=['DOMAIN,example.com,PASS','DOMAIN,example.com,PROXY','MATCH,DIRECT'];
+  await studio(yaml.dump(passDoc));assert.match(await panelText(),/\[WARNING\]/);
+  for(const mode of ['direct','global']){passDoc.mode=mode;await studio(yaml.dump(passDoc));assert.ok(!(await panelText()).includes('[WARNING]'));assert.match(await panelText(),/UNKNOWN/);}
+  assert.equal(await page.evaluate(()=>buildStateFingerprint()),builderBefore);
+  ok('PASS and non-rule modes: actual Parse replaces snapshot without Builder mutation');
+  const tokenDoc=JSON.parse(JSON.stringify(baseDoc));
+  tokenDoc.dns.nameserver=['https://user:SYNTH_DNS_TOKEN_ONLY@192.0.2.53/token/SYNTH_DNS_PATH_ONLY?token=SYNTH_DNS_QUERY_ONLY'];
+  tokenDoc.dns['nameserver-policy']={'geosite:cn':tokenDoc.dns.nameserver};
+  const tokenText=yaml.dump(tokenDoc);await studio(tokenText);
+  assert.match(await panelText(),/UNKNOWN/);
+  const shown=await page.locator('#csSummaryCard').textContent();
+  for(const secret of ['SYNTH_DNS_TOKEN_ONLY','SYNTH_DNS_PATH_ONLY','SYNTH_DNS_QUERY_ONLY'])assert.ok(!shown.includes(secret),'DNS-only token must remain hidden');
+  assert.equal(hash(await page.locator('#csImportInput').inputValue()),hash(tokenText));
+  assert.equal(await page.evaluate(()=>buildStateFingerprint()),builderBefore);
+  ok('unsupported policy, DNS-only URL tokens and source preservation');
   assert.deepEqual(errors, [], 'нет pageerror: ' + errors.join(' | '));
   console.log('PASS dns-routing-browser: ' + passed + ' checks');
   await browser.close();

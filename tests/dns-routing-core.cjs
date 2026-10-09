@@ -156,4 +156,17 @@ const ok = (msg) => { cases++; console.log('  ok — ' + msg); };
  assert.ok(!ids(mixed).includes('dns-bypass-for-proxied-domains'));
  ok('mixed endpoints and respect-rules use per-resolver classification');
 }
+// Final hardening: PASS continues matching; direct/global do not execute rules.
+{
+ const d={dns:{enable:true,nameserver:['192.0.2.53']},'proxy-groups':[{name:'PROXY',type:'select',proxies:['DIRECT']}],rules:['DOMAIN,x.test,PASS','DOMAIN,x.test,PROXY','MATCH,DIRECT']};
+ assert.equal(api.dnsEffectiveTarget('x.test',d.rules),'PROXY','PASS must continue matching');
+ assert.ok(api.dnsRoutingAudit(d).some(f=>f.id==='dns-bypass-for-proxied-domains'));
+ ok('PASS continues to the next effective rule');
+ for(const mode of ['direct','global']) {
+  const f=api.dnsRoutingAudit({...d,mode});
+  assert.ok(!f.some(x=>x.id==='dns-bypass-for-proxied-domains'),'inactive rules cannot claim proxied domains');
+  assert.ok(f.some(x=>x.evidence==='UNKNOWN'),'non-rule mode boundary explicit');
+ }
+ ok('direct/global mode does not claim rule-based routes');
+}
 console.log('PASS dns-routing-core: ' + cases + ' cases');

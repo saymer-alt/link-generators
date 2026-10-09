@@ -10,11 +10,13 @@ const cases=[
  ['omitted-structural',{'respect-rules':true},false],
  ['disabled-valid',{enable:false,nameserver:['192.0.2.53']},true],
  ['explicit-proxy',{enable:true,nameserver:['https://192.0.2.53/dns-query#PROXY'],'nameserver-policy':{'+.x.test':['tls://192.0.2.53#PROXY','quic://192.0.2.54#PROXY']}},true],
- ['respect-rules',{enable:true,'respect-rules':true,'proxy-server-nameserver':['192.0.2.53'],nameserver:['https://192.0.2.54/dns-query']},true]
+ ['respect-rules',{enable:true,'respect-rules':true,'proxy-server-nameserver':['192.0.2.53'],nameserver:['https://192.0.2.54/dns-query']},true],
+ ['psns-policy-empty',{enable:false,'proxy-server-nameserver-policy':{'+.x.test':['192.0.2.53']}},false],
+ ['pass-rule',{enable:true,nameserver:['192.0.2.53']},true,['DOMAIN,x.test,PASS','DOMAIN,x.test,PROXY','MATCH,DIRECT']]
 ];
 try {
- for(const [name,dns,valid] of cases){
-  const doc={'mixed-port':17890,mode:'rule',dns,'proxy-groups':[{name:'PROXY',type:'select',proxies:['DIRECT']}],rules:['MATCH,DIRECT']};
+ for(const [name,dns,valid,rules] of cases){
+  const doc={'mixed-port':17890,mode:'rule',dns,'proxy-groups':[{name:'PROXY',type:'select',proxies:['DIRECT']}],rules:rules||['MATCH,DIRECT']};
   const file=path.join(dir,name+'.yaml');fs.writeFileSync(file,yaml.dump(doc));
   const r=spawnSync(process.env.MIHOMO_BIN,['-t','-d',dir,'-f',file],{encoding:'utf8',timeout:20000});
   assert.ifError(r.error);

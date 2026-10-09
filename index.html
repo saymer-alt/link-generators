@@ -7351,6 +7351,7 @@ function dnsResolverRoute(value, dns, doc) {
 function dnsEffectiveTarget(domain, rules) {
   for (const raw of rules) {
     const r = rdParseRule(raw);
+    if (r.target === 'PASS') continue; // Mihomo continues GetRules for the PASS adapter.
     if (r.type === 'MATCH') return r.target;
     if (r.type === 'DOMAIN' || r.type === 'DOMAIN-SUFFIX' || r.type === 'DOMAIN-KEYWORD') {
       const value = r.value.toLowerCase();
@@ -7373,6 +7374,10 @@ function dnsRoutingAudit(doc) {
   if (respectRules && psns.length === 0) findings.push({id:'dns-respect-rules-no-psns',severity:'error',evidence:'CONFIRMED',message:'dns.respect-rules: true требует непустой dns.proxy-server-nameserver — конфигурация не принимается Mihomo, даже при выключенном DNS.',refs:'config.go:1420'});
   if (dns['proxy-server-nameserver-policy'] && Object.keys(dns['proxy-server-nameserver-policy']).length && !psns.length) findings.push({id:'dns-psns-policy-no-psns',severity:'error',evidence:'CONFIRMED',message:'proxy-server-nameserver-policy требует непустой proxy-server-nameserver.',refs:'config.go:1457'});
   if (dns.enable !== true) return findings;
+  if (doc.mode && String(doc.mode).toLowerCase() !== 'rule') {
+    findings.push({id:'dns-routing-mode',severity:'info',evidence:'UNKNOWN',message:'Конфиг использует режим вне rule: правила не определяют путь данных. Их DNS-согласованность не оценивается; runtime-выбор и сеть не проверены.',refs:'tunnel.go:resolveMetadata mode switch'});
+    return findings;
+  }
   const rules = Array.isArray(doc.rules) ? doc.rules : [];
   const domains = [...new Set(rules.map(rdParseRule).filter(r => ['DOMAIN','DOMAIN-SUFFIX'].includes(r.type)).map(r => r.value.toLowerCase()))];
   const proxied = domains.filter(d => { const t=dnsEffectiveTarget(d,rules); return t && !DNS_AUDIT_BUILTIN_TARGETS.has(t); });
