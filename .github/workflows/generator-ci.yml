@@ -384,6 +384,9 @@ jobs:
       - name: Config Studio export compat (#178)
         run: node tests/config-studio-compat.cjs
 
+      - name: DNS candidate parse-only semantic contracts
+        run: node tests/dns-routing-mihomo-compat.cjs
+
       - name: Physical Topology per-node artifacts compat (#187)
         run: node tests/per-node-mihomo-compat.cjs
 

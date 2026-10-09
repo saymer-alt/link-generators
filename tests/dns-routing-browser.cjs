@@ -56,7 +56,7 @@ const baseDoc = {
   await studio(yaml.dump(errDoc));
   const t2 = await panelText();
   assert.ok(t2.includes('[ERROR]') && t2.includes('proxy-server-nameserver'), 'error находка (валидатор mihomo)');
-  assert.ok(t2.includes('[INFO]') && t2.includes('198.18'), 'info находка (fake-ip × IP-правила)');
+  assert.ok(t2.includes('[INFO]') && t2.includes('реальный IP'), 'info находка (fake-ip × IP-правила)');
   ok('error + info находки отображаются с иконками и источниками');
 
   // --- 3. redaction: секрет в password, повторённый в домене политики и группы ---
@@ -107,6 +107,24 @@ const baseDoc = {
   assert.ok(t7.length > 0, 'после правки текст панели сохраняется (не очищается)');
   ok('снапшот-семантика: правки редактора не перетирают панель');
 
+  const structural = JSON.parse(JSON.stringify(baseDoc));
+  delete structural.dns.enable; structural.dns['respect-rules'] = true;
+  await studio(yaml.dump(structural));
+  assert.match(await panelText(), /неактивна/);
+  assert.match(await panelText(), /\[ERROR\]/);
+  ok('omitted enable: inactive DNS still reports structural error');
+  const proxied = JSON.parse(JSON.stringify(baseDoc));
+  proxied.dns.nameserver=['https://192.0.2.53/dns-query#PROXY'];
+  proxied.dns['nameserver-policy']={'+.example.com':proxied.dns.nameserver};
+  await studio(yaml.dump(proxied));
+  assert.ok(!(await panelText()).includes('[WARNING]'), 'explicit proxy is not called direct');
+  ok('explicit proxy endpoints and array policy do not claim DIRECT');
+  proxied.dns.nameserver=['https://192.0.2.53/dns-query'];
+  proxied.dns['nameserver-policy']={'+.example.com':proxied.dns.nameserver};
+  proxied.rules=['DOMAIN-SUFFIX,example.com,DIRECT','DOMAIN-SUFFIX,example.com,PROXY','MATCH,DIRECT'];
+  await studio(yaml.dump(proxied));
+  assert.ok(!(await panelText()).includes('[WARNING]'), 'unreachable duplicate never wins');
+  ok('first-match duplicates respected in actual Studio flow');
   assert.deepEqual(errors, [], 'нет pageerror: ' + errors.join(' | '));
   console.log('PASS dns-routing-browser: ' + passed + ' checks');
   await browser.close();

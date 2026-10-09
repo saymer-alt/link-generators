@@ -802,7 +802,7 @@
       </details>
       <details id="csDnsRoutingPanel" style="margin-top:8px">
         <summary style="cursor:pointer">DNS ↔ Routing</summary>
-        <div class="hint" style="margin-top:4px">Согласованность dns:-секции и правил маршрутизации (статический аудит после «Разобрать»). Находки CONFIRMED доказаны исходниками Mihomo 1.19.32; INFERRED — влияние зависит от окружения. GEOSITE/RULE-SET-содержимое — честный UNKNOWN. Не обновляется при правках редактора — повторно нажмите «Разобрать».</div>
+        <div class="hint" style="margin-top:4px">Согласованность dns:-секции и правил маршрутизации (статический аудит после «Разобрать»). CONFIRMED — структурная ошибка по исходникам Mihomo 1.19.31/1.19.32; INFERRED — возможное влияние, сеть не наблюдалась. DNS default false; HTTPS не означает прокси, #PROXY — явный селектор, не доказанный tunnel. GEOSITE/RULE-SET-содержимое — честный UNKNOWN. Не обновляется при правках редактора — повторно нажмите «Разобрать».</div>
         <div id="csDnsRoutingOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       </details>
     </div>
@@ -7283,85 +7283,75 @@ const DNS_AUDIT_DIRECT_SCHEMES = new Set(['', 'system', 'dhcp', 'ip']);
 const DNS_AUDIT_BUILTIN_TARGETS = new Set(['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL']);
 const DNS_AUDIT_DOMAIN_RULES = new Set(['DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-REGEX', 'GEOSITE']);
 const DNS_AUDIT_IP_RULES = new Set(['IP-CIDR', 'IP-CIDR6', 'SRC-IP-CIDR', 'GEOIP', 'IP-ASN', 'SRC-GEOIP', 'SRC-IP-ASN']);
+// SOURCE-PROVEN: Mihomo config.go parseNameServer, v1.19.31/v1.19.32.
+// A fragment names a selector OR interface, never infer proxying from HTTPS.
+function dnsResolverRoute(value, dns, doc) {
+  if (typeof value !== 'string' || !value.trim()) return 'unknown';
+  if (value === 'system' || value.startsWith('dhcp://')) return 'unknown';
+  let u;
+  try { u = new URL(value.includes('://') ? value : 'udp://' + value); } catch (_) { return 'unknown'; }
+  if (!['udp:', 'tcp:', 'http:', 'https:', 'tls:', 'quic:'].includes(u.protocol)) return 'unknown';
+  let fragment;
+  try { fragment = decodeURIComponent(u.hash.slice(1)); } catch (_) { return 'unknown'; }
+  let name = '';
+  for (const part of fragment.split('&')) if (!part.includes('=')) name = part;
+  if (!name) return dns['respect-rules'] === true ? 'rules' : 'direct';
+  if (name === 'DIRECT') return 'direct';
+  if (name === 'RULES') return 'rules';
+  if ((Array.isArray(doc.proxies) ? doc.proxies : []).some(p => p && p.name === name) || (Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []).some(g => g && g.name === name)) return 'explicit-proxy';
+  return 'unknown'; // could be an interface; an unobserved selector is not proof
+}
+function dnsEffectiveTarget(domain, rules) {
+  for (const raw of rules) {
+    const r = rdParseRule(raw);
+    if (r.type === 'MATCH') return r.target;
+    if (r.type === 'DOMAIN' || r.type === 'DOMAIN-SUFFIX' || r.type === 'DOMAIN-KEYWORD') {
+      const value = r.value.toLowerCase();
+      const match = r.type === 'DOMAIN' ? domain === value : r.type === 'DOMAIN-SUFFIX' ? domain === value || domain.endsWith('.' + value) : domain.includes(value);
+      if (match) return r.target;
+      continue;
+    }
+    return null; // GEOSITE/RULE-SET/IP/logical conditions may win: UNKNOWN
+  }
+  return null;
+}
 function dnsRoutingAudit(doc) {
   const findings = [];
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return findings;
-  const dns = (doc.dns && typeof doc.dns === 'object') ? doc.dns : null;
-  if (!dns || dns.enable === false || dns.enable === 'false') return findings;
-  const respectRules = dns['respect-rules'] === true || dns['respect-rules'] === 'true';
+  const dns = doc.dns && typeof doc.dns === 'object' && !Array.isArray(doc.dns) ? doc.dns : null;
+  if (!dns) return findings;
+  const respectRules = dns['respect-rules'] === true;
   const psns = Array.isArray(dns['proxy-server-nameserver']) ? dns['proxy-server-nameserver'] : [];
-  const enhancedMode = typeof dns['enhanced-mode'] === 'string' ? dns['enhanced-mode'].toLowerCase() : null;
-  const dnsTargetClass = v => {
-    if (typeof v !== 'string' || !v) return 'direct';
-    let u;
-    try { u = new URL(v.includes('://') ? v : 'default://' + v); } catch (_) { return 'direct'; }
-    const scheme = (u.protocol.replace('default:', '').replace(':', '') || '').toLowerCase();
-    if (scheme === 'rules') return 'respect-rules';
-    if (DNS_AUDIT_DIRECT_SCHEMES.has(scheme)) return 'direct';
-    return u.hostname ? 'proxy' : 'direct';
-  };
-  // Правила: домены → цель; IP-правила — для fake-ip находки.
-  const domainTargets = new Map();
-  const proxiedDomains = [];
-  let ipRules = 0;
-  for (const raw of Array.isArray(doc.rules) ? doc.rules : []) {
-    const parts = String(raw).split(',').map(s => s.trim());
-    const type = (parts[0] || '').toUpperCase();
-    const payload = parts[1] || '';
-    const target = parts[2] || '';
-    if (!type) continue;
-    if (type === 'MATCH') continue;
-    if (DNS_AUDIT_DOMAIN_RULES.has(type) && payload) {
-      domainTargets.set(payload.toLowerCase(), target);
-      if (target && !DNS_AUDIT_BUILTIN_TARGETS.has(target)) {
-        proxiedDomains.push(payload);
-      }
-    }
-    if (DNS_AUDIT_IP_RULES.has(type)) ipRules++;
+  // Structural checks run even when DNS is disabled (parseDNS is unconditional).
+  if (respectRules && psns.length === 0) findings.push({id:'dns-respect-rules-no-psns',severity:'error',evidence:'CONFIRMED',message:'dns.respect-rules: true требует непустой dns.proxy-server-nameserver — конфигурация не принимается Mihomo, даже при выключенном DNS.',refs:'config.go:1420'});
+  if (dns['proxy-server-nameserver-policy'] && Object.keys(dns['proxy-server-nameserver-policy']).length && !psns.length) findings.push({id:'dns-psns-policy-no-psns',severity:'error',evidence:'CONFIRMED',message:'proxy-server-nameserver-policy требует непустой proxy-server-nameserver.',refs:'config.go:1457'});
+  if (dns.enable !== true) return findings;
+  const rules = Array.isArray(doc.rules) ? doc.rules : [];
+  const domains = [...new Set(rules.map(rdParseRule).filter(r => ['DOMAIN','DOMAIN-SUFFIX'].includes(r.type)).map(r => r.value.toLowerCase()))];
+  const proxied = domains.filter(d => { const t=dnsEffectiveTarget(d,rules); return t && !DNS_AUDIT_BUILTIN_TARGETS.has(t); });
+  const list = value => Array.isArray(value) ? value : value === undefined ? [] : [value];
+  const endpoints = [...list(dns.nameserver), ...list(dns.fallback)];
+  const routes = endpoints.map(v => dnsResolverRoute(v,dns,doc));
+  if (proxied.length && routes.includes('direct')) findings.push({id:'dns-bypass-for-proxied-domains',severity:'warning',evidence:'INFERRED',message:'Есть статически проксируемые домены и DIRECT-резолверы в nameserver/fallback. Путь DNS отличается от пути данных; утечка и влияние на сеть НЕ наблюдались. Явные #PROXY и respect-rules учитываются.',refs:'config.go:1202; dns_dialer.go:52-79'});
+  const policy = dns['nameserver-policy'];
+  if (policy && typeof policy === 'object' && !Array.isArray(policy)) for (const [key,value] of Object.entries(policy)) {
+    if (/^(geosite:|rule-set:|\*)/i.test(key)) continue;
+    const domain=key.toLowerCase().replace(/^\+?\./,'');
+    const target=dnsEffectiveTarget(domain,rules);
+    if (target && !DNS_AUDIT_BUILTIN_TARGETS.has(target) && list(value).some(v=>dnsResolverRoute(v,dns,doc)==='direct')) findings.push({id:'dns-policy-vs-rule-mismatch',severity:'warning',evidence:'INFERRED',message:'Домен «'+key+'»: nameserver-policy содержит DIRECT-резолвер, первое доказанное правило выбирает «'+target+'». Возможен гео-рассинхрон; окружение НЕ наблюдалось.',refs:'config.go:1202; dns_dialer.go:52-79'});
   }
-  // A [CONFIRMED]: копия валидатора mihomo — конфиг не стартует.
-  if (respectRules && psns.length === 0) {
-    findings.push({ id: 'dns-respect-rules-no-psns', severity: 'error', message: 'dns.respect-rules: true требует непустой dns.proxy-server-nameserver — mihomo не стартует («if “respect-rules” is turned on, “proxy-server-nameserver” cannot be empty»).', refs: 'config.go:1420' });
-  }
-  // B [INFERRED]: DNS-запросы к nameserver идут напрямую при прокси-маршрутизации доменов.
-  if (!respectRules && proxiedDomains.length > 0) {
-    findings.push({ id: 'dns-bypass-for-proxied-domains', severity: 'warning', message: 'Правила маршрутизируют домены через прокси (' + proxiedDomains.length + ' шт.), но dns.respect-rules выключен — запросы к nameserver идут напрямую, минуя туннель (риск утечки/подмены DNS; влияние зависит от окружения).', refs: 'dns_dialer.go:57' });
-  }
-  // C [INFERRED]: nameserver-policy локально ↔ правило через прокси-группу.
-  const policy = (dns['nameserver-policy'] && typeof dns['nameserver-policy'] === 'object') ? dns['nameserver-policy'] : null;
-  if (policy) {
-    for (const dom of Object.keys(policy)) {
-      const bare = String(dom).toLowerCase().replace(/^\+?\./, '');
-      const ruleTarget = domainTargets.get(bare);
-      if (!ruleTarget || DNS_AUDIT_BUILTIN_TARGETS.has(ruleTarget)) continue;
-      if (dnsTargetClass(policy[dom]) === 'direct') {
-        findings.push({ id: 'dns-policy-vs-rule-mismatch', severity: 'warning', message: 'Домен «' + dom + '»: nameserver-policy резолвит локально, а правило маршрутизирует через «' + ruleTarget + '» — возможен гео-рассинхрон ответа DNS и пути трафика.', refs: 'dns_dialer.go:57' });
-      }
-    }
-  }
-  // D [CONFIRMED]: fake-ip + IP-правила — IP-правила видят 198.18.0.0/16.
-  if (enhancedMode === 'fake-ip' && ipRules > 0) {
-    findings.push({ id: 'fake-ip-with-ip-rules', severity: 'info', message: 'enhanced-mode: fake-ip + ' + ipRules + ' IP-правил: соединения с fake-ip уже «resolved», IP-правила видят адрес 198.18.0.0/16, а не реальный. Доменные правила ставьте раньше IP-правил; no-resolve — осознанно.', refs: 'tunnel.go:337; ipcidr.go:35' });
-  }
+  if (dns['enhanced-mode'] === 'fake-ip' && rules.some(raw=>DNS_AUDIT_IP_RULES.has(rdParseRule(raw).type))) findings.push({id:'fake-ip-with-ip-rules',severity:'info',evidence:'UNKNOWN',message:'fake-ip и IP-правила требуют проверки порядка/no-resolve. Mihomo восстанавливает hostname и очищает fake IP перед routing; при необходимости резолвится реальный IP. Результат конкретного запроса статически не доказан.',refs:'tunnel.go:296-299,337-350'});
+  if (routes.some(r=>r==='unknown') || rules.some(raw=>!['DOMAIN','DOMAIN-SUFFIX','DOMAIN-KEYWORD','MATCH'].includes(rdParseRule(raw).type))) findings.push({id:'dns-analysis-unknown',severity:'info',evidence:'UNKNOWN',message:'Часть resolver/routing semantics вне поддерживаемой статической модели (UNKNOWN). GEOSITE/RULE-SET, IP/logical rules, интерфейсы и runtime-выбор группы не угаданы.',refs:'static subset boundary'});
   return findings;
 }
-// Отображение для Config Studio: текст проходит csRedactText (секрет в имени
-// домена/группы не выводится). Полный текст — через единую точку, как
-// csGraphText/csTraceText.
 function csDnsRoutingText(doc) {
-  const dns = (doc && doc.dns && typeof doc.dns === 'object') ? doc.dns : null;
-  if (!dns || dns.enable === false || dns.enable === 'false') {
-    return csRedactText('dns: секция неактивна — DNS↔Routing аудит неприменим.', doc);
-  }
-  const findings = dnsRoutingAudit(doc);
-  if (!findings.length) {
-    return csRedactText('✓ Рассогласований dns↔routing не обнаружено (в границах статического аудита: 4 проверки — respect-rules, DNS-байпас, nameserver-policy, fake-ip×IP-правила).', doc);
-  }
-  const lines = findings.map(f => {
-    const icon = f.severity === 'error' ? '✖' : f.severity === 'warning' ? '⚠' : 'ℹ';
-    return icon + ' [' + f.severity.toUpperCase() + '] ' + f.message + '\n   источник: ' + f.refs;
-  });
-  return csRedactText(lines.join('\n'), doc);
+  const findings=dnsRoutingAudit(doc);
+  const inactive=!doc?.dns || doc.dns.enable !== true;
+  const lines=[];
+  if (inactive) lines.push('dns: секция неактивна (enable должен быть true; default false). Структурные ошибки проверяются отдельно.');
+  if (!findings.length && !inactive) lines.push('✓ Рассогласований не обнаружено в поддерживаемой статической модели. Это не проверка сети/утечек; runtime-выбор группы UNKNOWN.');
+  for (const f of findings) lines.push((f.severity==='error'?'✖':f.severity==='warning'?'⚠':'ℹ')+' ['+f.severity.toUpperCase()+'] ['+f.evidence+'] '+f.message+'\n   источник: '+f.refs);
+  return csRedactText(lines.join('\n'),doc);
 }
 // === DNS↔ROUTING AUDIT CORE — DNS-CORE-END ===
 // === CONFIG STUDIO CORE — CS-CORE-END ===
