@@ -10,11 +10,12 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const { chromium } = require('playwright');
 
 const root = path.resolve(__dirname, '..');
-const outDir = process.env.TEST_OUTPUT_DIR || root;
+const outDir = process.env.TEST_OUTPUT_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'lg-qa-test-'));
 fs.mkdirSync(outDir, { recursive: true });
 let passed = 0;
 const ok = name => { passed++; console.log('  ok —', name); };
