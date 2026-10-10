@@ -891,10 +891,16 @@ async function check(name, fn) {
         runtimeProviderModel={providers:[{name:'synthetic-runtime',proxies:[]}],fetchedAt:1};subscriptionSelection=new Set(['old']);rtControllerMemory='http://synthetic.invalid';document.getElementById('rtSecretInput').value='synthetic-only-secret';rbUndoProjectState=p;
       },{variant,link});
       if(variant==='load'){const downloadPromise=n.waitForEvent('download');await n.evaluate(()=>rbSaveProject());const download=await downloadPromise;const payload=fs.readFileSync(await download.path(),'utf8');n.once('dialog',d=>d.accept());await n.evaluate(text=>rbLoadProject(new File([text],'synthetic.lgproject.json')),payload);assert.equal(await n.evaluate(()=>!!rbUndoProjectState),true);}
+      if(variant==='dpr'){
+        await n.locator('#mtImportFile').setInputFiles({name:'synthetic.mtrickle',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({groups:[{id:'reset-preview',name:'Synthetic old group',interface:'mitun0',enable:true,rules:[]}]}))});
+        await n.waitForFunction(()=>!!mtPending?.preview);
+        assert.match(await n.locator('#mtImportGroups').textContent(),/Synthetic old group/);
+      }
       if(['built','stale'].includes(variant)){await build(n);if(variant==='stale')await n.locator('#mihomoInput').fill(link+'\n# stale');}
       n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();
       const state=await n.evaluate(()=>{const p=rbCollectProject(),d=JSON.parse(RB_NEW_PROJECT);delete p.meta.created;delete d.meta.created;return {p,d,snap:Object.values(profileSnapshots),wg:wgBeans.length,files:wgFiles.length,rejected:wgRejected.length,pending:mtPending,selection:subscriptionSelection.size,runtime:runtimeProviderModel.providers.length,secret:document.getElementById('rtSecretInput').value,undo:rbUndoProjectState,doc:lastRoutingDoc,fp:lastBuildFingerprint,status:document.getElementById('builderActionStatus').dataset.state};});
       assert.deepEqual(state.p,state.d,variant);assert.deepEqual(state.snap,[null,null,null]);for(const key of ['wg','files','rejected','selection','runtime'])assert.equal(state[key],0);for(const key of ['pending','undo','doc','fp'])assert.equal(state[key],null);assert.equal(state.secret,'');assert.equal(state.status,'NOT_BUILT');assert.equal(await n.locator('#mihomoOutput').inputValue(),'');assert.equal(await n.locator('#copyYamlBtn').isDisabled(),true);
+      for(const id of ['mtImportStats','mtImportGroups','mtImportMapping'])assert.equal(await n.locator('#'+id).textContent(),'',variant+': old MagiTrickle preview');
     }
     assert.equal(requests,0);assert.equal(await n.evaluate(()=>JSON.stringify(localStorage)),storage);assert.match(await n.locator('#csImportInput').inputValue(),/synthetic-studio-only/);
     await n.locator('#mihomoInput').fill(link);await n.locator('#cfgSubMode').uncheck();await build(n);assert.equal(await n.locator('#copyYamlBtn').isDisabled(),false);

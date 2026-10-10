@@ -11237,7 +11237,7 @@ function rbResetProject() {
   document.getElementById('mtImportMapping').textContent = '';
   document.getElementById('rbUndoBtn').style.display = 'none';
   clearPhysicalTopology();
-  for (const id of ['ptRuntimeProfiles','ptGraph','ptWhatIfOut','ptNetDiagOut','ptGenOut','mtImportSummary','subscriptionPreviewStats','subscriptionPreviewNames','subscriptionPreviewWarnings','subscriptionPreviewWarning','subscriptionPreviewNamesLegacy','rtReconciliation']) { const el = document.getElementById(id); if (el) el.textContent = ''; }
+  for (const id of ['ptRuntimeProfiles','ptGraph','ptWhatIfOut','ptNetDiagOut','ptGenOut','mtImportStats','mtImportGroups','subscriptionPreviewStats','subscriptionPreviewNames','subscriptionPreviewWarning','subscriptionPreviewNamesLegacy','rtReconciliation']) { const el = document.getElementById(id); if (el) el.textContent = ''; }
   lastBuildFingerprint = lastRoutingDoc = lastRoutingHumanNames = lastMtuPlan = null;
   diagnosticActionSeq++; diagnosticPendingOut = null; mihomoValidationSeq++;
   vrgFocusId = ''; vrgRenderInto('vrgSvgWrap', null, false, 'vrgTextAlt');

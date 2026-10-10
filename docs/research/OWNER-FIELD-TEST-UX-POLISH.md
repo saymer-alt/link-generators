@@ -74,3 +74,5 @@ Review Reset ownership/discard of old Undo, one-card defaults and AWL explanator
 ## PR review follow-up
 
 A real synthetic upload regression reproduced the DNS warning surviving Reset. Reset now hides wgDnsWarning explicitly. The existing renderWgList already calls renderWgRejected; the regression verifies its empty hidden DOM too, plus Cancel retention of both panels. The new case failed on the initial candidate and passes after repair.
+
+The reset inventory probe also imports a synthetic MagiTrickle preview: hidden statistics/group names must be erased, not only hidden. The test reproduced retained DOM text; cleanup now targets the actual mtImportStats/mtImportGroups IDs.
