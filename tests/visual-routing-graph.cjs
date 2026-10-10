@@ -99,16 +99,16 @@ const DOC = {
   ok();
 }
 
-// --- 5. фокус: замыкание — BFS в обе стороны от фокуса ---
+// --- 5. фокус builtin: только входящие предки ---
 {
   const g = api.cdgBuildGraph(DOC);
-  // фокус на builtin:DIRECT — в малом графе замыкание достигает всех узлов
+  // builtin:DIRECT сохраняет входящих предков, не их соседние выходы.
   const v = api.vrgBuildView(g, { focus: 'builtin:DIRECT' });
   assert.equal(v.focused, 'builtin:DIRECT');
   const ids = new Set(v.nodes.map(n => n.id));
   assert.ok(ids.has('builtin:DIRECT'), 'фокус в замыкании');
-  // в полном графе замыкание может достигать всех узлов — это корректно
-  assert.equal(v.truncated, false, 'маленький граф не усечён');
+  // Малый размер сам по себе не означает, что фокус обязан показать весь граф.
+  assert.equal(v.truncated, true, 'соседние ветки скрыты');
   ok();
 }
 
@@ -179,4 +179,39 @@ const DOC = {
   ok();
 }
 
+// GLOBAL в документе — реальная группа; builtin остаётся только без неё.
+{
+  const doc={proxies:['A','B','C'].map(name=>({name,type:'ss'})),
+    'proxy-groups':[{name:'GLOBAL',type:'select',proxies:['A','B','C']}],rules:['MATCH,GLOBAL']};
+  const graph=api.cdgBuildGraph(doc);
+  assert.ok(graph.edges.some(e=>e.from==='rule:0'&&e.to==='group:GLOBAL'));
+  assert.ok(!graph.nodes.some(n=>n.id==='builtin:GLOBAL'));
+  assert.deepEqual(api.vrgBuildView(graph,{focus:'proxy:A'}).nodes.map(n=>n.id).sort(),['group:GLOBAL','proxy:A','rule:0']);
+  assert.equal(api.vrgBuildView(graph,{focus:'rule:0'}).nodes.length,5);
+  assert.ok(api.cdgBuildGraph({rules:['MATCH,GLOBAL']}).nodes.some(n=>n.id==='builtin:GLOBAL'));
+  ok();
+}
+// Directional focus must never walk from an ancestor back into its siblings.
+{
+  const nodes = [['r1','rule'],['r2','rule'],['r3','rule'],['global','proxy-group'],['x','proxy-group'],['y','proxy-group'],['a','proxy'],['b','proxy'],['c','proxy'],['d','proxy'],['provider','proxy-provider']].map(([id,kind])=>({id,kind}));
+  const edges = [['r1','global'],['global','a'],['global','b'],['global','c'],['r2','x'],['x','provider'],['r3','y'],['y','d']].map(([from,to])=>({from,to,kind:'uses'}));
+  const graph={nodes,edges}, snapshot=JSON.stringify(graph);
+  for(const [focus,expected] of [['a',['a','global','r1']],['r1',['r1','global','a','b','c']],['provider',['provider','x','r2']],['x',['x','r2','provider']]]) {
+    assert.deepEqual([...api.vrgClosure(nodes,edges,focus,60)].sort(),expected.sort(),focus);
+    assert.deepEqual(api.vrgBuildView(graph,{focus}).nodes.map(n=>n.id).sort(),expected.sort());
+  }
+  assert.deepEqual([...api.vrgClosure(nodes,edges.concat([{from:'global',to:'x'}]),'x',60)].sort(),['global','provider','r1','r2','x'].sort(),'group ancestors never fan back to siblings');
+  assert.equal(JSON.stringify(graph),snapshot,'canonical graph unchanged');
+  assert.equal(api.vrgBuildView(graph,{focus:'missing'}).focused,null);
+  assert.equal(api.vrgClosure(nodes,edges,'missing',60).size,0);
+  assert.deepEqual([...api.vrgClosure(nodes,[],'a',60)],['a']);
+  const largeNodes=nodes.concat(Array.from({length:1000},(_,i)=>({id:'bulk'+i,kind:'proxy'})));
+  const largeEdges=edges.concat(Array.from({length:1000},(_,i)=>({from:'global',to:'bulk'+i,kind:'uses'})));
+  assert.equal(api.vrgClosure(largeNodes,largeEdges,'a',60).size,3);
+  const bounded=api.vrgClosure(largeNodes,largeEdges,'r1',8);
+  assert.equal(bounded.size,8);assert.ok(bounded.has('r1'));
+  assert.deepEqual([...bounded],[...api.vrgClosure(largeNodes,largeEdges,'r1',8)]);
+  assert.ok(api.vrgClosure(nodes,edges.concat([{from:'global',to:'r1'}]),'a',60).size<=nodes.length);
+  ok();
+}
 console.log('PASS visual-routing-graph: ' + cases + ' groups');

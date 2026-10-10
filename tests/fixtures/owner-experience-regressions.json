@@ -216,6 +216,125 @@
       "scenario_prefixes": [
         "UX29 field "
       ]
+    },
+    {
+      "id": "UX-30",
+      "summary": "Reset modal",
+      "scenario_prefixes": [
+        "UX30 R2 "
+      ]
+    },
+    {
+      "id": "UX-31",
+      "summary": "YAML action button",
+      "scenario_prefixes": [
+        "UX31 R2 "
+      ]
+    },
+    {
+      "id": "UX-32",
+      "summary": "Single Coverage action",
+      "scenario_prefixes": [
+        "UX32 R2 "
+      ]
+    },
+    {
+      "id": "UX-33",
+      "summary": "Internal list spacing",
+      "scenario_prefixes": [
+        "UX33 R2 "
+      ]
+    },
+    {
+      "id": "UX-34",
+      "summary": "Lab freshness and artifacts",
+      "scenario_prefixes": [
+        "UX34 R2 "
+      ]
+    },
+    {
+      "id": "UX-35",
+      "summary": "Fullscreen focus panel",
+      "scenario_prefixes": [
+        "UX35 R2 "
+      ]
+    },
+    {
+      "id": "UX-36",
+      "summary": "MagiTrickle SELECT rename",
+      "scenario_prefixes": [
+        "UX36 R2 "
+      ]
+    },
+    {
+      "id": "UX-37",
+      "summary": "Compact WG cards",
+      "scenario_prefixes": [
+        "UX37 R2 "
+      ]
+    },
+    {
+      "id": "UX-38",
+      "summary": "Tiered auto-add",
+      "scenario_prefixes": [
+        "UX38 R2 "
+      ]
+    },
+    {
+      "id": "UX-39",
+      "summary": "Priority display labels",
+      "scenario_prefixes": [
+        "UX39 R2 "
+      ]
+    },
+    {
+      "id": "UX-40",
+      "summary": "Final diagnostics snapshot",
+      "scenario_prefixes": [
+        "UX40 R2 "
+      ]
+    },
+    {
+      "id": "UX-41",
+      "summary": "Validation action button",
+      "scenario_prefixes": [
+        "UX41 R2 "
+      ]
+    },
+    {
+      "id": "UX-42",
+      "summary": "Physical public feature gate",
+      "scenario_prefixes": [
+        "UX42 R2 "
+      ]
+    },
+    {
+      "id": "UX-43",
+      "summary": "Directional graph focus without ancestor siblings",
+      "scenario_prefixes": [
+        "UX43 VRG "
+      ]
+    },
+    {
+      "id": "UX-44",
+      "summary": "Graph and text disclosure chevrons",
+      "scenario_prefixes": [
+        "UX44 VRG "
+      ]
+    },
+    {
+      "id": "UX-45",
+      "summary": "Coverage priority display and secret redaction",
+      "scenario_prefixes": [
+        "UX45 polish "
+      ]
+    },
+    {
+      "id": "UX-46",
+      "summary": "Actual graph scale and unambiguous reset",
+      "scenario_prefixes": [
+        "UX46 polish "
+      ]
     }
   ]
 }

@@ -41,7 +41,7 @@ const widths=[320,360,375,390,412,480,768,1024,1366,1440,1920,2560];
   await reveal('#cfgPolicyRouting');await p.check('#cfgPolicyRouting');await p.click('#btnPolicyAdd');
   const original=await build(),before=await snap();
   await layout('Builder/WG');
-  const [download]=await Promise.all([p.waitForEvent('download'),p.locator('button[onclick="rbSaveProject()"]').click()]);
+  const [download]=await Promise.all([p.waitForEvent('download'),p.locator('#tab-mihomo button[onclick="rbSaveProject()"]').click()]);
   const projectFile=path.join(lab.dir,'generated','final-ui.lgproject.json');await download.saveAs(projectFile);
   await ready();const empty=await snap();
   await p.locator('#rbProjectFile').setInputFiles(projectFile);await p.waitForFunction(()=>document.getElementById('toast').textContent.includes('отменена'));
@@ -76,7 +76,7 @@ const widths=[320,360,375,390,412,480,768,1024,1366,1440,1920,2560];
   await p.keyboard.press('Space');assert.equal(await p.locator('#csGraphPanel').evaluate(el=>el.open),wasOpen);
   const focus=await p.locator('#csGraphPanel > summary').evaluate(el=>({active:el===document.activeElement,outline:getComputedStyle(el).outlineStyle}));assert.equal(focus.active,true);assert.notEqual(focus.outline,'none');result.keyboard=true;
   for(const enable of [undefined,false,true]){const d={dns:{nameserver:['192.0.2.53'],...(enable===undefined?{}:{enable})},rules:['MATCH,DIRECT']};await studio(yaml.dump(d));assert.equal(await p.evaluate(()=>csSummarize(csCurrentDoc).dns),enable===true,'DNS summary must follow actual enable/default');if(hasDns)assert.equal((await p.locator('#csDnsRoutingOut').textContent()).includes('неактивна'),enable!==true);}
-  await p.locator('.tab',{hasText:'Mihomo Config Builder'}).click();await reveal('#ptDemoBtn');await p.click('#ptDemoBtn');await p.click('#ptAnalyzeBtn');await layout('Physical Topology');
+  await p.locator('.tab',{hasText:'Mihomo Config Builder'}).click();assert.equal(await p.locator('#physicalTopologyInternal').isVisible(),false);assert.equal(await p.locator('a[href="#ux-lab"]').count(),0);await layout('Public GUI without physical lab');
   assert.equal(errors.length,0,'Browser errors');
   for(const w of before.wgProfiles){const key=w.bean.wireguard.privateKey;assert.ok(!logs.some(x=>x.includes(key)),'Console leaked key');}
   assert.equal(result.externalRequests,0);result.journey=true;result.status='PASS';

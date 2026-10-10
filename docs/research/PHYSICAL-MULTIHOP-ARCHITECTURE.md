@@ -1,5 +1,8 @@
 # Physical Multi-Hop: архитектурный аудит и дизайн foundation (v1.11)
 
+> Owner Round 2: публичный Physical Topology UI выключен. Этот документ описывает сохранённый эксперимент, а не доступную пользовательскую функцию. См. [Product Review](PHYSICAL-TOPOLOGY-PRODUCT-REVIEW.md).
+
+
 Внутренний документ цикла v1.11.0 (canonical scope — issue #177; primary capability — #149).
 Базис: v1.10.0 released (stable `447af22`), main после bootstrap = `1.11.0-dev` / `main`.
 Дата: 2026-10-07/08. Статус: дизайн-документ; реализованные части помечены, обещания — разделены по уровням evidence.

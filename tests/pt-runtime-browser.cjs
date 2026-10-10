@@ -60,6 +60,7 @@ const PROXIES_DIRECT = JSON.stringify({ proxies: {
     return route.fulfill({ contentType: 'application/json', body: PROXIES_CONSISTENT });
   });
 
+  await page.addInitScript(()=>{globalThis.__LG_INTERNAL_PHYSICAL_TOPOLOGY__=true;});
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
   await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
 

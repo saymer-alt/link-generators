@@ -146,6 +146,9 @@ mihomo -t -f config.yaml
 
 ## Возможности Mihomo Builder
 
+Owner Acceptance Round 2: понятный Reset с отменой по умолчанию, кнопки перехода к YAML/проверке, fullscreen поиск и фокус графа, переименование отдельных SELECT-групп MagiTrickle до импорта, компактные WG/AWG карточки, добавление участников приоритетных групп сразу после выбора. Inspector очищает результат старой проверки при новом Build. YAML и routing guards сохранены. Physical Topology убрана из публичного GUI; экспериментальные исходники и тесты сохранены за выключенным внутренним gate. [Таблица приёмки](docs/research/OWNER-ACCEPTANCE-ROUND-2.md) · [Product Review](docs/research/PHYSICAL-TOPOLOGY-PRODUCT-REVIEW.md).
+
+
 - **Proxy groups** — группа быстрейшего прокси (`url-test`) и селектор `GLOBAL`; в режимах «на каждый прокси» — отдельная группа на каждый прокси. В автоматическом БС-режиме `GLOBAL` вместо этого становится плоской `fallback`-группой с абсолютным порядком primary → fallback.
 - **Автоматический режим белых списков** — два независимых набора выходов, автоматический переход на БС и возврат на primary по health-check. Поддерживаются static links, HTTP providers и mixed input. Вложенные `fallback → url-test` группы намеренно не используются из-за воспроизводимого [Mihomo #2588](https://github.com/MetaCubeX/mihomo/issues/2588).
 - **🌐 Modern REALITY (X25519+ML-KEM)** — selective-совместимость: перечислите серверы по одному в строке (`host`, `host:port` или `[IPv6]:port`), и только REALITY-узлы именно этих серверов получат `support-x25519mlkem768: true` (и `client-fingerprint: chrome`, если свой не задан). Остальные узлы, включая обычные VLESS/TLS, остаются без изменений; пустое поле — прежний вывод. Некорректные строки пропускаются с неблокирующим предупреждением. Применяйте только к серверам с подтверждённой совместимостью: X25519MLKEM768 появился в Xray v25.5.16, но сама версия совместимости не гарантирует.
@@ -214,3 +217,6 @@ mihomo -t -f config.yaml
 ## Credits
 
 Based on [web4core](https://github.com/spatiumstas/web4core) by [spatiumstas](https://github.com/spatiumstas) (BSD-3-Clause). Source-level extensions used by this project are maintained in the [`saymer-alt/web4core`](https://github.com/saymer-alt/web4core) fork on the `link-generators` branch.
+Фокус графа направленный: прокси/провайдер показывает входящих предков, правило — исходящие зависимости, группа — предков и свои зависимости без соседних ветвей предков. Явная группа GLOBAL соединена с ведущими к ней правилами и собственными участниками; без такой группы сохраняется builtin GLOBAL. Выбранный узел выделен; текстовая версия отражает текущий фокус, видимые связи и скрытые количества. Стрелки раскрытия графа и текстовой версии синхронизированы с состоянием раздела.
+
+Domain Coverage в Builder и Config Studio показывает человекочитаемые приоритеты; реальные имена групп сохранены в исходном YAML. Текущий масштаб графа расположен рядом с «−/+», отдельно от высоты; «Сбросить к 100%» возвращает реальный масштаб 1:1. При сильном уменьшении используйте масштабирование или фокус.

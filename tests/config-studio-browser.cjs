@@ -56,6 +56,7 @@ const SYNTH = [
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   if (process.env.JS_YAML_PATH) await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ path: process.env.JS_YAML_PATH, contentType: 'text/javascript' }));
+  await page.addInitScript(()=>{globalThis.__LG_INTERNAL_PHYSICAL_TOPOLOGY__=true;});
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
   await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
 
@@ -150,8 +151,8 @@ const SYNTH = [
   await page.locator('#csDomainBtn').click();
   const cov = await page.textContent('#csDomainOut');
   assert.ok(cov.includes('example.com:'), 'домен обработан');
-  assert.ok(cov.includes('правило #1'), 'победившее правило указано');
-  assert.ok(cov.includes('unknown-service.example: fallback MATCH'), 'непокрытый домен честно уходит в MATCH-fallback');
+  assert.ok(cov.includes('Правило: #1'), 'победившее правило указано');
+  assert.ok(cov.includes('unknown-service.example:\nПравило: MATCH, запасная маршрутизация.'), 'непокрытый домен честно уходит в MATCH-fallback');
   ok('покрытие доменов');
 
   // --- одиночная проверка ---

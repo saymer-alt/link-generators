@@ -69,8 +69,8 @@ const ok = name => { passed++; console.log('  ok —', name); };
         let opt = sel.querySelector('option[value="' + v + '"]');
         if (!opt) { opt = document.createElement('option'); opt.value = v; opt.textContent = v; sel.appendChild(opt); }
         sel.value = v;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
       }, { i: cardIdx, v: value });
-      await page.locator('#tierCards .tier-card').nth(cardIdx).locator('.tier-add-member').click();
       await page.waitForTimeout(60);
       const added = await page.evaluate(({ i, v }) => {
         const card = document.querySelectorAll('#tierCards .tier-card')[i];
@@ -109,7 +109,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.ok(d1.rules.includes('MATCH,🪜 TIERED-AUTO'), 'MATCH уходит в root');
   assert.ok(!d1.rules.includes('MATCH,GLOBAL'), 'старого MATCH,GLOBAL больше нет');
   const trace = await page.evaluate(() => document.getElementById('tieredTrace').textContent);
-  assert.match(trace, /Tiered Failover: 2 эшелон\(ов\), строгий приоритет → 1 WARP \[url-test × 2\] → 2 Commercial \[url-test × 1\]/, 'trace объясняет конфигурацию');
+  assert.match(trace, /Приоритетные группы серверов: 2 группы, строгий порядок → WARP.*Самый быстрый.*Commercial/, 'trace объясняет конфигурацию');
   ok('ON: tier-группы + root + GLOBAL/MATCH переписаны + trace');
 
   // 3. Детерминизм: rebuild → тот же YAML
@@ -152,8 +152,8 @@ const ok = name => { passed++; console.log('  ok —', name); };
     const sel = card.querySelector('.tier-member-select');
     const opt = document.createElement('option'); opt.value = 'ghost-proxy'; opt.textContent = 'ghost-proxy';
     sel.appendChild(opt); sel.value = 'ghost-proxy';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await page.locator('#tierCards .tier-card').nth(0).locator('.tier-add-member').click();
   r = await build();
   assert.match(r.toast, /не найден в текущей сборке/, 'неизвестный выход назван');
   ok('валидация: неизвестный участник → явный отказ');
@@ -190,7 +190,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   await build();
   await page.evaluate(() => { document.getElementById('routingDiagnostics').open = true; });
   const preview = await page.locator('#rdPreview').textContent();
-  assert.match(preview, /\[Приоритет\] TIERED-AUTO/, 'Inspector: readable semantic path through the unchanged YAML tier root');
+  assert.match(preview, /Приоритетные группы серверов/, 'Inspector: readable semantic path through the unchanged YAML tier root');
   assert.match(preview, /Фактически выбранный участник определяется Mihomo во время работы/, 'runtime-selected честность');
   ok('Inspector: semantic path показывает tier root без ложного runtime-claim');
 
@@ -250,7 +250,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
     const sel = document.querySelectorAll('#tierCards .tier-card')[1].querySelector('.tier-member-select');
     const v = sel.options[1] ? sel.options[1].value : '';
     sel.value = v;
-    sel.dispatchEvent(new Event('input', { bubbles: true })); // как реальный выбор пользователя
+    sel.dispatchEvent(new Event('change', { bubbles: true })); // confirmed selection auto-adds
     window.__raceProbe = v;
   });
   // внеочередной re-render (то, что делает debounced refreshWgTargetSelectors)
@@ -259,8 +259,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
     const sel = document.querySelectorAll('#tierCards .tier-card')[1].querySelector('.tier-member-select');
     return { value: sel.value, expected: window.__raceProbe };
   });
-  assert.equal(raceSel.value, raceSel.expected, 'pendingSelect пережил re-render: ' + JSON.stringify(raceSel));
-  await page.locator('#tierCards .tier-card').nth(1).locator('.tier-add-member').click();
+  assert.equal(raceSel.value, '', 'pendingSelect пережил re-render: ' + JSON.stringify(raceSel));
   await page.waitForTimeout(40);
   const raceMember = await page.evaluate(() => {
     const card = document.querySelectorAll('#tierCards .tier-card')[1];
@@ -283,8 +282,8 @@ const ok = name => { passed++; console.log('  ok —', name); };
       const hint = document.querySelector('#tierCards .tier-card .hint');
       return { addText: btn ? btn.textContent : '', hintText: hint ? hint.textContent : '' };
     });
-    assert.equal(p2.addText, '＋ Добавить', 'явная текстовая кнопка добавления: ' + JSON.stringify(p2.addText));
-    assert.ok(p2.hintText.includes('ещё не добавляет'), 'hint про то, что выбор сам не добавляет: ' + JSON.stringify(p2.hintText));
+    assert.equal(p2.addText, '', 'явная текстовая кнопка добавления: ' + JSON.stringify(p2.addText));
+    assert.ok(p2.hintText.includes('автоматически'), 'hint про то, что выбор сам не добавляет: ' + JSON.stringify(p2.hintText));
     ok('P2 UX: текстовая «＋ Добавить» + hint');
   }
 

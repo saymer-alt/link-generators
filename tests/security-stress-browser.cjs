@@ -35,7 +35,8 @@ let cases = 0;
       if (/^https?:/.test(url)) { unexpected.push(url); return route.abort(); }
       return route.continue();
     });
-    await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
+    await page.addInitScript(()=>{globalThis.__LG_INTERNAL_PHYSICAL_TOPOLOGY__=true;});
+  await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
     await page.waitForFunction(() => globalThis.jsyaml && globalThis.web4core);
     await page.evaluate(() => globalThis.__auditSentinel = 0);
     const studio = async text => {
