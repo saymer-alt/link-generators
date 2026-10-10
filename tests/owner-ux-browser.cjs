@@ -237,7 +237,7 @@ async function check(name, fn) {
     assert.equal(await d.locator('#dcBuildCheckBtn').isVisible(), true);
     assert.ok(!(await d.locator('#dcResults').textContent()).includes('SELECT-группа'));
     await d.locator('#dcBuildCheckBtn').click();
-    await d.waitForFunction(() => document.getElementById('dcResults').textContent.includes('→ DIRECT'));
+    await d.waitForFunction(() => document.getElementById('dcResults').textContent.includes('Маршрут: DIRECT'));
     assert.equal(await d.locator('#dcInput').inputValue(), 'chat.openai.com\nowner.example');
   });
   await check('UX07 network Build cancel does not send or mutate project', async () => {
@@ -1086,6 +1086,40 @@ async function check(name, fn) {
       assert.equal(await summary.evaluate(e=>getComputedStyle(e).listStyleType),'none');
     }
     await n.locator('.tab',{hasText:'Mihomo Config Builder'}).click();await build(n);assert.equal(await n.locator('#vrgPanel > summary .disclosure-chevron').textContent(),'▼');
+  });
+  for(const mode of ['tiered','awl','tiered-policy'])for(const consumer of ['Builder','Studio'])await check('UX45 polish coverage human labels '+mode+' '+consumer,async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);
+    if(mode==='awl')await n.evaluate(l=>{document.getElementById('cfgAutoWhitelist').checked=true;document.getElementById('whitelistInput').value=l.replace('Owner-A','Fallback-B');updateAwlCompatibility();},link);
+    else {await r2Tier(n);if(mode==='tiered-policy')await n.evaluate(()=>addPolicyCard({name:'AI',domains:'gemini.google.com',target:'GLOBAL'}));}
+    await build(n);const yaml=await n.locator('#mihomoOutput').inputValue();if(mode!=='awl')assert.match(yaml,/🪜 TIERED-AUTO/);
+    let output='#dcResults',input='#dcInput',button='#dcRunBtn';
+    if(consumer==='Studio'){await n.locator('.tab',{hasText:'Config Studio'}).click();await n.locator('#csImportInput').fill(yaml);await n.locator('#csParseBtn').click();output='#csDomainOut';input='#csDomainInput';button='#csDomainRunBtn';}
+    await r2Reveal(n,input.slice(1));await n.locator(input).fill('gemini.google.com\nunknown.example');
+    if(consumer==='Studio')await n.evaluate(()=>runCsDomainCoverage());else await n.locator(button).click();
+    const text=await n.locator(output).textContent();assert.doesNotMatch(text,/TIERED-AUTO|🪜|Приоритет 1.*Приоритет 1/);assert.match(text,/Правило:/);assert.match(text,/Фактический сервер выбирается Mihomo во время работы/);
+    if(mode!=='awl')assert.match(text,/Приоритетные группы серверов.*Приоритет 1/s);
+    if(consumer==='Studio'){
+      await n.evaluate(()=>{document.getElementById('csRuleProbe').value='gemini.google.com';runCsRuleProbe();});
+      for(const id of ['csRuleProbeOut','csGraphOut','csTraceOut','csVrgTextAltOut'])assert.doesNotMatch(await n.locator('#'+id).textContent(),/TIERED-AUTO|🪜/);
+      await n.evaluate(()=>{const secret='🪜 1 synthetic-polish-secret';const doc=JSON.parse(JSON.stringify(csCurrentDoc));doc.proxies[0].password=secret;doc.rules=['MATCH,'+secret];csRunAnalysis(jsyaml.dump(doc));document.getElementById('csDomainInput').value='unknown.example';runCsDomainCoverage();document.getElementById('csRuleProbe').value='unknown.example';runCsRuleProbe();vrgRenderInto('csVrgSvgWrap',csCurrentDoc,false,'csVrgTextAltOut');});
+      for(const id of ['csDomainOut','csRuleProbeOut','csVrgSvgWrap','csVrgTextAltOut'])assert.doesNotMatch(await n.locator('#'+id).textContent(),/synthetic-polish-secret/);
+    }
+    assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+  });
+  for(const consumer of ['Builder','Studio'])await check('UX46 polish graph scale label actual bounds '+consumer,async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);let id='vrgSvgWrap';
+    if(consumer==='Studio'){await n.locator('.tab',{hasText:'Config Studio'}).click();await n.locator('#csImportInput').fill(await n.locator('#mihomoOutput').inputValue());await n.locator('#csParseBtn').click();id='csVrgSvgWrap';}
+    await r2Reveal(n,id);const wrap=n.locator('#'+id),nav=n.locator('#'+id+'Nav'),button=a=>nav.locator('[data-vrg-action='+a+']');
+    assert.equal(await button('reset').textContent(),'Сбросить к 100%');assert.match(await nav.locator('.vrg-zoom-controls').textContent(),/−.*\+.*Масштаб:.*%.*Сбросить к 100%.*Вписать граф/s);
+    const verify=async expected=>{const data=await wrap.evaluate(w=>{const s=vrgNavigation.get(w);return{scale:s.scale,actual:Number(w.querySelector('svg').getAttribute('width'))/Number(w.querySelector('svg').getAttribute('viewBox').split(' ')[2])};});const percent=parseFloat(await nav.locator('.vrg-scale').textContent())/100;assert.ok(Math.abs(data.actual-data.scale)<1e-8);assert.ok(Math.abs(percent-data.scale)<.00006);if(expected!==undefined)assert.ok(Math.abs(data.scale-expected)<1e-8);};
+    await button('reset').click();await verify(1);for(let i=0;i<4;i++)await button('out').click();await verify(.05);assert.equal(await button('out').isDisabled(),true);assert.equal(await nav.locator('.vrg-small-scale-hint').isVisible(),true);
+    for(let i=0;i<10;i++)await button('in').click();await verify(2.5);assert.equal(await button('in').isDisabled(),true);await button('reset').click();await verify(1);
+    await wrap.dispatchEvent('wheel',{altKey:true,deltaY:-20,bubbles:true,cancelable:true});await verify(1.25);
+    await button('fit').click();await verify();await button('expand').click();await verify();
+    const side=wrap.locator('..').locator('..').locator('.vrg-side select');await side.selectOption(await side.locator('option').nth(1).getAttribute('value'));await verify();await button('reset').click();await verify(1);await n.keyboard.press('Escape');assert.equal(await button('expand').getAttribute('aria-expanded'),'false');
+    for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,850],[320,850]]){await n.setViewportSize({width,height});await button('fit').click();await verify();assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);}
+    await n.evaluate(id=>{const doc=JSON.parse(JSON.stringify(vrgNavigation.get(document.getElementById(id)).doc));doc.rules=Array.from({length:200},(_,i)=>'DOMAIN,large-'+i+'.example,GLOBAL');if(id==='vrgSvgWrap'){lastRoutingDoc=doc;vrgFocusId='';renderVrgBuilder();}else csRunAnalysis(jsyaml.dump(doc));},id);
+    await nav.locator('input[type=range]').evaluate(e=>{e.value='120';e.dispatchEvent(new Event('input',{bubbles:true}));});await button('fit').click();await verify(.05);assert.equal(await nav.locator('.vrg-small-scale-hint').isVisible(),true);assert.equal(await button('out').isDisabled(),true);
   });
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });
   await browser.close();

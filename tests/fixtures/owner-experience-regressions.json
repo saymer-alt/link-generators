@@ -321,6 +321,20 @@
       "scenario_prefixes": [
         "UX44 VRG "
       ]
+    },
+    {
+      "id": "UX-45",
+      "summary": "Coverage priority display and secret redaction",
+      "scenario_prefixes": [
+        "UX45 polish "
+      ]
+    },
+    {
+      "id": "UX-46",
+      "summary": "Actual graph scale and unambiguous reset",
+      "scenario_prefixes": [
+        "UX46 polish "
+      ]
     }
   ]
 }

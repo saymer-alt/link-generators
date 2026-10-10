@@ -151,8 +151,8 @@ const SYNTH = [
   await page.locator('#csDomainBtn').click();
   const cov = await page.textContent('#csDomainOut');
   assert.ok(cov.includes('example.com:'), 'домен обработан');
-  assert.ok(cov.includes('правило #1'), 'победившее правило указано');
-  assert.ok(cov.includes('unknown-service.example: fallback MATCH'), 'непокрытый домен честно уходит в MATCH-fallback');
+  assert.ok(cov.includes('Правило: #1'), 'победившее правило указано');
+  assert.ok(cov.includes('unknown-service.example:\nПравило: MATCH, запасная маршрутизация.'), 'непокрытый домен честно уходит в MATCH-fallback');
   ok('покрытие доменов');
 
   // --- одиночная проверка ---

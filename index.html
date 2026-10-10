@@ -247,6 +247,9 @@
   g:focus .vrg-node-rect,g:focus-visible .vrg-node-rect{stroke:var(--accent,#0074d9);stroke-width:2.5}
   .vrg-nav{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;min-width:0}
   .vrg-nav .btn{padding:5px 10px;flex:0 1 auto}
+  .vrg-zoom-controls,.vrg-view-controls,.vrg-size-controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-width:100%;min-width:0}
+  .vrg-current-scale{white-space:nowrap;font-weight:bold}
+  .vrg-small-scale-hint{flex-basis:100%}
   .vrg-viewport{max-width:100%;min-width:0}
   .vrg-viewport svg{display:block;max-width:none;touch-action:none}
   .vrg-viewport.vrg-panning{cursor:grabbing;user-select:none}
@@ -684,7 +687,7 @@
       </div>
 <div id="tieredAwlHint" class="hint" style="display:none">Недоступно при включённых автоматических белых списках. Настройки групп сохранены.</div>
 <details id="tieredPanel" style="display:none" open><summary id="tieredSavedSummary">Настройки групп приоритета</summary>
-        <div class="hint">Эшелоны проверяются по порядку; финальное правило MATCH направляет трафик в корневую группу «🪜 TIERED-AUTO». Участники — из текущей сборки (прокси, WG/AWG-профили, провайдеры). Health-семантика и границы: <a href="https://github.com/saymer-alt/link-generators/blob/main/docs/TIERED-FAILOVER.md">docs/TIERED-FAILOVER.md</a> (HTTP-пробы; UDP не заявлен).</div>
+        <div class="hint">Приоритетные группы серверов проверяются по порядку; финальное правило MATCH направляет трафик в эти группы. Участники — из текущей сборки (прокси, WG/AWG-профили, провайдеры). Health-семантика и границы: <a href="https://github.com/saymer-alt/link-generators/blob/main/docs/TIERED-FAILOVER.md">docs/TIERED-FAILOVER.md</a> (HTTP-пробы; UDP не заявлен).</div>
         <p class="hint">Используется первая доступная группа. Если она становится недоступной, Mihomo переходит к следующей. После восстановления группы более высокого приоритета она снова становится предпочтительной по результатам проверок доступности. Переключение не мгновенное; сохранение действующих соединений не гарантируется.</p><p class="hint">Между группами — строгий порядок приоритетов. Внутри группы: «Самый быстрый (url-test)» выбирает по измеренной задержке; «По порядку (fallback)» предпочитает первого доступного участника. Это не физическая multi-hop цепочка VPS. Назовите группы по своему назначению, например «Личные VPS» или «Резервная подписка».</p>
         <div id="tierCards"></div>
         <div id="tierDupWarn" class="hint" style="display:none;margin-top:6px"></div>
@@ -8520,6 +8523,22 @@ function routingDisplayText(value) {
 }
 function tierGroupCount(n) { const x = n % 100, y = n % 10; return n + ' ' + (x >= 11 && x <= 14 ? 'групп' : y === 1 ? 'группа' : y >= 2 && y <= 4 ? 'группы' : 'групп'); }
 function tierStrategyLabel(strategy) { return strategy === 'fallback' ? 'По порядку (fallback)' : 'Самый быстрый (url-test)'; }
+// Общий UI для Coverage обоих consumers. Сначала маскируем исходные значения.
+function domainCoverageDisplayText(res, doc) {
+  const lines = [];
+  for (const r of res.results) {
+    lines.push(r.input + ':');
+    if (!r.valid) { lines.push('Некорректный ввод — ' + r.reason); continue; }
+    if (r.verdict === 'UNKNOWN' || r.verdict === 'UNCOVERED') { lines.push(r.verdict + ' — ' + r.reason); continue; }
+    lines.push(r.verdict === 'FALLBACK' ? 'Правило: MATCH, запасная маршрутизация.'
+      : 'Правило: #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw + (r.viaProvider ? ' (inline-провайдер «' + r.viaProvider + '»)' : ''));
+    lines.push('Маршрут: ' + r.chainText);
+    if (r.runtimeSelected) lines.push('Фактический сервер выбирается Mihomo во время работы.');
+    if (r.stale) lines.push('(Предыдущая сборка.)');
+    lines.push('');
+  }
+  return routingDisplayText(csRedactText(lines.join('\n'), doc));
+}
 const RD_NL = String.fromCharCode(10);
 let lastRoutingDoc = null;
 let lastMtuPlan = null; // diagnostics-only результат web4core.planWireGuardMtu (YAML не меняется)
@@ -9213,9 +9232,9 @@ function csRunAnalysis(sourceText) {
   }
   const diags = csDiagnostics(doc);
   const out = document.getElementById('csDiagOut');
-  out.textContent = diags.map(d => (d.severity === 'error' ? '✖ ' : d.severity === 'warning' ? '⚠ ' : 'ℹ ') + d.message).join('\n');
-  document.getElementById('csGraphOut').textContent = csGraphText(doc);
-  document.getElementById('csTraceOut').textContent = csTraceText(doc);
+  out.textContent = routingDisplayText(csRedactText(diags.map(d => (d.severity === 'error' ? '✖ ' : d.severity === 'warning' ? '⚠ ' : 'ℹ ') + d.message).join('\n'), doc));
+  document.getElementById('csGraphOut').textContent = routingDisplayText(csGraphText(doc));
+  document.getElementById('csTraceOut').textContent = routingDisplayText(csTraceText(doc));
   document.getElementById('csDnsRoutingOut').textContent = csDnsRoutingText(doc);
   document.getElementById('csDomainOut').textContent = '';
   document.getElementById('csRuleProbeOut').textContent = '';
@@ -9243,17 +9262,7 @@ function runCsDomainCoverage() {
   if (!csCurrentDoc) { out.textContent = 'Сначала разберите конфиг.'; return; }
   const res = cdgDomainCoverage(csCurrentDoc, document.getElementById('csDomainInput').value, {});
   if (!res.results.length) { out.textContent = 'Введите домены (по одному в строке).'; return; }
-  const lines = [];
-  for (const r of res.results) {
-    const head = r.input + ':';
-    if (!r.valid) { lines.push(head + ' INVALID — ' + r.reason); continue; }
-    if (r.verdict === 'UNKNOWN' || r.verdict === 'UNCOVERED') { lines.push(head + ' ' + r.verdict + ' — ' + r.reason); continue; }
-    const via = r.verdict === 'FALLBACK'
-      ? 'fallback MATCH'
-      : (r.viaProvider ? 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw + ' (inline-провайдер «' + r.viaProvider + '»)' : 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw);
-    lines.push(head + ' ' + via + RD_NL + '  → ' + r.chainText + (r.runtimeSelected ? ' — runtime-selected' : ''));
-  }
-  out.textContent = csRedactText(lines.join(RD_NL), csCurrentDoc);
+  out.textContent = domainCoverageDisplayText(res, csCurrentDoc);
 }
 
 // Проверка одного домена/IP по импортированному конфигу (routingInspect — то же
@@ -9276,7 +9285,7 @@ function runCsRuleProbe() {
   const matched = res.matched.find(m => m.index === w);
   const rule = rdParseRule(csCurrentDoc.rules[w]);
   const human = matched && rdSemanticTargetText(csCurrentDoc, rule.target, { expandGlobal: true });
-  out.textContent = csRedactText('✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + csCurrentDoc.rules[w] + RD_NL + RD_NL + 'Маршрут: ' + rule.target + (human ? ' → ' + human : '') + (rdTargetIsRuntimeSelected(csCurrentDoc, rule.target) ? RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы (runtime-selected).' : ''), csCurrentDoc);
+  out.textContent = routingDisplayText(csRedactText('✓ Победившее правило:' + RD_NL + '#' + (w + 1) + ' ' + csCurrentDoc.rules[w] + RD_NL + RD_NL + 'Маршрут: ' + (human || rule.target) + (rdTargetIsRuntimeSelected(csCurrentDoc, rule.target) ? RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы (runtime-selected).' : ''), csCurrentDoc));
 }
 
 function csClearStudio() {
@@ -9924,21 +9933,28 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
   if (!nav) {
     nav = document.createElement('div'); nav.id = wrap.id + 'Nav'; nav.className = 'vrg-nav';
     nav.setAttribute('role', 'group'); nav.setAttribute('aria-label', 'Навигация по графу');
+    const zoom = document.createElement('div'); zoom.className = 'vrg-zoom-controls'; nav.appendChild(zoom);
+    const controls = document.createElement('div'); controls.className = 'vrg-view-controls'; nav.appendChild(controls);
+    const size = document.createElement('div'); size.className = 'vrg-size-controls'; nav.appendChild(size);
     for (const [action, label, aria] of [['out', '−', 'Уменьшить масштаб'], ['in', '+', 'Увеличить масштаб'],
-      ['reset', '100%', 'Исходный масштаб 100%'], ['fit', 'Вписать граф', 'Вписать весь граф в область'],
+      ['reset', 'Сбросить к 100%', 'Исходный масштаб 100%'], ['fit', 'Вписать граф', 'Вписать весь граф в область'],
       ['all', 'Весь граф', 'Сбросить фокус графа'], ['expand', '⛶ Развернуть граф', 'Развернуть граф'],
       ['size-reset', 'Сбросить размер', 'Вернуть исходную высоту области графа'], ['panel', 'Панель фокуса', 'Показать / скрыть панель']]) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-gray';
-      b.textContent = label; b.dataset.vrgAction = action; b.setAttribute('aria-label', aria); nav.appendChild(b);
+      b.textContent = label; b.dataset.vrgAction = action; b.setAttribute('aria-label', aria);
+      (['out','in','reset','fit'].includes(action) ? zoom : action === 'size-reset' ? size : controls).appendChild(b);
       if (action === 'panel') b.setAttribute('aria-expanded', 'true');
       if (action === 'expand') b.setAttribute('aria-expanded', 'false');
     }
     const indicator = document.createElement('output'); indicator.className = 'vrg-scale';
     indicator.setAttribute('aria-label', 'Текущий масштаб графа'); indicator.setAttribute('aria-live', 'polite');
-    nav.appendChild(indicator);
+    const scaleLabel = document.createElement('span'); scaleLabel.className = 'vrg-current-scale'; scaleLabel.appendChild(document.createTextNode('Масштаб: ')); scaleLabel.appendChild(indicator);
+    zoom.querySelector('[data-vrg-action="in"]').after(scaleLabel);
     const label = document.createElement('label'); label.className = 'vrg-height-control'; label.appendChild(document.createTextNode('Высота:'));
     const height = document.createElement('input'); height.type = 'range'; height.min = '120'; height.max = '900'; height.step = '10';
-    height.setAttribute('aria-label', 'Высота области графа'); label.appendChild(height); const pixels = document.createElement('output'); pixels.className = 'vrg-height-pixels'; label.appendChild(pixels); nav.appendChild(label);
+    height.setAttribute('aria-label', 'Высота области графа'); label.appendChild(height); const pixels = document.createElement('output'); pixels.className = 'vrg-height-pixels'; label.appendChild(pixels); size.prepend(label);
+    const smallHint = document.createElement('span'); smallHint.className = 'hint vrg-small-scale-hint'; smallHint.hidden = true;
+    smallHint.textContent = 'Граф уменьшен для отображения целиком. Для чтения отдельных узлов увеличьте масштаб или используйте фокус.'; nav.appendChild(smallHint);
     const hint = document.createElement('span'); hint.className = 'hint';
     hint.textContent = 'Пустая область: перетаскивание · Alt + колесо: масштаб · Escape: свернуть · граф зависимостей, не runtime-путь; текстовая версия доступна под графом';
     nav.appendChild(hint); wrap.before(nav);
@@ -9999,7 +10015,10 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     state.scale = Math.max(.05, Math.min(2.5, scale));
     svg.setAttribute('width', String(view.width * state.scale));
     svg.setAttribute('height', String(view.height * state.scale));
-    nav.querySelector('.vrg-scale').textContent = Math.round(state.scale * 100) + '%';
+    nav.querySelector('.vrg-scale').textContent = Number((state.scale * 100).toFixed(2)) + '%';
+    nav.querySelector('[data-vrg-action="out"]').disabled = state.scale <= .05;
+    nav.querySelector('[data-vrg-action="in"]').disabled = state.scale >= 2.5;
+    nav.querySelector('.vrg-small-scale-hint').hidden = state.scale >= .25;
     if (center) { wrap.scrollLeft = x * state.scale - wrap.clientWidth / 2; wrap.scrollTop = y * state.scale - wrap.clientHeight / 2; }
   };
   const fit = () => { viewport(); apply(Math.min(1, (wrap.clientWidth - 2) / view.width, (wrap.clientHeight - 2) / view.height), false); wrap.scrollLeft = wrap.scrollTop = 0; };
@@ -10298,15 +10317,7 @@ function runDomainCoverage() {
   if (!res.results.length) { out.textContent = 'Введите домены (по одному в строке).'; return; }
   const lines = [entered ? 'Проверены введённые домены' : 'Проверены демонстрационные домены'];
   if (res.stale) lines.push('⚠ Snapshot предыдущей сборки (настройки изменены после Build).');
-  for (const r of res.results) {
-    const head = r.input + ':';
-    if (!r.valid) { lines.push(head + ' INVALID — ' + r.reason); continue; }
-    if (r.verdict === 'UNKNOWN' || r.verdict === 'UNCOVERED') { lines.push(head + ' ' + r.verdict + ' — ' + r.reason); continue; }
-    const via = r.verdict === 'FALLBACK'
-      ? 'fallback MATCH'
-      : (r.viaProvider ? 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw + ' (inline-провайдер «' + r.viaProvider + '»)' : 'правило #' + (r.ruleIndex + 1) + ' ' + r.ruleRaw);
-    lines.push(head + ' ' + via + RD_NL + '  → ' + r.chainText + (r.runtimeSelected ? ' — runtime-selected' : '') + (r.stale ? RD_NL + '  (⚠ предыдущая сборка)' : ''));
-  }
+  lines.push(domainCoverageDisplayText(res, lastRoutingDoc));
   out.textContent = lines.join(RD_NL);
 }
 
