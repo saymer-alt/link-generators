@@ -591,6 +591,8 @@ async function check(name, fn) {
     assert.equal(await n.evaluate(()=>{window.ownerPendingBuild=buildMihomo();return document.getElementById('builderActionStatus').dataset.state;}),'BUILDING');
     await n.evaluate(()=>window.ownerPendingBuild);await n.waitForFunction(()=>MIHOMO_VALIDATION_STATE.state==='VALID');
     assert.equal(await status.getAttribute('data-state'),'CURRENT');
+    await n.locator('#mihomoInput').fill(link+'\n');await n.evaluate(()=>buildMihomo());await n.waitForFunction(()=>MIHOMO_VALIDATION_STATE.state==='VALID');
+    await n.locator('#cfgPolicyRouting').uncheck();assert.equal(await n.locator('#cfgPolicyRouting').isChecked(),false);await n.locator('#cfgPolicyRouting').check();await build(n);
     const snapshot=()=>n.evaluate(()=>({yaml:document.getElementById('mihomoOutput').value,seq:mihomoValidationSeq,fingerprint:buildStateFingerprint()}));const before=await snapshot();
     for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,740],[320,740]]) {
       await n.setViewportSize({width,height});

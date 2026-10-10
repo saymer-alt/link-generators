@@ -11095,6 +11095,8 @@ document.addEventListener('change', (e) => {
   const target = e.target;
   if (target.id === 'cfgAutoWhitelist' || target.id === 'cfgProfile') return; // admission invalidates accepted changes
   if (target.closest?.('#routingDiagnostics, .vrg-frame') || BUILD_STALE_EXCLUDED_IDS.has(target.id)) return;
+  // A delayed blur/change for the just-built values must not collapse output during a pointer click.
+  if (MIHOMO_VALIDATION_STATE.state === 'VALID' && diagnosticsCurrent()) return;
   mihomoValidationSeq++; // инвалидируем незавершённую проверку, если была
   resetCompatSummary();
   setMihomoValidationState('NOT_BUILT');
