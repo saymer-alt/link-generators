@@ -12,7 +12,7 @@
 //   6. обе визуальные сводки (subListStats + subscriptionPreviewStats)
 //      считают одну модель (union regex + checkbox, без double-count) и
 //      обновляются live;
-//   7. Device Model: webUiRow < deviceModelRow < excludeFilterRow;
+//   7. Device Model and Exclude Filter beside subscriptions in Quick Start;
 //   8. privacy: ни URL/токен подписки, ни содержимое не попадают в
 //      UI/localStorage; предупреждения показывают '[URL hidden]'.
 const assert = require('node:assert/strict');
@@ -292,9 +292,9 @@ async function listedCount(page) {
       dashboard: document.getElementById('webUiRow').closest('section').getAttribute('aria-labelledby') };
   });
   assert.ok(pos.dm < pos.ex, 'Device Model перед Exclude Filter: ' + JSON.stringify(pos));
-  assert.equal(pos.subscriptions, 'ux-routing'); assert.equal(pos.dashboard, 'ux-options');
+  assert.equal(pos.subscriptions, 'ux-start'); assert.equal(pos.dashboard, 'ux-start');
   assert.equal(await page.evaluate(() => document.getElementById('deviceModelRow').style.display), '', 'Device Model виден и в Sub Mode OFF');
-  ok('Device Model/Exclude Filter вместе в маршрутизации; Web UI в дополнительных параметрах');
+  ok('Device Model/Exclude Filter рядом с подписками; Web UI в основных настройках');
 
   // === 12. mobile: панель списка без горизонтального overflow ===
   for (const w of [360, 412, 480]) {

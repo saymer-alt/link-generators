@@ -69,8 +69,9 @@ const root = path.resolve(__dirname, '..');
     assert.equal(await page.evaluate((y) => validateMihomoYaml(y).status, yaml), 'VALID');
     cases += 4;
 
-    // 5. Дубликат имени — сборка отклоняется с тостом об ошибке
-    await page.locator('#btnPolicyAdd').click();
+    // 5. Independent keyboard activation avoids an accidental physical dblclick.
+    await page.locator('#btnPolicyAdd').focus();
+    await page.keyboard.press('Enter');
     const dup = page.locator('#policyCards .policy-card').nth(1);
     await dup.locator('.policy-name').fill('AI');
     await dup.locator('.policy-domains').fill('example.com');

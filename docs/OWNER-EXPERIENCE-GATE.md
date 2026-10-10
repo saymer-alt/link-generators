@@ -82,3 +82,7 @@ Gate должен упасть. Существующий guard Generator CI от
 полную human usability или runtime/field proof. Это применяет тот же
 Owner Experience Gate v1.0, что используется KAS, AMG и VPS Gateway,
 с учётом специфики браузерного продукта.
+
+## Owner UX 2.1
+
+Реестр расширен UX13–UX17: приоритет AWL/подписок, закреплённые действия и freshness, имена SELECT, связанные WG/Web UI controls, отображение Tiered. UX01–UX12 сохранены. Проверки входят в `tests/owner-ux-browser.cjs`; матрица viewport включает 1280×720, 1366×768, 1920×1080, 390 и 320 px. Реальный browser zoom 200% учитывается отдельно от viewport.
