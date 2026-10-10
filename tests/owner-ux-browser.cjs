@@ -720,6 +720,56 @@ async function check(name, fn) {
     n.once('dialog',d=>d.accept());await n.locator('#cfgProfile').selectOption('router');assert.equal(await n.locator('#cfgAutoWhitelist').isChecked(),true);assert.equal(await n.locator('#cfgTieredFailover').isChecked(),false);
   });
 
+  await check('P2 Studio redacts original ladder-prefixed secret before display formatting', async () => {
+    const n = await fresh();
+    await n.locator('.tab', { hasText: 'Config Studio' }).click();
+    const secret = '🪜 synthetic-owner-secret-236';
+    const yaml = ['secret: "' + secret + '"', 'proxies: []', 'proxy-groups:',
+      '  - name: "' + secret + '"', '    type: select', '    proxies: [DIRECT]',
+      'rules:', '  - "MATCH,' + secret + '"'].join('\n');
+    await n.locator('#csImportInput').fill(yaml);
+    await n.locator('#csParseBtn').click();
+    assert.match(await n.locator('#csStatus').textContent(), /✓ Разобрано/);
+    await n.locator('#csRoutingPanel > summary').click();
+    await n.locator('#csRuleProbe').fill('unmatched.example.invalid');
+    await n.locator('#csRuleProbeBtn').click();
+    const output = await n.locator('#csRuleProbeOut').textContent();
+    assert.match(output, /Fallback:[\s\S]*MATCH →/);
+    assert.ok(!output.includes(secret), 'original secret leaked');
+    assert.ok(!output.includes(secret.replace('🪜 ', '[Приоритет] ')), 'formatted secret leaked');
+    assert.ok(!output.includes('synthetic-owner-secret-236'), 'secret suffix leaked');
+    // A non-secret tier name still receives cosmetic formatting, without editing YAML.
+    await n.locator('#csImportInput').fill(yaml.replaceAll(secret, '🪜 Public tier').replace('secret: "🪜 Public tier"', 'secret: "other-synthetic-secret"'));
+    await n.locator('#csParseBtn').click();
+    await n.locator('#csRuleProbe').fill('unmatched.example.invalid');
+    await n.locator('#csRuleProbeBtn').click();
+    assert.match(await n.locator('#csRuleProbeOut').textContent(), /MATCH → \[Приоритет\] Public tier/);
+    assert.ok((await n.locator('#csImportInput').inputValue()).includes('MATCH,🪜 Public tier'));
+  });
+  await check('P2 Quick Start new sections stay inside wrap at desktop and mobile widths', async () => {
+    const n = await browser.newPage(); pages.push(n); n.errors = [];
+    n.on('pageerror', e => n.errors.push(e.message));
+    await n.route('https://**', r => r.abort());
+    await n.goto(pathToFileURL(path.join(root, 'quick-start.html')).href);
+    for (const width of [1920, 1280, 390, 320]) {
+      await n.setViewportSize({ width, height: 850 });
+      for (const title of ['Owner UX 2.1', 'Совместимость приоритетов']) {
+        const heading = n.getByRole('heading', { name: title, exact: true });
+        assert.equal(await heading.evaluate(el => !!el.closest('.wrap')), true, title + ': outside wrap');
+        await heading.scrollIntoViewIfNeeded();
+        assert.equal(await heading.isVisible(), true);
+        const layout = await heading.evaluate(el => {
+          const section = el.parentElement.getBoundingClientRect(), wrap = el.closest('.wrap').getBoundingClientRect();
+          return { contained: section.left >= wrap.left && section.right <= wrap.right,
+            overflow: document.documentElement.scrollWidth > innerWidth };
+        });
+        assert.equal(layout.contained, true, title + ': outside panel bounds at ' + width);
+        assert.equal(layout.overflow, false, 'horizontal overflow at ' + width);
+      }
+      await screenshot(n, '.wrap', 'quick-start-p2-' + width);
+    }
+  });
+
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });
   await browser.close();
   if (process.env.OWNER_UX_RESULTS) fs.writeFileSync(process.env.OWNER_UX_RESULTS, JSON.stringify({ engine, root, passed, failed, results }, null, 2));

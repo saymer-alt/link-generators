@@ -9170,7 +9170,7 @@ function runCsRuleProbe() {
   if (res.verdict === 'NO MATCH') { out.textContent = '✗ ' + res.message; return; }
   if (res.verdict === 'FALLBACK') {
     const rule = rdParseRule(csCurrentDoc.rules[res.winner]);
-    out.textContent = csRedactText('Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + routingDisplayText(rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Вход не совпал ни с одним известным правилом до MATCH.)', csCurrentDoc);
+    out.textContent = routingDisplayText(csRedactText('Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + (rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Вход не совпал ни с одним известным правилом до MATCH.)', csCurrentDoc));
     return;
   }
   const w = res.winner;
