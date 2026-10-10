@@ -9288,14 +9288,16 @@ function openBuilderYamlInStudio() {
   document.getElementById('csSummaryCard').scrollIntoView({ block: 'start' });
 }
 async function csPasteClipboard() {
-  const seq = ++csFileReadSeq;
+  const seq = ++csFileReadSeq, editorSeq = csEditorSeq;
+  const source = document.getElementById('csImportInput').value;
+  const current = () => seq === csFileReadSeq && editorSeq === csEditorSeq && source === document.getElementById('csImportInput').value;
   try {
     if (!navigator.clipboard || !navigator.clipboard.readText) throw new Error();
     const text = await navigator.clipboard.readText();
-    if (seq !== csFileReadSeq) return;
+    if (!current()) return;
     csReplaceDocument(text);
   } catch (_) {
-    if (seq !== csFileReadSeq) return;
+    if (!current()) return;
     document.getElementById('csStatus').textContent = 'Не удалось прочитать буфер. Вставьте YAML вручную через Ctrl+V';
   }
 }

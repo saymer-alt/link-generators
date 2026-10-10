@@ -1191,6 +1191,15 @@ async function check(name, fn) {
     await n.locator('#csImportInput').fill(studioFixture+'# draft');await n.evaluate(t=>resolveFile(new TextEncoder().encode(t).buffer),studioFixture.replaceAll('Local','Late'));assert.equal(await n.locator('#csImportInput').inputValue(),studioFixture+'# draft');
     await setClipboard(n,'success',studioFixture.replaceAll('Local','Paste'));n.once('dialog',d=>d.dismiss());await n.locator('#csPasteBtn').click();assert.equal(await n.locator('#csImportInput').inputValue(),studioFixture+'# draft');assert.equal(await n.evaluate(()=>csImportText),studioFixture);
   });
+  await check('UX48 Studio integration editor operation invalidates pending clipboard',async()=>{
+    const n=await fresh(false);await importStudio(n);assert.equal(await n.locator('#csPasteBtn').count(),1);
+    await n.locator('input[data-cs-field=server]').fill('192.0.2.88');let dialogs=0;n.on('dialog',d=>{dialogs++;d.dismiss();});
+    for(const action of ['csSaveFieldsBtn','csUndoBtn']){
+      await setClipboard(n,'pending','');await n.locator('#csPasteBtn').click();await n.locator('#'+action).click();
+      await n.evaluate(t=>resolveClipboard(t),studioFixture.replaceAll('Local','Late'));await n.waitForTimeout(30);
+      assert.equal(dialogs,0,'superseded clipboard must be discarded without confirmation');assert.equal(await n.evaluate(()=>csImportText),studioFixture);
+    }
+  });
   for(const consumer of ['Builder','Studio'])await check('UX49 Studio integration original view preserves height and clears focus '+consumer,async()=>{
     const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);let id='vrgSvgWrap',alt='vrgTextAltOut';if(consumer==='Studio'){await importStudio(n);id='csVrgSvgWrap';alt='csVrgTextAltOut';}
     await r2Reveal(n,id);const wrap=n.locator('#'+id),nav=n.locator('#'+id+'Nav'),btn=a=>nav.locator('[data-vrg-action='+a+']');
