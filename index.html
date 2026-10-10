@@ -3609,7 +3609,15 @@ function updateAwlCompatibility() {
   const panel = document.getElementById('tieredPanel');
   panel.style.display = tier.checked || (awl && (window.__tierCardsState || []).length) ? 'block' : 'none';
   panel.classList.toggle('control-disabled', awl);
-  panel.querySelectorAll('input,select,textarea,button').forEach(el => { el.disabled = awl; });
+  panel.querySelectorAll('input,select,textarea,button').forEach(el => {
+    if (awl) {
+      if (!('awlWasDisabled' in el.dataset)) el.dataset.awlWasDisabled = String(el.disabled);
+      el.disabled = true;
+    } else if ('awlWasDisabled' in el.dataset) {
+      el.disabled = el.dataset.awlWasDisabled === 'true';
+      delete el.dataset.awlWasDisabled;
+    }
+  });
 }
 
 // UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
