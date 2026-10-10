@@ -289,7 +289,7 @@
   .vrg-expanded .vrg-viewport{min-width:0;flex:1}
   .vrg-viewport.vrg-fit{display:flex;align-items:center;justify-content:center}
   .vrg-viewport.vrg-fit svg{display:block;margin:auto;flex-shrink:0}
-  @media(max-width:600px){.vrg-expanded .vrg-side:not([hidden]){position:absolute;top:110px;left:12px;bottom:12px;width:240px;max-width:80vw;z-index:2;box-shadow:3px 3px 0 #555}}
+  @media(max-width:600px){.vrg-expanded .vrg-side:not([hidden]){position:absolute;top:var(--vrg-sidebar-top,110px);left:12px;bottom:12px;width:240px;max-width:80vw;z-index:2;box-shadow:3px 3px 0 #555}}
 </style>
 </head>
 <body>
@@ -10006,6 +10006,7 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     state.appliedHeight = wrap.style.height;
     nav.querySelector('input[type="range"]').value = String(height);
     nav.querySelector('.vrg-height-pixels').textContent = Math.round(wrap.getBoundingClientRect().height) + ' px';
+    frame.style.setProperty('--vrg-sidebar-top', (nav.offsetHeight + 18) + 'px');
   };
   const apply = (scale, center) => {
     wrap.classList.toggle('vrg-fit', state.fit);
@@ -10019,6 +10020,7 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     nav.querySelector('[data-vrg-action="out"]').disabled = state.scale <= .05;
     nav.querySelector('[data-vrg-action="in"]').disabled = state.scale >= 2.5;
     nav.querySelector('.vrg-small-scale-hint').hidden = state.scale >= .25;
+    frame.style.setProperty('--vrg-sidebar-top', (nav.offsetHeight + 18) + 'px');
     if (center) { wrap.scrollLeft = x * state.scale - wrap.clientWidth / 2; wrap.scrollTop = y * state.scale - wrap.clientHeight / 2; }
   };
   const fit = () => {
