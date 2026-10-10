@@ -113,7 +113,10 @@ const ok = name => { passed++; console.log('  ok —', name); };
 
   // C-сценарий: keepalive ON + RT diagnostic ON
   await page.locator('#cfgAwgKeepalive').check();
+  await page.locator('#awgDiagnosticDetails > summary').click();
   await page.locator('#cfgAwgRtDiag').check();
+  await page.locator('#awgDiagnosticDetails > summary').click();
+  assert.equal(await page.locator('#awgRtDiagWarn').isVisible(), true, 'active diagnostic warning survives collapsed details');
   assert.equal(await page.evaluate(() => document.getElementById('awgRtDiagWarn').style.display), 'block', '🧪 ON: заметный красный WARN показан');
   assert.ok((await page.locator('#awgRtDiagWarn').textContent()).includes('controlled experiment'), 'WARN: не универсальный fix');
   r = await build();
@@ -131,6 +134,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   ok('C (ON/ON): pk 25 + RandomTrailers off + WARN + trace');
 
   // RT diagnostic OFF обратно → исходный RT возвращается (оригиналы не мутированы)
+  await page.locator('#awgDiagnosticDetails > summary').click();
   await page.locator('#cfgAwgRtDiag').uncheck();
   assert.equal(await page.evaluate(() => document.getElementById('awgRtDiagWarn').style.display), 'none', '🧪 OFF: WARN скрыт');
   r = await build();

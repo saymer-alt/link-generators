@@ -12,7 +12,7 @@
 //   6. обе визуальные сводки (subListStats + subscriptionPreviewStats)
 //      считают одну модель (union regex + checkbox, без double-count) и
 //      обновляются live;
-//   7. Device Model: webUiRow < deviceModelRow < excludeFilterRow;
+//   7. Device Model and Exclude Filter beside subscriptions in Quick Start;
 //   8. privacy: ни URL/токен подписки, ни содержимое не попадают в
 //      UI/localStorage; предупреждения показывают '[URL hidden]'.
 const assert = require('node:assert/strict');
