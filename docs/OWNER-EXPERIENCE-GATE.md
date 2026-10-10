@@ -86,3 +86,7 @@ Owner Experience Gate v1.0, что используется KAS, AMG и VPS Gate
 ## Owner UX 2.1
 
 Реестр расширен UX13–UX17: приоритет AWL/подписок, закреплённые действия и freshness, имена SELECT, связанные WG/Web UI controls, отображение Tiered. UX01–UX12 сохранены. Проверки входят в `tests/owner-ux-browser.cjs`; матрица viewport включает 1280×720, 1366×768, 1920×1080, 390 и 320 px. Реальный browser zoom 200% учитывается отдельно от viewport.
+
+## UX18 — конфликты приоритетов
+
+Сценарии: подтверждение/отмена AWL; сохранение карточек без повторного включения; старый проект через Load, Undo, Restore; Build/postprocessor bypass; DPR + AWL + URL ON/OFF; нейтральные имена новых карточек; возврат профиля. Baseline b111: пять FAIL, один PASS (DPR/URL уже совместимы). Candidate: шесть PASS.

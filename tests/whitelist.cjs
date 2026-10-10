@@ -13,6 +13,11 @@ const STATIC_HEALTH_GROUP = '🌐 static-health';
 // stays provable.
 const stripChecker = y => {
   const d = yaml.load(y);
+  // Logical-device identity is created before this optional harness fixes RNG.
+  // Normalize only its random value, preserving presence and header cardinality.
+  for (const provider of Object.values(d['proxy-providers'] || {})) {
+    if (Array.isArray(provider.header?.['x-hwid'])) provider.header['x-hwid'] = provider.header['x-hwid'].map(() => 'TEST-HWID');
+  }
   if (d['proxy-groups']) d['proxy-groups'] = d['proxy-groups'].filter(g => g && g.name !== STATIC_HEALTH_GROUP);
   return yaml.dump(d, { lineWidth: -1 });
 };
@@ -48,6 +53,7 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.equal(await page.locator('#cfgAutoWhitelist').isDisabled(), false, 'router: БС доступен');
     assert.equal(await page.locator('#cfgPerProxyMaster').isChecked(), true, 'router: Per-Proxy master восстановлен');
     assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), true, 'router: Per-Proxy TUN восстановлен');
+    page.once('dialog', dialog => dialog.accept());
     await page.locator('#cfgAutoWhitelist').check();
     for (const [name, primary, fallback, sub] of [
       ['one', a, b, false], ['many', a + '\n' + b, a + '\n' + b, false],

@@ -4,19 +4,39 @@ Opt-in checkbox `Автоматический режим белых списко
 и загруженные WG/AWG-файлы образуют основной набор; отдельное поле — резерв БС.
 Оба набора обязательны. Каждый допускает несколько ссылок, подписок или их смесь.
 При включённом режиме **Использовать URL-подписки** (технически Sub Mode) URL без userinfo становится HTTP provider; сами подписки
-загружает Mihomo. В БС-режиме ссылки без подписок тоже разрешены. При выключенном режиме URL-подписок наличие
-подписки даёт ошибку; URL с userinfo сохраняет значение HTTP(S) proxy.
+загружает Mihomo. В БС-режиме ссылки без подписок тоже разрешены. При выключенном режиме URL-подписок
+Builder явно загружает подписки при Build и разворачивает их в статические узлы до вызова движка; CORS или ошибка загрузки блокируют сборку. Сам engine не выполняет browser fetch. URL с userinfo сохраняет значение HTTP(S) proxy.
+
+## Owner UX 2.1: совместимость режимов
+
+| Режим A | Режим B | Совместим | Поведение | UI ограничение | Guard генерации | Тест |
+|---|---|---|---|---|---|---|
+| AWL | Tiered | Нет | Один владелец MATCH; подтверждение выключает Tiered, сохраняя данные | Tiered и карточки disabled, причина видна | Build отклоняет конфликт; postprocessor отклоняет AWL-флаг и структуру AWL YAML, включая override | UX18, tiered-failover |
+| AWL | Per-Proxy | Нет | Подтверждение выключает master/дочерние флаги | Per-Proxy disabled | Build отклоняет DOM bypass; engine запрещает fallbackInput + per-proxy | UX18, whitelist |
+| AWL | DPR SELECT | Да | Независимые SELECT [GLOBAL, DIRECT], без AUTO категорий | DPR доступен | mihomoDomainPolicy в engine | UX18, policy-routing-browser |
+| AWL | Обычный TUN / Mixed / Web UI | Да | Опции сохраняются | Прежние зависимости inbound | Прежняя нормализация родителей | whitelist, profile-matrix |
+| AWL | Router | Да | Плоский GLOBAL fallback PRIMARY→FALLBACK; MATCH,GLOBAL | AWL доступен | Build profile guard | whitelist, UX18 |
+| AWL | VPS local / gateway | Нет | Router-only | AWL виден disabled с причиной | Build и загрузка конфликтующего проекта отклонены | profile-matrix, UX18 |
+| AWL | WG/AWG dialer | Да, с прежними ограничениями целей | WG/AWG в основном наборе; registry/cycle guards сохраняются | Без новой общей блокировки | Прежние registry/missing/cycle guards | wg-dialer-selector, wg-profiles-browser |
+| AWL | Sub Mode ON | Да | URL становятся динамическими providers | Без новой блокировки | Прежняя обработка providers | UX18, whitelist |
+| AWL | Sub Mode OFF | Да | Явное разворачивание URL при Build в статические узлы; CORS fail-closed | Без fetch при навигации | Browser expansion перед engine | UX18, subscription-preview |
+| Per-Proxy | DPR | Нет | Прежний контракт listeners | DPR disabled при master | Прежний guard engine | policy-routing-browser, whitelist |
+| Per-Proxy | Tiered | Да | Tiered меняет MATCH; listeners сохраняются | Без новой блокировки | Прежняя проверка участников | baseline 8-combination probe, tiered-failover |
+| Per-Proxy | TUN / Mixed | По родителям | Per-TUN требует TUN; per-SOCKS требует Mixed | Дочерние disabled без родителя | Прежние клампы Build | whitelist baseline/bypass |
+| Per-Proxy | VPS profiles | Нет | Router-only | Master disabled | Прежний profile clamp | profile-matrix |
+| DPR / Tiered | TUN / profiles / WG / Sub Mode | Да, в рамках прежних контрактов | Имена/участники/targets проверяются валидаторами | Без новых общих запретов | Engine DPR и consumer Tiered checks | policy-routing-browser, tiered-failover, parity, real Mihomo CI |
+
+### Разрешение конфликта
+
+При включении AWL активные Tiered/Per-Proxy перечисляются в подтверждении. Отмена сохраняет поля; согласие выключает флаги режимов, сохраняя карточки, имена, участников и источники. Выключение AWL снимает disabled, но не включает прежние режимы автоматически. Load, Undo и Reverse Restore проходят `rbApplyProject` до изменения Builder. Отмена не расходует Undo и не удаляет pending Restore. Save и Build отклоняют конфликт DOM, не публикуя новый YAML. Возврат из VPS в router с сохранённым AWL разрешает конфликт до переключения профиля.
+
+### Граница движка
+
+`web4core/src/build.js` уже запрещает `fallbackInput` вместе с `mihomoPerProxyTun` / `perProxyPort`. AWL создаётся `buildMihomoPriorityConfig`; Tiered принадлежит consumer `index.html` и выполняется после engine. Новые guards находятся в Build и `applyTieredFailover`, включая проверку структурного AWL GLOBAL/filter. Сгенерированный runtime и исходники движка не изменялись. HTML disabled не заменяет генерационные guards.
 
 ## Архитектура
 
-- `link-generators/index.html`: checkbox, второй ввод, снимок состояний только в
-  памяти, скрытие и отключение опций «TUN на каждый прокси» / «SOCKS-порт на каждый
-  прокси» и панели VPS Gateway.
-  При сборке независимо от DOM принудительно `mihomoPerProxyTun: false`,
-  `perProxyPort: false`; профиль развёртывания временно переводится на
-  router-совместимый effective-контракт (`selectedProfile` сохраняется,
-  `effectiveProfile` = `router` на время БС, выбранный профиль и его
-  UI-state восстанавливаются при выключении).
+- `link-generators/index.html`: AWL после профиля, основной/резервный ввод, видимые disabled Tiered/Per-Proxy с причиной. Router-only: профиль не подменяется. Build независимо от DOM отклоняет несовместимые флаги; выключение AWL не возвращает их автоматически.
 - `web4core/src/build.js`: универсальное необязательное поле `fallbackInput`.
   Его отсутствие сохраняет прежний путь без новой нормализации/сериализации.
   Его наличие включает раздельный parsing/validation двух сторон; `wgBeans` — primary.
@@ -133,12 +153,8 @@ rules:
 - Обычный TUN и gVisor/MIPS, Mixed Port, Web UI, Allow LAN и режим URL-подписок остаются.
   Ordinary TUN сохраняет прежний `device: mitun0`, `auto-route: false`.
   MIPS требует Mihomo >= 1.19.31.
-- Выключение checkbox восстанавливает опции «на каждый прокси» и выбранный профиль
-  развёртывания из снимка в памяти; обновление
-  страницы снимок не сохраняет. Содержимое второго поля при выключенном режиме
-  игнорируется. Генерация выключенного режима не меняет байты; случайный `x-hwid`
-  сравнивается с фиксированным RNG исключительно в тестах.
-- Новые протоколы не добавлены. Загрузка подписок из браузера не добавлена.
+- Выключение AWL снимает ограничения, сохраняя карточки и источники; ранее отключённые режимы включаются вручную. Профиль не меняется. Содержимое резервного поля при выключенном AWL игнорируется. Генерация валидных прежних сценариев сохраняет байты; случайный `x-hwid` нормализуется исключительно в тестах.
+- Новые протоколы и новые неявные запросы не добавлены. При Sub Mode OFF сохранён существующий явный browser fetch во время Build.
 
 ## Проверки
 

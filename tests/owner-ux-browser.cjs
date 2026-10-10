@@ -644,6 +644,132 @@ async function check(name, fn) {
     await n.locator('#vrgPanel').evaluate(el=>el.open=true);assert.doesNotMatch(await n.locator('#vrgSvgWrap svg').textContent(),/🪜/);
     await n.locator('#rdTestBtn').click();assert.doesNotMatch(await n.locator('#rdResult').textContent(),/🪜/);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
   });
+  const ownerProject = n=>n.evaluate(()=>{const p=rbCollectProject();delete p.meta.created;return p;});
+  await check('UX18 AWL activation confirms conflicts and preserves priority cards', async () => {
+    const n=await fresh();await n.locator('#mihomoInput').fill(link);
+    await n.evaluate(()=>{window.__tierCardsState=[{name:'Personal VPS',strategy:'fallback',members:['Owner-A']}];document.getElementById('cfgTieredFailover').checked=true;renderTierCards();});
+    await build(n);const project=await ownerProject(n);const validation=await n.evaluate(()=>({seq:mihomoValidationSeq,status:document.getElementById('builderActionStatus').dataset.state,yaml:document.getElementById('mihomoOutput').value}));
+    n.once('dialog',d=>d.dismiss());await n.locator('#cfgAutoWhitelist').click();
+    assert.deepEqual(await ownerProject(n),project,'cancel leaves complete configuration unchanged');assert.deepEqual(await n.evaluate(()=>({seq:mihomoValidationSeq,status:document.getElementById('builderActionStatus').dataset.state,yaml:document.getElementById('mihomoOutput').value})),validation,'cancel retains current validation and YAML');
+    n.once('dialog',d=>d.accept());await n.locator('#cfgAutoWhitelist').click();
+    assert.equal(await n.locator('#cfgTieredFailover').isChecked(),false);assert.equal(await n.locator('#cfgTieredFailover').isDisabled(),true);
+    assert.equal(await n.locator('#cfgPerProxyMaster').isDisabled(),true);assert.equal(await n.locator('#cfgPolicyRouting').isDisabled(),false);
+    assert.match(await n.locator('#tieredAwlHint').textContent(),/Недоступно/);
+    const tiers=await n.evaluate(()=>rbCollectProject().tiered.cards);assert.deepEqual(tiers,project.tiered.cards);
+    await n.locator('#cfgPolicyRouting').focus();await n.locator('#cfgTieredFailover').evaluate(el=>el.focus());assert.notEqual(await n.evaluate(()=>document.activeElement.id),'cfgTieredFailover');const box=await n.locator('#cfgTieredFailover').boundingBox();await n.mouse.click(box.x+box.width/2,box.y+box.height/2);assert.equal(await n.locator('#cfgTieredFailover').isChecked(),false);
+    await n.locator('#whitelistInput').fill(link.replace('192.0.2.1','192.0.2.2').replace('#Owner-A','#Reserve'));await build(n);
+    let doc=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));assert.equal(doc.rules.at(-1),'MATCH,GLOBAL');assert.equal(doc['proxy-groups'].some(g=>g.name==='🪜 TIERED-AUTO'),false);
+    await n.locator('#cfgAutoWhitelist').uncheck();assert.equal(await n.locator('#cfgTieredFailover').isDisabled(),false);assert.equal(await n.locator('#cfgTieredFailover').isChecked(),false);assert.deepEqual(await n.evaluate(()=>rbCollectProject().tiered.cards),tiers);
+    await n.locator('#cfgTieredFailover').check();assert.equal(await n.locator('.tier-up').first().isDisabled(),true);assert.equal(await n.locator('.tier-down').last().isDisabled(),true);await build(n);doc=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));assert.equal(doc.rules.at(-1),'MATCH,🪜 TIERED-AUTO');
+    await n.locator('#cfgTieredFailover').uncheck();await n.evaluate(()=>document.getElementById('perProxyAdvancedDetails').open=true);await n.locator('#cfgPerProxyMaster').check();await n.locator('#cfgPerProxyTun').check();const per=await ownerProject(n);n.once('dialog',d=>d.dismiss());await n.locator('#cfgAutoWhitelist').click();assert.deepEqual(await ownerProject(n),per);n.once('dialog',d=>d.accept());await n.locator('#cfgAutoWhitelist').click();for(const id of ['cfgPerProxyMaster','cfgPerProxyTun','cfgPerProxySocks'])assert.equal(await n.locator('#'+id).isChecked(),false);assert.deepEqual((await ownerProject(n)).tiered.cards,tiers);
+  });
+  await check('UX18 old project conflict admission is atomic for Load Undo and Restore', async () => {
+    const n=await fresh();await n.locator('#mihomoInput').fill(link);const before=await ownerProject(n);
+    const old=JSON.parse(JSON.stringify(before));old.sources.autoWhitelist=true;old.sources.fallbackInput=link.replace('#Owner-A','#Reserve');old.tiered={enabled:true,cards:[{name:'Keep me',strategy:'fallback',members:['Owner-A']}]};old.options.perProxyMaster=true;old.options.perProxyTun=true;
+    n.once('dialog',d=>d.dismiss());const rejected=await n.evaluate(p=>{try{rbApplyProject(p);return false;}catch(e){return /не изменён/.test(e.message);}},old);assert.equal(rejected,true);assert.deepEqual(await ownerProject(n),before);
+    n.once('dialog',d=>d.accept());await n.evaluate(p=>rbApplyProject(p),old);
+    const loaded=await ownerProject(n);assert.equal(loaded.sources.autoWhitelist,true);assert.equal(loaded.tiered.enabled,false);assert.equal(loaded.options.perProxyMaster,false);assert.equal(loaded.options.perProxyTun,false);assert.deepEqual(loaded.tiered.cards,old.tiered.cards);
+    await build(n);assert.equal(await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value).rules.at(-1)),'MATCH,GLOBAL');
+    await n.evaluate(p=>rbApplyProject(p),loaded);assert.deepEqual(await ownerProject(n),loaded);
+    const vps=JSON.parse(JSON.stringify(loaded));vps.options.profile='vps-local';assert.equal(await n.evaluate(p=>{try{rbApplyProject(p);return false;}catch(e){return /только в профиле/.test(e.message);}},vps),true);assert.deepEqual(await ownerProject(n),loaded);
+    // Exercise the actual callers, including keeping Undo/pending Restore on cancel.
+    await n.evaluate(p=>{rbUndoProjectState=p;},old);
+    n.once('dialog',d=>d.dismiss());await n.evaluate(()=>rbUndoRestore());assert.deepEqual(await ownerProject(n),loaded);assert.equal(await n.evaluate(()=>!!rbUndoProjectState),true);
+    n.once('dialog',d=>d.accept());await n.evaluate(()=>rbUndoRestore());assert.equal(await n.evaluate(()=>rbUndoProjectState),null);assert.deepEqual((await ownerProject(n)).tiered.cards,old.tiered.cards);
+    const loadDialog=d=>d.message().startsWith('Предпросмотр')?d.accept():d.dismiss();n.on('dialog',loadDialog);
+    await n.evaluate(p=>rbLoadProject(new File([JSON.stringify(p)],'old.lgproject.json',{type:'application/json'})),old);n.off('dialog',loadDialog);assert.deepEqual(await ownerProject(n),loaded);
+    const accept=d=>d.accept();n.on('dialog',accept);await n.evaluate(p=>rbLoadProject(new File([JSON.stringify(p)],'old.lgproject.json')),old);n.off('dialog',accept);assert.deepEqual(await ownerProject(n),loaded);
+    await n.evaluate(p=>{rbPendingRestore={project:p,findings:[],source:document.getElementById('csImportInput').value,builder:rbProjectFingerprint(rbCollectProject())};},old);
+    n.once('dialog',d=>d.dismiss());await n.evaluate(()=>rbConfirmRestore());assert.equal(await n.evaluate(()=>!!rbPendingRestore),true);assert.deepEqual(await ownerProject(n),loaded);
+    n.once('dialog',d=>d.accept());await n.evaluate(()=>rbConfirmRestore());assert.equal(await n.evaluate(()=>rbPendingRestore),null);assert.deepEqual(await ownerProject(n),loaded);
+
+  });
+  await check('UX18 Build and postprocessor reject DOM bypass without publishing YAML', async () => {
+    const n=await fresh();await n.locator('#mihomoInput').fill(link);await build(n);const yaml=await n.locator('#mihomoOutput').inputValue();
+    for(const id of ['cfgTieredFailover','cfgPerProxyMaster','cfgPerProxyTun','cfgPerProxySocks']) {
+      await n.evaluate(id=>{for(const x of ['cfgTieredFailover','cfgPerProxyMaster','cfgPerProxyTun','cfgPerProxySocks'])document.getElementById(x).checked=x===id;document.getElementById('cfgAutoWhitelist').checked=true;},id);
+      assert.equal(await n.evaluate(()=>{const orig=URL.createObjectURL;let called=false;URL.createObjectURL=()=>{called=true;throw Error('unexpected export');};try{rbSaveProject();return !called;}finally{URL.createObjectURL=orig;}}),true);
+      await n.evaluate(()=>buildMihomo());assert.equal(await n.locator('#builderActionStatus').getAttribute('data-state'),'ERROR');assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);assert.equal(await n.locator('#copyYamlBtn').isDisabled(),true);
+    }
+    assert.equal(await n.evaluate(yaml=>{try{applyTieredFailover(yaml,[{name:'X',strategy:'fallback',members:['Owner-A']}]);return false;}catch(e){return /несовместимы/.test(e.message);}},yaml),true);
+    assert.equal(await n.evaluate(()=>{document.getElementById('cfgAutoWhitelist').checked=false;const y=jsyaml.dump({'proxy-groups':[{name:'GLOBAL',type:'fallback',filter:'^(PRIMARY-|primary-)`^(FALLBACK-|fallback-)',proxies:['Owner-A']}],rules:['MATCH,GLOBAL']});try{applyTieredFailover(y,[]);return false;}catch(e){return /AWL YAML/.test(e.message);}}),true);
+  });
+  await check('UX18 AWL DPR SELECT and URL subscriptions remain compatible in both modes', async () => {
+    for(const subMode of [false,true]) {
+      const n=await fresh();await n.locator('#cfgSubMode').setChecked(subMode);await n.locator('#cfgAutoWhitelist').check();
+      await n.route('https://primary.example.invalid/sub',r=>r.fulfill({body:link}));await n.route('https://reserve.example.invalid/sub',r=>r.fulfill({body:link.replace('192.0.2.1','192.0.2.2').replace('#Owner-A','#Reserve')}));
+      await n.locator('#mihomoInput').fill('https://primary.example.invalid/sub');await n.locator('#whitelistInput').fill('https://reserve.example.invalid/sub');
+      await n.locator('#btnPolicyAdd').click();const c=n.locator('#policyCards .policy-card').last();await c.locator('.policy-name').fill('AI');await c.locator('.policy-domains').fill('ai.example');await build(n);
+      const d=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));const group=d['proxy-groups'].find(g=>g.name==='AI');assert.equal(group.type,'select');assert.deepEqual(group.proxies,['GLOBAL','DIRECT']);assert.ok(d.rules.some(r=>r.startsWith('RULE-SET,')&&r.endsWith(',AI')));assert.equal(d.rules.at(-1),'MATCH,GLOBAL');
+    }
+    const n=await fresh();await n.locator('#cfgAutoWhitelist').check();await n.locator('#mihomoInput').fill(link);await n.locator('#whitelistInput').fill(link.replace('#Owner-A','#Reserve'));
+    await n.locator('#mtImportBtn').click();await n.locator('#mtImportFile').setInputFiles(path.join(root,'tests/fixtures/magitrickle-basic.mtrickle'));await n.waitForFunction(()=>mtPending!==null);await n.locator('#mtImportApply').click();
+    const cards=n.locator('#policyCards .policy-card');assert.equal(await cards.count(),2);for(let i=0;i<2;i++){await cards.nth(i).locator('.policy-target').selectOption('SELECT');await cards.nth(i).locator('.policy-name').fill(i?'Imported Video':'Imported AI');}
+    await build(n);let imported=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));for(const name of ['Imported AI','Imported Video'])assert.deepEqual(imported['proxy-groups'].find(g=>g.name===name).proxies,['GLOBAL','DIRECT']);
+    await cards.first().locator('.policy-name').fill('Renamed AI');await build(n);imported=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));assert.equal(imported['proxy-groups'].some(g=>g.name==='Imported AI'),false);assert.ok(imported.rules.some(r=>r.startsWith('RULE-SET,')&&r.endsWith(',Renamed AI')));
+    const p=await ownerProject(n);await n.evaluate(p=>rbApplyProject(p),p);await build(n);assert.deepEqual(await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value)),imported);
+  });
+  await check('UX18 neutral defaults apply only to new priority cards', async () => {
+    const n=await fresh();await n.locator('#cfgTieredFailover').check();assert.deepEqual(await n.evaluate(()=>readTierCards().map(t=>t.name)),['Основные выходы','Резервные выходы','Дополнительные выходы']);
+    const p=await ownerProject(n);p.tiered.cards[0].name='WARP';await n.evaluate(p=>rbApplyProject(p),p);assert.equal(await n.locator('.tier-name').first().inputValue(),'WARP');
+  });
+  await check('UX18 profile return resolves AWL priority conflict before mutation', async () => {
+    const n=await fresh();await n.locator('#cfgAutoWhitelist').check();await n.locator('#cfgProfile').selectOption('vps-local');await n.locator('#cfgTieredFailover').check();const before=await ownerProject(n);
+    await n.evaluate(()=>{const original=refreshWgTargetSelectors;window.ownerProfileRefreshCount=0;refreshWgTargetSelectors=(...args)=>{ownerProfileRefreshCount++;return original(...args);};});
+    n.once('dialog',d=>d.dismiss());await n.locator('#cfgProfile').selectOption('router');assert.deepEqual(await ownerProject(n),before);assert.equal(await n.evaluate(()=>ownerProfileRefreshCount),0,'no registry mutation before profile admission');
+    n.once('dialog',d=>d.accept());await n.locator('#cfgProfile').selectOption('router');assert.equal(await n.locator('#cfgAutoWhitelist').isChecked(),true);assert.equal(await n.locator('#cfgTieredFailover').isChecked(),false);
+  });
+
+  await check('P2 Studio redacts original ladder-prefixed secret before display formatting', async () => {
+    const n = await fresh();
+    await n.locator('.tab', { hasText: 'Config Studio' }).click();
+    const secret = '🪜 synthetic-owner-secret-236';
+    const yaml = ['secret: "' + secret + '"', 'proxies: []', 'proxy-groups:',
+      '  - name: "' + secret + '"', '    type: select', '    proxies: [DIRECT]',
+      'rules:', '  - "MATCH,' + secret + '"'].join('\n');
+    await n.locator('#csImportInput').fill(yaml);
+    await n.locator('#csParseBtn').click();
+    assert.match(await n.locator('#csStatus').textContent(), /✓ Разобрано/);
+    await n.locator('#csRoutingPanel > summary').click();
+    await n.locator('#csRuleProbe').fill('unmatched.example.invalid');
+    await n.locator('#csRuleProbeBtn').click();
+    const output = await n.locator('#csRuleProbeOut').textContent();
+    assert.match(output, /Fallback:[\s\S]*MATCH →/);
+    assert.ok(!output.includes(secret), 'original secret leaked');
+    assert.ok(!output.includes(secret.replace('🪜 ', '[Приоритет] ')), 'formatted secret leaked');
+    assert.ok(!output.includes('synthetic-owner-secret-236'), 'secret suffix leaked');
+    // A non-secret tier name still receives cosmetic formatting, without editing YAML.
+    await n.locator('#csImportInput').fill(yaml.replaceAll(secret, '🪜 Public tier').replace('secret: "🪜 Public tier"', 'secret: "other-synthetic-secret"'));
+    await n.locator('#csParseBtn').click();
+    await n.locator('#csRuleProbe').fill('unmatched.example.invalid');
+    await n.locator('#csRuleProbeBtn').click();
+    assert.match(await n.locator('#csRuleProbeOut').textContent(), /MATCH → \[Приоритет\] Public tier/);
+    assert.ok((await n.locator('#csImportInput').inputValue()).includes('MATCH,🪜 Public tier'));
+  });
+  await check('P2 Quick Start new sections stay inside wrap at desktop and mobile widths', async () => {
+    const n = await browser.newPage(); pages.push(n); n.errors = [];
+    n.on('pageerror', e => n.errors.push(e.message));
+    await n.route('https://**', r => r.abort());
+    await n.goto(pathToFileURL(path.join(root, 'quick-start.html')).href);
+    for (const width of [1920, 1280, 390, 320]) {
+      await n.setViewportSize({ width, height: 850 });
+      for (const title of ['Owner UX 2.1', 'Совместимость приоритетов']) {
+        const heading = n.getByRole('heading', { name: title, exact: true });
+        assert.equal(await heading.evaluate(el => !!el.closest('.wrap')), true, title + ': outside wrap');
+        await heading.scrollIntoViewIfNeeded();
+        assert.equal(await heading.isVisible(), true);
+        const layout = await heading.evaluate(el => {
+          const section = el.parentElement.getBoundingClientRect(), wrap = el.closest('.wrap').getBoundingClientRect();
+          return { contained: section.left >= wrap.left && section.right <= wrap.right,
+            overflow: document.documentElement.scrollWidth > innerWidth };
+        });
+        assert.equal(layout.contained, true, title + ': outside panel bounds at ' + width);
+        assert.equal(layout.overflow, false, 'horizontal overflow at ' + width);
+      }
+      await screenshot(n, '.wrap', 'quick-start-p2-' + width);
+    }
+  });
+
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });
   await browser.close();
   if (process.env.OWNER_UX_RESULTS) fs.writeFileSync(process.env.OWNER_UX_RESULTS, JSON.stringify({ engine, root, passed, failed, results }, null, 2));

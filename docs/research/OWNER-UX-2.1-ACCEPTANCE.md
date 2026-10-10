@@ -19,3 +19,23 @@ Viewport matrix: 1280×720, 1366×768, 1920×1080, 390 and 320 px, all five work
 5. Inspect priority groups in graph and Inspector: readable display, unchanged YAML names.
 
 Synthetic fixtures only. No live router, VPS, user subscription or packet-path acceptance is claimed. No stable/tag/release/Owner GO promotion.
+
+## Routing compatibility (separate owner-review PR)
+
+Baseline probe: AWL+Tiered previously produced VALID YAML but changed the final MATCH to Tiered. Per-Proxy+Tiered remained valid and is not newly blocked. UX18 baseline: five failures and one existing compatible scenario passes; candidate: six passes. Final exact-head CI records all three browsers and real Mihomo versions. Complete compatibility matrix and source boundary: [AUTO-WHITELIST.md](../AUTO-WHITELIST.md).
+
+Guards cover manual switch, profile return, Load, Undo, Reverse Restore, Save, Build and direct Tiered override. Accepted conflicts deactivate modes while preserving data. Cancel precedes mutation. AWL+DPR SELECT and synthetic URL subscriptions ON/OFF preserve MATCH,GLOBAL. Runtime is generated and unchanged; Tiered guards belong to the consumer postprocessor.
+
+YAML parity for valid existing scenarios remains byte-identical to the UI PR. Intentional changes: conflicting AWL+Tiered/Per-Proxy states now fail Build instead of silently rewriting/clamping; accepted old projects deactivate conflicts; new tier cards have neutral names. Existing names and internal group syntax are not migrated. Health-check semantics are unchanged.
+
+### PowerShell preview
+
+From the routing candidate checkout, run:
+
+```powershell
+python -m http.server 34224 --bind 127.0.0.1 --directory .
+```
+
+Open `http://127.0.0.1:34224/index.html` in a browser. Preview routing candidate separately from main. It requires owner review before merge.
+
+Manual acceptance: configure Tiered; enable AWL and cancel, compare fields; accept and inspect disabled controls and retained cards; Build and verify MATCH,GLOBAL; disable AWL and verify Tiered stays off; load an old conflicting project and repeat cancel/accept; create two SELECT cards, rename one and inspect group/rule references.
