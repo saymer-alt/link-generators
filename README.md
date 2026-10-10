@@ -25,6 +25,17 @@
 
 ## Быстрый старт
 
+**Пример задачи: у вас есть VLESS-ссылка, нужен Mihomo `config.yaml` для роутера Keenetic.**
+
+`Ваша VLESS-ссылка → Mihomo Config Builder → Build Config → готовый YAML`
+
+1. Откройте [веб-генератор](https://saymer-alt.github.io/link-generators/) — ничего устанавливать на ПК не нужно.
+2. На вкладке **Mihomo Config Builder** вставьте **свою** ссылку или подписку (не публикуйте действующие ключи в Issues). Для одиночной `vless://`-ссылки **выключите** режим URL-подписки.
+3. Нажмите **Build Config**, прочитайте результат проверки и скопируйте YAML. Базовая проверка в браузере не заменяет `mihomo -t` на целевом устройстве.
+4. Для Keenetic используйте [безопасный импорт в keenetic-auto-setup](https://github.com/saymer-alt/keenetic-auto-setup#2-конфигурация-mihomo). Если нужен разбор полей — [инструкция с примерами](https://saymer-alt.github.io/link-generators/quick-start.html).
+
+**Примечание о данных:** локальная сборка выполняется в браузере, но явно включённые опции предпросмотра подписки и диагностики могут делать сетевые обращения. [Какие именно](docs/DATAFLOW.md).
+
 **Ссылки → Mihomo YAML**
 
 1. Откройте вкладку **⚙️ Mihomo Config Builder**.
