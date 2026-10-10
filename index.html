@@ -17,7 +17,7 @@
     --green:#0a7a0a; --green-bg:#eef7ee; --red:#a40000; --red-bg:#fbeeee;
     --warn:#8a6d00; --warn-bg:#fdf6dd; --info:#003399; --tooltip:#ffffe1; }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:linear-gradient(165deg,var(--desktop1) 0%,#4a72c4 45%,var(--desktop2) 100%) fixed;color:var(--text);font-family:Tahoma,Verdana,Arial,sans-serif;font-size:13px;line-height:1.5;padding:18px}
+  body{background:linear-gradient(165deg,var(--desktop1) 0%,#4a72c4 45%,var(--desktop2) 100%) fixed;color:var(--text);font-family:Tahoma,Verdana,Arial,"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;font-size:13px;line-height:1.5;padding:18px}
   a{color:var(--link);text-decoration:none}
   a:hover{color:var(--link-hover);text-decoration:underline}
   a:visited{color:var(--link)}
@@ -247,11 +247,11 @@
   .vrg-viewport{max-width:100%;min-width:0}
   .vrg-viewport svg{display:block;max-width:none;touch-action:none}
   .vrg-viewport.vrg-panning{cursor:grabbing;user-select:none}
-  .workspace-nav{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:var(--face);border:1px solid var(--border);margin:10px 0}
+  .workspace-nav{position:sticky;top:var(--builder-action-height,80px);z-index:20;display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:var(--face);border:1px solid var(--border);margin:10px 0}
   .workspace-nav a{padding:6px 8px;border:1px outset var(--border);color:var(--text);text-decoration:none;min-height:28px;max-width:100%;overflow-wrap:anywhere}
   .workspace-nav a:focus-visible,.builder-workspace h2:focus{outline:2px solid var(--info);outline-offset:2px}
-  .builder-workspace{min-width:0;margin:20px 0 30px;scroll-margin-top:180px}
-  .builder-workspace h2{font-size:1.1rem;margin:0 0 8px;scroll-margin-top:180px}
+  .builder-workspace{min-width:0;margin:20px 0 30px;scroll-margin-top:var(--builder-obstruction,180px)}
+  .builder-workspace h2{font-size:1.1rem;margin:0 0 8px;scroll-margin-top:var(--builder-obstruction,180px)}
   .workspace-directory{display:flex;flex-wrap:wrap;gap:10px;padding:12px 0}
   .workspace-directory a{flex:1 1 240px;min-width:0;padding:6px;overflow-wrap:anywhere}
   .vrg-frame{min-width:0}
@@ -261,6 +261,15 @@
   .vrg-frame.vrg-expanded{position:fixed;inset:0;z-index:1100;padding:12px;background:var(--face);display:flex;flex-direction:column;gap:6px}
   .vrg-expanded .vrg-nav{flex:0 0 auto;margin:0;max-height:45vh;overflow:auto}
   .vrg-expanded .vrg-viewport{flex:1 1 auto;height:auto!important;min-height:0;max-height:none!important;resize:none;margin:0!important}
+
+  .control-disabled{opacity:.6}
+  .builder-actionbar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px;margin:8px 0;background:var(--face);border:1px solid var(--border)}
+  .builder-actionbar .btn{font-size:.82rem;padding:5px 8px}
+  #builderActionStatus{flex-basis:100%;font-size:.8rem;overflow-wrap:anywhere}
+  #builderActionStatus[data-state="STALE"],#builderActionStatus[data-state="ERROR"]{color:var(--red);font-weight:bold}
+  #tab-mihomo [id]{scroll-margin-top:var(--builder-obstruction,180px)}
+  .policy-name-help{margin:4px 0 6px;font-size:.8rem}
+  @media(max-width:768px){.workspace-nav{position:static}.builder-actionbar{gap:4px}.builder-actionbar .btn{padding:4px 6px;font-size:.78rem}}
 </style>
 </head>
 <body>
@@ -371,13 +380,22 @@
   <!-- TAB 2: MIHOMO BUILDER -->
   <div id="tab-mihomo" class="tab-content active">
 <div class="hint"><a href="quick-start.html">📖 Короткая инструкция</a> · WARP создаёт ссылки, Builder собирает конфигурацию, Config Studio анализирует готовый YAML.</div>
+<div id="builderActionbar" class="builder-actionbar" role="toolbar" aria-label="Действия Builder">
+        <button class="btn" id="buildConfigBtn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" onclick="buildMihomo()">⚡ Build Config</button>
+        <button class="btn btn-gray" id="downloadYamlBtn" type="button" onclick="downloadMihomo()">💾 Скачать YAML</button>
+        <button class="btn btn-gray" id="copyYamlBtn" title="Скопировать итоговый YAML (доступно только после успешной проверки)" onclick="copyMihomo()">📋 Copy YAML</button>
+        <button class="btn btn-gray" title="Сохранить проект генератора (все подписки, WG/AWG-профили, настройки) в .lgproject.json. ВНИМАНИЕ: файл содержит приватные ключи и токены" onclick="rbSaveProject()">💾 Сохранить проект</button>
+        <button class="btn btn-gray" title="Загрузить проект генератора (.lgproject.json) и восстановить Builder" onclick="document.getElementById('rbProjectFile').click()">📂 Загрузить проект</button>
+        <button class="btn btn-gray" id="rbUndoBtn" style="display:none" title="Вернуть состояние Builder до загрузки проекта" onclick="rbUndoRestore()">↩︎ Отменить восстановление</button>
+        <input type="file" id="rbProjectFile" accept=".lgproject.json,.json" hidden>
+      <a href="#mihomoOutput">К YAML</a><div id="builderActionStatus" role="status" aria-live="polite"></div></div>
 <nav id="builderWorkspaceNav" class="workspace-nav" aria-label="Разделы Mihomo Builder">
  <a href="#ux-start">🏠 Быстрый старт</a><a href="#ux-routing">🌐 Маршрутизация и DNS</a><a href="#ux-diagnostics">🔍 Диагностика</a><a href="#ux-lab">🧪 Лаборатория</a><a href="#ux-options">⚙️ Дополнительно</a>
 </nav>
 <details id="workspaceDirectory"><summary>Все инструменты — экспертный доступ</summary>
  <div class="workspace-directory">
  <a href="#policyRoutingPanel" data-workspace-target="cfgPolicyRouting">Доменные политики / MagiTrickle</a>
- <a href="#tieredPanel" data-workspace-target="cfgTieredFailover">Приоритетные эшелоны</a>
+ <a href="#tieredPanel" data-workspace-target="cfgTieredFailover">Приоритетные группы серверов</a>
  <a href="#excludeFilterRow">Выбор узлов / Exclude Filter</a><a href="#runtimeImportDetails">Список узлов работающего Mihomo</a>
  <a href="#routingDiagnostics">Проверка домена</a><a href="#ruleProviderExplorer">Провайдеры правил</a><a href="#domainCoveragePanel">Покрытие доменов</a><a href="#vrgPanel">Граф зависимостей Build</a>
  <a href="#physicalTopologyPanel">Физическая топология / What-if / артефакты</a><a href="#ptRuntimePanel">Наблюдения контроллеров узлов</a>
@@ -387,7 +405,7 @@
 </details>
 <section class="builder-workspace" aria-labelledby="ux-start">
 <h2 id="ux-start" tabindex="-1">🏠 Быстрый старт</h2>
-<p class="hint">1. Выберите платформу. 2. Добавьте данные. 3. Соберите YAML. Инженерные настройки доступны в отдельных разделах ниже.</p>
+<p class="hint">1. Выберите платформу. 2. Выберите режим маршрутизации. 3. Добавьте серверы и соберите YAML. Инженерные настройки доступны в отдельных разделах ниже.</p>
 <div class="card" id="profileRow">
       <div class="card-title">🎯 Где будет работать Mihomo?</div>
       <select id="cfgProfile">
@@ -422,71 +440,23 @@
       <div class="hint">Профиль задаёт только сценарий развёртывания: вход (TUN/SOCKS), базовые переключатели и gateway-настройки. Прокси, подписки, WireGuard, фильтры и остальные данные не затрагиваются. Подробно: <a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/GENERATOR-GUIDE.md">подробная инструкция</a>, <a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/VPS-GATEWAY.md">VPS Gateway</a>.</div>
     </div>
 <div class="card">
-<div class="card-title">📋 2. Добавьте ссылки или URL-подписки</div>
-<label for="mihomoInput">Основные прокси-ссылки / URL-подписки</label>
-<textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки, созданные во вкладке «⚡ WARP MASQUE Links»"></textarea>
-<div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Для HTTP(S) подписки режим ниже определяет результат: включён — динамический <code>proxy-provider</code>; выключен — подписка один раз читается браузером и её текущие узлы встраиваются как обычные <code>proxies:</code>.</div>
-<div class="hint">Поддерживает: vless, vmess, trojan, anytls, ss, socks/socks4/socks4a/socks5/socks5h, http/https, hy2/hysteria2, tuic, mieru/mierus, tt, masque, WG (.conf/.awg), HTTP(S) подписки</div>
-</div>
-<div class="card">
-<div class="card-title">📂 WireGuard / AmneziaWG — при необходимости</div>
-<div class="file-upload-wrapper">
-        <div class="file-upload">
-          <button class="btn btn-gray" id="btnWg" title="Добавляет WireGuard/AmneziaWG конфиги к уже загруженным (каждый файл — отдельный proxy в YAML). Список и удаление — ниже.">📂 Загрузить .conf / .wg / .awg</button>
-          <input type="file" id="wgFile" accept=".conf,.wg,.awg" multiple>
-        </div>
-        <span class="wg-status" id="wgStatus"></span>
-        <div class="hint" style="margin-top:4px">Можно выбрать сразу несколько WG/AWG-конфигов — каждый файл станет отдельным профилем в списке ниже. Добавлять можно и по очереди, несколькими загрузками.</div>
-        <div class="hint" style="margin-top:4px">WG/AWG-конфиги хранятся только в памяти текущей страницы. После обновления или закрытия страницы их нужно загрузить заново. Приватные ключи в browser storage не сохраняются.</div>
-      </div>
-<ul class="wg-list" id="wgList" role="list" hidden></ul>
-<div id="wgRejected" class="wg-rejected" role="alert" hidden></div>
-<button class="btn btn-gray" id="wgClear" type="button" style="display:none;margin-top:6px" onclick="clearWgProfiles()">🧹 Очистить все WG/AWG</button>
-</div>
-<div class="card">
-<div class="card-title">⚙️ 3. Основные настройки и сборка</div>
-<div class="checkbox-grid">
-        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Доступно только в профиле «Роутер / обычный TUN»; в обоих VPS-профилях отключено.</span></span></label>
-        <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
-        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090. На VPS controller доступен только локально (127.0.0.1:9090); для удалённого управления используйте SSH-туннель (локальный forwarded-порт — свой на каждый VPS).</span></span></label>
-        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется стабильный HWID логического устройства (#156), общий для preview и всех провайдеров конфига, — не HWID Mihomo/Keenetic.</span></span></label>
-
-      </div><div id="subModeHint" class="hint"></div>
-<div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN Interface">?</button><span class="ctx-help-pop" role="note">Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo».</span></span></label>
-        <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: MIPS stack">?</button><span class="ctx-help-pop" role="note">TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor.</span></span></label>
-      </div>
-<div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div><div class="btn-group">
-        <button class="btn" id="buildConfigBtn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" onclick="buildMihomo()">⚡ Build Config</button>
-        <button class="btn btn-gray" id="downloadYamlBtn" type="button" onclick="downloadMihomo()">💾 Скачать YAML</button>
-        <button class="btn btn-gray" id="copyYamlBtn" title="Скопировать итоговый YAML (доступно только после успешной проверки)" onclick="copyMihomo()">📋 Copy YAML</button>
-        <button class="btn btn-gray" title="Сохранить проект генератора (все подписки, WG/AWG-профили, настройки) в .lgproject.json. ВНИМАНИЕ: файл содержит приватные ключи и токены" onclick="rbSaveProject()">💾 Сохранить проект</button>
-        <button class="btn btn-gray" title="Загрузить проект генератора (.lgproject.json) и восстановить Builder" onclick="document.getElementById('rbProjectFile').click()">📂 Загрузить проект</button>
-        <button class="btn btn-gray" id="rbUndoBtn" style="display:none" title="Вернуть состояние Builder до загрузки проекта" onclick="rbUndoRestore()">↩︎ Отменить восстановление</button>
-        <input type="file" id="rbProjectFile" accept=".lgproject.json,.json" hidden>
-      </div>
-</div>
-<div class="card">
-      <div class="card-title">📦 Mihomo YAML</div>
-      <textarea id="mihomoOutput" readonly aria-describedby="mihomoOutputHint"></textarea>
-      <div id="mihomoOutputHint" class="hint">Предпросмотр только для чтения. Чтобы изменить YAML, поправьте входные данные или настройки выше и снова нажмите ⚡ Build Config.</div>
-      <div id="mihomoValidationBox" class="validation-box state-not-built" aria-live="polite"></div>
-      <div id="mihomoCompatBox" class="compat-box" aria-live="polite"></div>
-    </div>
-</section>
-<section class="builder-workspace" aria-labelledby="ux-routing">
-<h2 id="ux-routing" tabindex="-1">🌐 Маршрутизация и DNS</h2>
-<p class="hint">Настройте состав выходов и правила. Все изменения применяются только при Build. DNS gateway остаётся рядом с выбором платформы.</p>
-<div class="card">
-<div class="card-title">🛡️ Основной и резервный набор</div>
+<div class="card-title">🛡️ 2. Режим маршрутизации</div>
 <div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> 🛡️ Автоматический режим белых списков <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Автоматический режим белых списков">?</button><span class="ctx-help-pop" role="note">Плоский резервный набор (PRIMARY → FALLBACK): GLOBAL сначала использует основной набор выходов, при их недоступности переключается на резервный. Health-check каждые 300 секунд, ускоренный при неудачах. Доступен только в профиле «Роутер / обычный TUN»: на VPS не используется.</span></span></label></div>
 <div class="hint" id="awlRouterHint" style="display:none">Автоматический режим белых списков доступен только для профиля «Роутер / обычный TUN».</div>
+
+</div>
+<div class="card">
+<div class="card-title">📋 3. Основные серверы и подписки</div>
+<label for="mihomoInput">Основные серверы и подписки</label>
+<textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки, созданные во вкладке «⚡ WARP MASQUE Links»"></textarea>
 <div id="whitelistPanel" style="display:none">
-        <label for="whitelistInput">Резерв для белых списков (ссылки / подписки)</label>
+        <label for="whitelistInput">Резервные серверы и подписки</label>
         <textarea id="whitelistInput" placeholder="vless://...&#10;https://sub.url/..."></textarea>
         <div class="hint">Верхний набор — основной, этот — резерв. GLOBAL сначала использует обычные выходы, затем БС. Обе стороны обязательны. Ссылки можно смешивать с подписками при включённом режиме «URL-подписки». Плановая проверка доступности — каждые 300 секунд; при неудачных подключениях (2 за 60 секунд) проверка запускается сразу. Переключение и возврат на основной — не мгновенные. WG-файлы входят в основной набор.</div>
       </div>
-</div>
+<div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Для HTTP(S) подписки режим ниже определяет результат: включён — динамический <code>proxy-provider</code>; выключен — подписка один раз читается браузером и её текущие узлы встраиваются как обычные <code>proxies:</code>.</div>
+<div class="hint">Поддерживает: vless, vmess, trojan, anytls, ss, socks/socks4/socks4a/socks5/socks5h, http/https, hy2/hysteria2, tuic, mieru/mierus, tt, masque, WG (.conf/.awg), HTTP(S) подписки</div>
+
 <div class="card">
 <div class="card-title">📡 Подписки: устройство, просмотр и выбор узлов</div>
 <label><input type="checkbox" id="cfgServerList"> 📋 Показать серверы подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Показать серверы подписки">?</button><span class="ctx-help-pop" role="note">Позволяет браузеру получить имена узлов подписки для просмотра и выбора исключений. По умолчанию выключено — без этого генератор не запрашивает подписку браузером. Отдельная функция просмотра: работает в обоих режимах «Использовать URL-подписки», список и выбор исключений появляются в разделе Exclude Filter. При CORS может использоваться проектный fallback-воркер; список и URL не сохраняются, локально хранится только реестр идентичностей устройства (#156).</span></span></label><div id="deviceModelRow" style="margin-top:10px">
@@ -569,6 +539,78 @@
         <div class="hint">Фильтр по фактическим именам узлов. При включённых URL-подписках передаётся Mihomo как <code>exclude-filter</code>; при выключенных применяется браузером к развёрнутым узлам до сборки YAML. Например, <code>(?i)ru|russia|россия</code>. Применяется ко всем подпискам. Пусто — фильтрации нет.</div>
       </div>
 </div>
+</div>
+<div class="card">
+<div class="card-title">📂 WireGuard / AmneziaWG — при необходимости</div>
+<div class="file-upload-wrapper">
+        <div class="file-upload">
+          <button class="btn btn-gray" id="btnWg" title="Добавляет WireGuard/AmneziaWG конфиги к уже загруженным (каждый файл — отдельный proxy в YAML). Список и удаление — ниже.">📂 Загрузить .conf / .wg / .awg</button>
+          <input type="file" id="wgFile" accept=".conf,.wg,.awg" multiple>
+        </div>
+        <span class="wg-status" id="wgStatus"></span>
+        <div class="hint" style="margin-top:4px">Можно выбрать сразу несколько WG/AWG-конфигов — каждый файл станет отдельным профилем в списке ниже. Добавлять можно и по очереди, несколькими загрузками.</div>
+        <div class="hint" style="margin-top:4px">WG/AWG-конфиги хранятся только в памяти текущей страницы. После обновления или закрытия страницы их нужно загрузить заново. Приватные ключи в browser storage не сохраняются.</div>
+      </div>
+<ul class="wg-list" id="wgList" role="list" hidden></ul>
+<div id="wgRejected" class="wg-rejected" role="alert" hidden></div>
+<button class="btn btn-gray" id="wgClear" type="button" style="display:none;margin-top:6px" onclick="clearWgProfiles()">🧹 Очистить все WG/AWG</button>
+
+<div style="margin-top: 15px;">
+        <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">Общий DNS override для всех WG/AWG профилей:</label>
+        <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
+        <div class="hint" style="margin-top: 5px;">Общий DNS для ВСЕХ загруженных WG/AWG-профилей (добавляет <code>dns</code>/<code>remote-dns-resolve</code> в каждый wireguard-outbound). Пусто — DNS удаляется из профилей.</div>
+        <div id="wgDnsWarning" class="hint" style="color:var(--red); display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
+      </div>
+<div style="margin-top: 15px;">
+        <div class="toggle-row">
+          <label><input type="checkbox" id="cfgAwgKeepalive" checked> 🛡 Поддерживать AWG-соединение через NAT (keepalive 25 с) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: NAT keepalive">?</button><span class="ctx-help-pop" role="note">Явная user-visible policy для AWG-профилей (#137): если в .conf нет совместимого целого PersistentKeepalive, при сборке будет emitted persistent-keepalive: 25; диапазон вроде 25-35 сводится к 25 с явной диагностикой (fixed 25 не эквивалентен random-range); существующее целое значение (включая 0 = disabled) не меняется. Только AWG-профили; plain WireGuard не затрагивается. Выключение возвращает строгий контракт: диапазон не эмитится, WARN остаётся.</span></span></label>
+        </div>
+        <div class="hint" style="margin-top:4px">Для NAT/LTE/домашних роутеров периодический keepalive помогает не терять UDP-состояние. Если профиль не задаёт совместимое значение, Mihomo получит 25 секунд. Существующее целое значение не меняется.</div>
+        <details id="awgDiagnosticDetails"><summary>Диагностический эксперимент AWG</summary><div class="toggle-row" style="margin-top:8px">
+          <label><input type="checkbox" id="cfgAwgRtDiag"> 🧪 Тест обрывов: отключить RandomTrailers <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: RandomTrailers diagnostic">?</button><span class="ctx-help-pop" role="note">Диагностический override (#137): у AWG-профилей с RandomTrailers=on при сборке он будет отключён. Это controlled diagnostic experiment для локализации обрывов, а НЕ доказанный universal fix; MTU, ключи и остальные поля не меняются. Каждое применение фиксируется в diagnostic report.</span></span></label>
+        </div></details>
+        <div id="awgRtDiagWarn" class="hint" style="display:none;color:var(--red);margin-top:4px">⚠️ Диагностическая модификация AWG-профилей: RandomTrailers будет отключён в сборке (random-trailers: on → off). Это controlled experiment для теста обрывов, а НЕ доказанный universal fix; MTU/ключи и остальные поля не меняются.</div>
+      </div>
+</div>
+<div class="card">
+<div class="card-title">⚙️ Основные настройки</div>
+<div class="checkbox-grid">
+        <label><input type="checkbox" id="cfgLan" checked> 🌐 Allow LAN (0.0.0.0) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Allow LAN">?</button><span class="ctx-help-pop" role="note">Разрешает Mihomo принимать соединения не только с 127.0.0.1, но и из локальной сети (добавляет bind-address: *). Доступно только в профиле «Роутер / обычный TUN»; в обоих VPS-профилях отключено.</span></span></label>
+        <label><input type="checkbox" id="cfgSocks" checked> 🔌 Mixed Port 7890 <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Mixed Port">?</button><span class="ctx-help-pop" role="note">Локальный HTTP+SOCKS вход Mihomo на порту 7890 (127.0.0.1:7890; при включённом Allow LAN — из сети). Именно этот адрес используют Xray/3X-UI для отправки трафика в Mihomo.</span></span></label>
+        <label><input type="checkbox" id="cfgWebUI" checked> 🖥️ Web UI <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Web UI">?</button><span class="ctx-help-pop" role="note">Скачивает и включает веб-дашборд управления Mihomo (MetaCubeXD/Yacd) на порту 9090. На VPS controller доступен только локально (127.0.0.1:9090); для удалённого управления используйте SSH-туннель (локальный forwarded-порт — свой на каждый VPS).</span></span></label>
+        <label><input type="checkbox" id="cfgSubMode" checked> 📡 Использовать URL-подписки <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Использовать URL-подписки">?</button><span class="ctx-help-pop" role="note">Включено: HTTP(S) URL остаётся proxy-provider, узлы обновляет сам Mihomo. Выключено: при Build браузер один раз читает подписку и встраивает её текущие узлы как статические proxies. Для inspection используется стабильный HWID логического устройства (#156), общий для preview и всех провайдеров конфига, — не HWID Mihomo/Keenetic.</span></span></label>
+
+      </div>
+<div id="webUiRow" style="margin-top:10px">
+        <label for="webUiSelect">🖥️ Дашборд Web UI</label>
+        <select id="webUiSelect">
+          <option value="metacubexd" selected>MetaCubeXD (по умолчанию)</option>
+          <option value="yacd">Yacd-meta</option>
+          <option value="zashboard">Zashboard</option>
+          <option value="custom">Custom URL…</option>
+        </select>
+        <input type="text" id="webUiCustomUrl" placeholder="https://example.com/dashboard.zip" style="display:none;margin-left:8px">
+        <div class="hint">Архив дашборда, который Mihomo скачает в каталог external-ui. MetaCubeXD — по умолчанию. Custom: абсолютный http/https URL архива (.zip/.tgz); URL только генерируется в конфиг, не проверяется из браузера.</div>
+      </div><div id="subModeHint" class="hint"></div>
+<div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label><input type="checkbox" id="cfgTun" checked> 🛡️ TUN Interface <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: TUN Interface">?</button><span class="ctx-help-pop" role="note">Системный TUN-интерфейс: трафик устройства направляется в Mihomo. Для домашнего роутера включите; на VPS с локальным Xray/3X-UI не нужен — выключите или выберите профиль «VPS — локальный Mihomo».</span></span></label>
+        <label><input type="checkbox" id="cfgTunMips" checked> ⚡ MIPS stack для TUN <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: MIPS stack">?</button><span class="ctx-help-pop" role="note">TUN/IP-stack для обработки трафика (не архитектура CPU). По умолчанию MIPS; требуется Mihomo ≥ 1.19.31, иначе выберите gVisor.</span></span></label>
+      </div>
+<div class="hint">⚠ MIPS требует Mihomo 1.19.31 или новее. На более старой версии выберите gVisor / отключите MIPS.</div>
+</div>
+<div class="card">
+      <div class="card-title">📦 Mihomo YAML</div>
+      <textarea id="mihomoOutput" readonly aria-describedby="mihomoOutputHint"></textarea>
+      <div id="mihomoOutputHint" class="hint">Предпросмотр только для чтения. Чтобы изменить YAML, поправьте входные данные или настройки выше и снова нажмите ⚡ Build Config.</div>
+      <div id="mihomoValidationBox" class="validation-box state-not-built" aria-live="polite"></div>
+      <div id="mihomoCompatBox" class="compat-box" aria-live="polite"></div>
+    </div>
+</section>
+<section class="builder-workspace" aria-labelledby="ux-routing">
+<h2 id="ux-routing" tabindex="-1">🌐 Маршрутизация и DNS</h2>
+<p class="hint">Настройте состав выходов и правила. Все изменения применяются только при Build. DNS gateway остаётся рядом с выбором платформы.</p>
+
+
 <div class="card">
 <div class="card-title">🚦 Доменные политики и группы выхода</div>
 <div class="toggle-row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -620,7 +662,7 @@
         <div class="hint" id="policyRoutingHint"></div>
 
       </div><div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label><input type="checkbox" id="cfgTieredFailover"> 🔀 Приоритетные эшелоны выходов (Tiered Failover) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Tiered Failover">?</button><span class="ctx-help-pop" role="note">Строгий приоритет эшелонов (#148, runtime-proven на Mihomo 1.19.31/1.19.32): runtime-проверки подтвердили переход между эшелонами по доступности HTTP-проб; это не измерение фактического packet path. Внутри эшелона — url-test (быстрейший) или ordered fallback. Финальное правило MATCH уходит в корневую группу эшелонов; GLOBAL получает её первым участником (ручное переключение в дашборде остаётся возможным). Выключено — вывод без изменений.</span></span></label>
+        <label><input type="checkbox" id="cfgTieredFailover"> 🔀 Приоритетные группы серверов <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Tiered Failover">?</button><span class="ctx-help-pop" role="note">Строгий приоритет эшелонов (#148, runtime-proven на Mihomo 1.19.31/1.19.32): runtime-проверки подтвердили переход между эшелонами по доступности HTTP-проб; это не измерение фактического packet path. Внутри эшелона — url-test (быстрейший) или ordered fallback. Финальное правило MATCH уходит в корневую группу эшелонов; GLOBAL получает её первым участником (ручное переключение в дашборде остаётся возможным). Выключено — вывод без изменений.</span></span></label>
       </div>
 <div id="tieredPanel" style="display:none">
         <div class="hint">Эшелоны проверяются по порядку; финальное правило MATCH направляет трафик в корневую группу «🪜 TIERED-AUTO». Участники — из текущей сборки (прокси, WG/AWG-профили, провайдеры). Health-семантика и границы: <a href="https://github.com/saymer-alt/link-generators/blob/main/docs/TIERED-FAILOVER.md">docs/TIERED-FAILOVER.md</a> (HTTP-пробы; UDP не заявлен).</div>
@@ -632,24 +674,13 @@
         <div class="hint" id="tieredTrace" style="margin-top:6px;white-space:pre-line"></div>
       </div>
 </div>
+<div class="card" id="healthCheckSettings"><label style="margin-top:16px">📍 Health-check URL (latency test) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Health-check URL">?</button><span class="ctx-help-pop" role="note">Mihomo выполняет HTTP(S)-проверку задержки/доступности узлов (url-test и health-check провайдеров). Это не ICMP ping. Google и Cloudflare — официальные Mihomo-recommended URL; Custom URL браузером не проверяется — health-check выполняет сам Mihomo.</span></span></label>
+<select id="pingSelect"></select>
+<input type="text" id="pingCustomUrl" placeholder="https://example.com/generate_204" style="display:none;margin-top:6px" autocomplete="off"></div>
 <div class="card">
-<div class="card-title">🔗 DNS и промежуточные выходы WG/AWG</div>
-<div style="margin-top: 15px;">
-        <label class="label" for="wgCustomDns" style="display: block; margin-bottom: 5px;">Общий DNS override для всех WG/AWG профилей:</label>
-        <input type="text" id="wgCustomDns" style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Например: 1.1.1.1, 8.8.8.8">
-        <div class="hint" style="margin-top: 5px;">Общий DNS для ВСЕХ загруженных WG/AWG-профилей (добавляет <code>dns</code>/<code>remote-dns-resolve</code> в каждый wireguard-outbound). Пусто — DNS удаляется из профилей.</div>
-        <div id="wgDnsWarning" class="hint" style="color:var(--red); display: none; margin-top: 5px;">⚠️ Обнаружен нестабильный DNS Amnezia (100.64.0.1). Заменено на публичные.</div>
-      </div>
-<div style="margin-top: 15px;">
-        <div class="toggle-row">
-          <label><input type="checkbox" id="cfgAwgKeepalive" checked> 🛡 Поддерживать AWG-соединение через NAT (keepalive 25 с) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: NAT keepalive">?</button><span class="ctx-help-pop" role="note">Явная user-visible policy для AWG-профилей (#137): если в .conf нет совместимого целого PersistentKeepalive, при сборке будет emitted persistent-keepalive: 25; диапазон вроде 25-35 сводится к 25 с явной диагностикой (fixed 25 не эквивалентен random-range); существующее целое значение (включая 0 = disabled) не меняется. Только AWG-профили; plain WireGuard не затрагивается. Выключение возвращает строгий контракт: диапазон не эмитится, WARN остаётся.</span></span></label>
-        </div>
-        <div class="hint" style="margin-top:4px">Для NAT/LTE/домашних роутеров периодический keepalive помогает не терять UDP-состояние. Если профиль не задаёт совместимое значение, Mihomo получит 25 секунд. Существующее целое значение не меняется.</div>
-        <div class="toggle-row" style="margin-top:8px">
-          <label><input type="checkbox" id="cfgAwgRtDiag"> 🧪 Тест обрывов: отключить RandomTrailers <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: RandomTrailers diagnostic">?</button><span class="ctx-help-pop" role="note">Диагностический override (#137): у AWG-профилей с RandomTrailers=on при сборке он будет отключён. Это controlled diagnostic experiment для локализации обрывов, а НЕ доказанный universal fix; MTU, ключи и остальные поля не меняются. Каждое применение фиксируется в diagnostic report.</span></span></label>
-        </div>
-        <div id="awgRtDiagWarn" class="hint" style="display:none;color:var(--red);margin-top:4px">⚠️ Диагностическая модификация AWG-профилей: RandomTrailers будет отключён в сборке (random-trailers: on → off). Это controlled experiment для теста обрывов, а НЕ доказанный universal fix; MTU/ключи и остальные поля не меняются.</div>
-      </div>
+<div class="card-title">🔗 Ручная общая dialer-группа (Legacy)</div>
+
+
 <details id="wgDialerAdvanced" class="advanced-panel" style="margin-top:15px">
         <summary><span class="disclosure-chevron" aria-hidden="true">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Ручная общая dialer-группа (Legacy)</span></summary>
         <div class="hint">Обычно этот раздел не нужен. Для каждого WG/AWG используйте настройку «Через промежуточный proxy» в его карточке — генератор сам создаст безопасную группу (для подписки — provider-backed). Этот блок — ручной/Legacy путь: общая dialer-группа, которую несколько WG/AWG используют совместно, для особых схем.</div>
@@ -731,7 +762,7 @@
 <div class="card-title">🧪 Модель, симуляция и наблюдения</div>
 <details id="physicalTopologyPanel" class="advanced-panel" style="margin-top:12px">
         <summary style="cursor:pointer"><span class="disclosure-chevron" aria-hidden="true">▶</span> <span class="advanced-badge">PHYSICAL TOPOLOGY</span> <span>🌐 Physical Topology</span></summary>
-        <div class="hint">Физическая цепочка (#149): Client → ENTRY → TRANSIT(0..N) → EXIT [→ FINAL OVERLAY] → Internet. Для этой модели доступны what-if, генерация per-node артефактов и Runtime Evidence. Physical Topology использует отдельную модель и не меняет обычный Mihomo Build автоматически. Демо — синтетическая фикстура; реальные данные остаются в памяти вкладки. Модель описывает intended topology, Runtime Evidence — ограниченные наблюдения Controller API; ни одно из них не доказывает фактический packet path. Local routing policy узла остаётся отдельным уровнем.</div>
+        <div class="hint">Модель физической цепочки, what-if, per-node артефакты и Runtime Evidence. Данные остаются в памяти вкладки. Intended topology и наблюдения Controller API не доказывают фактический packet path.</div><details><summary>Границы лаборатории</summary><div class="hint">Client → ENTRY → TRANSIT(0..N) → EXIT [→ FINAL OVERLAY] → Internet. Отдельная модель не меняет обычный Mihomo Build автоматически. Демо синтетическое. Local routing policy узла остаётся отдельным уровнем.</div></details><div class="hint"></div>
         <textarea id="ptSpecInput" rows="10" aria-label="Спецификация физической топологии (JSON)" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder='{"nodes":[{"id":"entry-1","label":"…","role":"entry"}],"links":[{"from":"entry-1","to":"exit-1"}],"localPolicies":[]}'></textarea>
         <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
           <button type="button" class="btn btn-gray" id="ptDemoBtn">Загрузить демо-топологию</button>
@@ -773,20 +804,10 @@
 <h2 id="ux-options" tabindex="-1">⚙️ Дополнительные параметры</h2>
 <p class="hint">Редкие параметры для конкретной среды. Не меняйте их без необходимости; скрытие панели не выключает выбранные настройки.</p>
 <div class="card">
-<div class="card-title">⚙️ Дашборд, health-check и совместимость</div>
-<div id="webUiRow" style="margin-top:10px">
-        <label for="webUiSelect">🖥️ Дашборд Web UI</label>
-        <select id="webUiSelect">
-          <option value="metacubexd" selected>MetaCubeXD (по умолчанию)</option>
-          <option value="yacd">Yacd-meta</option>
-          <option value="zashboard">Zashboard</option>
-          <option value="custom">Custom URL…</option>
-        </select>
-        <input type="text" id="webUiCustomUrl" placeholder="https://example.com/dashboard.zip" style="display:none;margin-left:8px">
-        <div class="hint">Архив дашборда, который Mihomo скачает в каталог external-ui. MetaCubeXD — по умолчанию. Custom: абсолютный http/https URL архива (.zip/.tgz); URL только генерируется в конфиг, не проверяется из браузера.</div>
-      </div><label style="margin-top:16px">📍 Health-check URL (latency test) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Health-check URL">?</button><span class="ctx-help-pop" role="note">Mihomo выполняет HTTP(S)-проверку задержки/доступности узлов (url-test и health-check провайдеров). Это не ICMP ping. Google и Cloudflare — официальные Mihomo-recommended URL; Custom URL браузером не проверяется — health-check выполняет сам Mihomo.</span></span></label>
-<select id="pingSelect"></select>
-<input type="text" id="pingCustomUrl" placeholder="https://example.com/generate_204" style="display:none;margin-top:6px" autocomplete="off"><div id="realityModernRow" style="margin-top:10px">
+<div class="card-title">⚙️ Совместимость серверов</div>
+
+
+<div id="realityModernRow" style="margin-top:10px">
         <label for="realityModernInput">🌐 Modern REALITY / Post-Quantum (X25519MLKEM768) <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Modern REALITY">?</button><span class="ctx-help-pop" role="note">Опционально только для VLESS + REALITY узлов с подтверждённой поддержкой X25519MLKEM768. Поддержка появилась в Xray-core 25.5.16, но одна только версия Xray не гарантирует совместимость конкретного сервера/клиента. Укажите host или host:port нужных REALITY-серверов — генератор применит modern override только к ним; обычные VLESS/TLS и остальные узлы не изменяются.</span></span></label>
         <textarea id="realityModernInput" rows="3" placeholder="pan.example&#10;pan2.example:8443&#10;[2001:db8::1]:443"></textarea>
         <div class="hint">По одному <code>host</code> или <code>host:port</code> в строке. Для указанных REALITY-узлов добавляется X25519MLKEM768 и <code>client-fingerprint: chrome</code>, если fingerprint не задан. Пусто — функция выключена и legacy-вывод не меняется.</div>
@@ -985,7 +1006,7 @@ function switchTab(e, name) {
 let runtimeImporterVisible = false; // Presentation only, outside project/Build state.
 // Навигация открывает существующие панели; не изменяет формы и не вызывает Build.
 document.getElementById('tab-mihomo').addEventListener('click', e => {
-  const link = e.target.closest('#builderWorkspaceNav a, #workspaceDirectory a, .builder-workspace a[href^="#"]');
+  const link = e.target.closest('#builderActionbar a, #builderWorkspaceNav a, #workspaceDirectory a, .builder-workspace a[href^="#"]');
   if (!link) return;
   const target = document.getElementById(link.dataset.workspaceTarget || link.getAttribute('href').slice(1));
   if (!target) return;
@@ -2715,6 +2736,7 @@ function updateWgStatusTextOnly() {
 // что Mihomo гарантированно отвергнет (сверено с исходниками v1.19.x), и сознательно
 // НЕ проверяем неизвестные поля — Mihomo их игнорирует, а мы не должны блокировать
 // валидные конфиги. Уверенные ошибки (ERROR) блокируют Copy, предупреждения (WARNING) — нет.
+let builderBuildError = false, builderBuildAttempts = 0;
 const MIHOMO_VALIDATION_STATE = { state: 'NOT_BUILT', result: null }; // NOT_BUILT | VALIDATING | VALID | INVALID
 
 // Типы исходящих: точный список case'ов из adapter/parser.go (MetaCubeX/mihomo,
@@ -3158,6 +3180,34 @@ function validateMihomoYaml(yaml) {
   return { status: errors.length ? 'INVALID' : 'VALID', errors, warnings };
 }
 
+
+function isBuilderYamlReady() {
+  return !builderBuildError && !builderBuildAttempts && MIHOMO_VALIDATION_STATE.state === 'VALID' && diagnosticsCurrent();
+}
+function renderBuilderActionStatus() {
+  const el = document.getElementById('builderActionStatus');
+  if (!el) return;
+  const st = MIHOMO_VALIDATION_STATE.state;
+  const state = builderBuildAttempts || st === 'VALIDATING' ? 'BUILDING' : builderBuildError || st === 'INVALID' ? 'ERROR' :
+    lastBuildFingerprint !== null && (!diagnosticsCurrent() || st !== 'VALID') ? 'STALE' : st === 'VALID' ? 'CURRENT' : 'NOT_BUILT';
+  el.dataset.state = state;
+  el.textContent = {NOT_BUILT:'Конфигурация ещё не собрана',BUILDING:'Выполняется Build / проверка…',CURRENT:'YAML актуален — базовая проверка пройдена',STALE:'Настройки изменены после Build — соберите YAML заново',ERROR:'Ошибка сборки / проверки — исправьте данные и повторите Build'}[state];
+  for (const id of ['copyYamlBtn','downloadYamlBtn']) document.getElementById(id).disabled = !isBuilderYamlReady();
+}
+function buildFailure(message) {
+  builderBuildError = true; renderBuilderActionStatus(); showToast(message, true); return false;
+}
+(function () {
+  const bar = document.getElementById('builderActionbar'), nav = document.getElementById('builderWorkspaceNav');
+  let frame;
+  const resize = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => {
+    const height = bar.getBoundingClientRect().height;
+    document.documentElement.style.setProperty('--builder-action-height', height + 'px');
+    document.documentElement.style.setProperty('--builder-obstruction', (height + (innerWidth > 768 ? nav.getBoundingClientRect().height : 0) + 12) + 'px');
+  }); });
+  resize.observe(bar); resize.observe(nav);
+})();
+
 function renderMihomoValidation() {
   const box = document.getElementById('mihomoValidationBox');
   const st = MIHOMO_VALIDATION_STATE;
@@ -3187,6 +3237,7 @@ function renderMihomoValidation() {
   if (btn) btn.disabled = st.state !== 'VALID';
   const download = document.getElementById('downloadYamlBtn');
   if (download) download.disabled = st.state !== 'VALID';
+  renderBuilderActionStatus();
 }
 
 function validationIssueHtml(issue, isError) {
@@ -4524,7 +4575,9 @@ function updateWebUiVisibility() {
   const webUi = document.getElementById('cfgWebUI').checked;
   const select = document.getElementById('webUiSelect');
   const custom = document.getElementById('webUiCustomUrl');
-  document.getElementById('webUiRow').style.display = webUi ? '' : 'none';
+  document.getElementById('webUiRow').style.display = '';
+  select.disabled = !webUi; custom.disabled = !webUi;
+  document.getElementById('webUiRow').classList.toggle('control-disabled', !webUi);
   custom.style.display = select.value === 'custom' ? '' : 'none';
 }
 
@@ -4615,6 +4668,7 @@ const POLICY_PRESETS = {
   proxy: { name: 'PROXY-LIST', domains: '# свои домены, которые пойдут ЧЕРЕЗ прокси (GLOBAL — лучший прокси)\nexample.com', target: 'GLOBAL' }
 };
 
+let policyNameHelpSeq = 0;
 function policyCardDom(card, index) {
   const wrap = document.createElement('div');
   wrap.className = 'policy-card';
@@ -4632,7 +4686,10 @@ function policyCardDom(card, index) {
   del.className = 'btn btn-gray policy-del';
   del.textContent = '✕ Удалить';
   del.addEventListener('click', () => wrap.remove());
+  nameInput.setAttribute('aria-describedby', 'policyNameHelp-' + (++policyNameHelpSeq));
   title.append(nameInput, del);
+  const nameHelp = document.createElement('div'); nameHelp.id = nameInput.getAttribute('aria-describedby'); nameHelp.className = 'hint policy-name-help';
+  nameHelp.textContent = 'Название политики также используется как имя SELECT-группы Mihomo. Несколько карточек SELECT — независимые группы. После переименования нужны новый Build и загрузка YAML в Mihomo.';
   const targetRow = document.createElement('div');
   targetRow.className = 'policy-target-row';
   const targetLabel = document.createElement('label');
@@ -4666,7 +4723,7 @@ function policyCardDom(card, index) {
   const hint = document.createElement('div');
   hint.className = 'hint';
   hint.textContent = 'Голый домен = DOMAIN-SUFFIX (с поддоменами). Поддерживаются: DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, DOMAIN-REGEX, GEOSITE, CIDR (→ IP-CIDR,no-resolve). Нераспознанные строки пропускаются с предупреждением.';
-  wrap.append(title, targetRow, domainsLabel, domains, hint);
+  wrap.append(title, nameHelp, targetRow, domainsLabel, domains, hint);
   return wrap;
 }
 
@@ -8255,7 +8312,7 @@ bindTieredUI();
 // чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
 // ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
 // но визуально помечен как previous Build.
-const BUILD_STALE_EXCLUDED_IDS = new Set(['rdTestInput', 'dcInput', 'vrgFocusSelect', 'policyPresetSelect', 'rtControllerInput', 'rtSecretInput', 'ptSpecInput', 'csImportInput', 'csDomainInput', 'csRuleProbe']);
+const BUILD_STALE_EXCLUDED_IDS = new Set(['subListSearch', 'rdTestInput', 'dcInput', 'vrgFocusSelect', 'policyPresetSelect', 'rtControllerInput', 'rtSecretInput', 'ptSpecInput', 'csImportInput', 'csDomainInput', 'csRuleProbe']);
 let lastBuildFingerprint = null;
 
 function buildStateFingerprint() {
@@ -8279,6 +8336,7 @@ function buildStateFingerprint() {
 function refreshBuildStaleness() {
   const warn = document.getElementById('staleBuildWarn');
   if (!warn) return;
+  renderBuilderActionStatus();
   if (lastBuildFingerprint === null) { warn.style.display = 'none'; return; }
   warn.style.display = buildStateFingerprint() !== lastBuildFingerprint ? 'block' : 'none';
 }
@@ -8299,6 +8357,7 @@ function markBuildFresh() {
 })();
 
 // === ROUTING DIAGNOSTICS UI (read-only; только отображает результаты ядра) ===
+function routingDisplayText(value) { return String(value).replace(/🪜 /g, '[Приоритет] '); }
 const RD_NL = String.fromCharCode(10);
 let lastRoutingDoc = null;
 let lastMtuPlan = null; // diagnostics-only результат web4core.planWireGuardMtu (YAML не меняется)
@@ -8332,9 +8391,9 @@ function updateRoutingDiagnostics(yaml) {
     Object.keys(doc['rule-providers'] || {}).forEach(name => {
       if (!(providerRefs[name] && providerRefs[name].length)) lines.push('⚠ Провайдер «' + name + '» не используется ни одним RULE-SET');
     });
-    summary.textContent = lines.join(RD_NL);
+    summary.textContent = routingDisplayText(lines.join(RD_NL));
     const preview = routingPreview(doc, lastRoutingHumanNames);
-    previewEl.textContent = preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + rdSemanticTargetText(doc, p.target)).join(RD_NL)
+    previewEl.textContent = preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + routingDisplayText(rdSemanticTargetText(doc, p.target))).join(RD_NL)
       + RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы.';
     if (typeof web4core.planWireGuardMtu === 'function') {
       try { lastMtuPlan = web4core.planWireGuardMtu(doc); } catch (_) { lastMtuPlan = null; }
@@ -8420,7 +8479,7 @@ function runRoutingInspector() {
   if (res.verdict === 'FALLBACK') {
     // FALLBACK до обращения к matched: MATCH намеренно не попадает в matched[]
     const rule = rdParseRule(lastRoutingDoc.rules[res.winner]);
-    out.textContent = 'Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + (rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Домен не совпал ни с одним известным правилом до MATCH.)';
+    out.textContent = 'Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + routingDisplayText(rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Домен не совпал ни с одним известным правилом до MATCH.)';
     return;
   }
   const w = res.winner;
@@ -8432,7 +8491,7 @@ function runRoutingInspector() {
     text += RD_NL + RD_NL + 'Почему победило: Mihomo применяет первое подходящее правило; #' + (w + 1) + ' находится выше ' + (others.length > 1 ? 'остальных' : '#' + (others[0].index + 1)) + '.';
   }
   if (res.unknownAfter && res.unknownAfter.length) text += RD_NL + RD_NL + '⚠ Позже встречается недоказуемое правило: ' + res.unknownAfter[0].reason;
-  out.textContent = text;
+  out.textContent = routingDisplayText(text);
 }
 document.addEventListener('click', (e) => {
   if (e.target && e.target.id === 'rdTestBtn') { e.preventDefault(); runRoutingInspector(); }
@@ -9045,7 +9104,7 @@ function runCsRuleProbe() {
   if (res.verdict === 'NO MATCH') { out.textContent = '✗ ' + res.message; return; }
   if (res.verdict === 'FALLBACK') {
     const rule = rdParseRule(csCurrentDoc.rules[res.winner]);
-    out.textContent = csRedactText('Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + (rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Вход не совпал ни с одним известным правилом до MATCH.)', csCurrentDoc);
+    out.textContent = csRedactText('Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + routingDisplayText(rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Вход не совпал ни с одним известным правилом до MATCH.)', csCurrentDoc);
     return;
   }
   const w = res.winner;
@@ -9809,7 +9868,8 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
   // Config Studio: метки узлов проходят через csRedactText (значения из секретных
   // полей маскируются и при повторении в имени/ID). Краскция ДО усечения —
   // обрезанный секрет не матчится и утёк бы частично.
-  const R = typeof redact === 'function' ? redact : (s => csRedactText(s, doc));
+  const redactValue = typeof redact === 'function' ? redact : (s => csRedactText(s, doc));
+  const R = value => routingDisplayText(redactValue(value));
   vrgDispose(wrap, !doc);
   wrap.textContent = '';
   const nav = document.getElementById(containerId + 'Nav');
@@ -9947,7 +10007,7 @@ function vrgFillFocusSelect(selId, doc) {
     for (const id of groupsByKind.get(kl)) {
       const o = document.createElement('option');
       o.value = String(sel.querySelectorAll('option').length + og.children.length);
-      o._vrgId = id; o.textContent = vrgTruncateLabel(csRedactText(id, doc), 50);
+      o._vrgId = id; o.textContent = vrgTruncateLabel(routingDisplayText(csRedactText(id, doc)), 50);
       if (id === prev) o.selected = true;
       og.appendChild(o);
     }
@@ -10155,17 +10215,19 @@ function renderRuleProviderExplorer(doc) {
 
 // === MIHOMO BUILDER (via web4core) ===
 async function buildMihomo() {
+  builderBuildError = false; builderBuildAttempts++; renderBuilderActionStatus();
+  try {
   if (wgUploadPending) {
     mihomoValidationSeq++;
     resetCompatSummary();
     setMihomoValidationState('NOT_BUILT');
-    return showToast('WG/AWG файл ещё читается. Дождитесь завершения загрузки.', true);
+    return buildFailure('WG/AWG файл ещё читается. Дождитесь завершения загрузки.', true);
   }
   const raw = document.getElementById('mihomoInput').value.trim();
-  if (!raw && wgBeans.length === 0) return showToast('Вставь ссылки или загрузи WG конфиг', true);
+  if (!raw && wgBeans.length === 0) return buildFailure('Вставь ссылки или загрузи WG конфиг', true);
   
   const api = globalThis.web4core;
-  if (!api?.buildFromRequest) return showToast('❌ web4core.runtime не загружен!', true);
+  if (!api?.buildFromRequest) return buildFailure('❌ web4core.runtime не загружен!', true);
   const subMode = document.getElementById('cfgSubMode').checked;
   const excludeFilterRaw = document.getElementById('excludeFilterInput').value.trim();
   // Итоговый Exclude Filter = ручное выражение ИЛИ выбранные в списке серверов
@@ -10175,7 +10237,7 @@ async function buildMihomo() {
   // выражение — fail-closed в ОБЕИХ режимах (нельзя молча потерять фильтр).
   const combinedExclude = buildCombinedExcludeFilter(excludeFilterRaw);
   if (combinedExclude.error) {
-    return showToast('❌ ' + combinedExclude.error, true);
+    return buildFailure('❌ ' + combinedExclude.error, true);
   }
   const combinedExcludeRegex = combinedExclude.filter ? compileSubscriptionExcludeFilter(combinedExclude.filter).regex : null;
 
@@ -10186,11 +10248,11 @@ async function buildMihomo() {
     let parsed = null;
     try { parsed = new URL(trimmed); } catch (_) {}
     const creds = parsed && (parsed.username || parsed.password);
-    if (!trimmed) return showToast('❌ Ошибка: выбран Custom URL, но поле пусто — укажите http/https URL', true);
+    if (!trimmed) return buildFailure('❌ Ошибка: выбран Custom URL, но поле пусто — укажите http/https URL', true);
     if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) {
-      return showToast('❌ Ошибка: Custom health-check URL должен быть абсолютным http/https URL (javascript:, data:, file: и др. запрещены)', true);
+      return buildFailure('❌ Ошибка: Custom health-check URL должен быть абсолютным http/https URL (javascript:, data:, file: и др. запрещены)', true);
     }
-    if (creds) return showToast('❌ Ошибка: Custom health-check URL не должен содержать учётные данные (user:pass@host)', true);
+    if (creds) return buildFailure('❌ Ошибка: Custom health-check URL не должен содержать учётные данные (user:pass@host)', true);
     urlTest = trimmed;
   }
   let addTun = document.getElementById('cfgTun').checked;
@@ -10203,7 +10265,7 @@ async function buildMihomo() {
   // БС — router-only контракт. Если чекбокс включён tamper'ом в VPS-профиле —
   // явная ошибка, никакой silent-конверсии профиля.
   if (autoWhitelist && deploymentProfile !== 'router') {
-    return showToast('❌ Ошибка: Автоматический режим белых списков доступен только в профиле «Роутер / обычный TUN»', true);
+    return buildFailure('❌ Ошибка: Автоматический режим белых списков доступен только в профиле «Роутер / обычный TUN»', true);
   }
   // Fail-safe клампы профиля: не доверяем checked/disabled в DOM (могут быть
   // подменены расширением/консолью) — контракт профиля применяется здесь,
@@ -10237,14 +10299,14 @@ async function buildMihomo() {
       domainPolicy = collectPolicyRouting();
     }
   } catch (e) {
-    return showToast('❌ ' + (e && e.message ? e.message : e), true);
+    return buildFailure('❌ ' + (e && e.message ? e.message : e), true);
   }
 
   const webUiEnabled = document.getElementById('cfgWebUI').checked;
   const webUiChoice = document.getElementById('webUiSelect').value;
   const webUiCustomUrl = document.getElementById('webUiCustomUrl').value.trim();
   if (webUiEnabled && webUiChoice === 'custom' && !/^https?:\/\//i.test(webUiCustomUrl)) {
-    return showToast('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
+    return buildFailure('❌ Web UI: укажите абсолютный http/https URL архива дашборда', true);
   }
 
   // dialer-proxy (туннель в туннеле): per-profile модель. Назначение — в карточке
@@ -10257,16 +10319,16 @@ async function buildMihomo() {
   const wgDialerProviders = document.getElementById('wgDialerProviders').value.split('\n')
     .map(s => s.trim()).filter(Boolean);
   if ((wgDialerMembers.length || wgDialerProviders.length) && (wgDialer === 'GLOBAL' || wgDialer === '⚡ Fastest')) {
-    return showToast('❌ dialer-группа не может называться GLOBAL или ⚡ Fastest: они содержат сам WARP (цикл)', true);
+    return buildFailure('❌ dialer-группа не может называться GLOBAL или ⚡ Fastest: они содержат сам WARP (цикл)', true);
   }
   const dialedProfiles = wgProfiles.filter(p => p.mode === 'proxy');
   const emptyTargets = dialedProfiles.filter(p => !p.target.trim());
   if (emptyTargets.length) {
-    return showToast('❌ Укажите proxy/группу в карточке профиля: ' + emptyTargets.map(p => p.filename).join(', ') + ' (или переключите «Напрямую»)', true);
+    return buildFailure('❌ Укажите proxy/группу в карточке профиля: ' + emptyTargets.map(p => p.filename).join(', ') + ' (или переключите «Напрямую»)', true);
   }
   const badTargets = dialedProfiles.filter(p => p.target.trim() === 'GLOBAL' || p.target.trim() === '⚡ Fastest');
   if (badTargets.length) {
-    return showToast('❌ Таргет не может быть GLOBAL или ⚡ Fastest (они содержат сам WARP): ' + badTargets.map(p => p.filename).join(', '), true);
+    return buildFailure('❌ Таргет не может быть GLOBAL или ⚡ Fastest (они содержат сам WARP): ' + badTargets.map(p => p.filename).join(', '), true);
   }
   // Ручные (и любые) таргеты проверяются против authoritative-реестра целей:
   // никаких dangling dialer-proxy — цель обязана существовать в конфиге,
@@ -10277,7 +10339,7 @@ async function buildMihomo() {
   const danglingTargets = dialedProfiles.filter(p => p.target.trim() && !knownTargets.has(p.target.trim()));
   if (danglingTargets.length) {
     const p = danglingTargets[0];
-    return showToast('❌ Ошибка: цель «' + p.target.trim() + '» не существует в генерируемом конфиге (профиль «' + (p.filename || p.bean.name) + '»). Выберите цель из списка «Промежуточный выход».', true);
+    return buildFailure('❌ Ошибка: цель «' + p.target.trim() + '» не существует в генерируемом конфиге (профиль «' + (p.filename || p.bean.name) + '»). Выберите цель из списка «Промежуточный выход».', true);
   }
   const useDialerGroup = dialedProfiles.length > 0 && (wgDialerMembers.length > 0 || wgDialerProviders.length > 0);
 
@@ -10426,13 +10488,14 @@ async function buildMihomo() {
         /Provide one or more HTTP\(S\) URLs/i.test(message)) {
       message = 'Режим «URL-подписки» включён, но URL подписки не найден. Если вы вставили обычные proxy-ссылки — выключите «Использовать URL-подписки».';
     }
-    showToast('❌ ' + message, true);
+    buildFailure('❌ ' + message);
   }
+  } finally { builderBuildAttempts--; renderBuilderActionStatus(); }
 }
 
 function copyMihomo() {
   // Без silently-success: копирование разрешено только после пройденной проверки
-  if (MIHOMO_VALIDATION_STATE.state !== 'VALID') {
+  if (!isBuilderYamlReady()) {
     showToast('Копирование заблокировано: конфигурация не прошла базовую проверку', true);
     return;
   }
@@ -10442,7 +10505,7 @@ function copyMihomo() {
 }
 
 function downloadMihomo() {
-  if (MIHOMO_VALIDATION_STATE.state !== 'VALID') return showToast('Скачивание заблокировано: выполните Build и базовую проверку', true);
+  if (!isBuilderYamlReady()) return showToast('Скачивание заблокировано: выполните Build и базовую проверку', true);
   const text = document.getElementById('mihomoOutput').value;
   if (!text) return showToast('Нет конфига', true);
   const url = URL.createObjectURL(new Blob([text], { type: 'text/yaml' }));
@@ -10954,7 +11017,9 @@ document.addEventListener('change', (e) => {
 }, true);
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний
 // результат проверки недействительным — старый VALID не сохраняется
-['input', 'change'].forEach(ev => document.addEventListener(ev, () => {
+['input', 'change'].forEach(ev => document.addEventListener(ev, e => {
+  const target = e.target;
+  if (target.closest?.('#routingDiagnostics, .vrg-frame') || BUILD_STALE_EXCLUDED_IDS.has(target.id)) return;
   mihomoValidationSeq++; // инвалидируем незавершённую проверку, если была
   resetCompatSummary();
   setMihomoValidationState('NOT_BUILT');

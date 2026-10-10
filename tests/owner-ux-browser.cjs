@@ -571,6 +571,77 @@ async function check(name, fn) {
     assert.deepEqual(await n.evaluate(()=>({yaml:document.getElementById('mihomoOutput').value,selected:[...subscriptionSelection],names:subscriptionListNames})),beforeSize);
     await n.setViewportSize({width:390,height:740}); await list.evaluate(el=>el.scrollTop=0); await screenshot(n,'#serverListPanel','runtime-list-mobile');
   });
+  await check('UX13 AWL and subscription tools precede first Build in Quick Start', async () => {
+    const n=await fresh();
+    const placement=await n.evaluate(()=>{const ids=['cfgProfile','cfgAutoWhitelist','mihomoInput','cfgServerList','wgFile','wgCustomDns','cfgAwgKeepalive'];return ids.map(id=>({id,workspace:document.getElementById(id).closest('section')?.getAttribute('aria-labelledby')}));});
+    assert.equal(placement.every(x=>x.workspace==='ux-start'),true);
+    assert.equal(await n.evaluate(()=>!!(document.getElementById('cfgProfile').compareDocumentPosition(document.getElementById('cfgAutoWhitelist'))&Node.DOCUMENT_POSITION_FOLLOWING)),true);
+    assert.equal(await n.evaluate(()=>!!(document.getElementById('cfgAutoWhitelist').compareDocumentPosition(document.getElementById('mihomoInput'))&Node.DOCUMENT_POSITION_FOLLOWING)),true);
+    await n.locator('#mihomoInput').fill(link); let requests=0;n.on('request',()=>requests++);
+    await n.locator('#cfgAutoWhitelist').check();assert.equal(await n.locator('#whitelistInput').isVisible(),true);
+    assert.match(await n.locator('label[for=whitelistInput]').textContent(),/Резервные серверы и подписки/);
+    await n.locator('#whitelistInput').fill(link.replace('192.0.2.1','192.0.2.2').replace('#Owner-A','#Reserve'));
+    await build(n);const doc=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));
+    assert.equal(doc.rules.at(-1),'MATCH,GLOBAL');assert.equal(doc['proxy-groups'].find(g=>g.name==='GLOBAL').type,'fallback');
+    assert.equal(requests,0); await screenshot(n,'#ux-start','quick-start-priorities');
+  });
+  await check('UX14 sticky canonical actions current stale building and error', async () => {
+    const n=await fresh();const status=n.locator('#builderActionStatus');assert.equal(await status.count(),1);
+    assert.equal(await status.getAttribute('data-state'),'NOT_BUILT'); await n.locator('#mihomoInput').fill(link);
+    assert.equal(await n.evaluate(()=>{window.ownerPendingBuild=buildMihomo();return document.getElementById('builderActionStatus').dataset.state;}),'BUILDING');
+    await n.evaluate(()=>window.ownerPendingBuild);await n.waitForFunction(()=>MIHOMO_VALIDATION_STATE.state==='VALID');
+    assert.equal(await status.getAttribute('data-state'),'CURRENT');
+    const snapshot=()=>n.evaluate(()=>({yaml:document.getElementById('mihomoOutput').value,seq:mihomoValidationSeq,fingerprint:buildStateFingerprint()}));const before=await snapshot();
+    for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,740],[320,740]]) {
+      await n.setViewportSize({width,height});
+      for(const area of ['routing','diagnostics','lab','options','start']) {
+        await n.locator('#builderWorkspaceNav a[href="#ux-'+area+'"]').click();
+        const bar=await n.locator('#builderActionbar').boundingBox();assert.ok(bar.y>=-1&&bar.y<3);assert.ok(bar.height<height*.3);
+        const button=await n.locator('#buildConfigBtn').boundingBox();assert.ok(button.y>=0&&button.y+button.height<height);
+        assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+      }
+    }
+    assert.deepEqual(await snapshot(),before);
+    await n.locator('#mihomoInput').fill(link.replace('#Owner-A','#Renamed'));assert.equal(await status.getAttribute('data-state'),'STALE');
+    assert.equal(await n.locator('#copyYamlBtn').isDisabled(),true);assert.equal(await n.locator('#downloadYamlBtn').isDisabled(),true);
+    await n.locator('#builderWorkspaceNav a[href="#ux-lab"]').click();await build(n);assert.equal(await status.getAttribute('data-state'),'CURRENT');
+    await n.locator('#mihomoInput').fill('invalid://not-a-proxy');await n.locator('#buildConfigBtn').click();assert.equal(await status.getAttribute('data-state'),'ERROR');
+    assert.equal(await n.locator('#downloadYamlBtn').isDisabled(),true);
+    const duplicateIds=await n.evaluate(()=>{const ids=[...document.querySelectorAll('[id]')].map(x=>x.id);return ids.filter((id,i)=>ids.indexOf(id)!==i);});assert.deepEqual(duplicateIds,[]);
+    await screenshot(n,'#builderActionbar','sticky-actions-mobile');
+  });
+  await check('UX15 policy SELECT names explain independent groups and preserve references', async () => {
+    const n=await fresh();await n.locator('#mihomoInput').fill(link);
+    await n.locator('#btnPolicyAdd').click();await n.locator('#btnPolicyAdd').click();
+    const cards=n.locator('#policyCards .policy-card');assert.match(await cards.first().locator('.policy-name-help').textContent(),/имя SELECT-группы Mihomo/);
+    await cards.nth(0).locator('.policy-name').fill('AI');await cards.nth(0).locator('.policy-domains').fill('a.example');
+    await cards.nth(1).locator('.policy-name').fill('YouTube');await cards.nth(1).locator('.policy-domains').fill('video.example');await build(n);
+    const doc=()=>n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));let d=await doc();
+    assert.ok(d['proxy-groups'].some(g=>g.name==='AI'&&g.type==='select'));assert.ok(d['proxy-groups'].some(g=>g.name==='YouTube'&&g.type==='select'));
+    await cards.nth(0).locator('.policy-name').fill('Research');await build(n);d=await doc();assert.ok(d.rules.some(r=>r.startsWith('RULE-SET,')&&r.endsWith(',Research')));assert.equal(d['proxy-groups'].some(g=>g.name==='AI'),false);
+    const project=await n.evaluate(()=>rbCollectProject());await n.evaluate(p=>rbApplyProject(p),project);await build(n);assert.deepEqual(await doc(),d);
+    await cards.nth(1).locator('.policy-name').fill('Research');await n.locator('#buildConfigBtn').click();assert.notEqual(await n.evaluate(()=>MIHOMO_VALIDATION_STATE.state),'VALID');
+  });
+  await check('UX16 WG and Web UI settings remain near their inputs with retained values', async () => {
+    const n=await fresh();assert.equal(await n.locator('#webUiRow').evaluate(el=>el.closest('section').getAttribute('aria-labelledby')),'ux-start');
+    await n.locator('#webUiSelect').selectOption('custom');await n.locator('#webUiCustomUrl').fill('https://example.invalid/dashboard.zip');
+    await n.locator('#cfgWebUI').uncheck();assert.equal(await n.locator('#webUiSelect').isVisible(),true);assert.equal(await n.locator('#webUiSelect').isDisabled(),true);assert.equal(await n.locator('#webUiCustomUrl').inputValue(),'https://example.invalid/dashboard.zip');
+    await n.locator('#cfgWebUI').check();assert.equal(await n.locator('#webUiSelect').isDisabled(),false);
+    assert.equal(await n.locator('#wgCustomDns').evaluate(el=>el.closest('.card')===document.getElementById('wgFile').closest('.card')),true);
+    assert.equal(await n.locator('#cfgAwgRtDiag').evaluate(el=>!!el.closest('#awgDiagnosticDetails')),true);
+    await n.locator('#wgFile').setInputFiles(path.join(root,'tests/fixtures/wg-simple-a.conf'));await n.waitForFunction(()=>wgProfiles.length===1);
+    await n.locator('#wgCustomDns').fill('1.1.1.1');const snapshot=await n.evaluate(()=>rbCollectProject());await n.evaluate(p=>rbApplyProject(p),snapshot);
+    assert.equal(await n.locator('#wgCustomDns').inputValue(),'1.1.1.1');assert.equal(await n.locator('#webUiCustomUrl').inputValue(),'https://example.invalid/dashboard.zip');
+  });
+  await check('UX17 priority group display avoids ladder glyph without changing YAML names', async () => {
+    const n=await fresh();assert.match(await n.locator('#cfgTieredFailover').locator('..').textContent(),/Приоритетные группы серверов/);
+    await n.locator('#mihomoInput').fill(link);await n.locator('#cfgTieredFailover').check();
+    await n.evaluate(()=>{window.__tierCardsState=[{name:'Main',strategy:'fallback',members:['Owner-A']}];renderTierCards();});await build(n);
+    const yaml=await n.locator('#mihomoOutput').inputValue();assert.match(yaml,/🪜 TIERED-AUTO/);
+    await n.locator('#routingDiagnostics').evaluate(el=>el.open=true);assert.doesNotMatch(await n.locator('#rdPreview').textContent(),/🪜/);
+    await n.locator('#vrgPanel').evaluate(el=>el.open=true);assert.doesNotMatch(await n.locator('#vrgSvgWrap svg').textContent(),/🪜/);
+    await n.locator('#rdTestBtn').click();assert.doesNotMatch(await n.locator('#rdResult').textContent(),/🪜/);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+  });
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });
   await browser.close();
   if (process.env.OWNER_UX_RESULTS) fs.writeFileSync(process.env.OWNER_UX_RESULTS, JSON.stringify({ engine, root, passed, failed, results }, null, 2));

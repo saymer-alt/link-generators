@@ -97,6 +97,41 @@
       "scenario_prefixes": [
         "UX12 runtime list long names badges selection and narrow scroll"
       ]
+    },
+    {
+      "id": "UX-13",
+      "summary": "AWL и просмотр подписок далеко от первого ввода",
+      "scenario_prefixes": [
+        "UX13 AWL"
+      ]
+    },
+    {
+      "id": "UX-14",
+      "summary": "Build и актуальность YAML недоступны при работе в нижних разделах",
+      "scenario_prefixes": [
+        "UX14 sticky"
+      ]
+    },
+    {
+      "id": "UX-15",
+      "summary": "Непонятно как назвать несколько SELECT-групп",
+      "scenario_prefixes": [
+        "UX15 policy"
+      ]
+    },
+    {
+      "id": "UX-16",
+      "summary": "Связанные WG/AWG и Web UI настройки далеко от ввода",
+      "scenario_prefixes": [
+        "UX16 WG"
+      ]
+    },
+    {
+      "id": "UX-17",
+      "summary": "Техническое название приоритетов и квадраты вместо ladder emoji",
+      "scenario_prefixes": [
+        "UX17 priority"
+      ]
     }
   ]
 }
