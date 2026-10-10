@@ -189,7 +189,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   await build();
   await page.evaluate(() => { document.getElementById('routingDiagnostics').open = true; });
   const preview = await page.locator('#rdPreview').textContent();
-  assert.match(preview, /🪜 TIERED-AUTO/, 'Inspector: semantic path через tier root');
+  assert.match(preview, /\[Приоритет\] TIERED-AUTO/, 'Inspector: readable semantic path through the unchanged YAML tier root');
   assert.match(preview, /Фактически выбранный участник определяется Mihomo во время работы/, 'runtime-selected честность');
   ok('Inspector: semantic path показывает tier root без ложного runtime-claim');
 
