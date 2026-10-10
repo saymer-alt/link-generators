@@ -342,9 +342,11 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     await page.locator('#webUiSelect').selectOption('metacubexd');
     uiYaml = await rebuild();
     assert.ok(uiYaml.includes('external-ui-url: https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz'));
-    // Выключенный Web UI: выбор дашборда ни на что не влияет; крышка скрывает select.
+    // Выключенный Web UI: выбор виден, disabled и сохраняется; YAML без external-ui.
     await page.locator('#cfgWebUI').uncheck();
-    assert.equal(await page.locator('#webUiRow').isVisible(), false);
+    assert.equal(await page.locator('#webUiRow').isVisible(), true);
+    assert.equal(await page.locator('#webUiSelect').isDisabled(), true);
+    assert.equal(await page.locator('#webUiSelect').inputValue(), 'metacubexd');
     const offYaml = await rebuild();
     const offMatch = offYaml.match(/external-ui[^\n]*/);
     assert.equal(offMatch, null, 'webUI off: ' + JSON.stringify(offMatch));
