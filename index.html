@@ -146,6 +146,9 @@
   .advanced-panel{margin-top:14px;padding:10px 12px;border:1px solid var(--border);border-radius:0;background:rgba(255,255,255,.35)}
   .advanced-panel summary{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:bold;color:var(--info);cursor:pointer;list-style:none;padding:2px 0}
   .advanced-panel summary::-webkit-details-marker{display:none}
+  #vrgPanel > summary,#vrgTextAlt > summary,#csVrgPanel > summary,#csVrgTextAlt > summary{list-style:none}
+  #vrgPanel > summary::-webkit-details-marker,#vrgTextAlt > summary::-webkit-details-marker,#csVrgPanel > summary::-webkit-details-marker,#csVrgTextAlt > summary::-webkit-details-marker{display:none}
+  .vrg-focused .vrg-node-rect{stroke:var(--info);stroke-width:3}
   .site-footer{width:min(1520px,100%);margin:18px auto 26px;padding:12px 14px;border:1px solid var(--border);background:var(--face);font-size:.8rem;color:var(--muted)}
   @media (min-width:2100px){.site-footer{width:min(1600px,100%)}}
   .site-footer-brand{font-weight:bold;color:var(--text)}
@@ -754,7 +757,7 @@
             <button type="button" class="btn btn-gray" id="dcBuildCheckBtn" hidden>Собрать и проверить покрытие</button>
           </details>
           <details id="vrgPanel" style="margin-top:8px">
-            <summary style="cursor:pointer">Visual Routing Graph</summary>
+            <summary style="cursor:pointer"><span class="disclosure-chevron" aria-hidden="true">▶</span> Visual Routing Graph</summary>
             <div class="hint" style="margin-top:6px">Граф зависимостей из последнего Build: правила → группы → провайдеры/прокси. Клик по узлу — фокус на его зависимостях. Только доказанные CDG-связи; динамические группы (select/url-test/fallback) показывают состав, не выбор участника. Не меняет конфигурацию.</div>
             <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <label class="label" for="vrgFocusSelect" style="display:inline">Фокус:</label>
@@ -764,7 +767,7 @@
             <div id="vrgStatus" class="hint" style="margin-top:4px;white-space:pre-line"></div>
             <div id="vrgSvgWrap" style="margin-top:6px;overflow:auto;max-height:70vh;border:1px solid var(--border);background:rgba(255,255,255,.35)" role="img" aria-label="Visual Routing Graph"></div>
             <details id="vrgTextAlt" style="margin-top:4px">
-              <summary style="cursor:pointer">Текстовая альтернатива графу</summary>
+              <summary style="cursor:pointer"><span class="disclosure-chevron" aria-hidden="true">▶</span> Текстовая альтернатива графу</summary>
               <div id="vrgTextAltOut" class="hint" style="margin-top:4px;white-space:pre-line"></div>
             </details>
           </details>
@@ -915,11 +918,11 @@
         <div id="csTraceOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       </details>
       <details id="csVrgPanel" style="margin-top:8px">
-        <summary style="cursor:pointer">Visual Routing Graph</summary>
+        <summary style="cursor:pointer"><span class="disclosure-chevron" aria-hidden="true">▶</span> Visual Routing Graph</summary>
         <div class="hint" style="margin-top:4px">Граф зависимостей импортированного конфига (после «Разобрать»). Не обновляется при правках редактора — повторно нажмите «Разобрать».</div>
         <div id="csVrgSvgWrap" style="margin-top:6px;overflow:auto;max-height:50vh;border:1px solid var(--border);background:rgba(255,255,255,.35)" role="img" aria-label="Config Studio Visual Routing Graph"></div>
         <details id="csVrgTextAlt" style="margin-top:4px">
-          <summary style="cursor:pointer">Текстовая альтернатива</summary>
+          <summary style="cursor:pointer"><span class="disclosure-chevron" aria-hidden="true">▶</span> Текстовая альтернатива</summary>
           <div id="csVrgTextAltOut" class="hint" style="margin-top:4px;white-space:pre-line"></div>
         </details>
       </details>
@@ -5918,8 +5921,8 @@ function vrgComputeLevels(nodes, edges) {
   return { level, hasCycleEdge };
 }
 
-// Замыкание вокруг focus: узлы, достижимые по рёбрам в обе стороны (соседи по
-// зависимостям), ограниченное maxNodes; приоритет — BFS от focus.
+// Независимые направленные обходы: предки и собственные зависимости focus.
+// Из предка не спускаемся к соседям focus. Прокси/провайдеры показывают предков.
 function vrgClosure(nodes, edges, focusId, maxNodes) {
   const adj = new Map(), radj = new Map();
   const idset = new Set(nodes.map(n => n.id));
@@ -5930,18 +5933,24 @@ function vrgClosure(nodes, edges, focusId, maxNodes) {
     adj.get(e.from).push(e.to);
     radj.get(e.to).push(e.from);
   }
-  const keep = new Set([focusId]);
-  const grow = (seedMap) => {
-    const q = [...seedMap];
-    while (q.length && keep.size < maxNodes) {
-      const v = q.shift();
-      for (const w of (adj.get(v) || []).concat(radj.get(v) || [])) {
-        if (!keep.has(w)) { keep.add(w); q.push(w); }
-        if (keep.size >= maxNodes) return;
+  const keep = new Set();
+  if (!idset.has(focusId) || maxNodes < 1) return keep;
+  keep.add(focusId);
+  const kind = nodes.find(n => n.id === focusId).kind;
+  // Rule — только вперёд; leaf — только назад; group — union двух обходов.
+  const maps = kind === 'rule' ? [adj] : ['proxy','proxy-provider','builtin','unresolved'].includes(kind) ? [radj] : [radj, adj];
+  const walks = maps.map(map => ({ map, queue: [focusId], seen: new Set([focusId]), cursor: 0 }));
+  // Чередуем направления, чтобы лимит не отдавал все места только предкам.
+  while (keep.size < maxNodes && walks.some(w => w.cursor < w.queue.length)) {
+    for (const w of walks) {
+      if (w.cursor >= w.queue.length) continue;
+      for (const id of w.map.get(w.queue[w.cursor++]) || []) {
+        if (w.seen.has(id)) continue;
+        w.seen.add(id); w.queue.push(id); keep.add(id);
+        if (keep.size >= maxNodes) return keep;
       }
     }
-  };
-  grow(new Set([focusId]));
+  }
   return keep;
 }
 
@@ -9995,6 +10004,8 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
   nav.addEventListener('click', e => {
     const action = e.target.closest('[data-vrg-action]')?.dataset.vrgAction;
     if (!action) return;
+    // WebKit не всегда фокусирует кнопку мышью: Escape должен остаться в frame.
+    e.target.closest('[data-vrg-action]').focus({preventScroll:true});
     if (action === 'panel') { side.hidden = !side.hidden; e.target.setAttribute('aria-expanded', String(!side.hidden)); e.target.focus({preventScroll:true}); return; }
     if (action === 'expand') { vrgSetExpanded(frame, !frame.classList.contains('vrg-expanded')); return; }
     if (action === 'size-reset') { state.height = null; viewport(); if (state.fit) fit(); return; }
@@ -10049,6 +10060,15 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
   viewport();
   if (state.fit && wrap.clientWidth) fit(); else apply(state.scale, false);
   if (previous?.doc === doc && !previous.fit) { wrap.scrollLeft = previous.left || 0; wrap.scrollTop = previous.top || 0; }
+  // Сохраняем pan/zoom, но новый фокус не должен остаться за краем области.
+  const focusedNode = view.nodes.find(n => n.id === view.focused);
+  if (focusedNode && !state.fit) {
+    const left = focusedNode.x * state.scale, top = focusedNode.y * state.scale;
+    if (left < wrap.scrollLeft || left + VRG_NODE_W * state.scale > wrap.scrollLeft + wrap.clientWidth)
+      wrap.scrollLeft = left + VRG_NODE_W * state.scale / 2 - wrap.clientWidth / 2;
+    if (top < wrap.scrollTop || top + VRG_NODE_H * state.scale > wrap.scrollTop + wrap.clientHeight)
+      wrap.scrollTop = top + VRG_NODE_H * state.scale / 2 - wrap.clientHeight / 2;
+  }
   wrap.addEventListener('scroll',()=>{ state.left=wrap.scrollLeft; state.top=wrap.scrollTop; },options);
 }
 
@@ -10155,6 +10175,7 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
     g.setAttribute('role', 'group');
     g.setAttribute('aria-label', vrgKindLabel(n.kind) + ': ' + vrgTruncateLabel(R(vrgNodeLabel(n)), 60));
     g._vrgId = n.id;
+    if (n.id === view.focused) g.classList.add('vrg-focused');
     const rect = document.createElementNS(VRG_NS, 'rect');
     rect.setAttribute('width', String(VRG_NODE_W)); rect.setAttribute('height', String(VRG_NODE_H));
     rect.setAttribute('rx', '4');
@@ -10199,7 +10220,9 @@ function vrgRenderInto(containerId, doc, stale, textAltId, redact) {
     if (ta) {
       const tl = view.nodes.map(n => R(vrgKindLabel(n.kind) + ': ' + vrgNodeLabel(n) + (n.level !== undefined ? ' [слой ' + n.level + ']' : '')));
       const el = view.edges.map(e => R(e.kind + ': ' + e.from + ' → ' + e.to));
-      ta.textContent = ['Узлы (' + view.nodes.length + '):', ...tl, '', 'Связи (' + view.edges.length + '):', ...el].join('\n');
+      ta.textContent = [view.focused ? 'Фокус: ' + R(view.focused) : 'Весь граф',
+        'Скрыто: ' + view.hiddenNodes + ' узлов, ' + view.hiddenEdges + ' связей',
+        'Узлы (' + view.nodes.length + '):', ...tl, '', 'Связи (' + view.edges.length + '):', ...el].join('\n');
     }
   }
   if (status) {

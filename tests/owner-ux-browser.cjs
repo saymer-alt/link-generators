@@ -1045,6 +1045,48 @@ async function check(name, fn) {
     assert.deepEqual(n.errors,[]);
   });
 
+  for(const consumer of ['Builder','Studio'])await check('UX43 VRG directional focus all entry points '+consumer,async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);
+    const doc={proxies:['A','B','C','D'].map(x=>({name:'PROXY-'+x,type:'ss',server:'192.0.2.1',port:443,cipher:'aes-128-gcm',password:'🪜 1 synthetic-vrg-secret'})),
+      'proxy-providers':{'PROVIDER-X':{type:'http',url:'https://example.invalid/synthetic',path:'./x.yaml'}},
+      'proxy-groups':[{name:'ROOT',type:'select',proxies:['PROXY-A','PROXY-B','PROXY-C']},{name:'GROUP-X',type:'select',use:['PROVIDER-X']},{name:'GROUP-Y',type:'select',proxies:['PROXY-D']}],
+      rules:['DOMAIN,r1.example,ROOT','DOMAIN,r2.example,GROUP-X','DOMAIN,r3.example,GROUP-Y','MATCH,🪜 1 synthetic-vrg-secret']};
+    let id='vrgSvgWrap',alt='vrgTextAltOut';
+    if(consumer==='Studio'){await n.locator('.tab',{hasText:'Config Studio'}).click();await n.locator('#csImportInput').fill(await n.evaluate(d=>jsyaml.dump(d),doc));await n.locator('#csParseBtn').click();id='csVrgSvgWrap';alt='csVrgTextAltOut';}
+    else await n.evaluate(d=>{lastRoutingDoc=d;vrgFocusId='';renderVrgBuilder();},doc);
+    await r2Reveal(n,id);const wrap=n.locator('#'+id),nav=n.locator('#'+id+'Nav');
+    const before=await n.evaluate(()=>[document.getElementById('mihomoOutput').value,mihomoValidationSeq,buildStateFingerprint(),JSON.stringify(lastRoutingDoc)]);
+    const ids=()=>wrap.locator('svg > g[tabindex]').evaluateAll(xs=>xs.map(x=>x._vrgId));
+    const all=await ids();const graph=await n.evaluate(d=>cdgBuildGraph(d),doc);
+    const rule=graph.nodes.find(x=>x.kind==='rule'&&x.label?.includes('r1.example'))?.id || graph.edges.find(x=>x.to==='group:ROOT'&&x.kind==='routes-to').from;
+    async function verify(expected){assert.deepEqual((await ids()).sort(),expected.sort());const text=await n.locator('#'+alt).textContent();assert.match(text,/Фокус:|Весь граф/);assert.match(text,/Скрыто:/);assert.ok(text.includes('Узлы ('+expected.length+'):'));assert.equal((text.match(/ → /g)||[]).length,await wrap.locator('svg > line').count());assert.doesNotMatch(text,/synthetic-vrg-secret/);const focused=await wrap.locator('g.vrg-focused').count();assert.equal(focused,1);}
+    async function choose(selector,canonical){const value=await n.locator(selector).locator('option').evaluateAll((xs,id)=>xs.find(x=>x._vrgId===id)?.value,canonical);assert.ok(value,canonical);await n.locator(selector).selectOption(value);}
+    if(consumer==='Builder'){await choose('#vrgFocusSelect','proxy:PROXY-A');await verify(['proxy:PROXY-A','group:ROOT',rule]);await nav.locator('[data-vrg-action=all]').click();assert.deepEqual(await ids(),all);}
+    await wrap.locator('svg > g[tabindex]').evaluateAll(xs=>xs.find(x=>x._vrgId==='proxy:PROXY-A').setAttribute('data-test-focus','a'));
+    await wrap.locator('[data-test-focus=a]').click();await verify(['proxy:PROXY-A','group:ROOT',rule]);
+    await nav.locator('[data-vrg-action=all]').click();
+    const a=wrap.locator('svg > g[tabindex]').filter({hasText:'PROXY-A'});await a.focus();await n.keyboard.press('Enter');await verify(['proxy:PROXY-A','group:ROOT',rule]);
+    await nav.locator('[data-vrg-action=expand]').click();const frame=wrap.locator('..').locator('..');const side=frame.locator('.vrg-side');await side.locator('input').fill('GROUP');
+    await side.locator('select').selectOption(await side.locator('option').evaluateAll(xs=>xs.find(x=>x._vrgId==='group:GROUP-X').value));
+    const r2=graph.edges.find(x=>x.to==='group:GROUP-X'&&x.kind==='routes-to').from;await verify(['group:GROUP-X','proxy-provider:PROVIDER-X',r2]);assert.equal(await side.locator('input').inputValue(),'GROUP');
+    await side.locator('input').fill('');await side.locator('select').selectOption(await side.locator('option').evaluateAll(xs=>xs.find(x=>x._vrgId==='proxy-provider:PROVIDER-X').value));await verify(['group:GROUP-X','proxy-provider:PROVIDER-X',r2]);
+    await side.locator('select').selectOption(await side.locator('option').evaluateAll((xs,id)=>xs.find(x=>x._vrgId===id).value,rule));await verify(['group:ROOT','proxy:PROXY-A','proxy:PROXY-B','proxy:PROXY-C',rule]);
+    await nav.locator('[data-vrg-action=fit]').click();assert.ok(await wrap.locator('svg').isVisible());assert.equal(await nav.locator('[data-vrg-action=expand]').getAttribute('aria-expanded'),'true');
+    await n.keyboard.press('Escape');assert.equal(await nav.locator('[data-vrg-action=expand]').getAttribute('aria-expanded'),'false');await nav.locator('[data-vrg-action=all]').click();assert.deepEqual(await ids(),all);assert.doesNotMatch(await n.locator('#'+alt).textContent(),/synthetic-vrg-secret/);
+    assert.deepEqual(await n.evaluate(()=>[document.getElementById('mihomoOutput').value,mihomoValidationSeq,buildStateFingerprint(),JSON.stringify(lastRoutingDoc)]),before);
+    for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,850],[320,850]]){await n.setViewportSize({width,height});await nav.locator('[data-vrg-action=fit]').click();assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);}
+  });
+  await check('UX44 VRG disclosure native state mouse keyboard rerender both consumers',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);
+    for(const id of ['vrgPanel','vrgTextAlt','csVrgPanel','csVrgTextAlt']){
+      if(id==='csVrgPanel'){const yaml=await n.locator('#mihomoOutput').inputValue();await n.locator('.tab',{hasText:'Config Studio'}).click();await n.locator('#csImportInput').fill(yaml);await n.locator('#csParseBtn').click();}
+      await r2Reveal(n,id);const d=n.locator('#'+id),summary=d.locator(':scope > summary'),marker=summary.locator('.disclosure-chevron');assert.equal(await marker.count(),1,id);
+      for(const open of [false,true,false]){await d.evaluate((d,o)=>d.open=o,open);await n.waitForFunction(([id,t])=>document.querySelector('#'+id+' > summary .disclosure-chevron').textContent===t,[id,open?'▼':'▶']);}
+      await summary.click();await n.waitForFunction(id=>document.getElementById(id).open,id);await summary.focus();await n.keyboard.press('Enter');assert.equal(await d.evaluate(d=>d.open),false);await n.keyboard.press('Space');assert.equal(await d.evaluate(d=>d.open),true);
+      assert.equal(await summary.evaluate(e=>getComputedStyle(e).listStyleType),'none');
+    }
+    await n.locator('.tab',{hasText:'Mihomo Config Builder'}).click();await build(n);assert.equal(await n.locator('#vrgPanel > summary .disclosure-chevron').textContent(),'▼');
+  });
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });
   await browser.close();
   if (process.env.OWNER_UX_RESULTS) fs.writeFileSync(process.env.OWNER_UX_RESULTS, JSON.stringify({ engine, root, passed, failed, results }, null, 2));

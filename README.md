@@ -206,3 +206,4 @@ Owner Acceptance Round 2: понятный Reset с отменой по умол
 ## Credits
 
 Based on [web4core](https://github.com/spatiumstas/web4core) by [spatiumstas](https://github.com/spatiumstas) (BSD-3-Clause). Source-level extensions used by this project are maintained in the [`saymer-alt/web4core`](https://github.com/saymer-alt/web4core) fork on the `link-generators` branch.
+Фокус графа направленный: прокси/провайдер показывает входящих предков, правило — исходящие зависимости, группа — предков и свои зависимости без соседних ветвей предков. Выбранный узел выделен; текстовая версия отражает текущий фокус, видимые связи и скрытые количества. Стрелки раскрытия графа и текстовой версии синхронизированы с состоянием раздела.

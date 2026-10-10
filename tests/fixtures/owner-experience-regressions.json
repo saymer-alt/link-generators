@@ -307,6 +307,20 @@
       "scenario_prefixes": [
         "UX42 R2 "
       ]
+    },
+    {
+      "id": "UX-43",
+      "summary": "Directional graph focus without ancestor siblings",
+      "scenario_prefixes": [
+        "UX43 VRG "
+      ]
+    },
+    {
+      "id": "UX-44",
+      "summary": "Graph and text disclosure chevrons",
+      "scenario_prefixes": [
+        "UX44 VRG "
+      ]
     }
   ]
 }
