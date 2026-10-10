@@ -1,5 +1,8 @@
 # Per-node generation: transport registry и контракт артефактов (#187, v1.11)
 
+> Owner Round 2: публичный Physical Topology UI выключен. Этот документ описывает сохранённый эксперимент, а не доступную пользовательскую функцию. См. [Product Review](PHYSICAL-TOPOLOGY-PRODUCT-REVIEW.md).
+
+
 Документ цикла v1.11 (#177; primary capability — #187). Дата: 2026-10-08.
 Базис: main после NIGHT-02 (`dd271de`). Evidence-метки как в PHYSICAL-MULTIHOP-ARCHITECTURE.md.
 

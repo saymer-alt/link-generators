@@ -1,5 +1,8 @@
 # Runtime Evidence (#188): controller API, evidence model, security contract
 
+> Owner Round 2: публичный Physical Topology UI выключен. Этот документ описывает сохранённый эксперимент, а не доступную пользовательскую функцию. См. [Product Review](PHYSICAL-TOPOLOGY-PRODUCT-REVIEW.md).
+
+
 Документ цикла v1.11 (#177; #188). Дата: 2026-10-08. Базис: main `391298b`.
 Evidence-метки: SOURCE-PROVEN (raw-fetch исходников тега v1.19.32), FIELD-OBSERVED, INFERRED, UNKNOWN.
 
