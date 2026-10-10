@@ -132,6 +132,13 @@
       "scenario_prefixes": [
         "UX17 priority"
       ]
+    },
+    {
+      "id": "UX-18",
+      "summary": "AWL conflicts require explicit resolution and generation guard",
+      "scenario_prefixes": [
+        "UX18 "
+      ]
     }
   ]
 }

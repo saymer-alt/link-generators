@@ -664,6 +664,7 @@
       </div><div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <label><input type="checkbox" id="cfgTieredFailover"> 🔀 Приоритетные группы серверов <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Tiered Failover">?</button><span class="ctx-help-pop" role="note">Строгий приоритет эшелонов (#148, runtime-proven на Mihomo 1.19.31/1.19.32): runtime-проверки подтвердили переход между эшелонами по доступности HTTP-проб; это не измерение фактического packet path. Внутри эшелона — url-test (быстрейший) или ordered fallback. Финальное правило MATCH уходит в корневую группу эшелонов; GLOBAL получает её первым участником (ручное переключение в дашборде остаётся возможным). Выключено — вывод без изменений.</span></span></label>
       </div>
+<div id="tieredAwlHint" class="hint" style="display:none">Недоступно при включённых автоматических белых списках. Настройки групп сохранены.</div>
 <div id="tieredPanel" style="display:none">
         <div class="hint">Эшелоны проверяются по порядку; финальное правило MATCH направляет трафик в корневую группу «🪜 TIERED-AUTO». Участники — из текущей сборки (прокси, WG/AWG-профили, провайдеры). Health-семантика и границы: <a href="https://github.com/saymer-alt/link-generators/blob/main/docs/TIERED-FAILOVER.md">docs/TIERED-FAILOVER.md</a> (HTTP-пробы; UDP не заявлен).</div>
         <div id="tierCards"></div>
@@ -834,6 +835,7 @@
           <div class="advanced-subsection advanced-subsection-second">
             <div class="advanced-subsection-title">🔀 Отдельный вход на каждый прокси</div>
             <div class="advanced-master">
+              <div id="perProxyAwlHint" class="hint" style="display:none">Недоступно при включённых автоматических белых списках.</div>
               <label><input type="checkbox" id="cfgPerProxyMaster"> Включить расширенный Per-Proxy режим <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Отдельный вход на каждый прокси">?</button><span class="ctx-help-pop" role="note">Создаёт отдельный TUN-интерфейс и/или SOCKS-порт для каждого proxy/provider — каждый выход получает собственный вход. Для обычных сценариев не требуется. Доступен только в профиле «Роутер / обычный TUN»; несовместим с режимом белых списков и «Политиками по доменам».</span></span></label>
             </div>
             <div class="hint" id="perProxyRouterHint" style="display:none">Per-Proxy доступен только в профиле «Роутер / обычный TUN».</div>
@@ -3562,11 +3564,45 @@ function onProfileChange() {
   const prev = selectedProfile;
   const next = select.value;
   if (prev === next) { applyProfileUiState(next); return; }
+  const targetAwl = next === 'router' && profileSnapshots.router && profileSnapshots.router.awl;
+  if (targetAwl && tieredEnabled()) {
+    if (!confirmAwlResolution(['приоритетные группы серверов'])) { select.value = prev; return; }
+    document.getElementById('cfgTieredFailover').checked = false;
+  }
   snapshotProfileState(prev);
   selectedProfile = next;
   effectiveProfile = next;
   applyProfileUiState(next);
   refreshWgTargetSelectors();
+}
+
+// One admission rule for manual switches, project restore and generation.
+function awlConflicts(awl, tiered, perProxy) {
+  return awl ? [tiered ? 'приоритетные группы серверов' : '', perProxy ? 'Per-Proxy' : ''].filter(Boolean) : [];
+}
+function currentAwlConflicts() {
+  const on = id => document.getElementById(id).checked;
+  return awlConflicts(on('cfgAutoWhitelist'), on('cfgTieredFailover'),
+    on('cfgPerProxyMaster') || on('cfgPerProxyTun') || on('cfgPerProxySocks'));
+}
+function confirmAwlResolution(conflicts) {
+  return !conflicts.length || window.confirm('Включить автоматические белые списки? Будут выключены: ' + conflicts.join(', ') + '. Карточки, имена и участники сохранятся. После выключения белых списков режимы нужно включить вручную.');
+}
+function deactivateAwlConflicts() {
+  for (const id of ['cfgTieredFailover', 'cfgPerProxyMaster', 'cfgPerProxyTun', 'cfgPerProxySocks']) document.getElementById(id).checked = false;
+}
+function updateAwlCompatibility() {
+  const awl = document.getElementById('cfgAutoWhitelist').checked;
+  const tier = document.getElementById('cfgTieredFailover');
+  tier.disabled = awl;
+  tier.closest('label').classList.toggle('control-disabled', awl);
+  document.getElementById('tieredAwlHint').style.display = awl ? '' : 'none';
+  document.getElementById('perProxyAwlHint').style.display = awl ? '' : 'none';
+  document.getElementById('cfgPerProxyMaster').closest('label').classList.toggle('control-disabled', awl);
+  const panel = document.getElementById('tieredPanel');
+  panel.style.display = tier.checked || (awl && (window.__tierCardsState || []).length) ? 'block' : 'none';
+  panel.classList.toggle('control-disabled', awl);
+  panel.querySelectorAll('input,select,textarea,button').forEach(el => { el.disabled = awl; });
 }
 
 // UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
@@ -3579,6 +3615,11 @@ function onWhitelistChange() {
     awl.checked = false;
     awl.disabled = true;
     showToast('❌ Автоматический режим белых списков доступен только в профиле «Роутер / обычный TUN»', true);
+  }
+  const conflicts = currentAwlConflicts();
+  if (conflicts.length) {
+    if (!confirmAwlResolution(conflicts)) { awl.checked = false; return; }
+    deactivateAwlConflicts();
   }
   document.getElementById('whitelistPanel').style.display = awl.checked ? 'block' : 'none';
   updateMihomoOptionStates();
@@ -4617,6 +4658,7 @@ function updateMihomoOptionStates() {
   const socks = document.getElementById('cfgSocks').checked;
   const mips = document.getElementById('cfgTunMips');
   const masterEl = document.getElementById('cfgPerProxyMaster');
+  if (!routerProfile || awlOn) masterEl.checked = false;
   const master = !!(masterEl && masterEl.checked);
   const perTun = document.getElementById('cfgPerProxyTun');
   const perSocks = document.getElementById('cfgPerProxySocks');
@@ -4644,6 +4686,7 @@ function updateMihomoOptionStates() {
   const policyEl = document.getElementById('cfgPolicyRouting');
   policyEl.disabled = master;
   if (master) policyEl.checked = false;
+  updateAwlCompatibility();
   updatePolicyRoutingVisibility();
 }
 
@@ -8080,7 +8123,12 @@ function buildTieredGroups(tiers, existingNames) {
 // yaml возвращается без изменений (ALL PARITY).
 function applyTieredFailover(yaml, tiersOverride) {
   if (!tieredEnabled() && !tiersOverride) return yaml;
+  if (document.getElementById('cfgAutoWhitelist').checked) throw Error('Автоматические белые списки несовместимы с приоритетными группами серверов. Выберите один режим.');
   const doc = jsyaml.load(yaml);
+  // Structural AWL contract also protects explicit overrides with an inactive UI flag.
+  if ((doc['proxy-groups'] || []).some(g => g.name === 'GLOBAL' && g.type === 'fallback' && g.filter === '^(PRIMARY-|primary-)`^(FALLBACK-|fallback-)')) {
+    throw Error('AWL YAML нельзя преобразовать в Tiered: выберите один режим приоритетов.');
+  }
   const tiers = Array.isArray(tiersOverride) ? tiersOverride : readTierCards();
   const existingNames = new Set([
     ...(Array.isArray(doc.proxies) ? doc.proxies : []).map(p => p && p.name).filter(Boolean),
@@ -8119,6 +8167,7 @@ function renderTierCards() {
   const options = tierMemberOptions();
   (window.__tierCardsState || []).forEach((t, i) => wrap.appendChild(tierCardDom(t, i, options)));
   renderTierDuplicatesWarn();
+  updateAwlCompatibility();
 }
 
 // P2 UX (v1.11, field-test #160): один и тот же выход в нескольких эшелонах —
@@ -8254,9 +8303,10 @@ function bindTieredUI() {
   const enable = document.getElementById('cfgTieredFailover');
   if (!enable) return;
   enable.addEventListener('change', () => {
+    if (document.getElementById('cfgAutoWhitelist').checked) { enable.checked = false; updateAwlCompatibility(); return; }
     document.getElementById('tieredPanel').style.display = enable.checked ? 'block' : 'none';
     if (enable.checked && !(window.__tierCardsState || []).length) {
-      window.__tierCardsState = [{ name: 'WARP', strategy: 'url-test', members: [] }, { name: 'Резервные выходы', strategy: 'fallback', members: [] }];
+      window.__tierCardsState = [{ name: 'Основные выходы', strategy: 'url-test', members: [] }, { name: 'Резервные выходы', strategy: 'fallback', members: [] }, { name: 'Дополнительные выходы', strategy: 'url-test', members: [] }];
     }
     renderTierCards();
   });
@@ -10223,6 +10273,11 @@ async function buildMihomo() {
     setMihomoValidationState('NOT_BUILT');
     return buildFailure('WG/AWG файл ещё читается. Дождитесь завершения загрузки.', true);
   }
+  const conflicts = currentAwlConflicts();
+  if (conflicts.length) {
+    mihomoValidationSeq++; setMihomoValidationState('NOT_BUILT');
+    return buildFailure('Конфликт белых списков: ' + conflicts.join(', ') + '. Выберите один режим перед Build.');
+  }
   const raw = document.getElementById('mihomoInput').value.trim();
   if (!raw && wgBeans.length === 0) return buildFailure('Вставь ссылки или загрузи WG конфиг', true);
   
@@ -10583,6 +10638,14 @@ function rbCollectProject() {
 function rbApplyProject(project) {
   const copy = rbParseProjectText(JSON.stringify(project));
   if (!copy.ok) throw new Error('Проект не применён: ' + copy.error);
+  const o = copy.project.options;
+  if (copy.project.sources.autoWhitelist && o.profile !== 'router') throw new Error('Проект не применён: автоматические белые списки доступны только в профиле роутера.');
+  const conflicts = awlConflicts(copy.project.sources.autoWhitelist, copy.project.tiered.enabled, o.perProxyMaster || o.perProxyTun || o.perProxySocks);
+  if (conflicts.length) {
+    if (!confirmAwlResolution(conflicts)) throw new Error('Загрузка отменена: конфликт режимов не разрешён; Builder не изменён.');
+    copy.project.tiered.enabled = false;
+    o.perProxyMaster = false; o.perProxyTun = false; o.perProxySocks = false;
+  }
   const before = rbCollectProject();
   const profileState = { selectedProfile, effectiveProfile, snapshots: JSON.parse(JSON.stringify(profileSnapshots)) };
   // Старые узлы сохраняют обработчики и поля даже при повторном отказе рендера.
@@ -10619,7 +10682,9 @@ function rbWriteProject(project) {
   const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
   const s = project.sources, o = project.options;
   setOpt('cfgProfile', o.profile);
-  onProfileChange();
+  if (selectedProfile !== o.profile) snapshotProfileState(selectedProfile);
+  selectedProfile = effectiveProfile = o.profile;
+  applyProfileUiState(o.profile);
   setOpt('mihomoInput', s.mainInput);
   setOpt('whitelistInput', s.fallbackInput);
   setChk('cfgSubMode', s.subMode);
@@ -10675,6 +10740,7 @@ function rbWriteProject(project) {
 }
 
 function rbSaveProject() {
+  if (currentAwlConflicts().length) { showToast('Разрешите конфликт белых списков перед сохранением проекта.', true); return; }
   const project = rbCollectProject();
   const json = JSON.stringify(project, null, 2);
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + 'Z';

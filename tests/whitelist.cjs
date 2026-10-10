@@ -48,6 +48,7 @@ const b = 'socks://test:pass@192.0.2.2:1080#GLOBAL';
     assert.equal(await page.locator('#cfgAutoWhitelist').isDisabled(), false, 'router: БС доступен');
     assert.equal(await page.locator('#cfgPerProxyMaster').isChecked(), true, 'router: Per-Proxy master восстановлен');
     assert.equal(await page.locator('#cfgPerProxyTun').isChecked(), true, 'router: Per-Proxy TUN восстановлен');
+    page.once('dialog', dialog => dialog.accept());
     await page.locator('#cfgAutoWhitelist').check();
     for (const [name, primary, fallback, sub] of [
       ['one', a, b, false], ['many', a + '\n' + b, a + '\n' + b, false],
