@@ -587,7 +587,7 @@ async function check(name, fn) {
   });
   await check('UX14 sticky canonical actions current stale building and error', async () => {
     const n=await fresh();const status=n.locator('#builderActionStatus');assert.equal(await status.count(),1);
-    assert.equal(await status.getAttribute('data-state'),'NOT_BUILT'); await n.locator('#mihomoInput').fill(link);
+    assert.equal(await status.getAttribute('data-state'),'NOT_BUILT'); await n.locator('#mihomoInput').fill(link);await n.locator('#buildConfigBtn').focus();
     assert.equal(await n.evaluate(()=>{window.ownerPendingBuild=buildMihomo();return document.getElementById('builderActionStatus').dataset.state;}),'BUILDING');
     await n.evaluate(()=>window.ownerPendingBuild);await n.waitForFunction(()=>MIHOMO_VALIDATION_STATE.state==='VALID');
     assert.equal(await status.getAttribute('data-state'),'CURRENT');
