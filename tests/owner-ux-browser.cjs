@@ -1122,6 +1122,96 @@ async function check(name, fn) {
     await button('reset').click();await button('expand').click();await button('panel').click();assert.equal(await button('panel').getAttribute('aria-expanded'),'false');await button('panel').click();assert.equal(await button('panel').getAttribute('aria-expanded'),'true');await button('fit').click();assert.equal(await wrap.evaluate(w=>{const r=w.querySelector('svg').getBoundingClientRect();return r.width<=w.clientWidth+1&&r.height<=w.clientHeight+1;}),true,'Fit after small-scale hint reflow');await n.keyboard.press('Escape');
     await nav.locator('input[type=range]').evaluate(e=>{e.value='120';e.dispatchEvent(new Event('input',{bubbles:true}));});await button('fit').click();await verify(.05);assert.equal(await nav.locator('.vrg-small-scale-hint').isVisible(),true);assert.equal(await button('out').isDisabled(),true);
   });
+  // UX-47..50: existing Studio lifecycle and shared VRG navigation only.
+  const studioFixture = 'proxies:\n  - {name: Local, type: socks5, server: 192.0.2.2, port: 1080, password: synthetic-studio-secret}\nproxy-groups:\n  - {name: ROOT, type: select, proxies: [Local, DIRECT]}\nrules:\n  - MATCH,ROOT\n';
+  const openStudio = async n => {await n.locator('.tab',{hasText:'Config Studio'}).click();};
+  const importStudio = async n => {await openStudio(n);await n.locator('#csImportInput').fill(studioFixture);await n.locator('#csParseBtn').click();};
+  const setClipboard = async (n,mode,text) => n.evaluate(({mode,text})=>{Object.defineProperty(navigator,'clipboard',{configurable:true,value:mode==='unavailable'?undefined:{readText:()=>mode==='denied'?Promise.reject(new Error('synthetic-studio-secret')):mode==='pending'?new Promise(resolve=>{window.resolveClipboard=resolve;}):Promise.resolve(text)}});},{mode,text});
+  await check('UX47 Studio integration valid handoff is local and preserves Builder',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);
+    const before=await n.evaluate(()=>({yaml:document.getElementById('mihomoOutput').value,project:rbProjectFingerprint(rbCollectProject()),seq:mihomoValidationSeq}));
+    await screenshot(n,'#tab-mihomo','ux47-before-handoff');
+    assert.equal(await n.locator('#openYamlStudioBtn').count(),1);
+    const network=[];n.on('request',r=>network.push(r.url()));await n.locator('#openYamlStudioBtn').click();
+    assert.equal(await n.locator('#tab-studio').evaluate(e=>e.classList.contains('active')),true);
+    assert.equal(await n.locator('#csImportInput').inputValue(),before.yaml);assert.equal(await n.evaluate(()=>csImportText),before.yaml);
+    assert.equal(await n.locator('#csDiagnosticsPanel').evaluate(e=>e.open),true);assert.equal(await n.locator('#csSummaryCard').isVisible(),true);assert.equal(await n.locator('#csEditorCard').isVisible(),true);assert.equal(await n.locator('#csVrgSvgWrap svg').isVisible(),true);
+    assert.deepEqual(await n.evaluate(()=>({yaml:document.getElementById('mihomoOutput').value,project:rbProjectFingerprint(rbCollectProject()),seq:mihomoValidationSeq})),before);assert.deepEqual(network,[]);
+    await screenshot(n,'#tab-studio','ux47-after-handoff');
+  });
+  await check('UX47 Studio integration rejects missing stale invalid and tampered output',async()=>{
+    const n=await fresh(false);assert.equal(await n.locator('#openYamlStudioBtn').count(),1);
+    await n.locator('#openYamlStudioBtn').click();assert.equal(await n.evaluate(()=>csCurrentDoc),null);
+    await n.locator('#mihomoInput').fill(link);await build(n);await n.locator('#cfgLan').uncheck();await n.locator('#openYamlStudioBtn').click();assert.equal(await n.evaluate(()=>csCurrentDoc),null);
+    await build(n);await n.evaluate(()=>setMihomoValidationState('INVALID'));await n.locator('#openYamlStudioBtn').click();assert.equal(await n.evaluate(()=>csCurrentDoc),null);
+    await build(n);await n.evaluate(()=>document.getElementById('mihomoOutput').value='proxies: [');await n.locator('#openYamlStudioBtn').click();assert.equal(await n.evaluate(()=>csCurrentDoc),null);
+  });
+  await check('UX47 Studio integration cancel replacement and failed parse preserve document',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);await importStudio(n);
+    await n.locator('input[data-cs-field=server]').fill('192.0.2.99');
+    await n.locator('.tab',{hasText:'Mihomo Config Builder'}).click();assert.equal(await n.locator('#openYamlStudioBtn').count(),1);
+    const snapshot=()=>n.evaluate(()=>({input:document.getElementById('csImportInput').value,text:csImportText,doc:JSON.stringify(csCurrentDoc),ops:JSON.stringify(csOps),field:document.querySelector('input[data-cs-field=server]').value}));const prior=await snapshot();
+    n.once('dialog',d=>d.dismiss());await n.locator('#openYamlStudioBtn').click();assert.deepEqual(await snapshot(),prior);
+    assert.equal(await n.locator('#tab-mihomo').evaluate(e=>e.classList.contains('active')),true);
+    n.once('dialog',d=>d.accept());await n.locator('#openYamlStudioBtn').click();assert.notEqual(await n.evaluate(()=>csImportText),studioFixture);
+    // Existing parser rejects safely before committing a replacement document/input.
+    await n.evaluate(()=>csRunAnalysis('proxies: [synthetic-studio-secret'));assert.doesNotMatch(await n.locator('#csStatus').textContent(),/synthetic-studio-secret/);
+    assert.equal(await n.locator('#csImportInput').inputValue(),await n.evaluate(()=>csImportText));
+  });
+  await check('UX48 Studio integration clipboard success and source secrets remain local',async()=>{
+    const n=await fresh(false);await openStudio(n);await setClipboard(n,'success',studioFixture);
+    assert.equal(await n.locator('#csPasteBtn').count(),1);const network=[];n.on('request',r=>network.push(r.url()));await n.locator('#csPasteBtn').click();
+    assert.equal(await n.evaluate(()=>csImportText),studioFixture);assert.match(await n.locator('#csImportInput').inputValue(),/synthetic-studio-secret/);
+    for(const id of ['csStatus','csSummary','csDiagOut','csGraphOut','csVrgTextAltOut'])assert.doesNotMatch(await n.locator('#'+id).textContent(),/synthetic-studio-secret/);
+    assert.deepEqual(network,[]);
+    n.once('dialog',d=>d.dismiss());await setClipboard(n,'success',studioFixture.replace('ROOT','OTHER'));await n.locator('#csPasteBtn').click();assert.equal(await n.evaluate(()=>csImportText),studioFixture);
+  });
+  await check('UX48 Studio integration clipboard denied unavailable empty oversized invalid',async()=>{
+    const n=await fresh(false);await importStudio(n);assert.equal(await n.locator('#csPasteBtn').count(),1);
+    for(const mode of ['denied','unavailable']){await setClipboard(n,mode,'');await n.locator('#csPasteBtn').click();assert.match(await n.locator('#csStatus').textContent(),/Не удалось прочитать буфер.*Ctrl\+V/);}
+    for(const text of ['', 'x'.repeat(2*1024*1024+1), 'я'.repeat(1024*1024+1), 'proxies: [synthetic-studio-secret']){
+      await setClipboard(n,'success',text);const accept=d=>d.accept();n.on('dialog',accept);await n.locator('#csPasteBtn').click();n.off('dialog',accept);
+      assert.equal(await n.evaluate(()=>csImportText),studioFixture);assert.equal(await n.locator('#csImportInput').inputValue(),studioFixture);assert.doesNotMatch(await n.locator('#csStatus').textContent(),/synthetic-studio-secret/);assert.doesNotMatch(await n.locator('#csStatus').textContent(),/^✓/);
+    }
+  });
+  await check('UX48 Studio integration clipboard races clear file input editor and newer paste',async()=>{
+    const n=await fresh(false);await importStudio(n);assert.equal(await n.locator('#csPasteBtn').count(),1);
+    const pending=async()=>{await setClipboard(n,'pending','');await n.locator('#csPasteBtn').click();};
+    const finish=async()=>{await n.evaluate(t=>resolveClipboard(t),studioFixture.replaceAll('Local','Late'));await n.waitForTimeout(30);};
+    await pending();await n.locator('#csClearBtn').click();await finish();assert.equal(await n.evaluate(()=>csCurrentDoc),null);assert.equal(await n.locator('#csStatus').textContent(),'');
+    await pending();await n.locator('#csImportInput').fill('rules: [MATCH,DIRECT]');await finish();assert.equal(await n.locator('#csImportInput').inputValue(),'rules: [MATCH,DIRECT]');
+    await n.locator('#csClearBtn').click();await pending();await n.locator('#csImportFile').setInputFiles({name:'local.yaml',mimeType:'text/yaml',buffer:Buffer.from(studioFixture)});await n.waitForFunction(()=>csImportText.includes('ROOT'));await finish();assert.equal(await n.evaluate(()=>csImportText),studioFixture);
+    await pending();await n.locator('input[data-cs-field=server]').fill('192.0.2.77');await finish();assert.equal(await n.locator('input[data-cs-field=server]').inputValue(),'192.0.2.77');assert.equal(await n.evaluate(()=>csImportText),studioFixture);
+    await pending();const resolveOld=await n.evaluate(()=>{window.oldClipboard=resolveClipboard;return true;});assert.equal(resolveOld,true);await setClipboard(n,'success',studioFixture.replaceAll('Local','New'));n.once('dialog',d=>d.accept());await n.locator('#csPasteBtn').click();await n.evaluate(t=>oldClipboard(t),studioFixture);assert.match(await n.evaluate(()=>csImportText),/New/);
+  });
+  await check('UX48 Studio integration file late completion and cancelled replacement preserve edits',async()=>{
+    const n=await fresh(false);await importStudio(n);assert.equal(await n.locator('#csPasteBtn').count(),1);
+    await n.evaluate(()=>{File.prototype.arrayBuffer=function(){return new Promise(resolve=>{window.resolveFile=resolve;});};});
+    await n.locator('#csImportFile').setInputFiles({name:'late.yaml',mimeType:'text/yaml',buffer:Buffer.from(studioFixture)});
+    await n.locator('#csImportInput').fill(studioFixture+'# draft');await n.evaluate(t=>resolveFile(new TextEncoder().encode(t).buffer),studioFixture.replaceAll('Local','Late'));assert.equal(await n.locator('#csImportInput').inputValue(),studioFixture+'# draft');
+    await setClipboard(n,'success',studioFixture.replaceAll('Local','Paste'));n.once('dialog',d=>d.dismiss());await n.locator('#csPasteBtn').click();assert.equal(await n.locator('#csImportInput').inputValue(),studioFixture+'# draft');assert.equal(await n.evaluate(()=>csImportText),studioFixture);
+  });
+  for(const consumer of ['Builder','Studio'])await check('UX49 Studio integration original view preserves height and clears focus '+consumer,async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);let id='vrgSvgWrap',alt='vrgTextAltOut';if(consumer==='Studio'){await importStudio(n);id='csVrgSvgWrap';alt='csVrgTextAltOut';}
+    await r2Reveal(n,id);const wrap=n.locator('#'+id),nav=n.locator('#'+id+'Nav'),btn=a=>nav.locator('[data-vrg-action='+a+']');
+    assert.equal(await btn('all').textContent(),'Сбросить фокус');assert.equal(await btn('origin').count(),1);
+    const yaml=await n.locator('#mihomoOutput').inputValue();await nav.locator('input[type=range]').evaluate(e=>{e.value='440';e.dispatchEvent(new Event('input',{bubbles:true}));});
+    await wrap.locator('g[tabindex]').first().focus();await n.keyboard.press('Enter');await btn('reset').click();for(let i=0;i<6;i++)await btn('in').click();
+    await wrap.evaluate(w=>{w.scrollLeft=100;w.scrollTop=100;});await btn('origin').focus();await n.keyboard.press('Enter');
+    const verify=async()=>{const s=await wrap.evaluate(w=>{const s=vrgNavigation.get(w),svg=w.querySelector('svg');return {focus:w.id==='vrgSvgWrap'?vrgFocusId:vrgStudioFocus.get(s.doc),height:s.height,fit:s.fit,scale:s.scale,actual:parseFloat(svg.getAttribute('width'))/parseFloat(svg.getAttribute('viewBox').split(' ')[2]),percent:parseFloat(w.closest('.vrg-frame').querySelector('.vrg-scale').textContent)/100,left:w.scrollLeft,top:w.scrollTop};});assert.ok(!s.focus);assert.equal(s.height,440);assert.equal(s.fit,true);assert.equal(s.left,0);assert.equal(s.top,0);assert.ok(Math.abs(s.scale-s.actual)<1e-8);assert.ok(Math.abs(s.scale-s.percent)<.00006);const text=await n.locator('#'+alt).textContent();assert.match(text,/^Весь граф/);assert.ok(text.includes('Узлы ('+await wrap.locator('g[tabindex]').count()+'):'));assert.equal((text.match(/ → /g)||[]).length,await wrap.locator('svg > line').count());};await verify();
+    await btn('expand').click();await btn('origin').click();await verify();await n.keyboard.press('Escape');assert.equal(await btn('expand').getAttribute('aria-expanded'),'false');
+    for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,850],[320,850]]){await n.setViewportSize({width,height});await btn('origin').click();await verify();assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);}
+    assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);await screenshot(n,'#'+id+'Nav','ux49-'+consumer);
+  });
+  await check('UX50 Studio integration adaptive height persists for same document only',async()=>{
+    const n=await fresh(false);await importStudio(n);await r2Reveal(n,'csVrgSvgWrap');const w=n.locator('#csVrgSvgWrap'),nav=n.locator('#csVrgSvgWrapNav');
+    await screenshot(n,'#csVrgPanel','ux50-initial');let h=await w.evaluate(e=>e.clientHeight);assert.ok(h>=300&&h<=400,'desktop initial height '+h);
+    await nav.locator('input[type=range]').evaluate(e=>{e.value='460';e.dispatchEvent(new Event('input',{bubbles:true}));});await w.locator('g[tabindex]').first().click();assert.equal(await w.evaluate(e=>vrgNavigation.get(e).height),460);
+    await n.evaluate(()=>vrgRenderInto('csVrgSvgWrap',csCurrentDoc,false,'csVrgTextAltOut'));assert.equal(await w.evaluate(e=>vrgNavigation.get(e).height),460);
+    await n.locator('#csParseBtn').click();assert.equal(await w.evaluate(e=>vrgNavigation.get(e).height),null);h=await w.evaluate(e=>e.clientHeight);assert.ok(h>=300&&h<=400);
+    await n.locator('#csImportInput').fill('{}');await n.locator('#csParseBtn').click();assert.ok(await w.evaluate(e=>e.clientHeight)<=124,'empty document remains compact');await n.locator('#csImportInput').fill(studioFixture);await n.locator('#csParseBtn').click();
+    for(const width of [390,320]){await n.setViewportSize({width,height:850});await n.locator('#csParseBtn').click();const data=await w.evaluate(e=>({height:e.clientHeight,pixels:parseInt(e.closest('.vrg-frame').querySelector('.vrg-height-pixels').textContent),slider:Number(e.closest('.vrg-frame').querySelector('input[type=range]').value)}));assert.ok(data.height>=200&&data.height<=425);assert.ok(Math.abs(data.height-data.pixels)<=2);assert.ok(Math.abs(data.height-data.slider)<=10);assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);}
+  });
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });
   await browser.close();
   if (process.env.OWNER_UX_RESULTS) fs.writeFileSync(process.env.OWNER_UX_RESULTS, JSON.stringify({ engine, root, passed, failed, results }, null, 2));

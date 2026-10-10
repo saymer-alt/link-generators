@@ -335,6 +335,34 @@
       "scenario_prefixes": [
         "UX46 polish "
       ]
+    },
+    {
+      "id": "UX-47",
+      "summary": "Builder to Studio guarded local handoff",
+      "scenario_prefixes": [
+        "UX47 Studio integration "
+      ]
+    },
+    {
+      "id": "UX-48",
+      "summary": "Clipboard import and lifecycle race protection",
+      "scenario_prefixes": [
+        "UX48 Studio integration "
+      ]
+    },
+    {
+      "id": "UX-49",
+      "summary": "Shared original graph view action",
+      "scenario_prefixes": [
+        "UX49 Studio integration "
+      ]
+    },
+    {
+      "id": "UX-50",
+      "summary": "Adaptive initial Studio graph height",
+      "scenario_prefixes": [
+        "UX50 Studio integration "
+      ]
     }
   ]
 }

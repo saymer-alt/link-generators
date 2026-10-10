@@ -409,6 +409,7 @@
 <div id="builderActionbar" class="builder-actionbar" role="toolbar" aria-label="Действия Builder">
         <button class="btn" id="buildConfigBtn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" onclick="buildMihomo()">⚡ Build Config</button>
         <button class="btn btn-gray" id="downloadYamlBtn" type="button" onclick="downloadMihomo()">💾 Скачать YAML</button>
+        <button type="button" class="btn btn-gray" id="openYamlStudioBtn" onclick="openBuilderYamlInStudio()">🔎 Открыть YAML в Config Studio</button>
         <button class="btn btn-gray" id="copyYamlBtn" title="Скопировать итоговый YAML (доступно только после успешной проверки)" onclick="copyMihomo()">📋 Copy YAML</button>
         <button class="btn btn-gray" title="Сохранить проект генератора (все подписки, WG/AWG-профили, настройки) в .lgproject.json. ВНИМАНИЕ: файл содержит приватные ключи и токены" onclick="rbSaveProject()">💾 Сохранить проект</button>
         <button class="btn btn-gray" title="Загрузить проект генератора (.lgproject.json) и восстановить Builder" onclick="document.getElementById('rbProjectFile').click()">📂 Загрузить проект</button>
@@ -889,12 +890,15 @@
       <div class="hint">Импорт уже работающего конфига (Mihomo/Clash Meta) для анализа: структура, граф зависимостей, маршрутизация, диагностики. Разбор и анализ — локально в браузере; конфиг никуда не отправляется и не сохраняется; подписки/провайдеры автоматически не скачиваются. Значения секретных полей (password/uuid/ключи) скрываются и в диагностики не попадают. Поддерживается YAML одного документа.</div>
       <textarea id="csImportInput" rows="12" aria-label="Mihomo config YAML для анализа" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="Вставьте содержимое config.yaml…"></textarea>
       <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
+        <button type="button" class="btn btn-gray" id="csPasteBtn">📋 Вставить из буфера</button>
         <button type="button" class="btn btn-gray" id="csParseBtn">🔎 Разобрать</button>
-        <button type="button" class="btn btn-gray" id="csRestoreBtn" title="Восстановить состояние Builder из разобранного конфига (Reverse Build). Честный отчёт обратимости — см. панель ниже" style="display:none">🔁 Восстановить в Builder</button>
-        <div id="csRestoreOut" class="hint" style="display:none;margin-top:6px;white-space:pre-line;border:1px solid var(--border);padding:6px"></div>
         <label class="btn btn-gray" style="margin:0" for="csImportFile">📂 Загрузить .yaml / .yml</label>
         <input type="file" id="csImportFile" accept=".yaml,.yml" hidden>
         <button type="button" class="btn btn-gray" id="csClearBtn">Очистить</button>
+      </div>
+      <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
+        <button type="button" class="btn btn-gray" id="csRestoreBtn" title="Восстановить состояние Builder из разобранного конфига (Reverse Build). Честный отчёт обратимости — см. панель ниже" style="display:none">🔁 Восстановить в Builder</button>
+        <div id="csRestoreOut" class="hint" style="display:none;margin-top:6px;white-space:pre-line;border:1px solid var(--border);padding:6px"></div>
       </div>
       <div id="csStatus" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       <div id="csSecretsNote" class="hint" style="display:none;margin-top:6px;border:1px solid var(--border);padding:6px;background:rgba(255,170,0,.08)"></div>
@@ -9206,7 +9210,7 @@ function csRunAnalysis(sourceText) {
   if (!input || !status) return;
   const text = typeof sourceText === 'string' ? sourceText : String(input.value);
   if (!text.trim()) { status.textContent = 'Вставьте YAML или загрузите файл (.yaml/.yml).'; return; }
-  if (text.length > 2 * 1024 * 1024) { status.textContent = '✖ Файл больше 2 МБ — анализ не запущен (ограничение производительности вкладки).'; return; }
+  if (text.length > 2 * 1024 * 1024 || new TextEncoder().encode(text).length > 2 * 1024 * 1024) { status.textContent = '✖ Файл больше 2 МБ — анализ не запущен (ограничение производительности вкладки).'; return; }
   let doc;
   try {
     doc = csLoadBounded(text, jsyaml);
@@ -9222,6 +9226,7 @@ function csRunAnalysis(sourceText) {
   }
   csCurrentDoc = doc;
   csImportText = text;
+  input.value = text;
   note.style.display = 'none';
   const sum = csSummarize(doc);
   const lines = [
@@ -9258,7 +9263,49 @@ function csRunAnalysis(sourceText) {
   status.textContent = '✓ Разобрано: анализ готов (локально, без сети).';
   const rb = document.getElementById('csRestoreBtn');
   if (rb) rb.style.display = '';
+  return true;
 }
+
+// UX-47/48: одна замена документа, один parser и общий lifecycle epoch.
+// До успешного разбора исходный input, документ и правки остаются нетронутыми.
+function csReplaceDocument(text) {
+  if (csCurrentDoc || document.getElementById('csImportInput').value.trim()) {
+    if (!confirm('В Config Studio уже есть документ или незавершённый ввод. Заменить его? Текущие правки будут потеряны.')) return false;
+  }
+  return csRunAnalysis(text) === true;
+}
+function openBuilderYamlInStudio() {
+  csFileReadSeq++;
+  if (!isBuilderYamlReady()) {
+    showToast('Открытие YAML заблокировано: выполните Build и проверку актуальной конфигурации.', true);
+    return;
+  }
+  const text = document.getElementById('mihomoOutput').value;
+  if (!text.trim() || !csReplaceDocument(text)) return;
+  switchTab(null, 'studio');
+  document.getElementById('csDiagnosticsPanel').open = true;
+  document.getElementById('csVrgPanel').open = true;
+  document.getElementById('csSummaryCard').scrollIntoView({ block: 'start' });
+}
+async function csPasteClipboard() {
+  const seq = ++csFileReadSeq;
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.readText) throw new Error();
+    const text = await navigator.clipboard.readText();
+    if (seq !== csFileReadSeq) return;
+    csReplaceDocument(text);
+  } catch (_) {
+    if (seq !== csFileReadSeq) return;
+    document.getElementById('csStatus').textContent = 'Не удалось прочитать буфер. Вставьте YAML вручную через Ctrl+V';
+  }
+}
+// Даже правка с возвратом к прежнему значению отменяет запоздалый импорт.
+document.addEventListener('input', e => {
+  if (e.target.id === 'csImportInput' || e.target.closest('#csEditorCard')) csFileReadSeq++;
+});
+document.addEventListener('change', e => {
+  if (e.target.closest('#csEditorCard')) csFileReadSeq++;
+});
 
 // Покрытие доменов по ИМПОРТИРОВАННОМУ конфигу (cdgDomainCoverage — то же ядро,
 // что у генератора; снапшот последнего Build не затрагивается).
@@ -9324,6 +9371,7 @@ function csClearStudio() {
 
 document.addEventListener('click', (e) => {
   if (!e.target) return;
+  if (e.target.id === 'csPasteBtn') { e.preventDefault(); csPasteClipboard(); }
   if (e.target.id === 'csParseBtn') { e.preventDefault(); csRunAnalysis(); }
   if (e.target.id === 'csClearBtn') { e.preventDefault(); csClearStudio(); }
   if (e.target.id === 'csDomainBtn') { e.preventDefault(); runCsDomainCoverage(); }
@@ -9348,8 +9396,7 @@ document.addEventListener('change', (e) => {
   file.arrayBuffer().then(bytes => {
     if (seq !== csFileReadSeq || editorSeq !== csEditorSeq || source !== document.getElementById('csImportInput').value) return;
     const t = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
-    document.getElementById('csImportInput').value = t;
-    csRunAnalysis(t);
+    csReplaceDocument(t);
   }).catch(() => {
     if (seq !== csFileReadSeq || editorSeq !== csEditorSeq || source !== document.getElementById('csImportInput').value) return;
     document.getElementById('csStatus').textContent = '✖ Не удалось прочитать файл: ожидается корректный UTF-8 YAML. Предыдущий рабочий документ сохранён.';
@@ -9943,8 +9990,8 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     const controls = document.createElement('div'); controls.className = 'vrg-view-controls'; nav.appendChild(controls);
     const size = document.createElement('div'); size.className = 'vrg-size-controls'; nav.appendChild(size);
     for (const [action, label, aria] of [['out', '−', 'Уменьшить масштаб'], ['in', '+', 'Увеличить масштаб'],
-      ['reset', 'Сбросить к 100%', 'Исходный масштаб 100%'], ['fit', 'Вписать граф', 'Вписать весь граф в область'],
-      ['all', 'Весь граф', 'Сбросить фокус графа'], ['expand', '⛶ Развернуть граф', 'Развернуть граф'],
+      ['reset', 'Сбросить к 100%', 'Исходный масштаб 100%'], ['fit', 'Вписать граф', 'Вписать текущий граф в область'],
+      ['all', 'Сбросить фокус', 'Сбросить фокус графа'], ['origin', 'Исходный вид', 'Сбросить фокус, вписать граф и вернуть прокрутку к началу'], ['expand', '⛶ Развернуть граф', 'Развернуть граф'],
       ['size-reset', 'Сбросить размер', 'Вернуть исходную высоту области графа'], ['panel', 'Панель фокуса', 'Показать / скрыть панель']]) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-gray';
       b.textContent = label; b.dataset.vrgAction = action; b.setAttribute('aria-label', aria);
@@ -10005,9 +10052,11 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
   wrap.style.maxHeight = 'none';
   const abort = new AbortController(), options = { signal: abort.signal };
   const state = { doc, abort, resize: null, scale: previous?.doc === doc ? previous.scale : 1,
-    fit: previous?.doc === doc ? previous.fit : true, height: previous?.height ?? null, appliedHeight: wrap.style.height };
+    fit: previous?.doc === doc ? previous.fit : true, height: previous?.doc === doc ? previous.height : null, appliedHeight: wrap.style.height };
   const viewport = () => {
-    const height = state.height === null ? Math.min(view.height, Math.max(120, window.innerHeight * (wrap.id === 'vrgSvgWrap' ? .7 : .5))) : Math.max(120, Math.min(state.height, 900));
+    const initial = wrap.id === 'vrgSvgWrap' ? Math.min(view.height, Math.max(120, window.innerHeight * .7))
+      : (doc.proxies?.length || doc['proxy-groups']?.length || doc.rules?.length || Object.keys(doc['proxy-providers'] || {}).length) ? Math.max(200, Math.min(360, window.innerHeight * (window.innerWidth <= 600 ? .4 : .5))) : 120;
+    const height = state.height === null ? initial : Math.max(120, Math.min(state.height, 900));
     if (wrap.style.height !== height + 'px') wrap.style.height = height + 'px';
     state.appliedHeight = wrap.style.height;
     nav.querySelector('input[type="range"]').value = String(height);
@@ -10044,6 +10093,11 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     if (action === 'panel') { side.hidden = !side.hidden; e.target.setAttribute('aria-expanded', String(!side.hidden)); e.target.focus({preventScroll:true}); return; }
     if (action === 'expand') { vrgSetExpanded(frame, !frame.classList.contains('vrg-expanded')); return; }
     if (action === 'size-reset') { state.height = null; viewport(); if (state.fit) fit(); return; }
+    if (action === 'origin') {
+      // Следующий render наследует этот же state; общий Fit рассчитает новую область.
+      state.fit = true; wrap.scrollLeft = wrap.scrollTop = 0; resetFocus();
+      nav.querySelector('[data-vrg-action=origin]').focus({preventScroll:true}); return;
+    }
     if (action === 'all') { resetFocus(); return; }
     state.fit = action === 'fit';
     if (state.fit) fit();
