@@ -25,7 +25,7 @@ const doc={proxies:[{name:'SYNTH',type:'ss',server:'192.0.2.1',port:443,cipher:'
    await p.locator('#csImportFile').setInputFiles({name:'slow.yaml',mimeType:'text/yaml',buffer:Buffer.from('mixed-port: 17890\nrules: [MATCH,DIRECT]\n')});
    if(action==='clear')await p.click('#csClearBtn');
    else if(action==='parse')await studio(p,'mixed-port: 17891\nrules: [MATCH,DIRECT]\n');
-   else{await p.evaluate(()=>{window.__oldResolve=window.__fileResolve;window.__restoreRead();});await p.locator('#csImportFile').setInputFiles({name:'new.yaml',mimeType:'text/yaml',buffer:Buffer.from('mixed-port: 17892\nrules: [MATCH,DIRECT]\n')});await p.waitForFunction(()=>csCurrentDoc&&csCurrentDoc['mixed-port']===17892);}
+   else{await p.evaluate(()=>{window.__oldResolve=window.__fileResolve;window.__restoreRead();});let confirmation;p.once('dialog',async d=>{confirmation={type:d.type(),text:d.message()};await d.accept();});await p.locator('#csImportFile').setInputFiles({name:'new.yaml',mimeType:'text/yaml',buffer:Buffer.from('mixed-port: 17892\nrules: [MATCH,DIRECT]\n')});await p.waitForFunction(()=>csCurrentDoc&&csCurrentDoc['mixed-port']===17892);assert.equal(confirmation.type,'confirm');assert.match(confirmation.text,/Заменить/);}
    const state=await p.evaluate(()=>({source:document.getElementById('csImportInput').value,doc:csCurrentDoc}));
    await p.evaluate(async action=>{await(action==='new-file'?window.__oldResolve():window.__fileResolve());await new Promise(resolve=>setTimeout(resolve,0));},action);
    same(await p.evaluate(()=>({source:document.getElementById('csImportInput').value,doc:csCurrentDoc})),state,'late file must not overwrite newer Studio intent');same(await snap(p),before,'Studio changed Builder');
