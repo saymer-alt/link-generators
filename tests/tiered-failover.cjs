@@ -49,8 +49,8 @@ const ok = name => { passed++; console.log('  ok —', name); };
   // 2. ON: два эшелона через настоящий UI-путь (select + клик), как пользователь
   await page.locator('#cfgTieredFailover').check();
   assert.equal(await page.evaluate(() => document.getElementById('tieredPanel').style.display), 'block', 'панель показана');
-  assert.equal(await page.evaluate(() => (window.__tierCardsState || []).length), 3, 'дефолт: три нейтральные группы');
-  await page.locator('#tierCards .tier-card').nth(2).locator('.tier-del').click(); // two-group scenario: explicitly remove unused empty card
+  assert.equal(await page.evaluate(() => (window.__tierCardsState || []).length), 1, 'дефолт: одна группа приоритета');
+  await page.locator('#btnTierAdd').click(); // two-group scenario: explicitly add the second priority
   // Реестр целей (dialerTargetsCache) наполняется при загруженных WG/AWG —
   // загружаем два WG-профиля, они же станут участниками эшелонов.
   const fx = n => path.join(root, 'tests', 'fixtures', n);
@@ -213,7 +213,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   ok('320/360/412/480 layout: без overflow');
 
   // 13. UX-контракт #165: компактные контролы, disabled ↑/↓ на краях, destructive-стиль,
-  //     единый «＋ Добавить эшелон», стратегия/имя — визуально главное
+  //     единый «＋ Добавить группу приоритета», стратегия/имя — визуально главное
   const ux = await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('#tierCards .tier-card'));
     const up0 = cards[0].querySelector('.tier-up');
@@ -237,7 +237,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.equal(ux.up0Disabled, true, 'первый эшелон: ↑ disabled');
   assert.equal(ux.downLastDisabled, true, 'последний эшелон: ↓ disabled');
   assert.ok(ux.upAria && ux.delAria, 'aria-labels сохранены');
-  assert.equal(ux.addLevel.includes('Добавить эшелон'), true, 'единый «＋ Добавить эшелон»: ' + ux.addLevel);
+  assert.equal(ux.addLevel.includes('Добавить группу приоритета'), true, 'единый «＋ Добавить группу приоритета»: ' + ux.addLevel);
   assert.equal(ux.delDistinct, true, 'destructive delete визуально отличён от neutral');
   assert.notEqual(ux.delBg, ux.upBg, 'destructive delete: другой background');
   assert.match(ux.compact, /^2px$/, 'компактные контролы (padding-top ' + ux.compact + ')');
@@ -309,14 +309,14 @@ const ok = name => { passed++; console.log('  ok —', name); };
     ok('P2 UX: дубликат выхода между эшелонами → warning-lint');
   }
 
-  // 17. P2 UX v1.11 (#160): дефолтные имена эшелонов («Резервные выходы» вместо «Personal»)
+  // 17. P2 UX v1.11 (#160): новые проекты начинают с одной пустой группы «Приоритет 1»
   {
     await page.evaluate(() => { window.__tierCardsState = []; });
     await page.locator('#cfgTieredFailover').uncheck();
     await page.locator('#cfgTieredFailover').check();
     const names = await page.evaluate(() => (window.__tierCardsState || []).map(t => t.name));
-    assert.deepEqual(names, ['Основные выходы', 'Резервные выходы', 'Дополнительные выходы'], 'дефолтные имена: ' + JSON.stringify(names));
-    ok('P2 UX: дефолт «Резервные выходы»');
+    assert.deepEqual(names, ['Приоритет 1'], 'дефолтные имена: ' + JSON.stringify(names));
+    ok('P2 UX: одна новая группа «Приоритет 1»');
   }
 
   assert.deepEqual(errors, [], 'no page errors');

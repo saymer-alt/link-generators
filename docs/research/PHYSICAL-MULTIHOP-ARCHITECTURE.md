@@ -290,3 +290,7 @@ Reuse: docs/research/AWG-MTU-OVERHEAD.md (CPA/RandomTrailers ветки, RandomT
 ### Визуализация (PHASE 10)
 
 Read-only вертикальный срез: экспериментальная панель в Builder-вкладке (details, бейдж EXPERIMENTAL · v1.11-dev): demo-топология / paste JSON / анализ; вертикальный линейный рендер цепочки; what-if кликом по узлу; всё в памяти вкладки, excluded из build fingerprint, YAML не меняется. Desktop + 320–480 mobile, без горизонтального overflow; controls — кнопки/textarea с aria-label.
+
+## Owner field-test entry point (v1.11)
+
+Builder exposes the local lab as «Межсерверные цепочки: лаборатория» with a practical introduction, a demo and Analyze before the expert JSON editor. Inspect the route and generated artifacts, then follow the manual/external acceptance contract. Only the documented SS/SOCKS/HTTP combinations are represented; the UI does not deploy servers or prove live failover. A guided multi-server wizard remains v1.12 work. See [Owner field-test UX report](OWNER-FIELD-TEST-UX-POLISH.md).

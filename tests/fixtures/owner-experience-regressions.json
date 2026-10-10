@@ -139,6 +139,83 @@
       "scenario_prefixes": [
         "UX18 "
       ]
+    },
+    {
+      "id": "UX-19",
+      "summary": "AWG conversion diagnostic",
+      "scenario_prefixes": [
+        "UX19 field "
+      ]
+    },
+    {
+      "id": "UX-20",
+      "summary": "RandomTrailers explanation",
+      "scenario_prefixes": [
+        "UX20 field "
+      ]
+    },
+    {
+      "id": "UX-21",
+      "summary": "New tier defaults",
+      "scenario_prefixes": [
+        "UX21 field "
+      ]
+    },
+    {
+      "id": "UX-22",
+      "summary": "Empty coverage examples",
+      "scenario_prefixes": [
+        "UX22 field "
+      ]
+    },
+    {
+      "id": "UX-23",
+      "summary": "Graph height contract",
+      "scenario_prefixes": [
+        "UX23 field "
+      ]
+    },
+    {
+      "id": "UX-24",
+      "summary": "Physical lab discoverability",
+      "scenario_prefixes": [
+        "UX24 field "
+      ]
+    },
+    {
+      "id": "UX-25",
+      "summary": "REALITY direct navigation",
+      "scenario_prefixes": [
+        "UX25 field "
+      ]
+    },
+    {
+      "id": "UX-26",
+      "summary": "Actionable STALE",
+      "scenario_prefixes": [
+        "UX26 field "
+      ]
+    },
+    {
+      "id": "UX-27",
+      "summary": "AWL graph priorities",
+      "scenario_prefixes": [
+        "UX27 field "
+      ]
+    },
+    {
+      "id": "UX-28",
+      "summary": "Disabled tier disclosure",
+      "scenario_prefixes": [
+        "UX28 field "
+      ]
+    },
+    {
+      "id": "UX-29",
+      "summary": "Canonical safe project reset",
+      "scenario_prefixes": [
+        "UX29 field "
+      ]
     }
   ]
 }

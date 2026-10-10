@@ -13,7 +13,7 @@ const results = [];
 async function check(name, fn) {
   if (process.env.OWNER_UX_FILTER && !name.includes(process.env.OWNER_UX_FILTER)) return;
   try { await fn(); passed++; results.push({ name, pass: true }); console.log('PASS', name); }
-  catch (e) { failed++; results.push({ name, pass: false, error: e.message }); console.error('FAIL', name, e.message); }
+  catch (e) { failed++; results.push({ name, pass: false, error: e.message }); console.error('FAIL', name, process.env.OWNER_UX_DEBUG ? e.stack : e.message); }
 }
 (async () => {
   const browser = await playwright[engine].launch({ headless: true,
@@ -326,10 +326,10 @@ async function check(name, fn) {
       assert.ok(Number(await g.locator(prefix + ' svg').getAttribute('width')) > Number(before));
       await nav.locator('[data-vrg-action=out]').click();
       await nav.locator('[data-vrg-action=reset]').click();
-      assert.equal(await nav.locator('output').textContent(), '100%');
+      assert.equal(await nav.locator('.vrg-scale').textContent(), '100%');
       await nav.locator('[data-vrg-action=out]').focus();
       await g.keyboard.press('Tab'); await g.keyboard.press('Enter');
-      assert.equal(await nav.locator('output').textContent(), '125%');
+      assert.equal(await nav.locator('.vrg-scale').textContent(), '125%');
       const node = g.locator(prefix + ' g[tabindex]').first();
       await node.focus(); await g.keyboard.press('Enter');
       const selected = await g.evaluate(() => vrgFocusId); assert.ok(selected);
@@ -351,23 +351,23 @@ async function check(name, fn) {
     await g.mouse.down(); await g.mouse.move(box.x + 10, box.y + 20, { steps: 8 }); await g.mouse.up();
     assert.ok(await wrap.evaluate(el => el.scrollTop > 50));
     assert.equal(await g.evaluate(() => vrgFocusId), '');
-    const scale = await nav.locator('output').textContent();
-    await g.mouse.wheel(0, 50); assert.equal(await nav.locator('output').textContent(), scale);
+    const scale = await nav.locator('.vrg-scale').textContent();
+    await g.mouse.wheel(0, 50); assert.equal(await nav.locator('.vrg-scale').textContent(), scale);
     await nav.locator('[data-vrg-action=fit]').click();
     await wrap.scrollIntoViewIfNeeded();
     const fitted = await wrap.boundingBox();
     await g.mouse.move(fitted.x + fitted.width / 2, fitted.y + fitted.height / 2);
     const pageY = await g.evaluate(() => scrollY);
-    const fitScale = await nav.locator('output').textContent();
+    const fitScale = await nav.locator('.vrg-scale').textContent();
     await g.mouse.wheel(0, 200);
     await g.waitForFunction(y => scrollY > y + 20, pageY);
-    assert.equal(await nav.locator('output').textContent(), fitScale, 'ordinary wheel chains to page without zoom');
+    assert.equal(await nav.locator('.vrg-scale').textContent(), fitScale, 'ordinary wheel chains to page without zoom');
     await nav.locator('[data-vrg-action=reset]').click();
     await wrap.scrollIntoViewIfNeeded();
     const again = await wrap.boundingBox();
     await g.mouse.move(again.x + 10, again.y + 40);
     await g.keyboard.down('Alt'); await g.mouse.wheel(0, -80); await g.keyboard.up('Alt');
-    await g.waitForFunction(() => document.querySelector('#vrgSvgWrapNav output').textContent !== '100%');
+    await g.waitForFunction(() => document.querySelector('#vrgSvgWrapNav .vrg-scale').textContent !== '100%');
   });
   await check('UX03 Config Studio same controls, focus, reset and YAML invariant', async () => {
     const yaml = await g.evaluate(doc => jsyaml.dump(doc), graphDoc(12));
@@ -377,7 +377,7 @@ async function check(name, fn) {
     await g.locator('#csVrgPanel > summary').click();
     const nav = g.locator('#csVrgSvgWrapNav');
     for (const action of ['fit', 'in', 'out', 'reset']) await nav.locator('[data-vrg-action=' + action + ']').click();
-    assert.equal(await nav.locator('output').textContent(), '100%');
+    assert.equal(await nav.locator('.vrg-scale').textContent(), '100%');
     await g.locator('#csVrgSvgWrap g[tabindex]').first().focus(); await g.keyboard.press('Enter');
     assert.ok(await g.evaluate(() => vrgStudioFocus.get(csCurrentDoc)));
     await nav.locator('[data-vrg-action=in]').click();
@@ -420,11 +420,11 @@ async function check(name, fn) {
       assert.equal(await g.locator('#csVrgSvgWrap').evaluate(el => { const svg = el.querySelector('svg').getBoundingClientRect(); return svg.width <= el.clientWidth + 1 && svg.height <= el.clientHeight + 1; }), true);
     }
     for (let i = 0; i < 5; i++) { await g.locator('#csParseBtn').click(); await g.locator('#csVrgSvgWrapNav [data-vrg-action=in]').click(); }
-    const scale = await g.locator('#csVrgSvgWrapNav output').textContent();
+    const scale = await g.locator('#csVrgSvgWrapNav .vrg-scale').textContent();
     const before = Number.parseInt(scale, 10);
     await g.locator('#csVrgSvgWrapNav [data-vrg-action=reset]').click();
     await g.locator('#csVrgSvgWrapNav [data-vrg-action=in]').click();
-    assert.equal(await g.locator('#csVrgSvgWrapNav output').textContent(), '125%');
+    assert.equal(await g.locator('#csVrgSvgWrapNav .vrg-scale').textContent(), '125%');
     assert.ok(before > 0);
     const previous = await g.locator('#csVrgSvgWrap').textContent();
     await g.locator('#csImportInput').fill('broken: ['); await g.locator('#csParseBtn').click();
@@ -513,17 +513,17 @@ async function check(name, fn) {
     assert.equal(await wrap.evaluate(el=>{const r=el.querySelector('svg').getBoundingClientRect();return r.width<=el.clientWidth+1&&r.height<=el.clientHeight+1;}),true);
     await nav.locator('[data-vrg-action=reset]').click();
     await wrap.scrollIntoViewIfNeeded(); const normalBox=await wrap.boundingBox();
-    await n.mouse.move(normalBox.x+10,normalBox.y+150);await n.mouse.down();await n.mouse.move(normalBox.x+10,normalBox.y+20,{steps:6});await n.mouse.up();
+    const visibleTop=Math.max(normalBox.y+20,160);await n.mouse.move(normalBox.x+10,visibleTop+150);await n.mouse.down();await n.mouse.move(normalBox.x+10,visibleTop,{steps:6});await n.mouse.up();
     const panBefore=await wrap.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop}));assert.ok(panBefore.top>50);
-    const beforeHeight=await wrap.evaluate(el=>el.clientHeight),scale=await nav.locator('output').textContent();
+    const beforeHeight=await wrap.evaluate(el=>el.clientHeight),scale=await nav.locator('.vrg-scale').textContent();
     await expand.click(); const frame=n.locator('.vrg-expanded');
     assert.equal(await frame.count(),1); assert.equal(await frame.getAttribute('role'),'dialog');
-    assert.equal(await height.isDisabled(),true); assert.equal(await nav.locator('output').textContent(),scale);
+    assert.equal(await height.isDisabled(),true); assert.equal(await nav.locator('.vrg-scale').textContent(),scale);
     const box=await frame.boundingBox(); assert.ok(box.width>=1278&&box.height>=718);
     assert.equal(await n.evaluate(()=>document.body.style.overflow),'hidden');
     const expandedBox=await wrap.boundingBox(); await n.mouse.move(expandedBox.x+10,expandedBox.y+180); await n.mouse.down(); await n.mouse.move(expandedBox.x+10,expandedBox.y+20,{steps:6}); await n.mouse.up();
     const expandedPan=await wrap.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop})); assert.ok(expandedPan.top>panBefore.top);
-    await n.keyboard.press('Escape');assert.deepEqual(await wrap.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop})),expandedPan);
+    await n.keyboard.press('Escape');const restored=await wrap.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop,maxLeft:el.scrollWidth-el.clientWidth,maxTop:el.scrollHeight-el.clientHeight}));assert.deepEqual({left:restored.left,top:restored.top},{left:Math.min(expandedPan.left,restored.maxLeft),top:Math.min(expandedPan.top,restored.maxTop)});
     await expand.click();
     await nav.locator('[data-vrg-action=fit]').click();
     await wrap.locator('g[tabindex]').first().focus(); await n.keyboard.press('Enter'); assert.equal(await frame.count(),1,'expanded after node Enter');
@@ -710,7 +710,7 @@ async function check(name, fn) {
     const p=await ownerProject(n);await n.evaluate(p=>rbApplyProject(p),p);await build(n);assert.deepEqual(await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value)),imported);
   });
   await check('UX18 neutral defaults apply only to new priority cards', async () => {
-    const n=await fresh();await n.locator('#cfgTieredFailover').check();assert.deepEqual(await n.evaluate(()=>readTierCards().map(t=>t.name)),['Основные выходы','Резервные выходы','Дополнительные выходы']);
+    const n=await fresh();await n.locator('#cfgTieredFailover').check();assert.deepEqual(await n.evaluate(()=>readTierCards().map(t=>t.name)),['Приоритет 1']);
     const p=await ownerProject(n);p.tiered.cards[0].name='WARP';await n.evaluate(p=>rbApplyProject(p),p);assert.equal(await n.locator('.tier-name').first().inputValue(),'WARP');
   });
   await check('UX18 profile return resolves AWL priority conflict before mutation', async () => {
@@ -768,6 +768,160 @@ async function check(name, fn) {
       }
       await screenshot(n, '.wrap', 'quick-start-p2-' + width);
     }
+  });
+
+  await check('UX19 field AWG keepalive diagnostics agree with actual YAML ON and OFF', async () => {
+    const n = await fresh();
+    for (const fixture of ['awg31.conf', 'awg-keepalive-30.conf', 'awg-no-keepalive.conf']) {
+      for (const keep of [true, false]) {
+        await n.evaluate(()=>{clearWgProfiles();document.getElementById('wgFile').value='';});
+        await n.locator('#cfgAwgKeepalive').setChecked(keep);
+        await n.locator('#wgFile').setInputFiles(path.join(root, 'tests/fixtures', fixture));
+        await n.waitForFunction(() => !wgUploadPending && wgProfiles.length === 1);
+        const bean = await n.evaluate(() => wgProfiles[0].bean.wireguard);
+        const notes = await n.locator('#wgList .wg-mtu-note').allTextContents();
+        if (fixture === 'awg31.conf' && keep) {
+          assert.equal(notes.filter(t => /25-35|AWG keepalive:/.test(t)).length, 1, 'duplicate range conversion warning');
+          assert.match(notes.join('\n'), /AWG keepalive: 25-35 → 25 секунд/);
+        }
+        await build(n);
+        const proxy = await n.evaluate(() => jsyaml.load(document.getElementById('mihomoOutput').value).proxies.find(p=>p.type==='wireguard'));
+        assert.equal(proxy['persistent-keepalive'], Number.isFinite(bean.persistentKeepalive) ? bean.persistentKeepalive : keep ? 25 : undefined);
+        const actual=await n.locator('.wg-keepalive-actual').textContent();assert.match(actual,proxy['persistent-keepalive']===undefined ? /отсутствует/ : new RegExp('persistent-keepalive: '+proxy['persistent-keepalive']+' секунд'));
+        if (!keep && !Number.isFinite(bean.persistentKeepalive)) assert.ok(!notes.some(t => /получит.*25|→ 25 секунд/.test(t)));
+      }
+    }
+  });
+  await check('UX20 field RandomTrailers explains config experiment with warning outside disclosure', async () => {
+    const n=await fresh();
+    assert.match(await n.locator('#awgDiagnosticDetails > summary').textContent(), /Диагностика обрывов AmneziaWG 3.x/);
+    assert.match(await n.locator('#awgDiagnosticIntro').textContent(), /автоматический сетевой тест не выполняется/);
+    await n.locator('#awgDiagnosticDetails > summary').click();
+    assert.match(await n.locator('#awgDiagnosticDetails').textContent(), /обфускаци[\s\S]*сравните стабильность/);
+    await n.locator('#cfgAwgRtDiag').check();await n.locator('#awgDiagnosticDetails > summary').click();
+    assert.equal(await n.locator('#awgRtDiagWarn').isVisible(),true);
+  });
+  await check('UX21 field one fresh priority card and incremental names preserve saved names', async () => {
+    const n=await fresh(); await n.locator('#cfgTieredFailover').check();
+    assert.deepEqual(await n.evaluate(()=>readTierCards().map(c=>c.name)),['Приоритет 1']);
+    await n.locator('#btnTierAdd').click();await n.locator('#btnTierAdd').click();
+    assert.deepEqual(await n.evaluate(()=>readTierCards().map(c=>c.name)),['Приоритет 1','Приоритет 2','Приоритет 3']);
+    await n.locator('.tier-name').first().fill('Cloudflare WARP/MASQUE');
+    const saved=await ownerProject(n);await n.evaluate(p=>rbApplyProject(p),saved);
+    assert.equal(await n.locator('.tier-name').first().inputValue(),'Cloudflare WARP/MASQUE');
+    assert.match(await n.locator('#tieredPanel').textContent(),/Между группами[\s\S]*Внутри группы[\s\S]*не физическая/);
+  });
+  await check('UX22 field empty coverage uses examples and entered coverage stays local and stale', async () => {
+    const n=await fresh();await n.locator('#mihomoInput').fill(link);await build(n);
+    await n.locator('#routingDiagnostics').evaluate(d=>d.open=true);await n.locator('#domainCoveragePanel').evaluate(d=>d.open=true);
+    const yaml=await n.locator('#mihomoOutput').inputValue();const seq=await n.evaluate(()=>mihomoValidationSeq);
+    await n.locator('#dcRunBtn').click();let output=await n.locator('#dcResults').textContent();
+    assert.match(output,/Проверены демонстрационные домены/);for(const name of ['gemini.google.com','youtube.com','unknown-service.example'])assert.ok(output.includes(name));
+    assert.equal(await n.locator('#dcInput').inputValue(),'');await n.locator('#dcExamplesBtn').click();assert.match(await n.locator('#dcInput').inputValue(),/gemini.google.com/);
+    await n.locator('#dcInput').fill('only.example.invalid');await n.locator('#dcRunBtn').click();output=await n.locator('#dcResults').textContent();assert.match(output,/Проверены введённые домены/);assert.ok(!output.includes('youtube.com'));
+    assert.equal(await n.evaluate(()=>mihomoValidationSeq),seq);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+    await n.locator('#mihomoInput').fill(link+'\n# changed');await n.locator('#dcRunBtn').click();assert.match(await n.locator('#dcResults').textContent(),/предыдущая сборка не актуальна/);
+  });
+  for(const consumer of ['Builder','Studio']) await check('UX23 field graph height reaches 900 and survives resize '+consumer, async()=>{
+    const n=await fresh();await n.setViewportSize({width:1280,height:720});await n.locator('#mihomoInput').fill(link);await build(n);
+    let wrap=n.locator('#vrgSvgWrap');
+    if(consumer==='Builder'){await n.locator('#routingDiagnostics').evaluate(d=>d.open=true);await n.locator('#vrgPanel').evaluate(d=>d.open=true);}
+    else{const yaml=await n.locator('#mihomoOutput').inputValue();await n.locator('.tab',{hasText:'Config Studio'}).click();await n.locator('#csImportInput').fill(yaml);await n.locator('#csParseBtn').click();await n.locator('#csVrgPanel').evaluate(d=>d.open=true);wrap=n.locator('#csVrgSvgWrap');}
+    const nav=n.locator('#'+await wrap.getAttribute('id')+'Nav');const slider=nav.locator('input[type=range]');
+    for(const height of [900,120,650,900]){await slider.evaluate((el,h)=>{el.value=h;el.dispatchEvent(new Event('input',{bubbles:true}));},height);await n.waitForTimeout(40);assert.ok(Math.abs(await wrap.evaluate(el=>el.getBoundingClientRect().height)-height)<=2);assert.match(await nav.locator('.vrg-height-pixels').textContent(),new RegExp(height+' px'));}
+    await n.setViewportSize({width:390,height:740});assert.ok(await wrap.evaluate(el=>el.getBoundingClientRect().height)>=899);
+    await nav.locator('[data-vrg-action=fit]').click();await nav.locator('[data-vrg-action=reset]').click();assert.equal(await nav.locator('.vrg-scale').textContent(),'100%');
+    await nav.locator('[data-vrg-action=expand]').click();await n.keyboard.press('Escape');assert.ok(await wrap.evaluate(el=>el.getBoundingClientRect().height)>=899);
+    await nav.locator('[data-vrg-action=size-reset]').click();assert.ok(await wrap.evaluate(el=>el.getBoundingClientRect().height)<900);
+  });
+  await check('UX24 field physical laboratory has guided demo and honest capability boundaries',async()=>{
+    const n=await fresh();await n.locator('#physicalTopologyPanel').evaluate(d=>d.open=true);
+    assert.match(await n.locator('#physicalTopologyPanel > summary').textContent(),/Межсерверная цепочка/);
+    const text=await n.locator('#physicalTopologyPanel').textContent();assert.match(text,/Не подключается к серверам/);assert.match(text,/SS, SOCKS и HTTP/);assert.match(text,/SSH deployment отсутствуют/);
+    await n.locator('#ptDemoBtn').click();await n.locator('#ptAnalyzeBtn').click();assert.equal(await n.locator('#ptGraphBox').isVisible(),true);
+  });
+  await check('UX25 field REALITY jump opens ancestors and focuses single selective field',async()=>{
+    const n=await fresh();await n.locator('#realityModernJump').click();
+    assert.equal(await n.locator('#realityModernInput').count(),1);assert.equal(await n.locator('#realityModernInput').evaluate(el=>el===document.activeElement),true);
+    assert.match(await n.locator('#realityModernRow').textContent(),/Совместимость с новым REALITY/);
+    assert.equal(await n.locator('#realityModernInput').getAttribute('rows'),'3');
+  });
+  await check('UX26 field STALE explains disabled export and rebuild uses canonical Build',async()=>{
+    const n=await fresh();await n.locator('#mihomoInput').fill(link);await build(n);await n.locator('#mihomoInput').fill(link+'\n# changed');
+    assert.match(await n.locator('#builderActionStatus').textContent(),/Конфигурация требует пересборки/);assert.equal(await n.locator('#copyYamlBtn').isDisabled(),true);assert.equal(await n.locator('#builderRebuildBtn').isVisible(),true);
+    await n.locator('#builderRebuildBtn').click();await n.waitForFunction(()=>MIHOMO_VALIDATION_STATE.state==='VALID');assert.equal(await n.locator('#builderRebuildBtn').isVisible(),false);
+  });
+  await check('UX27 field AWL priorities derive from YAML in both consumers without invented nodes',async()=>{
+    const n=await fresh();await n.locator('#mihomoInput').fill(link);await n.locator('#cfgAutoWhitelist').check();await n.locator('#whitelistInput').fill(link.replace('Owner-A','Owner-B'));await build(n);
+    await n.locator('#routingDiagnostics').evaluate(d=>d.open=true);await n.locator('#vrgPanel').evaluate(d=>d.open=true);
+    const yaml=await n.locator('#mihomoOutput').inputValue();const view=n.locator('#vrgSvgWrapAwlView');assert.equal(await view.isVisible(),true);assert.match(await view.textContent(),/ПРИОРИТЕТ 1: PRIMARY[\s\S]*ПРИОРИТЕТ 2: FALLBACK/);
+    await view.getByRole('button',{name:'Все зависимости',exact:true}).click();assert.equal(await n.locator('#vrgSvgWrap svg').isVisible(),true);await n.locator('#vrgSvgWrapNav [data-vrg-action=all]').click();assert.equal(await n.locator('#vrgSvgWrap svg').isVisible(),true);await view.getByRole('button',{name:'Приоритеты',exact:true}).click();
+    await n.locator('.tab',{hasText:'Config Studio'}).click();await n.locator('#csImportInput').fill(yaml);await n.locator('#csParseBtn').click();await n.locator('#csVrgPanel').evaluate(d=>d.open=true);assert.equal(await n.locator('#csVrgSvgWrapAwlView').isVisible(),true);
+    const plain=yaml.replace('^(PRIMARY-|primary-)`^(FALLBACK-|fallback-)','^other');await n.locator('#csImportInput').fill(plain);await n.locator('#csParseBtn').click();assert.equal(await n.locator('#csVrgSvgWrapAwlView').count(),0);
+    assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+  });
+  await check('UX28 field AWL disabled tiers collapse but allow inspection and help without editing',async()=>{
+    const n=await fresh();await n.locator('#cfgTieredFailover').check();await n.locator('.tier-name').first().fill('Personal saved');n.once('dialog',d=>d.accept());await n.locator('#cfgAutoWhitelist').check();
+    assert.equal(await n.locator('#tieredPanel').evaluate(d=>d.tagName==='DETAILS'&&!d.open),true);assert.match(await n.locator('#tieredSavedSummary').textContent(),/Сохранено 1/);
+    await n.locator('#tieredSavedSummary').click();assert.equal(await n.locator('.tier-name').isDisabled(),true);assert.equal(await n.locator('#btnTierAdd').isDisabled(),true);await n.locator('#tieredSavedSummary').click();
+    await n.locator('#perProxyAdvancedDetails > summary').click();assert.equal(await n.locator('#cfgPerProxyMaster').isDisabled(),true);
+    await n.locator('#cfgAutoWhitelist').uncheck();assert.equal(await n.locator('#cfgTieredFailover').isChecked(),false);await n.locator('#cfgTieredFailover').check();assert.equal(await n.locator('.tier-name').inputValue(),'Personal saved');assert.equal(await n.locator('.tier-name').isDisabled(),false);
+  });
+  await check('UX29 field reset cancellation is atomic and confirmation clears all project owners only',async()=>{
+    const n=await fresh();await n.locator('#mihomoInput').fill(link);await build(n);
+    await n.locator('.tab',{hasText:'Config Studio'}).click();
+    await n.locator('#csImportInput').fill('secret: synthetic-studio-only\nrules: ["MATCH,DIRECT"]');
+    await n.locator('#csParseBtn').click();
+    await n.locator('.tab',{hasText:'Mihomo Config Builder'}).click();
+    const before=await ownerProject(n);const yaml=await n.locator('#mihomoOutput').inputValue();
+    n.once('dialog',d=>d.dismiss());await n.locator('#builderResetBtn').click();assert.deepEqual(await ownerProject(n),before);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+    const storage=await n.evaluate(()=>JSON.stringify(localStorage));let requests=0;n.on('request',r=>{if(/^https?:/.test(r.url()))requests++;});
+    const variants=['empty','sources','wg','awl','tiers','dpr','options','built','stale','load','repeat'];
+    for(const variant of variants){
+      await n.evaluate(({variant,link})=>{
+        const p=JSON.parse(RB_NEW_PROJECT);
+        if(variant!=='empty'){p.sources.mainInput=link;p.sources.subMode=false;}
+        if(variant==='sources'){p.sources.subMode=true;p.sources.mainInput='https://subscriptions.example.invalid/private?token=synthetic-only';}
+        if(variant==='wg'){const raw='[Interface]\nPrivateKey = AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=\nAddress = 10.0.0.2/32\n[Peer]\nPublicKey = AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=\nEndpoint = 192.0.2.2:51820\nAllowedIPs = 0.0.0.0/0';p.wgProfiles=[{id:1,filename:'synthetic.conf',bean:web4core.parseWireGuardConf(raw,'synthetic.conf'),mode:'direct',target:''}];}
+        if(variant==='awl'){p.sources.autoWhitelist=true;p.sources.fallbackInput=link.replace('Owner-A','Owner-B');}
+        if(variant==='tiers'){p.tiered={enabled:true,cards:[{name:'Saved',strategy:'fallback',members:['Owner-A']}]};}
+        if(variant==='dpr'){p.domainPolicy={enabled:true,cards:[{name:'Imported AI',domains:'example.invalid',target:'SELECT'}]};mtPending={groups:[]};mtMappingDraft={mitun0:'SELECT'};}
+        if(variant==='options'){p.options.realityModern='192.0.2.1';p.options.wgCustomDns='9.9.9.9';p.options.addTun=false;p.options.excludeFilter='synthetic';p.options.webUiCustomUrl='https://dashboard.example.invalid';}
+        rbApplyProject(p);profileSnapshots['vps-local']={owned:{},subMode:false};
+        runtimeProviderModel={providers:[{name:'synthetic-runtime',proxies:[]}],fetchedAt:1};subscriptionSelection=new Set(['old']);rtControllerMemory='http://synthetic.invalid';document.getElementById('rtSecretInput').value='synthetic-only-secret';rbUndoProjectState=p;
+      },{variant,link});
+      if(variant==='load'){const downloadPromise=n.waitForEvent('download');await n.evaluate(()=>rbSaveProject());const download=await downloadPromise;const payload=fs.readFileSync(await download.path(),'utf8');n.once('dialog',d=>d.accept());await n.evaluate(text=>rbLoadProject(new File([text],'synthetic.lgproject.json')),payload);assert.equal(await n.evaluate(()=>!!rbUndoProjectState),true);}
+      if(['built','stale'].includes(variant)){await build(n);if(variant==='stale')await n.locator('#mihomoInput').fill(link+'\n# stale');}
+      n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();
+      const state=await n.evaluate(()=>{const p=rbCollectProject(),d=JSON.parse(RB_NEW_PROJECT);delete p.meta.created;delete d.meta.created;return {p,d,snap:Object.values(profileSnapshots),wg:wgBeans.length,files:wgFiles.length,rejected:wgRejected.length,pending:mtPending,selection:subscriptionSelection.size,runtime:runtimeProviderModel.providers.length,secret:document.getElementById('rtSecretInput').value,undo:rbUndoProjectState,doc:lastRoutingDoc,fp:lastBuildFingerprint,status:document.getElementById('builderActionStatus').dataset.state};});
+      assert.deepEqual(state.p,state.d,variant);assert.deepEqual(state.snap,[null,null,null]);for(const key of ['wg','files','rejected','selection','runtime'])assert.equal(state[key],0);for(const key of ['pending','undo','doc','fp'])assert.equal(state[key],null);assert.equal(state.secret,'');assert.equal(state.status,'NOT_BUILT');assert.equal(await n.locator('#mihomoOutput').inputValue(),'');assert.equal(await n.locator('#copyYamlBtn').isDisabled(),true);
+    }
+    assert.equal(requests,0);assert.equal(await n.evaluate(()=>JSON.stringify(localStorage)),storage);assert.match(await n.locator('#csImportInput').inputValue(),/synthetic-studio-only/);
+    await n.locator('#mihomoInput').fill(link);await n.locator('#cfgSubMode').uncheck();await build(n);assert.equal(await n.locator('#copyYamlBtn').isDisabled(),false);
+  });
+
+  await check('UX29 field reset invalidates pending Build and project file reads without resurrection',async()=>{
+    const n=await fresh();await n.locator('#mihomoInput').fill('https://subscription.example.invalid/synthetic');
+    await n.evaluate(()=>{web4core.fetchSubscription=()=>new Promise(resolve=>window.finishResetFetch=resolve);window.resetOldBuild=buildMihomo();});
+    await n.waitForFunction(()=>!!window.finishResetFetch);
+    n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();assert.equal(await n.locator('#builderActionStatus').getAttribute('data-state'),'NOT_BUILT');
+    await n.evaluate(async link=>{window.finishResetFetch(link);await window.resetOldBuild;},link);
+    assert.equal(await n.locator('#mihomoOutput').inputValue(),'');assert.equal(await n.locator('#builderActionStatus').getAttribute('data-state'),'NOT_BUILT');assert.equal(await n.evaluate(()=>lastPreviewSummary),null);
+    await n.evaluate(()=>{window.oldProjectRead=rbLoadProject({size:10,text:()=>new Promise(resolve=>window.finishResetFile=resolve)});});
+    n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();await n.evaluate(async()=>{const p=JSON.parse(RB_NEW_PROJECT);p.sources.mainInput='should-not-resurrect';window.finishResetFile(JSON.stringify(p));await window.oldProjectRead;});
+    assert.equal(await n.locator('#mihomoInput').inputValue(),'');
+  });
+  await check('UX29 field reset invalidates pending WG and MagiTrickle imports',async()=>{
+    const n=await fresh();const wg=fs.readFileSync(path.join(root,'tests/fixtures/awg31.conf'),'utf8');
+    await n.evaluate(()=>{window.originalFileText=File.prototype.text;File.prototype.text=function(){return new Promise(resolve=>window.finishResetImport=resolve);};});
+    await n.locator('#wgFile').setInputFiles({name:'synthetic.conf',mimeType:'text/plain',buffer:Buffer.from(wg)});await n.waitForFunction(()=>wgUploadPending&&!!window.finishResetImport);
+    n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();await n.evaluate(wg=>window.finishResetImport(wg),wg);await n.waitForTimeout(50);assert.equal(await n.evaluate(()=>wgProfiles.length),0);
+    await n.locator('#mtImportFile').setInputFiles({name:'synthetic.mtrickle',mimeType:'application/json',buffer:Buffer.from('{}')});await n.waitForTimeout(20);
+    n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();await n.evaluate(()=>{window.finishResetImport(JSON.stringify({groups:[{id:'x',name:'Should not return',interface:'mitun0',enable:true,rules:[]}]}));File.prototype.text=window.originalFileText;});await n.waitForTimeout(50);assert.equal(await n.evaluate(()=>mtPending),null);
+  });
+  await check('UX29 field reset and stale actionbar fit all owner viewports',async()=>{
+    const n=await fresh();await n.locator('#mihomoInput').fill(link);await build(n);await n.locator('#mihomoInput').fill(link+'\n# stale');
+    for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,850],[320,850]]){await n.setViewportSize({width,height});for(const id of ['ux-start','ux-routing','ux-options','ux-diagnostics','ux-lab']){await n.locator('#'+id).scrollIntoViewIfNeeded();assert.equal(await n.locator('#builderResetBtn').isVisible(),true);assert.equal(await n.locator('#builderRebuildBtn').isVisible(),true);assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);}}
   });
 
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });

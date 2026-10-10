@@ -192,3 +192,9 @@ primary, пока запросы обслуживает БС, и автомат�
 Семантика сверена с [fallback](https://wiki.metacubex.one/en/config/proxy-groups/fallback/),
 [providers](https://wiki.metacubex.one/en/config/proxy-providers/) и исходниками
 [Mihomo v1.19.31](https://github.com/MetaCubeX/mihomo/tree/v1.19.31/adapter/outboundgroup).
+
+## Два представления графа
+
+Builder и Config Studio распознают AWL по фактическим GLOBAL fallback, точному priority filter и первому MATCH,GLOBAL. «Приоритеты» показывает PRIMARY → при недоступности FALLBACK, возврат после health-check и границы HTTP/UDP. Ручной выбор в дашборде может изменить предпочтение; runtime-участник неизвестен. Это пояснение одной плоской GLOBAL, не новые proxy-groups PRIMARY/FALLBACK и не multi-hop.
+
+Количество статических выходов берётся из YAML; состав удалённых providers не выдумывается. «Все зависимости» открывает технический CDG с focus/navigation. Canonical IDs и YAML не меняются. Схема не печатает имена, секреты или URL с токенами; многочисленные связи свёрнуты в категории с доступом к полной технической информации.
