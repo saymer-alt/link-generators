@@ -11094,7 +11094,8 @@ document.addEventListener('change', (e) => {
   // ВАЖНО: контролы WG-карточек (wg-mode/wg-target/wg-target-manual) здесь НЕ
   // обновляются — их собственный обработчик меняет p.target и перерисовывает
   // селект точечно; capture-refresh раньше него сбросил бы выбор пользователя.
-  const refreshIds = new Set(['mihomoInput', 'wgDialerInput', 'wgDialerMembers', 'wgDialerProviders', 'cfgSubMode', 'cfgPolicyRouting', 'cfgProfile']);
+  // Profile registry refresh belongs to onProfileChange, after conflict admission.
+  const refreshIds = new Set(['mihomoInput', 'wgDialerInput', 'wgDialerMembers', 'wgDialerProviders', 'cfgSubMode', 'cfgPolicyRouting']);
   if (refreshIds.has(t.id)) refreshWgTargetSelectors();
 }, true);
 // Любое изменение входных данных (поля, чекбоксы, файлы) делает прежний

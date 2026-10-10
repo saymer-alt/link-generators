@@ -715,7 +715,8 @@ async function check(name, fn) {
   });
   await check('UX18 profile return resolves AWL priority conflict before mutation', async () => {
     const n=await fresh();await n.locator('#cfgAutoWhitelist').check();await n.locator('#cfgProfile').selectOption('vps-local');await n.locator('#cfgTieredFailover').check();const before=await ownerProject(n);
-    n.once('dialog',d=>d.dismiss());await n.locator('#cfgProfile').selectOption('router');assert.deepEqual(await ownerProject(n),before);
+    await n.evaluate(()=>{const original=refreshWgTargetSelectors;window.ownerProfileRefreshCount=0;refreshWgTargetSelectors=(...args)=>{ownerProfileRefreshCount++;return original(...args);};});
+    n.once('dialog',d=>d.dismiss());await n.locator('#cfgProfile').selectOption('router');assert.deepEqual(await ownerProject(n),before);assert.equal(await n.evaluate(()=>ownerProfileRefreshCount),0,'no registry mutation before profile admission');
     n.once('dialog',d=>d.accept());await n.locator('#cfgProfile').selectOption('router');assert.equal(await n.locator('#cfgAutoWhitelist').isChecked(),true);assert.equal(await n.locator('#cfgTieredFailover').isChecked(),false);
   });
 
