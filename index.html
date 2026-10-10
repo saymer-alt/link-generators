@@ -9954,7 +9954,7 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     const height = document.createElement('input'); height.type = 'range'; height.min = '120'; height.max = '900'; height.step = '10';
     height.setAttribute('aria-label', 'Высота области графа'); label.appendChild(height); const pixels = document.createElement('output'); pixels.className = 'vrg-height-pixels'; label.appendChild(pixels); size.prepend(label);
     const smallHint = document.createElement('span'); smallHint.className = 'hint vrg-small-scale-hint'; smallHint.hidden = true;
-    smallHint.textContent = 'Граф уменьшен для отображения целиком. Для чтения отдельных узлов увеличьте масштаб или используйте фокус.'; nav.appendChild(smallHint);
+    smallHint.textContent = 'Граф сильно уменьшен. Для чтения отдельных узлов увеличьте масштаб или используйте фокус.'; nav.appendChild(smallHint);
     const hint = document.createElement('span'); hint.className = 'hint';
     hint.textContent = 'Пустая область: перетаскивание · Alt + колесо: масштаб · Escape: свернуть · граф зависимостей, не runtime-путь; текстовая версия доступна под графом';
     nav.appendChild(hint); wrap.before(nav);
@@ -10021,7 +10021,13 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     nav.querySelector('.vrg-small-scale-hint').hidden = state.scale >= .25;
     if (center) { wrap.scrollLeft = x * state.scale - wrap.clientWidth / 2; wrap.scrollTop = y * state.scale - wrap.clientHeight / 2; }
   };
-  const fit = () => { viewport(); apply(Math.min(1, (wrap.clientWidth - 2) / view.width, (wrap.clientHeight - 2) / view.height), false); wrap.scrollLeft = wrap.scrollTop = 0; };
+  const fit = () => {
+    viewport();
+    // Подсказка малого масштаба меняет высоту toolbar в fullscreen.
+    // Второй расчёт использует уже обновлённую область, не ждёт ResizeObserver.
+    for (let pass = 0; pass < 2; pass++) apply(Math.min(1, (wrap.clientWidth - 2) / view.width, (wrap.clientHeight - 2) / view.height), false);
+    wrap.scrollLeft = wrap.scrollTop = 0;
+  };
   nav.addEventListener('click', e => {
     const action = e.target.closest('[data-vrg-action]')?.dataset.vrgAction;
     if (!action) return;
