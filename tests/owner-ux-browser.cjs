@@ -48,7 +48,7 @@ async function check(name, fn) {
   const names = page => page.locator('#policyCards .policy-name').evaluateAll(xs => xs.map(x => x.value));
   const p = await fresh();
   const disclosure = await fresh();
-  // Keep the two shared legacy pages; release per-scenario browser processes.
+  // Keep shared legacy pages; release per-scenario browser processes.
   // Retain page.errors arrays for the final aggregate error assertion.
   const sharedPages = new Set([p, disclosure]);
   releaseScenarioPages = async () => {
@@ -143,6 +143,7 @@ async function check(name, fn) {
   });
 
   const c = await fresh();
+  sharedPages.add(c);
   await c.locator('#cfgServerList').check();
   await c.evaluate(() => { document.getElementById('runtimeImportDetails').open = true; document.getElementById('subscriptionPreviewDetails')?.setAttribute('open', ''); });
   const requests = [];
@@ -216,6 +217,7 @@ async function check(name, fn) {
   });
 
   const d = await fresh();
+  sharedPages.add(d);
   await d.evaluate(() => { document.getElementById('routingDiagnostics').open = true; document.getElementById('domainCoveragePanel').open = true; });
   await check('UX07 empty Inspector offers normal Build then default offline probe', async () => {
     await d.locator('#mihomoInput').fill(link);
@@ -294,6 +296,7 @@ async function check(name, fn) {
   });
 
   const g = await fresh();
+  sharedPages.add(g);
   await g.locator('#mihomoInput').fill(Array.from({ length: 19 }, (_, i) => 'vless://00000000-0000-4000-8000-' + String(i + 1).padStart(12, '0') + '@192.0.2.' + (i + 1) + ':443#Owner-' + i).join('\n'));
   await g.locator('#btnPolicyAdd').click();
   await build(g);
