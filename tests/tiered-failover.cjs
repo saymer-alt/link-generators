@@ -49,7 +49,8 @@ const ok = name => { passed++; console.log('  ok —', name); };
   // 2. ON: два эшелона через настоящий UI-путь (select + клик), как пользователь
   await page.locator('#cfgTieredFailover').check();
   assert.equal(await page.evaluate(() => document.getElementById('tieredPanel').style.display), 'block', 'панель показана');
-  assert.equal(await page.evaluate(() => (window.__tierCardsState || []).length), 2, 'дефолт: два эшелона');
+  assert.equal(await page.evaluate(() => (window.__tierCardsState || []).length), 3, 'дефолт: три нейтральные группы');
+  await page.locator('#tierCards .tier-card').nth(2).locator('.tier-del').click(); // two-group scenario: explicitly remove unused empty card
   // Реестр целей (dialerTargetsCache) наполняется при загруженных WG/AWG —
   // загружаем два WG-профиля, они же станут участниками эшелонов.
   const fx = n => path.join(root, 'tests', 'fixtures', n);
@@ -314,7 +315,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
     await page.locator('#cfgTieredFailover').uncheck();
     await page.locator('#cfgTieredFailover').check();
     const names = await page.evaluate(() => (window.__tierCardsState || []).map(t => t.name));
-    assert.deepEqual(names, ['WARP', 'Резервные выходы'], 'дефолтные имена: ' + JSON.stringify(names));
+    assert.deepEqual(names, ['Основные выходы', 'Резервные выходы', 'Дополнительные выходы'], 'дефолтные имена: ' + JSON.stringify(names));
     ok('P2 UX: дефолт «Резервные выходы»');
   }
 
