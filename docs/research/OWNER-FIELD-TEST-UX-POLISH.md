@@ -56,7 +56,7 @@ Primary RandomTrailers source: [pinned amneziawg-go send.go](https://github.com/
 
 ## Owner review and limits
 
-Local final results: Owner Experience registry PASS (UX01–UX29); Chromium / Firefox / WebKit each 64/64; exact-baseline YAML parity 10/10; whitelist 266 matrix/baseline cases plus bypass/restoration guards; AWG 12/12; Tiered, Physical Topology browser (10), Config Studio browser (32), release journey (72 layout checks) and Help (16) PASS. Static/core/runtime suites PASS. The 15 added field scenarios fail against the unchanged baseline, while the old control case passes. CI run links and exact candidate SHA are supplied in the final handoff after publication.
+Local final results: Owner Experience registry PASS (UX01–UX29); Chromium / Firefox / WebKit each 65/65; exact-baseline YAML parity 10/10; whitelist 266 matrix/baseline cases plus bypass/restoration guards; AWG 12/12; Tiered, Physical Topology browser (10), Config Studio browser (32), release journey (72 layout checks) and Help (16) PASS. Static/core/runtime suites PASS. The original 15 added field scenarios fail against the unchanged baseline, while the old control case passes. CI run links and exact candidate SHA are supplied in the final handoff after publication.
 
 Preview: http://127.0.0.1:34225/ serves this candidate checkout. PowerShell: `Start-Process 'http://127.0.0.1:34225/'`. To restart it from the candidate directory: `python -m http.server 34225 --bind 127.0.0.1` (keep that terminal open).
 
@@ -70,3 +70,7 @@ Review Reset ownership/discard of old Undo, one-card defaults and AWL explanator
 4. Move height to 900, scroll page, Fit/100%/Expand/Escape in both consumers. REALITY link focuses the field.
 5. Change settings and explicitly Rebuild. Save a populated project; cancel Reset and compare, confirm and verify NOT_BUILT/disabled export. Studio/HWID remain. Build again.
 6. Open physical demo, analyze, inspect route/artifacts and manual/external-contract limits.
+
+## PR review follow-up
+
+A real synthetic upload regression reproduced the DNS warning surviving Reset. Reset now hides wgDnsWarning explicitly. The existing renderWgList already calls renderWgRejected; the regression verifies its empty hidden DOM too, plus Cancel retention of both panels. The new case failed on the initial candidate and passes after repair.

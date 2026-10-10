@@ -900,6 +900,23 @@ async function check(name, fn) {
     await n.locator('#mihomoInput').fill(link);await n.locator('#cfgSubMode').uncheck();await build(n);assert.equal(await n.locator('#copyYamlBtn').isDisabled(),false);
   });
 
+  await check('UX29 field reset clears WG warning panels after real synthetic uploads',async()=>{
+    const n=await fresh();
+    const wg=fs.readFileSync(path.join(root,'tests/fixtures/awg31.conf'),'utf8').replace(/DNS\s*=.*$/m,'DNS = 100.64.0.1');
+    await n.locator('#wgFile').setInputFiles([
+      {name:'synthetic-dns.conf',mimeType:'text/plain',buffer:Buffer.from(wg)},
+      {name:'synthetic-rejected.conf',mimeType:'text/plain',buffer:Buffer.from('not a WireGuard profile')}
+    ]);
+    await n.waitForFunction(()=>!wgUploadPending&&wgProfiles.length===1&&wgRejected.length===1);
+    assert.equal(await n.locator('#wgRejected').isVisible(),true);
+    assert.equal(await n.locator('#wgDnsWarning').isVisible(),true);
+    n.once('dialog',d=>d.dismiss());await n.locator('#builderResetBtn').click();
+    assert.equal(await n.locator('#wgRejected').isVisible(),true);assert.equal(await n.locator('#wgDnsWarning').isVisible(),true);
+    n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();
+    assert.equal(await n.locator('#wgRejected').isVisible(),false);assert.equal(await n.locator('#wgRejected').textContent(),'');
+    assert.equal(await n.locator('#wgDnsWarning').isVisible(),false);assert.equal(await n.locator('#wgCustomDns').inputValue(),'');
+    assert.deepEqual(await n.evaluate(()=>[wgProfiles.length,wgRejected.length]),[0,0]);
+  });
   await check('UX29 field reset invalidates pending Build and project file reads without resurrection',async()=>{
     const n=await fresh();await n.locator('#mihomoInput').fill('https://subscription.example.invalid/synthetic');
     await n.evaluate(()=>{web4core.fetchSubscription=()=>new Promise(resolve=>window.finishResetFetch=resolve);window.resetOldBuild=buildMihomo();});

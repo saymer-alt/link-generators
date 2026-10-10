@@ -11222,6 +11222,7 @@ function rbResetProject() {
   catch (e) { showToast('Сброс не выполнен; прежний проект сохранён.', true); return false; }
   builderProjectEpoch++; builderBuildAttempts = 0; builderBuildError = false;
   wgUploadSeq++; wgUploadPending = false; wgProfileSeq = 0; wgRejected = []; wgFiles = []; syncWgCollections();
+  document.getElementById('wgDnsWarning').style.display = 'none';
   subscriptionPreviewSeq++; serverListLoadSeq++; serverListState = SERVER_LIST_STATE.IDLE;
   lastInspectedBuildInput = lastInspectedFallbackInput = null;
   clearSubscriptionPreview(); cancelRuntimeImport();
