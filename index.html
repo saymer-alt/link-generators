@@ -5728,6 +5728,8 @@ function cdgBuildGraph(doc) {
   const proxyNames = new Set(proxies.map(p => p && p.name).filter(Boolean));
   const targetId = t => {
     const s = String(t);
+    // Явная GLOBAL-группа владеет составом; не создаём отдельный builtin-двойник.
+    if (s === 'GLOBAL' && groupNames.has(s)) return 'group:' + s;
     if (RD_BUILTIN_TARGETS.has(s)) return 'builtin:' + s;
     if (groupNames.has(s)) return 'group:' + s;
     if (proxyNames.has(s)) return 'proxy:' + s;

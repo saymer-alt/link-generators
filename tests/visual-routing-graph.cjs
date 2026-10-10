@@ -179,6 +179,18 @@ const DOC = {
   ok();
 }
 
+// GLOBAL в документе — реальная группа; builtin остаётся только без неё.
+{
+  const doc={proxies:['A','B','C'].map(name=>({name,type:'ss'})),
+    'proxy-groups':[{name:'GLOBAL',type:'select',proxies:['A','B','C']}],rules:['MATCH,GLOBAL']};
+  const graph=api.cdgBuildGraph(doc);
+  assert.ok(graph.edges.some(e=>e.from==='rule:0'&&e.to==='group:GLOBAL'));
+  assert.ok(!graph.nodes.some(n=>n.id==='builtin:GLOBAL'));
+  assert.deepEqual(api.vrgBuildView(graph,{focus:'proxy:A'}).nodes.map(n=>n.id).sort(),['group:GLOBAL','proxy:A','rule:0']);
+  assert.equal(api.vrgBuildView(graph,{focus:'rule:0'}).nodes.length,5);
+  assert.ok(api.cdgBuildGraph({rules:['MATCH,GLOBAL']}).nodes.some(n=>n.id==='builtin:GLOBAL'));
+  ok();
+}
 // Directional focus must never walk from an ancestor back into its siblings.
 {
   const nodes = [['r1','rule'],['r2','rule'],['r3','rule'],['global','proxy-group'],['x','proxy-group'],['y','proxy-group'],['a','proxy'],['b','proxy'],['c','proxy'],['d','proxy'],['provider','proxy-provider']].map(([id,kind])=>({id,kind}));
