@@ -13,6 +13,11 @@ const STATIC_HEALTH_GROUP = '🌐 static-health';
 // stays provable.
 const stripChecker = y => {
   const d = yaml.load(y);
+  // Logical-device identity is created before this optional harness fixes RNG.
+  // Normalize only its random value, preserving presence and header cardinality.
+  for (const provider of Object.values(d['proxy-providers'] || {})) {
+    if (Array.isArray(provider.header?.['x-hwid'])) provider.header['x-hwid'] = provider.header['x-hwid'].map(() => 'TEST-HWID');
+  }
   if (d['proxy-groups']) d['proxy-groups'] = d['proxy-groups'].filter(g => g && g.name !== STATIC_HEALTH_GROUP);
   return yaml.dump(d, { lineWidth: -1 });
 };
