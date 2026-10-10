@@ -3559,11 +3559,11 @@ function applyProfileUiState(target) {
   updateVpsDnsFields();
 }
 
-function onProfileChange() {
+function onProfileChange(event) {
   const select = document.getElementById('cfgProfile');
   const prev = selectedProfile;
   const next = select.value;
-  if (prev === next) { applyProfileUiState(next); return; }
+  if (prev === next) { applyProfileUiState(next); if (event && event.type === 'change') invalidateAcceptedModeChange(); return; }
   const targetAwl = next === 'router' && profileSnapshots.router && profileSnapshots.router.awl;
   if (targetAwl && tieredEnabled()) {
     if (!confirmAwlResolution(['приоритетные группы серверов'])) { select.value = prev; return; }
@@ -3573,9 +3573,16 @@ function onProfileChange() {
   selectedProfile = next;
   effectiveProfile = next;
   applyProfileUiState(next);
+  if (event && event.type === 'change') invalidateAcceptedModeChange();
   refreshWgTargetSelectors();
 }
 
+// Cancelled mode/profile confirmations leave validation and pending generation intact.
+function invalidateAcceptedModeChange() {
+  mihomoValidationSeq++;
+  resetCompatSummary();
+  setMihomoValidationState('NOT_BUILT');
+}
 // One admission rule for manual switches, project restore and generation.
 function awlConflicts(awl, tiered, perProxy) {
   return awl ? [tiered ? 'приоритетные группы серверов' : '', perProxy ? 'Per-Proxy' : ''].filter(Boolean) : [];
@@ -3606,7 +3613,7 @@ function updateAwlCompatibility() {
 }
 
 // UI-снимок живёт только в памяти; сборка независимо принудительно исключает эти режимы.
-function onWhitelistChange() {
+function onWhitelistChange(event) {
   const awl = document.getElementById('cfgAutoWhitelist');
   // Контракт router-only держится на трёх слоях: select профиля (disabled для
   // VPS в applyProfileUiState), этот обработчик и кламп в buildMihomo, который
@@ -3621,6 +3628,7 @@ function onWhitelistChange() {
     if (!confirmAwlResolution(conflicts)) { awl.checked = false; return; }
     deactivateAwlConflicts();
   }
+  if (event && event.type === 'change') invalidateAcceptedModeChange();
   document.getElementById('whitelistPanel').style.display = awl.checked ? 'block' : 'none';
   updateMihomoOptionStates();
   updatePolicyRoutingVisibility();
@@ -10740,7 +10748,7 @@ function rbWriteProject(project) {
 }
 
 function rbSaveProject() {
-  if (currentAwlConflicts().length) { showToast('Разрешите конфликт белых списков перед сохранением проекта.', true); return; }
+  if (currentAwlConflicts().length || (document.getElementById('cfgAutoWhitelist').checked && document.getElementById('cfgProfile').value !== 'router')) { showToast('Разрешите конфликт белых списков перед сохранением проекта.', true); return; }
   const project = rbCollectProject();
   const json = JSON.stringify(project, null, 2);
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + 'Z';
@@ -11085,6 +11093,7 @@ document.addEventListener('change', (e) => {
 // результат проверки недействительным — старый VALID не сохраняется
 ['input', 'change'].forEach(ev => document.addEventListener(ev, e => {
   const target = e.target;
+  if (target.id === 'cfgAutoWhitelist' || target.id === 'cfgProfile') return; // admission invalidates accepted changes
   if (target.closest?.('#routingDiagnostics, .vrg-frame') || BUILD_STALE_EXCLUDED_IDS.has(target.id)) return;
   mihomoValidationSeq++; // инвалидируем незавершённую проверку, если была
   resetCompatSummary();

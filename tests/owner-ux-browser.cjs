@@ -646,9 +646,9 @@ async function check(name, fn) {
   await check('UX18 AWL activation confirms conflicts and preserves priority cards', async () => {
     const n=await fresh();await n.locator('#mihomoInput').fill(link);
     await n.evaluate(()=>{window.__tierCardsState=[{name:'Personal VPS',strategy:'fallback',members:['Owner-A']}];document.getElementById('cfgTieredFailover').checked=true;renderTierCards();});
-    await build(n);const project=await ownerProject(n);
+    await build(n);const project=await ownerProject(n);const validation=await n.evaluate(()=>({seq:mihomoValidationSeq,status:document.getElementById('builderActionStatus').dataset.state,yaml:document.getElementById('mihomoOutput').value}));
     n.once('dialog',d=>d.dismiss());await n.locator('#cfgAutoWhitelist').click();
-    assert.deepEqual(await ownerProject(n),project,'cancel leaves complete configuration unchanged');
+    assert.deepEqual(await ownerProject(n),project,'cancel leaves complete configuration unchanged');assert.deepEqual(await n.evaluate(()=>({seq:mihomoValidationSeq,status:document.getElementById('builderActionStatus').dataset.state,yaml:document.getElementById('mihomoOutput').value})),validation,'cancel retains current validation and YAML');
     n.once('dialog',d=>d.accept());await n.locator('#cfgAutoWhitelist').click();
     assert.equal(await n.locator('#cfgTieredFailover').isChecked(),false);assert.equal(await n.locator('#cfgTieredFailover').isDisabled(),true);
     assert.equal(await n.locator('#cfgPerProxyMaster').isDisabled(),true);assert.equal(await n.locator('#cfgPolicyRouting').isDisabled(),false);
