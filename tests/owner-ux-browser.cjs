@@ -10,10 +10,12 @@ const engine = process.env.OWNER_UX_BROWSER || 'chromium';
 const link = 'vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#Owner-A';
 let passed = 0, failed = 0;
 const results = [];
+let releaseScenarioPages = async () => {};
 async function check(name, fn) {
   if (process.env.OWNER_UX_FILTER && !name.includes(process.env.OWNER_UX_FILTER)) return;
   try { await fn(); passed++; results.push({ name, pass: true }); console.log('PASS', name); }
   catch (e) { failed++; results.push({ name, pass: false, error: e.message }); console.error('FAIL', name, process.env.OWNER_UX_DEBUG ? e.stack : e.message); }
+  finally { await releaseScenarioPages(); }
 }
 (async () => {
   const browser = await playwright[engine].launch({ headless: true,
@@ -46,6 +48,12 @@ async function check(name, fn) {
   const names = page => page.locator('#policyCards .policy-name').evaluateAll(xs => xs.map(x => x.value));
   const p = await fresh();
   const disclosure = await fresh();
+  // Keep the two shared legacy pages; release per-scenario browser processes.
+  // Retain page.errors arrays for the final aggregate error assertion.
+  const sharedPages = new Set([p, disclosure]);
+  releaseScenarioPages = async () => {
+    for (const page of pages) if (!sharedPages.has(page) && !page.isClosed()) await page.close();
+  };
   await check('UX09 chevrons follow native open state and nested keyboard toggles', async () => {
     const ids = ['wgDialerAdvanced', 'routingDiagnostics', 'ruleProviderExplorer',
       'domainCoveragePanel', 'physicalTopologyPanel', 'ptRuntimePanel', 'perProxyAdvancedDetails'];
