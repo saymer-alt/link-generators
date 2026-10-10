@@ -56,6 +56,7 @@ const SYNTH = [
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   if (process.env.JS_YAML_PATH) await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ path: process.env.JS_YAML_PATH, contentType: 'text/javascript' }));
+  await page.addInitScript(()=>{globalThis.__LG_INTERNAL_PHYSICAL_TOPOLOGY__=true;});
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
   await page.waitForFunction(() => !!globalThis.web4core && !!globalThis.jsyaml);
 

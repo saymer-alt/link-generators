@@ -19,13 +19,14 @@ async function check(name, fn) {
   const browser = await playwright[engine].launch({ headless: true,
     ...(engine === 'chromium' && process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
   const pages = [];
-  async function fresh() {
+  async function fresh(internal = true) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 850 } }); pages.push(page);
     page.setDefaultTimeout(5000);
     page.errors = []; page.on('pageerror', e => page.errors.push(e.message));
     await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ path: process.env.JS_YAML_PATH, contentType: 'text/javascript' }));
     // Any non-CDN network must be explicitly intercepted by a scenario.
     await page.route(/https?:\/\/(?!cdn\.jsdelivr\.net)/, r => r.abort());
+    if(internal) await page.addInitScript(()=>{globalThis.__LG_INTERNAL_PHYSICAL_TOPOLOGY__=true;});
     await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
     await page.waitForFunction(() => globalThis.web4core && globalThis.jsyaml);
     await page.locator('.tab', { hasText: 'Mihomo Config Builder' }).click();
@@ -437,8 +438,8 @@ async function check(name, fn) {
   });
   await check('UX10 quick start ends at YAML before engineering sections', async () => {
     const n = await fresh();
-    assert.equal(await n.locator('#builderWorkspaceNav a').count(), 5);
-    assert.equal(await n.locator('.builder-workspace').count(), 5);
+    assert.equal(await n.locator('#builderWorkspaceNav a').count(), 4);
+    assert.equal(await n.locator('.builder-workspace:not(#physicalTopologyInternal)').count(), 4);
     assert.equal(await n.locator('#ux-start').evaluate(el => el.parentElement.contains(document.getElementById('mihomoOutput'))), true);
     assert.equal(await n.locator('#ux-start').evaluate(el => el.parentElement.contains(document.getElementById('physicalTopologyPanel'))), false);
     assert.equal(await n.evaluate(() => !!(document.getElementById('mihomoOutput').compareDocumentPosition(document.getElementById('ux-routing')) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
@@ -456,7 +457,7 @@ async function check(name, fn) {
     const before = await snapshot(); let requests = 0; n.on('request', r => { if (/^https?:/.test(r.url())) requests++; });
     for (const [width, height] of [[1280,720],[1366,768],[1920,1080],[320,740],[390,740],[640,360]]) {
       await n.setViewportSize({width,height});
-      for (const target of ['routing','diagnostics','lab','options','start']) {
+      for (const target of ['routing','diagnostics','options','start']) {
         const a = n.locator('#builderWorkspaceNav a[href="#ux-'+target+'"]'); await a.focus(); await n.keyboard.press('Enter');
         assert.equal(await n.locator('#ux-'+target).evaluate(el => el === document.activeElement), true);
         const box = await n.locator('#ux-'+target).boundingBox(); assert.ok(box.y >= 0 && box.y < height, 'target visible');
@@ -479,8 +480,7 @@ async function check(name, fn) {
     assert.equal(await n.locator('#cfgServerList').isChecked(),false);
     assert.equal(await n.locator('#runtimeImportDetails > summary').evaluate(el=>el===document.activeElement),true);
     assert.equal(await n.evaluate(()=>{const p=rbCollectProject();delete p.meta.created;return JSON.stringify(p);}),before); assert.equal(requests,0);
-    await n.locator('#workspaceDirectory a[href="#physicalTopologyPanel"]').click();
-    assert.equal(await n.locator('#ptDemoBtn').isVisible(), true);
+    assert.equal(await n.locator('#workspaceDirectory a[href="#physicalTopologyPanel"]').count(), 0);
     await n.locator('#workspaceDirectory a[href="#perProxyAdvancedDetails"]').click();
     assert.equal(await n.locator('#cfgPerProxyMaster').isVisible(), true);
     assert.equal(await n.locator('#cfgPerProxyMaster').isChecked(), false);
@@ -596,7 +596,7 @@ async function check(name, fn) {
     const snapshot=()=>n.evaluate(()=>({yaml:document.getElementById('mihomoOutput').value,seq:mihomoValidationSeq,fingerprint:buildStateFingerprint()}));const before=await snapshot();
     for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,740],[320,740]]) {
       await n.setViewportSize({width,height});
-      for(const area of ['routing','diagnostics','lab','options','start']) {
+      for(const area of ['routing','diagnostics','options','start']) {
         await n.locator('#builderWorkspaceNav a[href="#ux-'+area+'"]').click();
         const bar=await n.locator('#builderActionbar').boundingBox();assert.ok(bar.y>=-1&&bar.y<3);assert.ok(bar.height<height*.3);
         const button=await n.locator('#buildConfigBtn').boundingBox();assert.ok(button.y>=0&&button.y+button.height<height);
@@ -606,7 +606,7 @@ async function check(name, fn) {
     assert.deepEqual(await snapshot(),before);
     await n.locator('#mihomoInput').fill(link.replace('#Owner-A','#Renamed'));assert.equal(await status.getAttribute('data-state'),'STALE');
     assert.equal(await n.locator('#copyYamlBtn').isDisabled(),true);assert.equal(await n.locator('#downloadYamlBtn').isDisabled(),true);
-    await n.locator('#builderWorkspaceNav a[href="#ux-lab"]').click();await build(n);assert.equal(await status.getAttribute('data-state'),'CURRENT');
+    await n.locator('#builderWorkspaceNav a[href="#ux-diagnostics"]').click();await build(n);assert.equal(await status.getAttribute('data-state'),'CURRENT');
     await n.locator('#mihomoInput').fill('invalid://not-a-proxy');await n.locator('#buildConfigBtn').click();assert.equal(await status.getAttribute('data-state'),'ERROR');
     assert.equal(await n.locator('#downloadYamlBtn').isDisabled(),true);
     const duplicateIds=await n.evaluate(()=>{const ids=[...document.querySelectorAll('[id]')].map(x=>x.id);return ids.filter((id,i)=>ids.indexOf(id)!==i);});assert.deepEqual(duplicateIds,[]);
@@ -703,7 +703,7 @@ async function check(name, fn) {
       const d=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));const group=d['proxy-groups'].find(g=>g.name==='AI');assert.equal(group.type,'select');assert.deepEqual(group.proxies,['GLOBAL','DIRECT']);assert.ok(d.rules.some(r=>r.startsWith('RULE-SET,')&&r.endsWith(',AI')));assert.equal(d.rules.at(-1),'MATCH,GLOBAL');
     }
     const n=await fresh();await n.locator('#cfgAutoWhitelist').check();await n.locator('#mihomoInput').fill(link);await n.locator('#whitelistInput').fill(link.replace('#Owner-A','#Reserve'));
-    await n.locator('#mtImportBtn').click();await n.locator('#mtImportFile').setInputFiles(path.join(root,'tests/fixtures/magitrickle-basic.mtrickle'));await n.waitForFunction(()=>mtPending!==null);await n.locator('#mtImportApply').click();
+    await n.locator('#mtImportBtn').click();await n.locator('#mtImportFile').setInputFiles(path.join(root,'tests/fixtures/magitrickle-basic.mtrickle'));await n.waitForFunction(()=>mtPending!==null);await n.locator('.mt-iface-map[data-iface=blackhole]').selectOption('DIRECT');await n.locator('#mtImportApply').click();
     const cards=n.locator('#policyCards .policy-card');assert.equal(await cards.count(),2);for(let i=0;i<2;i++){await cards.nth(i).locator('.policy-target').selectOption('SELECT');await cards.nth(i).locator('.policy-name').fill(i?'Imported Video':'Imported AI');}
     await build(n);let imported=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));for(const name of ['Imported AI','Imported Video'])assert.deepEqual(imported['proxy-groups'].find(g=>g.name===name).proxies,['GLOBAL','DIRECT']);
     await cards.first().locator('.policy-name').fill('Renamed AI');await build(n);imported=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));assert.equal(imported['proxy-groups'].some(g=>g.name==='Imported AI'),false);assert.ok(imported.rules.some(r=>r.startsWith('RULE-SET,')&&r.endsWith(',Renamed AI')));
@@ -723,7 +723,7 @@ async function check(name, fn) {
   await check('P2 Studio redacts original ladder-prefixed secret before display formatting', async () => {
     const n = await fresh();
     await n.locator('.tab', { hasText: 'Config Studio' }).click();
-    const secret = '🪜 synthetic-owner-secret-236';
+    const secret = '🪜 1 synthetic-owner-secret-236';
     const yaml = ['secret: "' + secret + '"', 'proxies: []', 'proxy-groups:',
       '  - name: "' + secret + '"', '    type: select', '    proxies: [DIRECT]',
       'rules:', '  - "MATCH,' + secret + '"'].join('\n');
@@ -737,14 +737,15 @@ async function check(name, fn) {
     assert.match(output, /Fallback:[\s\S]*MATCH →/);
     assert.ok(!output.includes(secret), 'original secret leaked');
     assert.ok(!output.includes(secret.replace('🪜 ', '[Приоритет] ')), 'formatted secret leaked');
+    assert.ok(!output.includes(await n.evaluate(s=>routingDisplayText(s),secret)), 'current formatted secret leaked');
     assert.ok(!output.includes('synthetic-owner-secret-236'), 'secret suffix leaked');
     // A non-secret tier name still receives cosmetic formatting, without editing YAML.
-    await n.locator('#csImportInput').fill(yaml.replaceAll(secret, '🪜 Public tier').replace('secret: "🪜 Public tier"', 'secret: "other-synthetic-secret"'));
+    await n.locator('#csImportInput').fill(yaml.replaceAll(secret, '🪜 1 Public tier').replace('secret: "🪜 1 Public tier"', 'secret: "other-synthetic-secret"'));
     await n.locator('#csParseBtn').click();
     await n.locator('#csRuleProbe').fill('unmatched.example.invalid');
     await n.locator('#csRuleProbeBtn').click();
-    assert.match(await n.locator('#csRuleProbeOut').textContent(), /MATCH → \[Приоритет\] Public tier/);
-    assert.ok((await n.locator('#csImportInput').inputValue()).includes('MATCH,🪜 Public tier'));
+    assert.match(await n.locator('#csRuleProbeOut').textContent(), /MATCH → Группа 1: Public tier/);
+    assert.ok((await n.locator('#csImportInput').inputValue()).includes('MATCH,🪜 1 Public tier'));
   });
   await check('P2 Quick Start new sections stay inside wrap at desktop and mobile widths', async () => {
     const n = await browser.newPage(); pages.push(n); n.errors = [];
@@ -817,7 +818,7 @@ async function check(name, fn) {
     const yaml=await n.locator('#mihomoOutput').inputValue();const seq=await n.evaluate(()=>mihomoValidationSeq);
     await n.locator('#dcRunBtn').click();let output=await n.locator('#dcResults').textContent();
     assert.match(output,/Проверены демонстрационные домены/);for(const name of ['gemini.google.com','youtube.com','unknown-service.example'])assert.ok(output.includes(name));
-    assert.equal(await n.locator('#dcInput').inputValue(),'');await n.locator('#dcExamplesBtn').click();assert.match(await n.locator('#dcInput').inputValue(),/gemini.google.com/);
+    assert.equal(await n.locator('#dcInput').inputValue(),'');assert.equal(await n.locator('#dcExamplesBtn').count(),0);
     await n.locator('#dcInput').fill('only.example.invalid');await n.locator('#dcRunBtn').click();output=await n.locator('#dcResults').textContent();assert.match(output,/Проверены введённые домены/);assert.ok(!output.includes('youtube.com'));
     assert.equal(await n.evaluate(()=>mihomoValidationSeq),seq);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
     await n.locator('#mihomoInput').fill(link+'\n# changed');await n.locator('#dcRunBtn').click();assert.match(await n.locator('#dcResults').textContent(),/предыдущая сборка не актуальна/);
@@ -874,7 +875,7 @@ async function check(name, fn) {
     await n.locator('#csParseBtn').click();
     await n.locator('.tab',{hasText:'Mihomo Config Builder'}).click();
     const before=await ownerProject(n);const yaml=await n.locator('#mihomoOutput').inputValue();
-    n.once('dialog',d=>d.dismiss());await n.locator('#builderResetBtn').click();assert.deepEqual(await ownerProject(n),before);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+    await n.locator('#builderResetBtn').click();await n.locator('#builderResetCancel').click();await n.waitForFunction(()=>!document.getElementById('builderResetDialog').open);assert.deepEqual(await ownerProject(n),before);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
     const storage=await n.evaluate(()=>JSON.stringify(localStorage));let requests=0;n.on('request',r=>{if(/^https?:/.test(r.url()))requests++;});
     const variants=['empty','sources','wg','awl','tiers','dpr','options','built','stale','load','repeat'];
     for(const variant of variants){
@@ -897,7 +898,7 @@ async function check(name, fn) {
         assert.match(await n.locator('#mtImportGroups').textContent(),/Synthetic old group/);
       }
       if(['built','stale'].includes(variant)){await build(n);if(variant==='stale')await n.locator('#mihomoInput').fill(link+'\n# stale');}
-      n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();
+      await n.locator('#builderResetBtn').click();await n.locator('#builderResetConfirm').click();await n.waitForFunction(()=>!document.getElementById('builderResetDialog').open);
       const state=await n.evaluate(()=>{const p=rbCollectProject(),d=JSON.parse(RB_NEW_PROJECT);delete p.meta.created;delete d.meta.created;return {p,d,snap:Object.values(profileSnapshots),wg:wgBeans.length,files:wgFiles.length,rejected:wgRejected.length,pending:mtPending,selection:subscriptionSelection.size,runtime:runtimeProviderModel.providers.length,secret:document.getElementById('rtSecretInput').value,undo:rbUndoProjectState,doc:lastRoutingDoc,fp:lastBuildFingerprint,status:document.getElementById('builderActionStatus').dataset.state};});
       assert.deepEqual(state.p,state.d,variant);assert.deepEqual(state.snap,[null,null,null]);for(const key of ['wg','files','rejected','selection','runtime'])assert.equal(state[key],0);for(const key of ['pending','undo','doc','fp'])assert.equal(state[key],null);assert.equal(state.secret,'');assert.equal(state.status,'NOT_BUILT');assert.equal(await n.locator('#mihomoOutput').inputValue(),'');assert.equal(await n.locator('#copyYamlBtn').isDisabled(),true);
       for(const id of ['mtImportStats','mtImportGroups','mtImportMapping'])assert.equal(await n.locator('#'+id).textContent(),'',variant+': old MagiTrickle preview');
@@ -916,9 +917,9 @@ async function check(name, fn) {
     await n.waitForFunction(()=>!wgUploadPending&&wgProfiles.length===1&&wgRejected.length===1);
     assert.equal(await n.locator('#wgRejected').isVisible(),true);
     assert.equal(await n.locator('#wgDnsWarning').isVisible(),true);
-    n.once('dialog',d=>d.dismiss());await n.locator('#builderResetBtn').click();
+    await n.locator('#builderResetBtn').click();await n.locator('#builderResetCancel').click();await n.waitForFunction(()=>!document.getElementById('builderResetDialog').open);
     assert.equal(await n.locator('#wgRejected').isVisible(),true);assert.equal(await n.locator('#wgDnsWarning').isVisible(),true);
-    n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();
+    await n.locator('#builderResetBtn').click();await n.locator('#builderResetConfirm').click();await n.waitForFunction(()=>!document.getElementById('builderResetDialog').open);
     assert.equal(await n.locator('#wgRejected').isVisible(),false);assert.equal(await n.locator('#wgRejected').textContent(),'');
     assert.equal(await n.locator('#wgDnsWarning').isVisible(),false);assert.equal(await n.locator('#wgCustomDns').inputValue(),'');
     assert.deepEqual(await n.evaluate(()=>[wgProfiles.length,wgRejected.length]),[0,0]);
@@ -927,24 +928,109 @@ async function check(name, fn) {
     const n=await fresh();await n.locator('#mihomoInput').fill('https://subscription.example.invalid/synthetic');
     await n.evaluate(()=>{web4core.fetchSubscription=()=>new Promise(resolve=>window.finishResetFetch=resolve);window.resetOldBuild=buildMihomo();});
     await n.waitForFunction(()=>!!window.finishResetFetch);
-    n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();assert.equal(await n.locator('#builderActionStatus').getAttribute('data-state'),'NOT_BUILT');
+    await n.locator('#builderResetBtn').click();await n.locator('#builderResetConfirm').click();await n.waitForFunction(()=>!document.getElementById('builderResetDialog').open);assert.equal(await n.locator('#builderActionStatus').getAttribute('data-state'),'NOT_BUILT');
     await n.evaluate(async link=>{window.finishResetFetch(link);await window.resetOldBuild;},link);
     assert.equal(await n.locator('#mihomoOutput').inputValue(),'');assert.equal(await n.locator('#builderActionStatus').getAttribute('data-state'),'NOT_BUILT');assert.equal(await n.evaluate(()=>lastPreviewSummary),null);
     await n.evaluate(()=>{window.oldProjectRead=rbLoadProject({size:10,text:()=>new Promise(resolve=>window.finishResetFile=resolve)});});
-    n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();await n.evaluate(async()=>{const p=JSON.parse(RB_NEW_PROJECT);p.sources.mainInput='should-not-resurrect';window.finishResetFile(JSON.stringify(p));await window.oldProjectRead;});
+    await n.locator('#builderResetBtn').click();await n.locator('#builderResetConfirm').click();await n.waitForFunction(()=>!document.getElementById('builderResetDialog').open);await n.evaluate(async()=>{const p=JSON.parse(RB_NEW_PROJECT);p.sources.mainInput='should-not-resurrect';window.finishResetFile(JSON.stringify(p));await window.oldProjectRead;});
     assert.equal(await n.locator('#mihomoInput').inputValue(),'');
   });
   await check('UX29 field reset invalidates pending WG and MagiTrickle imports',async()=>{
     const n=await fresh();const wg=fs.readFileSync(path.join(root,'tests/fixtures/awg31.conf'),'utf8');
     await n.evaluate(()=>{window.originalFileText=File.prototype.text;File.prototype.text=function(){return new Promise(resolve=>window.finishResetImport=resolve);};});
     await n.locator('#wgFile').setInputFiles({name:'synthetic.conf',mimeType:'text/plain',buffer:Buffer.from(wg)});await n.waitForFunction(()=>wgUploadPending&&!!window.finishResetImport);
-    n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();await n.evaluate(wg=>window.finishResetImport(wg),wg);await n.waitForTimeout(50);assert.equal(await n.evaluate(()=>wgProfiles.length),0);
+    await n.locator('#builderResetBtn').click();await n.locator('#builderResetConfirm').click();await n.waitForFunction(()=>!document.getElementById('builderResetDialog').open);await n.evaluate(wg=>window.finishResetImport(wg),wg);await n.waitForTimeout(50);assert.equal(await n.evaluate(()=>wgProfiles.length),0);
     await n.locator('#mtImportFile').setInputFiles({name:'synthetic.mtrickle',mimeType:'application/json',buffer:Buffer.from('{}')});await n.waitForTimeout(20);
-    n.once('dialog',d=>d.accept());await n.locator('#builderResetBtn').click();await n.evaluate(()=>{window.finishResetImport(JSON.stringify({groups:[{id:'x',name:'Should not return',interface:'mitun0',enable:true,rules:[]}]}));File.prototype.text=window.originalFileText;});await n.waitForTimeout(50);assert.equal(await n.evaluate(()=>mtPending),null);
+    await n.locator('#builderResetBtn').click();await n.locator('#builderResetConfirm').click();await n.waitForFunction(()=>!document.getElementById('builderResetDialog').open);await n.evaluate(()=>{window.finishResetImport(JSON.stringify({groups:[{id:'x',name:'Should not return',interface:'mitun0',enable:true,rules:[]}]}));File.prototype.text=window.originalFileText;});await n.waitForTimeout(50);assert.equal(await n.evaluate(()=>mtPending),null);
   });
   await check('UX29 field reset and stale actionbar fit all owner viewports',async()=>{
     const n=await fresh();await n.locator('#mihomoInput').fill(link);await build(n);await n.locator('#mihomoInput').fill(link+'\n# stale');
     for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,850],[320,850]]){await n.setViewportSize({width,height});for(const id of ['ux-start','ux-routing','ux-options','ux-diagnostics','ux-lab']){await n.locator('#'+id).scrollIntoViewIfNeeded();assert.equal(await n.locator('#builderResetBtn').isVisible(),true);assert.equal(await n.locator('#builderRebuildBtn').isVisible(),true);assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);}}
+  });
+
+  const r2Reveal = async (n,id) => n.locator('#'+id).evaluate(el=>{for(let x=el.parentElement;x;x=x.parentElement)if(x.tagName==='DETAILS')x.open=true;});
+  const r2Tier = async n => {await n.evaluate(()=>{document.getElementById('cfgTieredFailover').checked=true;window.__tierCardsState=[{name:'Приоритет 1',strategy:'url-test',members:['Owner-A']}];renderTierCards();});};
+  await check('UX30 R2 reset modal default cancel Escape focus and canonical cleanup',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);const yaml=await n.locator('#mihomoOutput').inputValue();
+    await n.locator('#builderResetBtn').click();assert.equal(await n.locator('#builderResetDialog').isVisible(),true);assert.equal(await n.locator('#builderResetCancel').evaluate(e=>e===document.activeElement),true);
+    await n.keyboard.press('Tab');assert.equal(await n.locator('#builderResetConfirm').evaluate(e=>e===document.activeElement),true);await n.keyboard.press('Tab');assert.equal(await n.locator('#builderResetSave').evaluate(e=>e===document.activeElement),true);const saved=n.waitForEvent('download');await n.keyboard.press('Enter');assert.ok((await saved).suggestedFilename().endsWith('.lgproject.json'));assert.equal(await n.locator('#builderResetDialog').isVisible(),true);await n.keyboard.press('Escape');await n.waitForFunction(()=>!document.getElementById('builderResetDialog').open);assert.equal(await n.locator('#builderResetBtn').evaluate(e=>e===document.activeElement),true);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+    await n.locator('#builderResetBtn').click();await n.locator('#builderResetCancel').click();assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+    await n.locator('#builderResetBtn').click();await n.locator('#builderResetConfirm').click();await n.waitForFunction(()=>document.getElementById('builderActionStatus').dataset.state==='NOT_BUILT');assert.equal(await n.locator('#mihomoOutput').inputValue(),'');assert.equal(await n.locator('#vrgTextAlt > summary').count(),1);await n.locator('#mihomoInput').fill('keep-after-reset');await n.locator('#builderResetBtn').click();await n.keyboard.press('Escape');assert.equal(await n.locator('#mihomoInput').inputValue(),'keep-after-reset');
+  });
+  await check('UX31 R2 YAML button reveals focuses without Build in all states',async()=>{
+    const n=await fresh(false);
+    for(const state of ['empty','current','stale']){
+      if(state==='current'){await n.locator('#mihomoInput').fill(link);await build(n);}if(state==='stale')await n.locator('#cfgLan').uncheck();
+      const before=await n.evaluate(()=>[document.getElementById('mihomoOutput').value,mihomoValidationSeq,buildStateFingerprint()]);
+      await n.locator('#builderYamlJump').focus();await n.keyboard.press('Enter');assert.equal(await n.locator('#mihomoOutput').evaluate(e=>e===document.activeElement),true);
+      assert.deepEqual(await n.evaluate(()=>[document.getElementById('mihomoOutput').value,mihomoValidationSeq,buildStateFingerprint()]),before);
+    }
+  });
+  await check('UX32 R2 Coverage one button demo and entered domains remain local',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);await r2Reveal(n,'dcInput');assert.equal(await n.locator('#dcExamplesBtn').count(),0);
+    const before=await n.evaluate(()=>[document.getElementById('mihomoOutput').value,mihomoValidationSeq]);await n.locator('#dcRunBtn').click();assert.match(await n.locator('#dcResults').textContent(),/демонстрационные.*gemini.google.com/s);assert.equal(await n.locator('#dcInput').inputValue(),'');
+    await n.locator('#dcInput').fill('custom.example');await n.locator('#dcRunBtn').click();assert.match(await n.locator('#dcResults').textContent(),/введённые.*custom.example/s);assert.doesNotMatch(await n.locator('#dcResults').textContent(),/youtube.com/);assert.deepEqual(await n.evaluate(()=>[document.getElementById('mihomoOutput').value,mihomoValidationSeq]),before);
+  });
+  await check('UX33 R2 retained internal steps have local indentation',async()=>{
+    const n=await fresh();await r2Reveal(n,'ptDemoBtn');assert.ok(await n.locator('#physicalTopologyPanel ol').evaluate(e=>parseFloat(getComputedStyle(e).paddingLeft)>=24));
+  });
+  await check('UX34 R2 internal lab artifacts and inputs preserve Builder freshness',async()=>{
+    const n=await fresh();await n.locator('#mihomoInput').fill(link);await build(n);const before=await n.evaluate(()=>[buildStateFingerprint(),document.getElementById('mihomoOutput').value,mihomoValidationSeq]);await r2Reveal(n,'ptDemoBtn');await n.locator('#ptDemoBtn').click();await n.locator('#ptAnalyzeBtn').click();
+    await n.locator('#ptRuntimePanel').evaluate(e=>e.open=true);const input=n.locator('#ptRuntimeProfiles input').first();if(await input.count())await input.fill('http://127.0.0.1:9090');
+    await n.locator('#ptGenBtn').click();assert.deepEqual(await n.evaluate(()=>[buildStateFingerprint(),document.getElementById('mihomoOutput').value,mihomoValidationSeq]),before);assert.equal(await n.locator('#builderActionStatus').getAttribute('data-state'),'CURRENT');assert.match(await n.locator('#ptGenDownloads').textContent(),/topology.json/);
+  });
+  for(const consumer of ['Builder','Studio'])await check('UX35 R2 fullscreen focus panel keeps navigation '+consumer,async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);let id='vrgSvgWrap';
+    if(consumer==='Studio'){const yaml=await n.locator('#mihomoOutput').inputValue();await n.locator('.tab',{hasText:'Config Studio'}).click();await n.locator('#csImportInput').fill(yaml);await n.locator('#csParseBtn').click();id='csVrgSvgWrap';}
+    await r2Reveal(n,id);const nav=n.locator('#'+id+'Nav');await nav.locator('[data-vrg-action=expand]').click();await nav.locator('[data-vrg-action=reset]').click();
+    const frame=n.locator('#'+id).locator('..').locator('..');const side=frame.locator('.vrg-side');assert.equal(await side.isVisible(),true);await side.locator('input').fill('GLOBAL');
+    const select=side.locator('select');const value=await select.locator('option').nth(1).getAttribute('value');await select.selectOption(value);assert.equal(await frame.evaluate(e=>e.classList.contains('vrg-expanded')),true);assert.equal(await nav.locator('.vrg-scale').textContent(),'100%');assert.match(await side.locator('.vrg-selected').textContent(),/GLOBAL/);
+    await side.locator('input').fill('');await nav.locator('[data-vrg-action=fit]').click();
+    const centered=await n.locator('#'+id).evaluate(e=>{const a=e.getBoundingClientRect(),b=e.querySelector('svg').getBoundingClientRect();return Math.abs((a.top+a.bottom-b.top-b.bottom)/2)<3&&Math.abs((a.left+a.right-b.left-b.right)/2)<3;});assert.equal(centered,true,'Fit centers graph in both axes');
+    await n.setViewportSize({width:320,height:740});assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);await n.setViewportSize({width:1280,height:850});
+    await nav.locator('[data-vrg-action=panel]').click();assert.equal(await side.isVisible(),false);await nav.locator('[data-vrg-action=panel]').click();assert.match(await side.locator('.vrg-selected').textContent(),/GLOBAL/);await n.keyboard.press('Escape');assert.equal(await nav.locator('[data-vrg-action=expand]').evaluate(e=>e===document.activeElement),true);
+  });
+  await check('UX36 R2 MagiTrickle independent SELECT rename admission and roundtrip',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);await r2Reveal(n,'mtImportBtn');
+    const data={groups:['Telegram','YouTube Google'].map((name,i)=>({name,interface:'mitun0',enable:true,rules:[{type:'domain',rule:'exact'+i+'.example',enable:true},{type:'namespace',rule:'suffix'+i+'.example',enable:true}]}))};
+    const upload=async()=>{await n.locator('#mtImportFile').setInputFiles({name:'synthetic.mtrickle',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(data))});await n.waitForFunction(()=>!!mtPending?.preview);await n.locator('.mt-iface-map').selectOption('SELECT');};await upload();assert.equal(await n.locator('.mt-select-name').count(),2);
+    await n.locator('.mt-select-name').nth(0).fill('AI');await n.locator('.mt-select-name').nth(1).fill('AI');const before=await n.locator('#policyCards .policy-card').count();await n.locator('#mtImportApply').click();assert.equal(await n.locator('#policyCards .policy-card').count(),before);assert.equal(await n.locator('#mtImportPreview').isVisible(),true);
+    await n.locator('.mt-select-name').nth(1).fill('');await n.locator('#mtImportApply').click();assert.equal(await n.locator('#policyCards .policy-card').count(),before);
+    await n.locator('.mt-select-name').nth(1).fill('GLOBAL');await n.locator('#mtImportApply').click();assert.equal(await n.locator('#policyCards .policy-card').count(),before);
+    await n.locator('.mt-select-name').nth(1).fill('YouTube');await n.locator('#mtImportApply').click();assert.deepEqual((await n.evaluate(()=>collectPolicyRouting())).map(p=>p.name),['AI','YouTube']);await build(n);
+    const doc=await n.evaluate(()=>lastRoutingDoc);for(const name of ['AI','YouTube'])assert.ok(doc['proxy-groups'].some(g=>g.name===name&&g.type==='select'));assert.equal(Object.values(doc['rule-providers']).reduce((sum,p)=>sum+(p.payload?.length||0),0),4);
+    const downloadPromise=n.waitForEvent('download');await n.evaluate(()=>rbSaveProject());const download=await downloadPromise;const payload=fs.readFileSync(await download.path(),'utf8');n.once('dialog',d=>d.accept());await n.evaluate(text=>rbLoadProject(new File([text],'synthetic.lgproject.json')),payload);assert.deepEqual((await n.evaluate(()=>collectPolicyRouting())).map(p=>p.name),['AI','YouTube']);
+    await upload();assert.deepEqual(await n.locator('.mt-select-name').evaluateAll(xs=>xs.map(x=>x.value)),['Telegram','YouTube Google']);await n.locator('.mt-select-name').nth(0).fill('AI');await n.locator('#mtImportApply').click();assert.deepEqual((await n.evaluate(()=>collectPolicyRouting())).map(p=>p.name),['AI','YouTube']);
+    await n.locator('#mtReplacePolicies').check();await n.locator('.mt-select-name').nth(0).fill('');await n.locator('#mtImportApply').click();assert.deepEqual((await n.evaluate(()=>collectPolicyRouting())).map(p=>p.name),['AI','YouTube'],'invalid replace preserves existing policies');await n.locator('.mt-select-name').nth(0).fill('AI');await n.locator('.mt-select-name').nth(1).fill('GLOBAL');await n.locator('#mtImportApply').click();assert.equal(await n.locator('#policyCards .policy-card').count(),2);
+    await n.locator('.mt-select-name').nth(1).fill('YouTube');await n.locator('#mtImportApply').click();assert.equal(await n.locator('#policyCards .policy-card').count(),2);
+    await n.locator('#cfgAutoWhitelist').check();await upload();await n.locator('#mtImportApply').click();assert.equal(await n.locator('#mtImportPreview').isVisible(),true);assert.match(await n.locator('#toast').textContent(),/AWL/);
+  });
+  await check('UX37 R2 compact multi WG AWG cards retain controls warnings and freshness',async()=>{
+    const n=await fresh(false);const awg=fs.readFileSync(path.join(root,'tests/fixtures/awg31.conf'),'utf8');const legacy=awg.replace(/^(?:I[1-5]|S[34]|HeaderProtectionKey|ContentPaddingAddition|RekeyAfterTime|RekeyTimeout|RejectAfterTime|KeepaliveTimeout|MaxHandshakeAttempts|RandomTrailers|DisableCookies)\s*=.*\r?\n/gm,'');const wg=awg.replace(/^(?:Jc|Jmin|Jmax|S[1-4]|H[1-4]|I[1-5]|RandomTrailers|HeaderProtectionKey|PersistentKeepalive)\s*=.*\r?\n/gm,'');
+    await n.locator('#wgFile').setInputFiles([{name:'modern.conf',mimeType:'text/plain',buffer:Buffer.from(awg)},{name:'plain.conf',mimeType:'text/plain',buffer:Buffer.from(wg)},{name:'legacy.conf',mimeType:'text/plain',buffer:Buffer.from(legacy)}]);await n.waitForFunction(()=>wgProfiles.length===3&&!wgUploadPending);await build(n);assert.equal(await n.locator('.wg-profile-details').count(),3);assert.equal(await n.locator('.wg-list-del:visible').count(),3);assert.equal(await n.locator('.wg-mode:visible').count(),3);assert.equal(await n.locator('.wg-keepalive-actual').first().isVisible(),true);assert.equal(await n.locator('.wg-profile-details[open]').count(),0);const before=await n.evaluate(()=>[document.getElementById('mihomoOutput').value,buildStateFingerprint(),mihomoValidationSeq]);
+    await n.locator('.wg-profile-details > summary').first().click();await n.evaluate(()=>renderWgList());assert.equal(await n.locator('.wg-profile-details').first().evaluate(e=>e.open),true);assert.deepEqual(await n.evaluate(()=>[document.getElementById('mihomoOutput').value,buildStateFingerprint(),mihomoValidationSeq]),before);
+  });
+  await check('UX38 R2 Tiered confirmed selection auto adds order dedup and keyboard',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link+'\n'+link.replace('Owner-A','Owner-B').replace('192.0.2.1','192.0.2.2'));await build(n);await n.locator('#cfgTieredFailover').check();const select=n.locator('.tier-member-select').first();await select.selectOption('Owner-A');assert.equal(await select.inputValue(),'');await select.selectOption('Owner-A');assert.equal(await n.locator('.tier-member li').count(),1);await select.focus();await n.keyboard.press('o');await n.keyboard.press('ArrowDown');await n.keyboard.press('Enter');
+    await select.selectOption('Owner-B');assert.deepEqual(await n.evaluate(()=>window.__tierCardsState[0].members),['Owner-A','Owner-B']);await n.locator('.tier-member-down').first().click();assert.deepEqual(await n.evaluate(()=>window.__tierCardsState[0].members),['Owner-B','Owner-A']);assert.equal(await n.locator('.tier-add-member').count(),0);await build(n);assert.equal(await n.locator('#builderActionStatus').getAttribute('data-state'),'CURRENT');
+  });
+  await check('UX39 R2 priority display terminology preserves YAML identifiers and redaction',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);await r2Tier(n);await build(n);const yaml=await n.locator('#mihomoOutput').inputValue();assert.match(yaml,/🪜 TIERED-AUTO/);assert.match(await n.locator('#tieredTrace').textContent(),/1 группа/);assert.doesNotMatch(await n.locator('#tieredTrace').textContent(),/1 Приоритет 1|эшелон|Tiered Failover/);assert.deepEqual(await n.evaluate(()=>[1,2,5,11,21].map(tierGroupCount)),['1 группа','2 группы','5 групп','11 групп','21 группа']);assert.equal(await n.evaluate(()=>routingDisplayText('🪜 TIERED-AUTO → 🪜 1 Приоритет 1')),'Приоритетные группы серверов → Приоритет 1');
+  });
+  await check('UX40 R2 Inspector final YAML snapshot clears old result and matches modes',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);await r2Reveal(n,'rdTestBtn');await n.locator('#rdTestBtn').click();assert.match(await n.locator('#rdResult').textContent(),/MATCH → GLOBAL/);await r2Tier(n);await build(n);assert.equal(await n.locator('#rdResult').textContent(),'');await n.locator('#rdTestBtn').click();assert.doesNotMatch(await n.locator('#rdResult').textContent(),/MATCH → GLOBAL/);assert.match(await n.locator('#rdResult').textContent(),/Приоритетные группы серверов/);
+    for(const mode of ['dpr-tiered','normal','awl']){await n.evaluate(mode=>{document.getElementById('cfgTieredFailover').checked=mode==='dpr-tiered';document.getElementById('cfgAutoWhitelist').checked=mode==='awl';document.getElementById('whitelistInput').value=document.getElementById('mihomoInput').value;document.getElementById('policyCards').textContent='';if(mode==='dpr-tiered')addPolicyCard({name:'AI',domains:'gemini.google.com',target:'GLOBAL'});updateAwlCompatibility();},mode);await build(n);await n.locator('#rdTestInput').fill('unknown.example');await n.locator('#rdTestBtn').click();const target=await n.evaluate(()=>rdParseRule(lastRoutingDoc.rules.find(r=>rdParseRule(r).type==='MATCH')).target);assert.ok((await n.locator('#rdResult').textContent()).includes(await n.evaluate(t=>routingDisplayText(t),target)));
+      const yaml=await n.locator('#mihomoOutput').inputValue();await n.locator('.tab',{hasText:'Config Studio'}).click();await n.locator('#csImportInput').fill(yaml);await n.locator('#csParseBtn').click();await n.evaluate(()=>{document.getElementById('csRuleProbe').value='unknown.example';runCsRuleProbe();});assert.ok((await n.locator('#csRuleProbeOut').textContent()).includes(await n.evaluate(t=>routingDisplayText(t),target)));await n.locator('.tab',{hasText:'Mihomo Config Builder'}).click();
+    }
+    await n.locator('#cfgLan').uncheck();await n.locator('#rdTestBtn').click();assert.match(await n.locator('#rdResult').textContent(),/предыдущая сборка|изменены/);
+  });
+  await check('UX41 R2 validation navigation is keyboard button without Build',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);const before=await n.evaluate(()=>[mihomoValidationSeq,document.getElementById('mihomoOutput').value]);await n.locator('#builderValidationJump').focus();await n.keyboard.press('Enter');assert.equal(await n.locator('#mihomoValidationBox').evaluate(e=>e===document.activeElement),true);assert.deepEqual(await n.evaluate(()=>[mihomoValidationSeq,document.getElementById('mihomoOutput').value]),before);
+  });
+  await check('UX42 R2 public GUI excludes Physical Topology all entry points and empty lab',async()=>{
+    const n=await fresh(false);assert.equal(await n.locator('#physicalTopologyInternal').isVisible(),false);assert.equal(await n.locator('#physicalTopologyInternal').evaluate(e=>e.inert),true);assert.equal(await n.locator('a[href="#ux-lab"],a[href="#physicalTopologyPanel"],a[href="#ptRuntimePanel"]').count(),0);assert.equal(await n.locator('.builder-workspace:visible').count(),4);
+    for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,850],[320,850]]){await n.setViewportSize({width,height});assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);}
+    assert.deepEqual(n.errors,[]);
   });
 
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });

@@ -270,6 +270,17 @@
   #tab-mihomo [id]{scroll-margin-top:var(--builder-obstruction,180px)}
   .policy-name-help{margin:4px 0 6px;font-size:.8rem}
   @media(max-width:768px){.workspace-nav{position:static}.builder-actionbar{gap:4px}.builder-actionbar .btn{padding:4px 6px;font-size:.78rem}}
+
+  #physicalTopologyInternal[hidden]{display:none!important}
+  .vrg-body{display:contents}
+  .vrg-side{display:none}
+  .vrg-expanded .vrg-body{display:flex;flex:1;min-height:0;gap:8px}
+  .vrg-expanded .vrg-side:not([hidden]){display:block;flex:0 0 240px;max-width:40vw;overflow:auto;border:1px solid var(--border);padding:8px;background:var(--face)}
+  .vrg-side input,.vrg-side select{width:100%;box-sizing:border-box;max-width:100%}
+  .vrg-expanded .vrg-viewport{min-width:0;flex:1}
+  .vrg-viewport.vrg-fit{display:flex;align-items:center;justify-content:center}
+  .vrg-viewport.vrg-fit svg{display:block;margin:auto;flex-shrink:0}
+  @media(max-width:600px){.vrg-expanded .vrg-side:not([hidden]){position:absolute;top:110px;left:12px;bottom:12px;width:240px;max-width:80vw;z-index:2;box-shadow:3px 3px 0 #555}}
 </style>
 </head>
 <body>
@@ -388,9 +399,9 @@
         <button class="btn btn-gray" title="Загрузить проект генератора (.lgproject.json) и восстановить Builder" onclick="document.getElementById('rbProjectFile').click()">📂 Загрузить проект</button>
         <button class="btn btn-gray" id="rbUndoBtn" style="display:none" title="Вернуть состояние Builder до загрузки проекта" onclick="rbUndoRestore()">↩︎ Отменить восстановление</button>
         <input type="file" id="rbProjectFile" accept=".lgproject.json,.json" hidden>
-      <button type="button" class="btn" id="builderRebuildBtn" hidden>Пересобрать YAML</button><button type="button" class="btn btn-gray" id="builderResetBtn" onclick="rbResetProject()">🧹 Сбросить проект</button><a href="#mihomoOutput">К YAML</a><div id="builderActionStatus" role="status" aria-live="polite"></div></div>
+      <button type="button" class="btn" id="builderRebuildBtn" hidden>Пересобрать YAML</button><button type="button" class="btn btn-gray" id="builderResetBtn" onclick="rbResetProject()">🧹 Сбросить проект</button><button type="button" class="btn btn-gray" id="builderYamlJump" onclick="builderJump('mihomoOutput')">↓ Перейти к YAML</button><div id="builderActionStatus" role="status" aria-live="polite"></div></div>
 <nav id="builderWorkspaceNav" class="workspace-nav" aria-label="Разделы Mihomo Builder">
- <a href="#ux-start">🏠 Быстрый старт</a><a href="#ux-routing">🌐 Маршрутизация и DNS</a><a href="#ux-diagnostics">🔍 Диагностика</a><a href="#ux-lab">🧪 Лаборатория</a><a href="#ux-options">⚙️ Дополнительно</a>
+ <a href="#ux-start">🏠 Быстрый старт</a><a href="#ux-routing">🌐 Маршрутизация и DNS</a><a href="#ux-diagnostics">🔍 Диагностика</a><a href="#ux-options">⚙️ Дополнительно</a>
 </nav>
 <details id="workspaceDirectory"><summary>Все инструменты — экспертный доступ</summary>
  <div class="workspace-directory">
@@ -398,7 +409,7 @@
  <a href="#tieredPanel" data-workspace-target="cfgTieredFailover">Приоритетные группы серверов</a>
  <a href="#excludeFilterRow">Выбор узлов / Exclude Filter</a><a href="#runtimeImportDetails">Список узлов работающего Mihomo</a>
  <a href="#routingDiagnostics">Проверка домена</a><a href="#ruleProviderExplorer">Провайдеры правил</a><a href="#domainCoveragePanel">Покрытие доменов</a><a href="#vrgPanel">Граф зависимостей Build</a>
- <a href="#physicalTopologyPanel">Физическая топология / What-if / артефакты</a><a href="#ptRuntimePanel">Наблюдения контроллеров узлов</a>
+
  <a href="#perProxyAdvancedDetails">Расширенный TUN / вход на каждый прокси</a><a href="#wgDialerAdvanced">Общая dialer-группа</a>
  <a href="#mihomoValidationBox">Результат проверки YAML</a><button type="button" class="btn btn-gray" onclick="switchTab(null, 'studio')">Config Studio: анализ готового YAML / DNS / редактор</button>
  </div>
@@ -663,7 +674,7 @@
         <div class="hint" id="policyRoutingHint"></div>
 
       </div><div class="checkbox-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label><input type="checkbox" id="cfgTieredFailover"> 🔀 Приоритетные группы серверов <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Tiered Failover">?</button><span class="ctx-help-pop" role="note">Строгий приоритет эшелонов (#148, runtime-proven на Mihomo 1.19.31/1.19.32): runtime-проверки подтвердили переход между эшелонами по доступности HTTP-проб; это не измерение фактического packet path. Внутри эшелона — url-test (быстрейший) или ordered fallback. Финальное правило MATCH уходит в корневую группу эшелонов; GLOBAL получает её первым участником (ручное переключение в дашборде остаётся возможным). Выключено — вывод без изменений.</span></span></label>
+        <label><input type="checkbox" id="cfgTieredFailover"> 🔀 Приоритетные группы серверов <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Приоритетные группы серверов">?</button><span class="ctx-help-pop" role="note">Строгий приоритет групп серверов (#148, runtime-proven на Mihomo 1.19.31/1.19.32): runtime-проверки подтвердили переход между группами по доступности HTTP-проб; это не измерение фактического packet path. Внутри группы — самый быстрый сервер (url-test) или выбор по порядку (fallback). Финальное правило MATCH уходит в корневую группу приоритетов; GLOBAL получает её первым участником (ручное переключение в дашборде остаётся возможным). Выключено — вывод без изменений.</span></span></label>
       </div>
 <div id="tieredAwlHint" class="hint" style="display:none">Недоступно при включённых автоматических белых списках. Настройки групп сохранены.</div>
 <details id="tieredPanel" style="display:none" open><summary id="tieredSavedSummary">Настройки групп приоритета</summary>
@@ -734,7 +745,7 @@
             <div class="hint">Покрытие доменов итоговым конфигом (результат последнего Build): какое правило выигрывает первым, через inline-правило или провайдера, и статический путь до цели насколько это доказуемо. «Совпадает с правилом» ≠ «гарантированно идёт через конкретный прокси»: для <code>select</code>/<code>url-test</code>/<code>fallback</code> участник определяется Mihomo во время работы (помечается <code>runtime-selected</code>). GEOSITE/GEOIP/внешние провайдеры/DNS-зависимые правила честно возвращают UNKNOWN. По одному домену в строке; только чтение — конфиг не меняется.</div>
             <textarea id="dcInput" rows="4" aria-label="Domains to check, one per line" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;margin-top:6px" placeholder="gemini.google.com&#10;youtube.com&#10;unknown-service.example"></textarea>
             <div class="btn-group" style="margin-top:6px">
-              <button type="button" class="btn btn-gray" id="dcExamplesBtn">Подставить примеры</button><button type="button" class="btn btn-gray" id="dcRunBtn">Проверить покрытие</button>
+              <button type="button" class="btn btn-gray" id="dcRunBtn">Проверить покрытие</button>
             </div>
             <div id="dcResults" class="hint" style="margin-top:6px;white-space:pre-line"></div>
             <button type="button" class="btn btn-gray" id="dcBuildCheckBtn" hidden>Собрать и проверить покрытие</button>
@@ -755,17 +766,17 @@
             </details>
           </details>
         </details>
-<div class="btn-group"><a href="#mihomoValidationBox">Проверка YAML и совместимости</a><button type="button" class="btn btn-gray" onclick="switchTab(null, 'studio')">Открыть Config Studio — готовый YAML и DNS-анализ</button></div>
+<div class="btn-group"><button type="button" class="btn btn-gray" id="builderValidationJump" onclick="builderJump('mihomoValidationBox')">К результатам проверки YAML</button><button type="button" class="btn btn-gray" onclick="switchTab(null, 'studio')">Открыть Config Studio — готовый YAML и DNS-анализ</button></div>
 </div>
 </section>
-<section class="builder-workspace" aria-labelledby="ux-lab">
+<section id="physicalTopologyInternal" class="builder-workspace" aria-labelledby="ux-lab" hidden inert>
 <h2 id="ux-lab" tabindex="-1">🧪 Инженерная лаборатория</h2>
 <p class="hint">Экспериментальная модель маршрута между несколькими узлами. Не изменяет обычную конфигурацию Mihomo автоматически. Автоматический физический failover не реализован.</p>
 <div class="card">
 <div class="card-title">🧪 Модель, симуляция и наблюдения</div>
 <details id="physicalTopologyPanel" class="advanced-panel" style="margin-top:12px">
         <summary style="cursor:pointer"><span class="disclosure-chevron" aria-hidden="true">▶</span> <span class="advanced-badge">PHYSICAL TOPOLOGY</span> <span>🌐 Межсерверная цепочка — экспериментальная лаборатория</span></summary>
-        <div class="hint">Инструмент моделирует последовательный маршрут через несколько VPS, проверяет структуру цепочки и может подготовить конфигурации для поддерживаемых транспортов. Не подключается к серверам и не развёртывает Mihomo автоматически.</div><ol class="hint"><li>Загрузите демонстрационную цепочку.</li><li>Нажмите «Проанализировать».</li><li>Посмотрите предполагаемый маршрут.</li><li>Подготовьте артефакты узлов кнопкой ниже.</li><li>Проверьте список готовых файлов и ограничений ручной настройки.</li></ol><p class="hint">Полная генерация — SS, SOCKS и HTTP в доказанных комбинациях. Остальные транспорты требуют external contract. Runtime Evidence не доказывает путь пакетов; what-if не меняет подключения. Автоматический physical failover и SSH deployment отсутствуют.</p><div class="hint">Модель физической цепочки, what-if, per-node артефакты и Runtime Evidence. Данные остаются в памяти вкладки. Intended topology и наблюдения Controller API не доказывают фактический packet path.</div><details><summary>Границы лаборатории</summary><div class="hint">Client → ENTRY → TRANSIT(0..N) → EXIT [→ FINAL OVERLAY] → Internet. Отдельная модель не меняет обычный Mihomo Build автоматически. Демо синтетическое. Local routing policy узла остаётся отдельным уровнем.</div></details><div class="hint"></div>
+        <div class="hint">Инструмент моделирует последовательный маршрут через несколько VPS, проверяет структуру цепочки и может подготовить конфигурации для поддерживаемых транспортов. Не подключается к серверам и не развёртывает Mihomo автоматически.</div><ol class="hint" style="padding-left:28px"><li>Загрузите демонстрационную цепочку.</li><li>Нажмите «Проанализировать».</li><li>Посмотрите предполагаемый маршрут.</li><li>Подготовьте артефакты узлов кнопкой ниже.</li><li>Проверьте список готовых файлов и ограничений ручной настройки.</li></ol><p class="hint">Полная генерация — SS, SOCKS и HTTP в доказанных комбинациях. Остальные транспорты требуют external contract. Runtime Evidence не доказывает путь пакетов; what-if не меняет подключения. Автоматический physical failover и SSH deployment отсутствуют.</p><div class="hint">Модель физической цепочки, what-if, per-node артефакты и Runtime Evidence. Данные остаются в памяти вкладки. Intended topology и наблюдения Controller API не доказывают фактический packet path.</div><details><summary>Границы лаборатории</summary><div class="hint">Client → ENTRY → TRANSIT(0..N) → EXIT [→ FINAL OVERLAY] → Internet. Отдельная модель не меняет обычный Mihomo Build автоматически. Демо синтетическое. Local routing policy узла остаётся отдельным уровнем.</div></details><div class="hint"></div>
 
         <div class="btn-group" style="margin-top:6px;flex-wrap:wrap">
           <button type="button" class="btn btn-gray" id="ptDemoBtn">Загрузить демо-топологию</button>
@@ -982,6 +993,11 @@
 <!-- WEB4CORE RUNTIME -->
 <script src="./web4core.runtime.js"></script>
 
+<dialog id="builderResetDialog" aria-labelledby="builderResetTitle" aria-describedby="builderResetDescription" style="max-width:min(560px,90vw);background:var(--face);color:var(--text);border:2px outset var(--border)">
+<form method="dialog"><h2 id="builderResetTitle">Вы уверены, что хотите сбросить проект?</h2>
+<p id="builderResetDescription">Все введённые серверы, подписки, WG/AWG, доменные политики и настройки текущего проекта будут очищены. Несохранённый проект восстановить после подтверждения нельзя.</p>
+<p>Файлы на компьютере, работающий Mihomo, WARP, Config Studio и реестр идентичностей устройств не изменяются.</p>
+<div class="btn-group"><button type="button" class="btn btn-gray" id="builderResetSave">Сохранить проект перед сбросом</button><button class="btn" id="builderResetCancel" value="cancel" autofocus>Нет, оставить</button><button class="btn btn-gray" id="builderResetConfirm" value="confirm">Да, сбросить</button></div></form></dialog>
 <script>
 // === GENERATOR META (единственный production source-of-truth версии/канала) ===
 // channel — metadata конкретной сборки, НЕ определение git-ветки в рантайме:
@@ -1848,7 +1864,7 @@ function collectDialerRegistryFromDoc(doc) {
 
 function computeDialerTargetsSync() {
   const api = globalThis.web4core;
-  if (!api || !wgProfilesEnabled()) { dialerRegistryDegraded = false; return []; }
+  if (!api) { dialerRegistryDegraded = false; return []; }
   try {
     const autoWhitelist = document.getElementById('cfgAutoWhitelist').checked;
     const masterEl = document.getElementById('cfgPerProxyMaster');
@@ -2464,6 +2480,7 @@ function updateWgDialerAdvancedVisibility() {
   if (adv) adv.style.display = wgProfiles.length ? '' : 'none';
 }
 
+const wgDetailsOpen = new Set();
 function renderWgList() {
   queueMicrotask(refreshAwgKeepaliveActual);
   const list = document.getElementById('wgList');
@@ -2633,6 +2650,16 @@ function renderWgList() {
 
     li.append(head, info, modeRow, targetRow);
     for (const extra of wgGenExtras) info.appendChild(extra); // после всех textContent-записей (#157)
+    const more = document.createElement('details'); more.className = 'wg-profile-details'; more.open = wgDetailsOpen.has(p.id);
+    const summary = document.createElement('summary'); summary.textContent = 'Подробнее'; more.appendChild(summary);
+    const technical = document.createElement('div'); technical.className = 'wg-profile-technical';
+    for (const node of Array.from(info.childNodes)) {
+      if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('wg-mtu-note-warn')) continue;
+      technical.appendChild(node);
+    }
+    more.appendChild(technical); info.prepend(document.createTextNode('Импортирован · ' + (bean.name || '') + (ep ? ' · endpoint: ' + ep : ''))); info.appendChild(more);
+    more.addEventListener('click', e => { if (e.target === summary) { if (!more.open) wgDetailsOpen.add(p.id); else wgDetailsOpen.delete(p.id); } });
+    more.addEventListener('toggle', () => { if (!more.isConnected) return; if (more.open) wgDetailsOpen.add(p.id); else wgDetailsOpen.delete(p.id); });
     list.appendChild(li);
   });
   list.hidden = wgProfiles.length === 0;
@@ -5011,10 +5038,10 @@ function renderMagiTricklePreview() {
     sel.className = 'mt-iface-map';
     sel.dataset.iface = iface;
     for (const [value, text] of [
-      ['GLOBAL', '🌐 GLOBAL'],
-      ['SELECT', '🎛 Своя SELECT-группа (переключается в Mihomo)'],
-      ['DIRECT', '⬇ DIRECT'],
-      ['REJECT', '🚫 REJECT'],
+      ['GLOBAL', 'Через GLOBAL'],
+      ['SELECT', 'Создать отдельную переключаемую SELECT-группу для каждой импортируемой категории'],
+      ['DIRECT', 'Напрямую — DIRECT'],
+      ['REJECT', 'Блокировать — REJECT'],
       ['skip', '⏭ Пропустить'],
     ]) {
       const opt = document.createElement('option');
@@ -5023,10 +5050,24 @@ function renderMagiTricklePreview() {
       sel.appendChild(opt);
     }
     sel.value = mtMappingDraft[iface] || mtPending.mapping[iface] || 'skip';
-    sel.addEventListener('change', () => { mtMappingDraft[iface] = sel.value; });
+    sel.addEventListener('change', () => { mtMappingDraft[iface] = sel.value; renderMagiTricklePreview(); });
     row.append(label, sel);
     mapBox.appendChild(row);
   }
+  const note=document.createElement('p'); note.className='hint';
+  note.textContent='SELECT создаёт независимую переключаемую группу для каждой категории. Объединение категорий в одну группу не поддерживается. При AWL разрешены только GLOBAL и DIRECT.';
+  mapBox.appendChild(note);
+  mtPending.selectNames ||= {};
+  const names = new Set(document.getElementById('mtReplacePolicies').checked ? [] : Array.from(document.querySelectorAll('#policyCards .policy-name')).map(e=>e.value.trim()));
+  mtPending.groups.forEach((g,i)=>{
+    const map=mtMappingDraft[String(g.interface||'').trim()] || mtPending.mapping[String(g.interface||'').trim()];
+    if(map!=='SELECT' || !mtIsEnabled(g.enable)) return;
+    if(!(i in mtPending.selectNames)) { let name=String(g.name).trim(), n=2; const base=name; while(names.has(name))name=base+'-'+n++; mtPending.selectNames[i]=name; }
+    names.add(mtPending.selectNames[i]);
+    const row=document.createElement('label'); row.textContent='Категория «'+g.name+'» → имя SELECT-группы';
+    const input=document.createElement('input'); input.className='mt-select-name'; input.dataset.index=i; input.value=mtPending.selectNames[i]; input.setAttribute('aria-label','Имя SELECT-группы: '+g.name);
+    input.addEventListener('input',()=>{mtPending.selectNames[i]=input.value;}); row.appendChild(input); mapBox.appendChild(row);
+  });
   pv.hidden = false;
 }
 
@@ -5036,9 +5077,19 @@ function applyMagiTrickleImport() {
   const mapping = Object.assign({}, mtPending.mapping, mtMappingDraft);
   const counts = { groups: 0, rules: 0, targets: {}, skippedGroups: 0, skippedRules: 0, unknownTypes: 0, duplicateNames: 0 };
   const replace = document.getElementById('mtReplacePolicies').checked;
+  const plannedNames = new Set(replace ? [] : Array.from(document.querySelectorAll('#policyCards .policy-name')).map(el=>el.value.trim()));
+  for(const [i,g] of mtPending.groups.entries()) {
+    const map=mapping[String(g.interface||'').trim()]; if(!mtIsEnabled(g.enable)||!map||map==='skip') continue;
+    if(document.getElementById('cfgAutoWhitelist').checked && !['GLOBAL','DIRECT'].includes(map)) return showToast('AWL: выберите GLOBAL или DIRECT; SELECT и REJECT недоступны.',true);
+    if(map==='SELECT') {
+      const name=String(mtPending.selectNames?.[i] ?? g.name ?? '').trim();
+      if(!name || plannedNames.has(name) || ['GLOBAL','DIRECT','REJECT','PASS','REJECT-DROP','COMPATIBLE','⚡ Fastest'].includes(name) || dialerTargetsCache.some(t=>t.kind!=='provider'&&t.value===name)) return showToast('Укажите непустые уникальные имена SELECT-групп без конфликта с существующими политиками и системными группами.',true);
+      plannedNames.add(name);
+    }
+  }
   if (replace) document.getElementById('policyCards').textContent = '';
   const existingNames = new Set(Array.from(document.querySelectorAll('#policyCards .policy-name')).map(el => el.value.trim()));
-  for (const g of mtPending.groups) {
+  for (const [groupIndex, g] of mtPending.groups.entries()) {
     const iface = String(g.interface || '').trim();
     const map = mapping[iface];
     if (!mtIsEnabled(g.enable)) { counts.skippedGroups++; continue; }
@@ -5055,7 +5106,7 @@ function applyMagiTrickleImport() {
       lines.push(mapped);
     }
     if (!lines.length) { counts.skippedGroups++; continue; }
-    let name = String(g.name || '').trim() || ('MT-' + iface);
+    let name = String(map === 'SELECT' ? (mtPending.selectNames?.[groupIndex] ?? g.name) : g.name).trim() || ('MT-' + iface);
     while (existingNames.has(name)) {
       const m = name.match(/-(\d+)$/);
       name = m ? name.slice(0, m.index) + '-' + (Number(m[1]) + 1) : name + '-2';
@@ -8091,7 +8142,7 @@ function csPlanOp(csDoc, src, plain, op) {
 // === TIERED FAILOVER (#148, v1.10; runtime-proven: docs/research/TIERED-FAILOVER-RUNTIME.md) ===
 // Явная user-visible feature, DEFAULT OFF: выключена — вывод байт-в-байт прежний.
 // Модель: TieredStrategy = упорядоченные эшелоны; ROOT fallback обходит эшелоны
-// по порядку, внутри эшелона — url-test (быстрейший) или fallback (по порядку).
+// по порядку, внутри группы — url-test (быстрейший) или fallback (по порядку).
 // Участники эшелона ссылаются на имена текущей сборки (прокси/WG/AWG) или
 // провайдеры (__provider__:NAME → use:). Никаких секретов в модели — только имена.
 let tierSeq = 0;
@@ -8124,7 +8175,7 @@ function tierGroupName(base, taken) {
 // неизвестный участник, дубликаты имён) — buildMihomo показывает их как ❌.
 // Возвращает {groups, rootName, tiers} — groups ДОБАВЛЯЮТСЯ к doc в applyTieredFailover.
 function buildTieredGroups(tiers, existingNames) {
-  if (!tiers.length) throw Error('Tiered Failover: включён, но не создан ни один эшелон — добавьте уровень или выключите настройку');
+  if (!tiers.length) throw Error('Приоритетные группы серверов: включён, но не создана ни одна группа — добавьте группу или выключите настройку');
   const taken = new Set(existingNames);
   const seenNames = new Map();
   const out = [];
@@ -8132,16 +8183,16 @@ function buildTieredGroups(tiers, existingNames) {
   const tierRefs = [];
   tiers.forEach((t, i) => {
     const name = t.name.trim();
-    if (!name) throw Error('Tiered Failover: у эшелона #' + (i + 1) + ' пустое имя');
-    if (seenNames.has(name.toLowerCase())) throw Error('Tiered Failover: дубликат имени эшелона «' + name + '»');
+    if (!name) throw Error('Приоритетные группы серверов: у группы #' + (i + 1) + ' пустое имя');
+    if (seenNames.has(name.toLowerCase())) throw Error('Приоритетные группы серверов: дубликат имени группы «' + name + '»');
     seenNames.set(name.toLowerCase(), true);
-    if (!t.members.length) throw Error('Tiered Failover: эшелон «' + name + '» пуст — выбранный в списке выход ещё не добавлен; нажмите «＋ Добавить»');
+    if (!t.members.length) throw Error('Приоритетные группы серверов: группа «' + name + '» пуста — выберите сервер для автоматического добавления');
     const gname = tierGroupName('🪜 ' + (i + 1) + ' ' + name, taken);
     const proxies = [], use = [];
     t.members.forEach(m => {
       if (m.startsWith('__provider__:')) use.push(m.slice('__provider__:'.length));
       else {
-        if (!existingNames.has(m)) throw Error('Tiered Failover: выход «' + m + '» не найден в текущей сборке — пересоберите или уберите его из эшелона «' + name + '»');
+        if (!existingNames.has(m)) throw Error('Приоритетные группы серверов: выход «' + m + '» не найден в текущей сборке — пересоберите или уберите его из группы «' + name + '»');
         proxies.push(m);
       }
     });
@@ -8149,7 +8200,7 @@ function buildTieredGroups(tiers, existingNames) {
     if (t.strategy === 'url-test') g.tolerance = 50;
     if (proxies.length) g.proxies = proxies;
     if (use.length) g.use = use;
-    if (!g.proxies && !g.use) throw Error('Tiered Failover: эшелон «' + name + '» не содержит участников');
+    if (!g.proxies && !g.use) throw Error('Приоритетные группы серверов: группа «' + name + '» не содержит участников');
     out.push(g);
     tierRefs.push(gname);
   });
@@ -8177,11 +8228,11 @@ function applyTieredFailover(yaml, tiersOverride) {
   const { groups, rootName } = buildTieredGroups(tiers, existingNames);
   doc['proxy-groups'] = [...(Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []), ...groups];
   const global = doc['proxy-groups'].find(g => g.name === 'GLOBAL');
-  if (!global || !Array.isArray(global.proxies)) throw Error('Tiered Failover: группа GLOBAL не найдена в сборке');
+  if (!global || !Array.isArray(global.proxies)) throw Error('Приоритетные группы серверов: группа GLOBAL не найдена в сборке');
   global.proxies.unshift(rootName);
   doc.rules = (Array.isArray(doc.rules) ? doc.rules : []).map(r => (r === 'MATCH,GLOBAL' ? 'MATCH,' + rootName : r));
-  const summary = 'Tiered Failover: ' + tiers.length + ' эшелон(ов), строгий приоритет → ' +
-    tiers.map((t, i) => (i + 1) + ' ' + t.name.trim() + ' [' + t.strategy + ' × ' + t.members.length + ']').join(' → ');
+  const summary = 'Приоритетные группы серверов: ' + tierGroupCount(tiers.length) + ', строгий порядок → ' +
+    tiers.map(t => t.name.trim() + ' [' + tierStrategyLabel(t.strategy) + '; участников: ' + t.members.length + ']').join(' → ');
   const traceEl = document.getElementById('tieredTrace');
   if (traceEl) traceEl.textContent = 'ℹ ' + summary;
   return jsyaml.dump(doc, { lineWidth: -1 });
@@ -8210,7 +8261,7 @@ function renderTierCards() {
   updateAwlCompatibility();
 }
 
-// P2 UX (v1.11, field-test #160): один и тот же выход в нескольких эшелонах —
+// P2 UX (v1.11, field-test #160): один и тот же выход в нескольких группах —
 // легально (приоритет эшелонов отдельный), но подозрительно. Warning-lint в
 // панели, НЕ build-ошибка: runtime-конфиг остаётся валидным.
 function renderTierDuplicatesWarn() {
@@ -8220,16 +8271,16 @@ function renderTierDuplicatesWarn() {
   const seen = new Map();
   tiers.forEach(t => (t.members || []).forEach(m => {
     if (!seen.has(m)) seen.set(m, []);
-    seen.get(m).push(t.name || 'эшелон');
+    seen.get(m).push(t.name || 'группа');
   }));
   const dups = [];
   seen.forEach((names, m) => { if (names.length > 1) dups.push([m, names]); });
   if (!dups.length) { box.style.display = 'none'; box.textContent = ''; return; }
   const label = m => String(m).replace('__provider__:', 'provider:');
   box.style.display = 'block';
-  box.textContent = '⚠ Один и тот же выход используется в нескольких эшелонах: ' +
+  box.textContent = '⚠ Один и тот же выход используется в нескольких группах: ' +
     dups.map(([m, names]) => '«' + label(m) + '» → ' + names.map(n => '«' + n + '»').join(', ')).join('; ') +
-    '. Это допустимо (у каждого эшелона свой приоритет), но проверьте, что так и задумано.';
+    '. Это допустимо (у каждой группы свой приоритет), но проверьте, что так и задумано.';
 }
 
 // Компактная иконка-кнопка карточки (#165): единый размер, aria-label/title
@@ -8255,14 +8306,14 @@ function tierCardDom(t, index, options) {
   nameInput.type = 'text';
   nameInput.className = 'tier-name';
   nameInput.value = t.name || ('Эшелон ' + (index + 1));
-  nameInput.placeholder = 'Имя эшелона (например WARP)';
-  nameInput.setAttribute('aria-label', 'Имя эшелона ' + (index + 1));
+  nameInput.placeholder = 'Имя группы (например WARP)';
+  nameInput.setAttribute('aria-label', 'Имя группы ' + (index + 1));
   const count = (window.__tierCardsState || []).length;
   title.append(
     nameInput,
-    tierIconBtn('tier-up', '↑', 'Эшелон выше', 'Поднять эшелон (приоритет выше)', index === 0),
-    tierIconBtn('tier-down', '↓', 'Эшелон ниже', 'Опустить эшелон (приоритет ниже)', index === count - 1),
-    tierIconBtn('tier-del', '🗑', 'Удалить эшелон', 'Удалить эшелон')
+    tierIconBtn('tier-up', '↑', 'Группа выше', 'Поднять группу (приоритет выше)', index === 0),
+    tierIconBtn('tier-down', '↓', 'Группа ниже', 'Опустить группу (приоритет ниже)', index === count - 1),
+    tierIconBtn('tier-del', '🗑', 'Удалить группу', 'Удалить группу')
   );
   const strategyRow = document.createElement('div');
   strategyRow.className = 'policy-target-row';
@@ -8271,8 +8322,8 @@ function tierCardDom(t, index, options) {
   strategyLabel.textContent = 'Стратегия:';
   const strategySel = document.createElement('select');
   strategySel.className = 'tier-strategy';
-  strategySel.setAttribute('aria-label', 'Стратегия внутри эшелона');
-  for (const [v, txt] of [['url-test', '⚡ Fastest / url-test'], ['fallback', 'Ordered fallback']]) {
+  strategySel.setAttribute('aria-label', 'Стратегия внутри группы');
+  for (const [v, txt] of [['url-test', 'Самый быстрый (url-test)'], ['fallback', 'По порядку (fallback)']]) {
     const o = document.createElement('option'); o.value = v; o.textContent = txt; strategySel.appendChild(o);
   }
   strategySel.value = t.strategy === 'fallback' ? 'fallback' : 'url-test';
@@ -8288,27 +8339,17 @@ function tierCardDom(t, index, options) {
   addRow.className = 'tier-add-row';
   const memberSel = document.createElement('select');
   memberSel.className = 'tier-member-select';
-  memberSel.setAttribute('aria-label', 'Добавить участника в эшелон');
+  memberSel.setAttribute('aria-label', 'Добавить участника в группу');
   const placeholder = document.createElement('option');
   placeholder.value = ''; placeholder.textContent = options.length ? '— выберите выход —' : 'Реестр целей ещё не построен — выполните Build или загрузите WG/AWG';
   memberSel.appendChild(placeholder);
   options.forEach(o => {
     const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; memberSel.appendChild(opt);
   });
-  // pendingSelect (#165): выбор переживает внешние перерисовки.
-  if (t.pendingSelect && options.some(o => o.value === t.pendingSelect)) memberSel.value = t.pendingSelect;
-  // P2 UX (v1.11, field-test #160): явная текстовая кнопка — выбор в списке сам
-  // по себе участника не добавляет (FIELD-OBSERVED на v1.10).
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'btn btn-gray tier-add-member';
-  addBtn.textContent = '＋ Добавить';
-  addBtn.setAttribute('aria-label', 'Добавить выбранный выход в эшелон');
-  addBtn.title = 'Добавить выбранный выход';
-  addRow.append(memberSel, addBtn);
+  addRow.append(memberSel);
   const hint = document.createElement('div');
   hint.className = 'hint';
-  hint.textContent = 'Выбор в списке ещё не добавляет выход в эшелон — нажмите «＋ Добавить». Порядок важен для Ordered fallback; для url-test порядок — приоритет при равной скорости.';
+  hint.textContent = t.members.length ? 'Выберите ещё один сервер — он добавится автоматически. Стрелки у участников задают порядок fallback.' : 'В группе пока нет серверов. Выберите сервер ниже — он добавится автоматически.';
   card.append(title, strategyRow, membersLabel, memberList, addRow, hint);
   return card;
 }
@@ -8324,7 +8365,7 @@ function tierMemberItem(value, options) {
   rm.type = 'button'; rm.className = 'btn btn-gray tier-btn tier-member-rm'; rm.textContent = '×';
   rm.setAttribute('aria-label', 'Убрать участника');
   rm.title = 'Убрать участника';
-  li.append(span, rm);
+  li.append(span, tierIconBtn('tier-member-up','↑','Участник выше'), tierIconBtn('tier-member-down','↓','Участник ниже'), rm);
   return li;
 }
 
@@ -8348,6 +8389,7 @@ function bindTieredUI() {
     if (enable.checked && !(window.__tierCardsState || []).length) {
       window.__tierCardsState = [{ name: 'Приоритет 1', strategy: 'url-test', members: [] }];
     }
+    dialerTargetsCache = computeDialerTargetsSync();
     renderTierCards();
   });
   document.getElementById('tierCards').addEventListener('click', e => {
@@ -8361,15 +8403,10 @@ function bindTieredUI() {
       const arr = window.__tierCardsState; [arr[idx], arr[j]] = [arr[j], arr[idx]];
       renderTierCards(); return;
     }
-    if (e.target.classList.contains('tier-add-member')) {
-      // Значение берём из канонического состояния (pendingSelect), а не только
-      // из текущего DOM: внешние перерисовки не теряют выбор пользователя (#165).
-      const pending = window.__tierCardsState[idx].pendingSelect || card.querySelector('.tier-member-select').value;
-      if (!pending) return;
-      if (!window.__tierCardsState[idx].members.includes(pending)) {
-        window.__tierCardsState[idx].members.push(pending);
-      }
-      window.__tierCardsState[idx].pendingSelect = ''; // выбор потреблён
+    if (e.target.classList.contains('tier-member-up') || e.target.classList.contains('tier-member-down')) {
+      const members = window.__tierCardsState[idx].members, i = members.indexOf(e.target.closest('li').dataset.value);
+      const j = i + (e.target.classList.contains('tier-member-up') ? -1 : 1);
+      if (i >= 0 && j >= 0 && j < members.length) [members[i], members[j]] = [members[j], members[i]];
       renderTierCards(); return;
     }
     if (e.target.classList.contains('tier-member-rm')) {
@@ -8379,6 +8416,15 @@ function bindTieredUI() {
       if (mIdx !== -1) members.splice(mIdx, 1);
       renderTierCards();
     }
+  });
+  document.getElementById('tierCards').addEventListener('change', e => {
+    if (!e.target.classList.contains('tier-member-select') || e.target.disabled) return;
+    const value = e.target.value, idx = Number(e.target.closest('.tier-card').dataset.index);
+    saveTierCardsState(); const t = window.__tierCardsState[idx];
+    if (value && !t.members.includes(value)) t.members.push(value);
+    t.pendingSelect = ''; renderTierCards();
+    document.querySelectorAll('#tierCards .tier-member-select')[idx]?.focus({preventScroll:true});
+    refreshBuildStaleness();
   });
   document.getElementById('tierCards').addEventListener('input', e => {
     // saveTierCardsState коммитит и pendingSelect селекта добавления: выбор
@@ -8408,7 +8454,7 @@ let lastBuildFingerprint = null;
 function buildStateFingerprint() {
   const parts = [];
   document.querySelectorAll('#tab-mihomo input, #tab-mihomo select, #tab-mihomo textarea').forEach(el => {
-    if (el.closest('#routingDiagnostics')) return; // read-only queries/navigation, включая lazy Explorer search
+    if (el.closest('#routingDiagnostics, #physicalTopologyInternal, #mtImportPreview')) return; // read-only queries/navigation, включая lazy Explorer search
     if (BUILD_STALE_EXCLUDED_IDS.has(el.id)) return;
     if (el.type === 'file') return; // содержимое файлов отражено в wgProfiles
     parts.push((el.id || el.name || el.className) + '=' + (el.type === 'checkbox' ? String(el.checked) : el.value));
@@ -8454,7 +8500,12 @@ document.getElementById('realityModernJump').addEventListener('click', e => {
 });
 
 // === ROUTING DIAGNOSTICS UI (read-only; только отображает результаты ядра) ===
-function routingDisplayText(value) { return String(value).replace(/🪜 /g, '[Приоритет] '); }
+function routingDisplayText(value) {
+  return String(value).replace(/🪜 TIERED-AUTO(?:-\d+)?/g, 'Приоритетные группы серверов')
+    .replace(/🪜 \d+ (Приоритет \d+)/g, '$1').replace(/🪜 (\d+) /g, 'Группа $1: ');
+}
+function tierGroupCount(n) { const x = n % 100, y = n % 10; return n + ' ' + (x >= 11 && x <= 14 ? 'групп' : y === 1 ? 'группа' : y >= 2 && y <= 4 ? 'группы' : 'групп'); }
+function tierStrategyLabel(strategy) { return strategy === 'fallback' ? 'По порядку (fallback)' : 'Самый быстрый (url-test)'; }
 const RD_NL = String.fromCharCode(10);
 let lastRoutingDoc = null;
 let lastMtuPlan = null; // diagnostics-only результат web4core.planWireGuardMtu (YAML не меняется)
@@ -8470,6 +8521,9 @@ function updateRoutingDiagnostics(yaml) {
     const doc = jsyaml.load(String(yaml));
     if (!doc || typeof doc !== 'object' || !Array.isArray(doc.rules)) throw new Error('в конфиге нет секции rules');
     lastRoutingDoc = doc;
+    resultEl.textContent = '';
+    document.getElementById('rdEffectiveInput').textContent = '';
+    document.getElementById('dcResults').textContent = '';
     try {
       const policies = collectPolicyRouting();
       if (policies.length) lastRoutingHumanNames = routingDprHumanNames(policies);
@@ -8488,9 +8542,9 @@ function updateRoutingDiagnostics(yaml) {
     Object.keys(doc['rule-providers'] || {}).forEach(name => {
       if (!(providerRefs[name] && providerRefs[name].length)) lines.push('⚠ Провайдер «' + name + '» не используется ни одним RULE-SET');
     });
-    summary.textContent = routingDisplayText(lines.join(RD_NL));
+    summary.textContent = routingDisplayText(csRedactText(lines.join(RD_NL), doc));
     const preview = routingPreview(doc, lastRoutingHumanNames);
-    previewEl.textContent = preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + routingDisplayText(rdSemanticTargetText(doc, p.target))).join(RD_NL)
+    previewEl.textContent = routingDisplayText(csRedactText(preview.map(p => (p.index + 1) + '. ' + p.label + ' → ' + rdSemanticTargetText(doc, p.target)).join(RD_NL), doc))
       + RD_NL + 'Фактически выбранный участник определяется Mihomo во время работы.';
     if (typeof web4core.planWireGuardMtu === 'function') {
       try { lastMtuPlan = web4core.planWireGuardMtu(doc); } catch (_) { lastMtuPlan = null; }
@@ -8576,7 +8630,7 @@ function runRoutingInspector() {
   if (res.verdict === 'FALLBACK') {
     // FALLBACK до обращения к matched: MATCH намеренно не попадает в matched[]
     const rule = rdParseRule(lastRoutingDoc.rules[res.winner]);
-    out.textContent = 'Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + routingDisplayText(rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Домен не совпал ни с одним известным правилом до MATCH.)';
+    out.textContent = routingDisplayText(csRedactText('Fallback:' + RD_NL + '#' + (res.winner + 1) + ' MATCH → ' + (rule.target || 'GLOBAL') + RD_NL + RD_NL + '(Домен не совпал ни с одним известным правилом до MATCH.)', lastRoutingDoc));
     return;
   }
   const w = res.winner;
@@ -8588,7 +8642,7 @@ function runRoutingInspector() {
     text += RD_NL + RD_NL + 'Почему победило: Mihomo применяет первое подходящее правило; #' + (w + 1) + ' находится выше ' + (others.length > 1 ? 'остальных' : '#' + (others[0].index + 1)) + '.';
   }
   if (res.unknownAfter && res.unknownAfter.length) text += RD_NL + RD_NL + '⚠ Позже встречается недоказуемое правило: ' + res.unknownAfter[0].reason;
-  out.textContent = routingDisplayText(text);
+  out.textContent = routingDisplayText(csRedactText(text, lastRoutingDoc));
 }
 document.addEventListener('click', (e) => {
   if (e.target && e.target.id === 'rdTestBtn') { e.preventDefault(); runRoutingInspector(); }
@@ -9839,6 +9893,7 @@ function vrgSetExpanded(frame, expanded) {
 
 function vrgDispose(wrap, forget) {
   const old = vrgNavigation.get(wrap);
+  if(old) { old.left=wrap.scrollLeft; old.top=wrap.scrollTop; }
   if (old) { old.abort.abort(); old.resize.disconnect(); cancelAnimationFrame(old.resizeFrame); }
   if (forget) {
     vrgSetExpanded(wrap.closest('.vrg-frame'), false);
@@ -9858,9 +9913,10 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     for (const [action, label, aria] of [['out', '−', 'Уменьшить масштаб'], ['in', '+', 'Увеличить масштаб'],
       ['reset', '100%', 'Исходный масштаб 100%'], ['fit', 'Вписать граф', 'Вписать весь граф в область'],
       ['all', 'Весь граф', 'Сбросить фокус графа'], ['expand', '⛶ Развернуть граф', 'Развернуть граф'],
-      ['size-reset', 'Сбросить размер', 'Вернуть исходную высоту области графа']]) {
+      ['size-reset', 'Сбросить размер', 'Вернуть исходную высоту области графа'], ['panel', 'Панель фокуса', 'Показать / скрыть панель']]) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-gray';
       b.textContent = label; b.dataset.vrgAction = action; b.setAttribute('aria-label', aria); nav.appendChild(b);
+      if (action === 'panel') b.setAttribute('aria-expanded', 'true');
       if (action === 'expand') b.setAttribute('aria-expanded', 'false');
     }
     const indicator = document.createElement('output'); indicator.className = 'vrg-scale';
@@ -9873,6 +9929,40 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     hint.textContent = 'Пустая область: перетаскивание · Alt + колесо: масштаб · Escape: свернуть · граф зависимостей, не runtime-путь; текстовая версия доступна под графом';
     nav.appendChild(hint); wrap.before(nav);
   }
+  let body = frame.querySelector('.vrg-body');
+  if (!body) { body = document.createElement('div'); body.className = 'vrg-body'; frame.appendChild(body); body.appendChild(wrap); }
+  let side = frame.querySelector('.vrg-side');
+  if (!side) { side = document.createElement('aside'); side.className = 'vrg-side'; side.setAttribute('aria-label','Панель фокуса графа'); body.prepend(side); }
+  const searchValue = side.querySelector('input')?.value || '';
+  side.textContent = '';
+  const selected = document.createElement('div'); selected.className = 'vrg-selected'; selected.setAttribute('role','status');
+  const currentFocus = () => wrap.id === 'vrgSvgWrap' ? vrgFocusId : (vrgStudioFocus.get(doc) || '');
+  const labelOf = id => routingDisplayText(csRedactText(id,doc));
+  selected.textContent = 'Выбранный узел: ' + (currentFocus() ? labelOf(currentFocus()) : 'весь граф');
+  const searchLabel = document.createElement('label'); searchLabel.textContent = 'Поиск узла по имени';
+  const search = document.createElement('input'); search.type = 'search'; search.setAttribute('aria-label','Поиск узла по имени'); search.value = searchValue; searchLabel.appendChild(search);
+  const focusLabel = document.createElement('label'); focusLabel.textContent = 'Фокус';
+  const select = document.createElement('select'); select.setAttribute('aria-label','Фокус в полноэкранном графе'); focusLabel.appendChild(select);
+  const fill = () => {
+    select.textContent = ''; const all = document.createElement('option'); all.value=''; all.textContent='— весь граф —'; select.appendChild(all);
+    const groups = new Map();
+    for (const n of cdgBuildGraph(doc).nodes) {
+      const text = labelOf(n.id); if (search.value && !text.toLocaleLowerCase().includes(search.value.toLocaleLowerCase())) continue;
+      const kind = vrgKindLabel(n.kind); if (!groups.has(kind)) { const g=document.createElement('optgroup'); g.label=kind; groups.set(kind,g); select.appendChild(g); }
+      const option=document.createElement('option'); option.value=String(select.querySelectorAll('option').length); option._vrgId=n.id; option.textContent=text;
+      option.selected=n.id===currentFocus(); groups.get(kind).appendChild(option);
+    }
+  };
+  fill(); search.addEventListener('input',fill);
+  select.addEventListener('change',()=>{
+    const id=select.selectedOptions[0]?._vrgId || '';
+    if (wrap.id==='vrgSvgWrap') { vrgFocusId=id; vrgFillFocusSelect('vrgFocusSelect',doc); }
+    else if(id) vrgStudioFocus.set(doc,id); else vrgStudioFocus.delete(doc);
+    vrgRenderInto(wrap.id,doc,false,wrap.id==='vrgSvgWrap'?'vrgTextAltOut':'csVrgTextAltOut');
+    frame.querySelector('.vrg-side select')?.focus({preventScroll:true});
+  });
+  const clear=document.createElement('button'); clear.type='button'; clear.className='btn btn-gray'; clear.textContent='Сбросить фокус'; clear.addEventListener('click',resetFocus);
+  side.append(selected,searchLabel,focusLabel,clear);
   nav.querySelectorAll('button,input').forEach(b => { b.disabled = false; });
   nav.querySelector('input[type="range"]').disabled = frame.classList.contains('vrg-expanded');
   wrap.classList.add('vrg-viewport'); wrap.setAttribute('role', 'region');
@@ -9888,6 +9978,7 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     nav.querySelector('.vrg-height-pixels').textContent = Math.round(wrap.getBoundingClientRect().height) + ' px';
   };
   const apply = (scale, center) => {
+    wrap.classList.toggle('vrg-fit', state.fit);
     const old = state.scale;
     const x = (wrap.scrollLeft + wrap.clientWidth / 2) / old;
     const y = (wrap.scrollTop + wrap.clientHeight / 2) / old;
@@ -9901,6 +9992,7 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
   nav.addEventListener('click', e => {
     const action = e.target.closest('[data-vrg-action]')?.dataset.vrgAction;
     if (!action) return;
+    if (action === 'panel') { side.hidden = !side.hidden; e.target.setAttribute('aria-expanded', String(!side.hidden)); e.target.focus({preventScroll:true}); return; }
     if (action === 'expand') { vrgSetExpanded(frame, !frame.classList.contains('vrg-expanded')); return; }
     if (action === 'size-reset') { state.height = null; viewport(); if (state.fit) fit(); return; }
     if (action === 'all') { resetFocus(); return; }
@@ -9913,7 +10005,7 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
     if (!frame.classList.contains('vrg-expanded')) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); vrgSetExpanded(frame, false); }
     if (e.key === 'Tab') {
-      const controls = Array.from(frame.querySelectorAll('button:enabled,input:enabled,[tabindex="0"]')).filter(el => el.getClientRects().length);
+      const controls = Array.from(frame.querySelectorAll('button:enabled,input:enabled,select:enabled,[tabindex="0"]')).filter(el => el.getClientRects().length);
       const first = controls[0], last = controls[controls.length - 1];
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
@@ -9953,6 +10045,8 @@ function vrgAttachNavigation(wrap, svg, view, doc, resetFocus) {
   vrgNavigation.set(wrap, state);
   viewport();
   if (state.fit && wrap.clientWidth) fit(); else apply(state.scale, false);
+  if (previous?.doc === doc && !previous.fit) { wrap.scrollLeft = previous.left || 0; wrap.scrollTop = previous.top || 0; }
+  wrap.addEventListener('scroll',()=>{ state.left=wrap.scrollLeft; state.top=wrap.scrollTop; },options);
 }
 
 function vrgTruncateLabel(text, maxLen) {
@@ -10164,7 +10258,6 @@ function renderVrgBuilder() {
 // Только отображение результатов ядра (cdgDomainCoverage); snapshot последнего
 // Build; STALE помечает каждую строку, скрытый Build не выполняется.
 const DC_EXAMPLES = 'gemini.google.com\nyoutube.com\nunknown-service.example';
-document.getElementById('dcExamplesBtn').addEventListener('click', () => { const input = document.getElementById('dcInput'); input.value = DC_EXAMPLES; input.focus(); });
 function runDomainCoverage() {
   diagnosticActionSeq++;
   const out = document.getElementById('dcResults');
@@ -10208,7 +10301,7 @@ function refreshWgMtuNotes() {
       noteEl = document.createElement('div');
       noteEl.className = 'wg-mtu-chain';
       noteEl.style.cssText = 'color:var(--muted);font-size:.78rem;margin-top:2px;white-space:pre-line';
-      infoEl.appendChild(noteEl);
+      (infoEl.querySelector('.wg-profile-technical') || infoEl).appendChild(noteEl);
     }
     const lines = [];
     if (pr.chain && pr.chain.length > 1) {
@@ -10921,7 +11014,7 @@ function rbCompareWithCurrent(project) {
   const a = rbProjectCounts(cur);
   const b = rbProjectCounts(project);
   const diff = [];
-  const fmt = (c) => 'подписок ' + c.subs + ' · прямых ссылок ' + c.direct + ' · UNKNOWN ' + c.unknown + ' · WG ' + (c.wg - c.awg) + ' · AWG ' + c.awg + ' · DPR-политик ' + c.dpr + ' · Tiered-карточек ' + c.tiered;
+  const fmt = (c) => 'подписок ' + c.subs + ' · прямых ссылок ' + c.direct + ' · UNKNOWN ' + c.unknown + ' · WG ' + (c.wg - c.awg) + ' · AWG ' + c.awg + ' · DPR-политик ' + c.dpr + ' · групп приоритета ' + c.tiered;
   const compositionChanged = ['sources', 'wgProfiles', 'dialer', 'domainPolicy', 'tiered', 'passthrough'].some(k => JSON.stringify(cur[k]) !== JSON.stringify(project[k]));
   if (compositionChanged) {
     diff.push('Было: ' + fmt(a));
@@ -10961,7 +11054,7 @@ function rbRestoreFromStudio() {
   const statusOrder = ['EXACT', 'DERIVED', 'AMBIGUOUS', 'MISSING', 'UNSUPPORTED', 'CONFLICT', 'UNKNOWN', 'INVALID'];
   const attention = statusOrder.filter(s => s !== 'EXACT' && byStatus[s] && byStatus[s].length);
   const preview = [];
-  preview.push('Подписки: ' + counts.subs + ' · WireGuard: ' + (counts.wg - counts.awg) + ' · AmneziaWG: ' + counts.awg + ' · DPR-политик: ' + counts.dpr + ' · Tiered-карточек: ' + counts.tiered);
+  preview.push('Подписки: ' + counts.subs + ' · WireGuard: ' + (counts.wg - counts.awg) + ' · AmneziaWG: ' + counts.awg + ' · DPR-политик: ' + counts.dpr + ' · групп приоритета: ' + counts.tiered);
   preview.push('Настройки: профиль ' + project.options.profile + ' · TUN ' + (project.options.addTun ? 'вкл' + (project.options.tunMips ? ' (MIPS)' : '') : 'выкл') + ' · WebUI ' + (project.options.webUI ? 'вкл' : 'выкл') + ' · allow-lan ' + (project.options.lan ? 'вкл' : 'выкл'));
   const statusLine = statusOrder.filter(s => byStatus[s]).map(s => {
     const hint = RB_STATUS_HINTS[s];
@@ -11171,7 +11264,7 @@ document.addEventListener('change', (e) => {
 ['input', 'change'].forEach(ev => document.addEventListener(ev, e => {
   const target = e.target;
   if (target.id === 'cfgAutoWhitelist' || target.id === 'cfgProfile') return; // admission invalidates accepted changes
-  if (target.closest?.('#routingDiagnostics, .vrg-frame') || BUILD_STALE_EXCLUDED_IDS.has(target.id)) return;
+  if (target.closest?.('#routingDiagnostics, .vrg-frame, #physicalTopologyInternal, #mtImportPreview') || BUILD_STALE_EXCLUDED_IDS.has(target.id)) return;
   // A delayed blur/change for the just-built values must not collapse output during a pointer click.
   if (MIHOMO_VALIDATION_STATE.state === 'VALID' && diagnosticsCurrent()) return;
   mihomoValidationSeq++; // инвалидируем незавершённую проверку, если была
@@ -11207,6 +11300,34 @@ setMihomoValidationState('NOT_BUILT');
   });
 })();
 
+
+function builderJump(id) {
+  const target = document.getElementById(id); if (!target) return;
+  for (let el = target.parentElement; el; el = el.parentElement) if (el.tagName === 'DETAILS') el.open = true;
+  if (!target.matches('input,textarea,button,select,a')) target.tabIndex = -1;
+  target.scrollIntoView({block:'center'}); target.focus({preventScroll:true});
+}
+function rbResetProject() {
+  const modal = document.getElementById('builderResetDialog'); modal.returnValue = 'cancel'; modal.showModal();
+  document.getElementById('builderResetCancel').focus();
+}
+document.getElementById('builderResetSave').addEventListener('click', rbSaveProject);
+document.getElementById('builderResetDialog').addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const first = document.getElementById('builderResetSave'), last = document.getElementById('builderResetConfirm');
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+document.getElementById('builderResetDialog').addEventListener('submit', e => {
+  if (e.submitter?.value === 'confirm' && !rbCommitProjectReset()) e.preventDefault();
+});
+document.getElementById('builderResetDialog').addEventListener('close', e => {
+  document.getElementById(e.target.returnValue === 'confirm' ? 'mihomoInput' : 'builderResetBtn').focus({preventScroll:true});
+});
+// Internal test/developer opt-in only; no public link, URL switch or persistence.
+const physicalTopologyInternal = document.getElementById('physicalTopologyInternal');
+if (globalThis.__LG_INTERNAL_PHYSICAL_TOPOLOGY__ === true) { physicalTopologyInternal.hidden = false; physicalTopologyInternal.inert = false; }
+
 // === SAFE BUILDER PROJECT RESET ===
 // Project defaults are canonical; extra control defaults cover presentation/preview
 // inputs outside the serializable project. Device identity and other tabs are separate owners.
@@ -11214,13 +11335,13 @@ const RB_NEW_PROJECT = JSON.stringify(rbCollectProject());
 const RB_NEW_CONTROLS = Array.from(document.querySelectorAll('#tab-mihomo input, #tab-mihomo textarea, #tab-mihomo select'))
   .filter(el => el.id && !el.closest('#deviceIdentityDetails'))
   .map(el => ({ id: el.id, value: el.type === 'file' ? '' : el.value, checked: el.checked }));
-function rbResetProject() {
-  if (!confirm('Сбросить текущий проект Mihomo Builder? Все введённые серверы, подписки, WG/AWG, политики и настройки проекта будут очищены. Файлы на компьютере и работающий Mihomo не изменятся. При необходимости нажмите «Отмена» и сохраните проект. Отмена сброса после подтверждения недоступна.')) return false;
+function rbCommitProjectReset() {
   // Admission and canonical write happen before destructive cleanup. rbApplyProject
   // provides rollback if validation/rendering fails; no history is consumed on failure.
   try { rbApplyProject(JSON.parse(RB_NEW_PROJECT)); }
   catch (e) { showToast('Сброс не выполнен; прежний проект сохранён.', true); return false; }
   builderProjectEpoch++; builderBuildAttempts = 0; builderBuildError = false;
+  wgDetailsOpen.clear();
   wgUploadSeq++; wgUploadPending = false; wgProfileSeq = 0; wgRejected = []; wgFiles = []; syncWgCollections();
   document.getElementById('wgDnsWarning').style.display = 'none';
   subscriptionPreviewSeq++; serverListLoadSeq++; serverListState = SERVER_LIST_STATE.IDLE;
@@ -11240,8 +11361,8 @@ function rbResetProject() {
   for (const id of ['ptRuntimeProfiles','ptGraph','ptWhatIfOut','ptNetDiagOut','ptGenOut','mtImportStats','mtImportGroups','subscriptionPreviewStats','subscriptionPreviewNames','subscriptionPreviewWarning','subscriptionPreviewNamesLegacy','rtReconciliation']) { const el = document.getElementById(id); if (el) el.textContent = ''; }
   lastBuildFingerprint = lastRoutingDoc = lastRoutingHumanNames = lastMtuPlan = null;
   diagnosticActionSeq++; diagnosticPendingOut = null; mihomoValidationSeq++;
-  vrgFocusId = ''; vrgRenderInto('vrgSvgWrap', null, false, 'vrgTextAlt');
-  for (const id of ['rdSummary','rdPreview','rdResult','rdEffectiveInput','dcResults','vrgStatus','vrgTextAlt','tieredTrace','rtStatus','rtSummary','subListStatus']) { const el = document.getElementById(id); if (el) el.textContent = ''; }
+  vrgFocusId = ''; vrgRenderInto('vrgSvgWrap', null, false, 'vrgTextAltOut');
+  for (const id of ['rdSummary','rdPreview','rdResult','rdEffectiveInput','dcResults','vrgStatus','vrgTextAltOut','tieredTrace','rtStatus','rtSummary','subListStatus']) { const el = document.getElementById(id); if (el) el.textContent = ''; }
   renderRuleProviderExplorer(null); renderServerList(); updateServerListStats(); updateSubSelectionNote(); renderRuntimeSummary();
   resetServerListButton(); updateServerListVisibility(); renderWgList(); updateWgStatusTextOnly();
   updateMihomoOptionStates(); updateExcludeFilterVisibility(); updateSubModeHint(); updateVpsDnsFields();
