@@ -74,8 +74,10 @@ let cases = 0;
     assert.equal(await page.evaluate(() => globalThis.__auditSentinel), 0); cases++;
     // File import must retain CRLF and a final newline in the downloaded no-op file.
     const crlf = '\uFEFF' + fixture.replace(/\n/g, '\r\n');
+    let replacementConfirmation;page.once('dialog',async d=>{replacementConfirmation={type:d.type(),text:d.message()};await d.accept();});
     await page.setInputFiles('#csImportFile', { name: 'synthetic.yaml', mimeType: 'text/yaml', buffer: Buffer.from(crlf) });
     await page.waitForFunction(() => csImportText.includes('\r\n'));
+    assert.equal(replacementConfirmation.type,'confirm');assert.match(replacementConfirmation.text,/Заменить/);
     assert.deepEqual(await download('#csExportDownload'), { name: 'config.yaml', data: crlf }); cases++;
     await page.setInputFiles('#csImportFile', { name: 'invalid-utf8.yaml', mimeType: 'text/yaml', buffer: Buffer.concat([Buffer.from('proxies: []\nnote: "'), Buffer.from([0xff]), Buffer.from('"\n')]) });
     await page.waitForFunction(() => document.getElementById('csStatus').textContent.includes('UTF-8'));
