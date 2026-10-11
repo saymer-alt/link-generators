@@ -4,7 +4,7 @@
 
 ## [Unreleased]
 
-- **Owner acceptance UX-51–54:** синхронизированы disabled-действия Builder → Studio, общие демонстрационные офлайн-проверки; добавлена HTTP(S) подписка в source-preserving редактор (без автоматического use). Новый default общей dialer-группы SHARED-DIALER; формат проекта v2 с миграцией исторического default v1 без переименования targets/YAML.
+- **Owner acceptance UX-51–54:** синхронизированы disabled-действия Builder → Studio, общие демонстрационные офлайн-проверки; добавлена HTTP(S) подписка в source-preserving редактор (без автоматического use). Новый default общей dialer-группы SHARED-DIALER; формат проекта остаётся v1, совместимая обработка старых тестовых проектов без переименования targets/YAML.
 
 ### Added
 

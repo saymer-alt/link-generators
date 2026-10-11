@@ -1296,9 +1296,9 @@ async function check(name, fn) {
       assert.ok(blocked.error);assert.equal(await n.evaluate(()=>csExportText()),before);
     }
   });
-  await check('UX54 acceptance project migration and neutral default',async()=>{
+  await check('UX54 acceptance project v1 compatibility and neutral default',async()=>{
     const n=await fresh(false);await n.locator('#mihomoInput').fill(link);
-    assert.equal(await n.evaluate(()=>rbCollectProject().schemaVersion),2);
+    assert.equal(await n.evaluate(()=>rbCollectProject().schemaVersion),1);
     const f=path.join(root,'tests','fixtures');await n.locator('#wgFile').setInputFiles([path.join(f,'wg-simple-a.conf'),path.join(f,'awg31.conf')]);await n.waitForFunction(()=>wgProfiles.length===2);
     const project=await n.evaluate(()=>{document.getElementById('wgDialerMembers').value='DIRECT';for(const w of wgProfiles){w.mode='proxy';w.target='SHARED-DIALER';}return rbCollectProject();});
     await n.evaluate(p=>rbApplyProject(p),project);await build(n);
@@ -1307,9 +1307,26 @@ async function check(name, fn) {
       const old=JSON.parse(JSON.stringify(project));old.schemaVersion=1;old.dialer.name=explicit?'WARP-DIALER':'';for(const w of old.wgProfiles)w.target='WARP-DIALER';
       await n.evaluate(p=>rbApplyProject(p),old);assert.equal(await n.locator('#wgDialerInput').inputValue(),'WARP-DIALER');await build(n);
       const legacy=await n.locator('#mihomoOutput').inputValue();assert.ok(legacy.includes('WARP-DIALER'));assert.ok(!legacy.includes('SHARED-DIALER'));
-      const round=await n.evaluate(()=>rbParseProjectText(JSON.stringify(rbCollectProject())));assert.equal(round.ok,true);assert.equal(round.project.schemaVersion,2);assert.equal(round.project.dialer.name,'WARP-DIALER');
+      const round=await n.evaluate(()=>rbParseProjectText(JSON.stringify(rbCollectProject())));assert.equal(round.ok,true);assert.equal(round.project.schemaVersion,1);assert.equal(round.project.dialer.name,'WARP-DIALER');
       assert.deepEqual(round.project.wgProfiles,old.wgProfiles);
     }
+    await n.evaluate(p=>rbApplyProject(p),project);await build(n);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+    const newRound=await n.evaluate(()=>rbParseProjectText(JSON.stringify(rbCollectProject())));assert.equal(newRound.ok,true);assert.equal(newRound.project.schemaVersion,1);assert.equal(newRound.project.dialer.name,'');assert.deepEqual(newRound.project.wgProfiles,project.wgProfiles);
+    for(const name of ['', 'WARP-DIALER', 'Custom-Dialer']){
+      const interim=JSON.parse(JSON.stringify(project));interim.schemaVersion=2;interim.dialer.name=name;for(const w of interim.wgProfiles)w.target=name||'SHARED-DIALER';
+      const parsed=await n.evaluate(p=>rbParseProjectText(JSON.stringify(p)),interim);assert.equal(parsed.ok,true);assert.equal(parsed.project.schemaVersion,1);assert.equal(parsed.project.dialer.name,name);assert.deepEqual(parsed.project.wgProfiles,interim.wgProfiles);
+      await n.evaluate(p=>rbApplyProject(p),parsed.project);await build(n);const doc=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));const target=name||'SHARED-DIALER';assert.equal(doc['proxy-groups'].filter(g=>g.name===target).length,1);for(const w of doc.proxies.filter(p=>p.type==='wireguard'))assert.equal(w['dialer-proxy'],target);
+      const saved=await n.evaluate(()=>rbCollectProject());assert.equal(saved.schemaVersion,1);await n.evaluate(p=>rbApplyProject(p),saved);await build(n);
+    }
+    const noRefs=await n.evaluate(p=>{p.wgProfiles=[];return rbParseProjectText(JSON.stringify(p));},project);assert.equal(noRefs.project.dialer.name,'');
+    for(const source of ['bean','policy','tiered']){
+      const old=JSON.parse(JSON.stringify(project));old.dialer.name='  ';old.wgProfiles=[];old.passthrough={'source-config':{rules:['MATCH,WARP-DIALER']}};
+      if(source==='bean'){old.wgProfiles=JSON.parse(JSON.stringify(project.wgProfiles));for(const w of old.wgProfiles){w.target='';w.bean.wireguard.dialerProxy='WARP-DIALER';}}
+      if(source==='policy')old.domainPolicy.cards=[{name:'legacy',domains:'example.invalid',target:'WARP-DIALER'}];
+      if(source==='tiered')old.tiered.cards=[{name:'legacy',strategy:'fallback',members:['WARP-DIALER']}];
+      const parsed=await n.evaluate(p=>rbParseProjectText(JSON.stringify(p)),old);assert.equal(parsed.ok,true);assert.equal(parsed.project.dialer.name,'WARP-DIALER');assert.deepEqual({...parsed.project,dialer:old.dialer},old);
+    }
+    const future=await n.evaluate(p=>rbParseProjectText(JSON.stringify({...p,schemaVersion:3})),project);assert.equal(future.ok,false);
     await n.evaluate(p=>rbApplyProject(p),project);await build(n);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
     const empty=await n.evaluate(p=>{p.schemaVersion=1;p.dialer={name:'',members:'',providers:''};p.wgProfiles=[];return rbParseProjectText(JSON.stringify(p));},project);assert.equal(empty.project.dialer.name,'');
     await r2Reveal(n,'wgDialerInput');await screenshot(n,'#wgDialerAdvanced','ux54-shared-dialer');

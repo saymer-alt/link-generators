@@ -7,7 +7,7 @@ Baseline: `36081f9c94cbff2f8a905e32ae809ca9eb9b2624` (main). Реестр UX-01�
 - UX-51: все три действия YAML используют `isBuilderYamlReady()`. Защитная проверка handoff сохранена; обычный disabled-click не вызывает toast/Build.
 - UX-53: Builder и Studio используют общие примеры. Пустой одиночный ввод — gemini.google.com, эффективный адрес виден отдельно. Поля/YAML не заполняются, сетевые проверки не выполняются.
 - UX-52: отдельная операция `add-provider` в `csReplay`; HTTP(S) provider, проверка имени/URL/интервалов/цели/path/health-check. Нет изменения groups/use, загрузки подписки или перезаписи файла. Структурные aliases/неоднозначный YAML отклоняются. Undo/Reset/export используют существующий engine. URL скрыт при вводе и замаскирован в diff/диагностике.
-- UX-54: canonical source `saymer-alt/web4core`, commit `fea3cede102ca69137975b31a20317a4c42e052b`: новый implicit default SHARED-DIALER. Явное WARP-DIALER сохранено. Миграция проекта v1 → v2 закрепляет историческое имя при пустом name и заполненных members/providers; targets/beans/passthrough не переименовывает. Пустая неактивная группа не создаётся. YAML миграции не подвергается.
+- UX-54: canonical source `saymer-alt/web4core`, commit `fea3cede102ca69137975b31a20317a4c42e052b`: новый implicit default SHARED-DIALER. Явное WARP-DIALER сохранено. По уточнению владельца writer остаётся на schemaVersion 1. Старые тестовые v1 с пустым именем активной группы и ссылками на WARP-DIALER получают явное историческое имя; промежуточные тестовые v2 читаются как v1. Targets/beans/passthrough не переименовываются. Пустая неактивная группа не создаётся. YAML миграции не подвергается.
 
 ## Воспроизведение baseline
 

@@ -81,14 +81,14 @@ const normalizeHwid = yaml => yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, '  - <HWI
   const projectPath = path.join(outputDir, 'downloaded-project.lgproject.json');
   await download.saveAs(projectPath);
   const project = JSON.parse(fs.readFileSync(projectPath, 'utf8'));
-  assert.equal(project.schemaVersion, 2);
+  assert.equal(project.schemaVersion, 1);
   assert.equal(project.wgProfiles.length, 2);
   assert.ok(project.wgProfiles.some(w => w.filename === 'wg-simple-a.conf' && w.bean.wireguard.privateKey === PRIV_A));
   assert.equal(project.sources.subMode, true);
   assert.equal(project.options.tunMips, true);
   assert.equal(project.domainPolicy.cards[0].name, 'ai');
   assert.equal(project.tiered.cards[0].name, 'main');
-  ok('проект сохранён: схема v2, 2 WG (с ключами и именами файлов), опции/карточки на месте');
+  ok('проект сохранён: схема v1, 2 WG (с ключами и именами файлов), опции/карточки на месте');
 
   // --- 4. Новая вкладка: загрузить проект → Builder восстановлен ---
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href);

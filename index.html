@@ -6953,7 +6953,7 @@ function ptNetworkDiagnostics(spec, model, opts) {
 // bounded-разбор — pure-функции (без DOM). Контракт формата:
 // docs/research/PORTABLE-BUILDER-PROJECT.md. Сбор/применение состояния
 // Builder (DOM) живёт в RB-UI, здесь только данные.
-const RB_PROJECT_SCHEMA_VERSION = 2;
+const RB_PROJECT_SCHEMA_VERSION = 1;
 const RB_PROJECT_MAX_BYTES = 4 * 1024 * 1024;
 const RB_PROFILES = new Set(['router', 'vps-local', 'vps-gateway']);
 const RB_DASHBOARDS = new Set(['metacubexd', 'yacd', 'zashboard', 'custom']);
@@ -7049,26 +7049,22 @@ function rbValidateProject(p) {
   return errors;
 }
 
-// v1: пустое имя активной общей группы означало WARP-DIALER.
-// Закрепляем исторический default; имена/targets/beans/passthrough не меняем.
-// v2: пустое имя новой группы означает SHARED-DIALER.
-const RB_MIGRATIONS = {
-  1: p => {
-    const d = p.dialer;
-    const active = d && ['members', 'providers'].some(k => typeof d[k] === 'string' && d[k].trim());
-    return active && typeof d.name === 'string' && !d.name.trim()
-      ? { ...p, dialer: { ...d, name: 'WARP-DIALER' } } : { ...p };
-  }
-};
+// Формат v1 ещё не выпускался. Новое пустое имя означает SHARED-DIALER.
+// Совместимость тестовых файлов: закрепляем старое имя только при ссылке
+// на историческую неявную группу; сами ссылки/beans/passthrough не меняем.
+// Промежуточный v2 из этого PR имел ту же структуру: читаем и сохраняем v1.
 function rbMigrateProject(p) {
-  let cur = p;
-  while (cur && cur.schemaVersion < RB_PROJECT_SCHEMA_VERSION) {
-    const step = RB_MIGRATIONS[cur.schemaVersion];
-    if (!step) return { ok: false, error: 'нет миграции schemaVersion ' + cur.schemaVersion };
-    cur = step(cur);
-    cur.schemaVersion = (cur.schemaVersion || 0) + 1;
+  if (p && p.schemaVersion === 2) return { ok: true, project: { ...p, schemaVersion: 1 } };
+  const d = p && p.dialer;
+  const active = d && ['members', 'providers'].some(k => typeof d[k] === 'string' && d[k].trim());
+  const legacyRef = (Array.isArray(p?.wgProfiles) && p.wgProfiles.some(w =>
+    w?.target === 'WARP-DIALER' || w?.bean?.wireguard?.dialerProxy === 'WARP-DIALER')) ||
+    (Array.isArray(p?.domainPolicy?.cards) && p.domainPolicy.cards.some(c => c?.target === 'WARP-DIALER')) ||
+    (Array.isArray(p?.tiered?.cards) && p.tiered.cards.some(c => Array.isArray(c?.members) && c.members.includes('WARP-DIALER')));
+  if (p?.schemaVersion === 1 && active && typeof d.name === 'string' && !d.name.trim() && legacyRef) {
+    return { ok: true, project: { ...p, dialer: { ...d, name: 'WARP-DIALER' } } };
   }
-  return { ok: true, project: cur };
+  return { ok: true, project: p };
 }
 
 // Bounded-разбор: размер → JSON → миграция → валидация. Ничего не бросает:

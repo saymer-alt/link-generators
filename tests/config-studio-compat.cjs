@@ -91,9 +91,14 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'..','web4core.runtime.js'),
 const core=context.web4core;
 const wg=core.parseWireGuardConf(fs.readFileSync(path.join(__dirname,'fixtures','wg-simple-a.conf'),'utf8'),'WG');
 const awg=core.parseWireGuardConf(fs.readFileSync(path.join(__dirname,'fixtures','awg31.conf'),'utf8'),'AWG');
-for(const provider of [false,true])for(const name of ['', 'WARP-DIALER']){
-  const target=name||'SHARED-DIALER';
-  const beans=[wg,awg].map(b=>({...b,wireguard:{...b.wireguard,dialerProxy:target}}));
+const projectApi=new Function(grab('RB-CORE-START','RB-CORE-END')+'\nreturn {rbParseProjectText};')();
+for(const provider of [false,true])for(const [version,storedName,target] of [[1,'','SHARED-DIALER'],[1,'','WARP-DIALER'],[1,'WARP-DIALER','WARP-DIALER'],[1,'Custom-Dialer','Custom-Dialer'],[2,'','SHARED-DIALER'],[2,'WARP-DIALER','WARP-DIALER']]){
+  const project={schemaVersion:version,sources:{mainInput:'',fallbackInput:'',subMode:provider,autoWhitelist:false},options:{profile:'router'},dialer:{name:storedName,members:provider?'':'DIRECT',providers:provider?'https://sub.example.invalid/feed':''},domainPolicy:{enabled:false,cards:[]},tiered:{enabled:false,cards:[]},wgProfiles:[wg,awg].map((b,i)=>({id:i+1,filename:i?'awg31.conf':'wg-simple-a.conf',mode:'proxy',target,bean:{...b,wireguard:{...b.wireguard,dialerProxy:target}}}))};
+  const parsed=projectApi.rbParseProjectText(JSON.stringify(project));assert.equal(parsed.ok,true);assert.equal(parsed.project.schemaVersion,1);assert.deepEqual(parsed.project.wgProfiles,JSON.parse(JSON.stringify(project.wgProfiles)));
+  const round=projectApi.rbParseProjectText(JSON.stringify(parsed.project));assert.deepEqual(round,parsed);
+  const name=parsed.project.dialer.name;
+  assert.equal(name||'SHARED-DIALER',target);
+  const beans=parsed.project.wgProfiles.map(w=>w.bean);
   const options={addTun:false,addSocks:true,webUI:false,mihomoSubscriptionMode:false,wgDialerProxy:name,wgDialerGroupOnly:true,wgDialerGroupMembers:['DIRECT']};
   const url='https://sub.example.invalid/feed';
   if(provider){options.mihomoSubscriptionMode=true;delete options.wgDialerGroupMembers;options.wgDialerProviders=[url];}
@@ -105,7 +110,7 @@ for(const provider of [false,true])for(const name of ['', 'WARP-DIALER']){
   assert.equal((text.match(new RegExp('dialer-proxy: '+target,'g'))||[]).length,2);
   const file=path.join(dir,'dialer-'+target+'.yaml');fs.writeFileSync(file,text);
   execFileSync(MIHOMO,['-t','-d',dir,'-f',file],{timeout:60000,stdio:['ignore','pipe','pipe']});
-  cases++;console.log('  ok — UX54 multiple WG/AWG '+target+' provider='+provider);
+  cases++;console.log('  ok — UX54 project v'+version+' name='+JSON.stringify(storedName)+' multiple WG/AWG '+target+' provider='+provider);
 }
 fs.rmSync(dir, { recursive: true, force: true });
 console.log('PASS config-studio-compat: ' + cases + ' сценариев против реального mihomo');
