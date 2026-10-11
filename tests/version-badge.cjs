@@ -13,11 +13,17 @@ let cases = 0;
 // --- Node-side guard: single source-of-truth ---
 {
   assert.equal((html.match(/const GENERATOR_META = Object\.freeze/g) || []).length, 1, 'GENERATOR_META определяется ровно один раз');
-  assert.equal((html.match(/version:\s*'1\.10\.0'/g) || []).length, 1, 'version-литерал живёт только в GENERATOR_META');
+  assert.equal((html.match(/version:\s*'1\.11\.0'/g) || []).length, 1, 'version-литерал живёт только в GENERATOR_META');
   assert.equal((html.match(/channel:\s*'stable'/g) || []).length, 1, 'channel-литерал живёт только в GENERATOR_META');
   assert.match(html, /<span id="genVersionBadge"[^>]*><\/span>/, 'бейдж пуст в HTML — текст приходит из GENERATOR_META');
+  assert.ok(!/EXPERIMENTAL\s*[·-]\s*v?1\.11-dev/.test(html), 'Physical Topology badge не содержит устаревающий v1.11-dev literal');
+  assert.match(html, /PHYSICAL TOPOLOGY/, 'Physical Topology label без version literal');
+  assert.match(html, /id="cfgAutoWhitelist"[^>]*>\s*🛡️ Автоматический режим белых списков/, 'Auto Whitelist uses supported shield icon');
+  assert.match(html, /id="cfgTieredFailover"[^>]*>\s*🔀 Приоритетные группы серверов/, 'Tiered Failover uses supported decorative icon');
+  assert.match(html, /tierGroupName\('🪜 TIERED-AUTO'/, 'canonical generated group identity remains backward compatible');
+  assert.match(html, /\.site-footer\{width:min\(1520px,100%\);margin:18px auto 26px/, 'footer центрирован и совпадает с app max-width');
   assert.ok(!/https:\/\/google\.com\/generate_204/.test(html), 'в production index.html нет legacy google fallback');
-  cases += 5;
+  cases += 11;
 }
 
 (async () => {
@@ -34,7 +40,7 @@ let cases = 0;
   // Badge visible immediately + derives from GENERATOR_META
   const badge = page.locator('#genVersionBadge');
   assert.equal(await badge.isVisible(), true, 'badge visible после загрузки'); cases += 1;
-  assert.equal(await badge.textContent(), 'v1.10.0 · STABLE'); cases += 1;
+  assert.equal(await badge.textContent(), 'v1.11.0 · STABLE'); cases += 1;
   const meta = await page.evaluate(() => ({
     // const в classic script не создаёт свойство globalThis — читаем глобальный lexical binding
     present: typeof GENERATOR_META !== 'undefined',
@@ -46,19 +52,35 @@ let cases = 0;
   }));
   assert.equal(meta.present, true, 'GENERATOR_META доступен странице');
   assert.equal(meta.frozen, true, 'GENERATOR_META frozen');
-  assert.equal(meta.version, '1.10.0');
+  assert.equal(meta.version, '1.11.0');
   assert.equal(meta.channel, 'stable');
   assert.equal(meta.derived, await badge.textContent(), 'badge text derives from GENERATOR_META');
-  assert.equal(meta.title, 'Generator version 1.10.0, channel stable', 'accessible title из GENERATOR_META');
-  cases += 5;
+  assert.equal(meta.title, 'Generator version 1.11.0, channel stable', 'accessible title из GENERATOR_META');
+  // Футер: версия/канал из того же источника GENERATOR_META (PHASE 23)
+  assert.equal(await page.textContent('#footerVersion'), await badge.textContent(), 'footer version деривится из GENERATOR_META как бейдж');
+  const rel = await page.getAttribute('.site-footer-links a', 'rel');
+  assert.ok(rel && rel.includes('noopener') && rel.includes('noreferrer'), 'внешние ссылки футера с rel=noopener noreferrer');
+  cases += 7;
 
-  // Narrow viewport: no horizontal overflow, badge still visible
-  await page.setViewportSize({ width: 360, height: 740 });
-  await page.waitForTimeout(150);
-  const overflow = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, badgeVisible: !!document.getElementById('genVersionBadge').offsetParent }));
-  assert.ok(overflow.sw <= overflow.iw + 1, 'narrow viewport: нет горизонтального overflow (' + overflow.sw + ' vs ' + overflow.iw + ')');
-  assert.equal(overflow.badgeVisible, true, 'badge виден на narrow viewport');
-  cases += 2;
+  // Mobile widths: no horizontal overflow; wide layouts keep footer aligned with app.
+  for (const width of [320, 360, 390, 412, 480]) {
+    await page.setViewportSize({ width, height: 740 });
+    const layout = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, badgeVisible: !!document.getElementById('genVersionBadge').offsetParent }));
+    assert.ok(layout.sw <= layout.iw + 1, 'mobile ' + width + ': no horizontal overflow (' + layout.sw + ' vs ' + layout.iw + ')');
+    assert.equal(layout.badgeVisible, true, 'badge visible at ' + width);
+    cases += 2;
+  }
+  for (const width of [1366, 1920, 2560]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await page.evaluate(() => {
+      const app = document.querySelector('.container').getBoundingClientRect();
+      const footer = document.querySelector('.site-footer').getBoundingClientRect();
+      return { aligned: Math.abs(app.width - footer.width) < 1 && Math.abs(app.left - footer.left) < 1, sw: document.documentElement.scrollWidth, iw: window.innerWidth };
+    });
+    assert.equal(layout.aligned, true, 'footer aligned with app at ' + width);
+    assert.ok(layout.sw <= layout.iw + 1, 'desktop ' + width + ': no horizontal overflow');
+    cases += 2;
+  }
   await page.setViewportSize({ width: 1280, height: 800 });
 
   // Production build; badge interaction and reading must not alter YAML
@@ -71,7 +93,7 @@ let cases = 0;
   await badge.hover();
   const yaml2 = await page.evaluate(() => document.getElementById('mihomoOutput').value);
   assert.equal(yaml2, yaml1, 'badge click/hover не меняет generated YAML');
-  assert.equal(await badge.textContent(), 'v1.10.0 · STABLE', 'badge не меняется от клика');
+  assert.equal(await badge.textContent(), 'v1.11.0 · STABLE', 'badge не меняется от клика');
   cases += 2;
 
   // Fallback: forced empty #pingSelect → Build → gstatic (не legacy google)

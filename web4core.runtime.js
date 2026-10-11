@@ -4632,7 +4632,7 @@
     }
     return stack;
   }
-  var MIHOMO_WG_DIALER_DEFAULT_GROUP = "WARP-DIALER";
+  var MIHOMO_WG_DIALER_DEFAULT_GROUP = "SHARED-DIALER";
   function resolveMihomoWgDialer(proxies, groups, providers, opts) {
     const groupOnly = !!(opts && opts.wgDialerGroupOnly);
     const target = String(opts && opts.wgDialerProxy || "").trim();

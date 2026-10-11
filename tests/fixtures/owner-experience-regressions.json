@@ -1,0 +1,396 @@
+{
+  "schema_version": 1,
+  "project": "link-generators",
+  "user_findings": [
+    {
+      "id": "UX-01",
+      "summary": "Карточка политики появляется вне видимой области",
+      "scenario_prefixes": [
+        "UX01 add controls precede cards and separate import",
+        "UX01/02 four visible focused cards in append order"
+      ]
+    },
+    {
+      "id": "UX-02",
+      "summary": "Повторное создание политики даёт дублирующееся имя",
+      "scenario_prefixes": [
+        "UX02 delete and re-add reuses free name without renaming",
+        "UX02 imported names and order survive manual addition",
+        "UX02 project roundtrip retains policy names and priority"
+      ]
+    },
+    {
+      "id": "UX-03",
+      "summary": "Visual Routing Graph без Zoom/Pan/Fit",
+      "scenario_prefixes": [
+        "UX03 real normal Build with 19+ nodes and unchanged YAML",
+        "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+        "UX03 Config Studio same controls, focus, reset and YAML invariant"
+      ]
+    },
+    {
+      "id": "UX-04",
+      "summary": "Пустой адрес Mihomo Controller отвергается",
+      "scenario_prefixes": [
+        "UX04 no automatic request; empty field defaults only on Fetch",
+        "UX04 default secret requires target confirmation and cancel sends nothing"
+      ]
+    },
+    {
+      "id": "UX-05",
+      "summary": "URL /ui/#/overview не приводится к API контроллера",
+      "scenario_prefixes": [
+        "UX05 UI URL normalization, prefix, IPv6 and credentials rejection"
+      ]
+    },
+    {
+      "id": "UX-06",
+      "summary": "Неясная ошибка обращения к контроллеру",
+      "scenario_prefixes": [
+        "UX06 HTTP, malformed JSON and unknown network failure stay distinct",
+        "UX06 timeout uses existing eight second abort"
+      ]
+    },
+    {
+      "id": "UX-07",
+      "summary": "Routing Inspector неудобен до Build и с пустым полем",
+      "scenario_prefixes": [
+        "UX07 empty Inspector offers normal Build then default offline probe",
+        "UX07 network Build cancel does not send or mutate project",
+        "UX07 async policy mutation rejects old Build commit"
+      ]
+    },
+    {
+      "id": "UX-08",
+      "summary": "Domain Coverage применяет устаревший или отсутствующий Build",
+      "scenario_prefixes": [
+        "UX08 stale coverage offers rebuild and retains chosen domains"
+      ]
+    },
+    {
+      "id": "UX-09",
+      "summary": "Стрелки раскрывающихся панелей не меняют направление после открытия",
+      "scenario_prefixes": [
+        "UX09 chevrons follow native open state and nested keyboard toggles"
+      ]
+    },
+    {
+      "id": "UX-10",
+      "summary": "Первый Build теряется среди инженерных инструментов, нет навигации по рабочим сценариям",
+      "scenario_prefixes": [
+        "UX10 quick start ends at YAML before engineering sections",
+        "UX10 keyboard workspace navigation preserves project YAML and generation",
+        "UX10 expert directory reveals tools without enabling options",
+        "UX10 quick start downloads exactly the validated YAML"
+      ]
+    },
+    {
+      "id": "UX-11",
+      "summary": "Рабочую область графа нельзя развернуть или изменить по высоте",
+      "scenario_prefixes": [
+        "UX11 expanded graph height Escape and focus"
+      ]
+    },
+    {
+      "id": "UX-12",
+      "summary": "Runtime-only метки прижаты к краю, длинные имена переполняют список",
+      "scenario_prefixes": [
+        "UX12 runtime list long names badges selection and narrow scroll"
+      ]
+    },
+    {
+      "id": "UX-13",
+      "summary": "AWL и просмотр подписок далеко от первого ввода",
+      "scenario_prefixes": [
+        "UX13 AWL"
+      ]
+    },
+    {
+      "id": "UX-14",
+      "summary": "Build и актуальность YAML недоступны при работе в нижних разделах",
+      "scenario_prefixes": [
+        "UX14 sticky"
+      ]
+    },
+    {
+      "id": "UX-15",
+      "summary": "Непонятно как назвать несколько SELECT-групп",
+      "scenario_prefixes": [
+        "UX15 policy"
+      ]
+    },
+    {
+      "id": "UX-16",
+      "summary": "Связанные WG/AWG и Web UI настройки далеко от ввода",
+      "scenario_prefixes": [
+        "UX16 WG"
+      ]
+    },
+    {
+      "id": "UX-17",
+      "summary": "Техническое название приоритетов и квадраты вместо ladder emoji",
+      "scenario_prefixes": [
+        "UX17 priority"
+      ]
+    },
+    {
+      "id": "UX-18",
+      "summary": "AWL conflicts require explicit resolution and generation guard",
+      "scenario_prefixes": [
+        "UX18 "
+      ]
+    },
+    {
+      "id": "UX-19",
+      "summary": "AWG conversion diagnostic",
+      "scenario_prefixes": [
+        "UX19 field "
+      ]
+    },
+    {
+      "id": "UX-20",
+      "summary": "RandomTrailers explanation",
+      "scenario_prefixes": [
+        "UX20 field "
+      ]
+    },
+    {
+      "id": "UX-21",
+      "summary": "New tier defaults",
+      "scenario_prefixes": [
+        "UX21 field "
+      ]
+    },
+    {
+      "id": "UX-22",
+      "summary": "Empty coverage examples",
+      "scenario_prefixes": [
+        "UX22 field "
+      ]
+    },
+    {
+      "id": "UX-23",
+      "summary": "Graph height contract",
+      "scenario_prefixes": [
+        "UX23 field "
+      ]
+    },
+    {
+      "id": "UX-24",
+      "summary": "Physical lab discoverability",
+      "scenario_prefixes": [
+        "UX24 field "
+      ]
+    },
+    {
+      "id": "UX-25",
+      "summary": "REALITY direct navigation",
+      "scenario_prefixes": [
+        "UX25 field "
+      ]
+    },
+    {
+      "id": "UX-26",
+      "summary": "Actionable STALE",
+      "scenario_prefixes": [
+        "UX26 field "
+      ]
+    },
+    {
+      "id": "UX-27",
+      "summary": "AWL graph priorities",
+      "scenario_prefixes": [
+        "UX27 field "
+      ]
+    },
+    {
+      "id": "UX-28",
+      "summary": "Disabled tier disclosure",
+      "scenario_prefixes": [
+        "UX28 field "
+      ]
+    },
+    {
+      "id": "UX-29",
+      "summary": "Canonical safe project reset",
+      "scenario_prefixes": [
+        "UX29 field "
+      ]
+    },
+    {
+      "id": "UX-30",
+      "summary": "Reset modal",
+      "scenario_prefixes": [
+        "UX30 R2 "
+      ]
+    },
+    {
+      "id": "UX-31",
+      "summary": "YAML action button",
+      "scenario_prefixes": [
+        "UX31 R2 "
+      ]
+    },
+    {
+      "id": "UX-32",
+      "summary": "Single Coverage action",
+      "scenario_prefixes": [
+        "UX32 R2 "
+      ]
+    },
+    {
+      "id": "UX-33",
+      "summary": "Internal list spacing",
+      "scenario_prefixes": [
+        "UX33 R2 "
+      ]
+    },
+    {
+      "id": "UX-34",
+      "summary": "Lab freshness and artifacts",
+      "scenario_prefixes": [
+        "UX34 R2 "
+      ]
+    },
+    {
+      "id": "UX-35",
+      "summary": "Fullscreen focus panel",
+      "scenario_prefixes": [
+        "UX35 R2 "
+      ]
+    },
+    {
+      "id": "UX-36",
+      "summary": "MagiTrickle SELECT rename",
+      "scenario_prefixes": [
+        "UX36 R2 "
+      ]
+    },
+    {
+      "id": "UX-37",
+      "summary": "Compact WG cards",
+      "scenario_prefixes": [
+        "UX37 R2 "
+      ]
+    },
+    {
+      "id": "UX-38",
+      "summary": "Tiered auto-add",
+      "scenario_prefixes": [
+        "UX38 R2 "
+      ]
+    },
+    {
+      "id": "UX-39",
+      "summary": "Priority display labels",
+      "scenario_prefixes": [
+        "UX39 R2 "
+      ]
+    },
+    {
+      "id": "UX-40",
+      "summary": "Final diagnostics snapshot",
+      "scenario_prefixes": [
+        "UX40 R2 "
+      ]
+    },
+    {
+      "id": "UX-41",
+      "summary": "Validation action button",
+      "scenario_prefixes": [
+        "UX41 R2 "
+      ]
+    },
+    {
+      "id": "UX-42",
+      "summary": "Physical public feature gate",
+      "scenario_prefixes": [
+        "UX42 R2 "
+      ]
+    },
+    {
+      "id": "UX-43",
+      "summary": "Directional graph focus without ancestor siblings",
+      "scenario_prefixes": [
+        "UX43 VRG "
+      ]
+    },
+    {
+      "id": "UX-44",
+      "summary": "Graph and text disclosure chevrons",
+      "scenario_prefixes": [
+        "UX44 VRG "
+      ]
+    },
+    {
+      "id": "UX-45",
+      "summary": "Coverage priority display and secret redaction",
+      "scenario_prefixes": [
+        "UX45 polish "
+      ]
+    },
+    {
+      "id": "UX-46",
+      "summary": "Actual graph scale and unambiguous reset",
+      "scenario_prefixes": [
+        "UX46 polish "
+      ]
+    },
+    {
+      "id": "UX-47",
+      "summary": "Builder to Studio guarded local handoff",
+      "scenario_prefixes": [
+        "UX47 Studio integration "
+      ]
+    },
+    {
+      "id": "UX-48",
+      "summary": "Clipboard import and lifecycle race protection",
+      "scenario_prefixes": [
+        "UX48 Studio integration "
+      ]
+    },
+    {
+      "id": "UX-49",
+      "summary": "Shared original graph view action",
+      "scenario_prefixes": [
+        "UX49 Studio integration "
+      ]
+    },
+    {
+      "id": "UX-50",
+      "summary": "Adaptive initial Studio graph height",
+      "scenario_prefixes": [
+        "UX50 Studio integration "
+      ]
+    },
+    {
+      "id": "UX-51",
+      "summary": "Builder to Studio action availability",
+      "scenario_prefixes": [
+        "UX51 acceptance "
+      ]
+    },
+    {
+      "id": "UX-52",
+      "summary": "Add HTTP subscription provider preserving source",
+      "scenario_prefixes": [
+        "UX52 acceptance "
+      ]
+    },
+    {
+      "id": "UX-53",
+      "summary": "Shared offline routing demo inputs",
+      "scenario_prefixes": [
+        "UX53 acceptance "
+      ]
+    },
+    {
+      "id": "UX-54",
+      "summary": "Neutral dialer default and legacy project migration",
+      "scenario_prefixes": [
+        "UX54 acceptance "
+      ]
+    }
+  ]
+}

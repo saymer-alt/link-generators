@@ -1,0 +1,96 @@
+{
+  "31": [
+    {
+      "persistent": false,
+      "code": 0,
+      "version": "Mihomo Meta v1.19.31 windows amd64 with go1.26.8 Mon Sep 14 13:22:27 UTC 2026\nUse tags: with_gvisor",
+      "initialRoot": "T2",
+      "initialT1AAlive": false,
+      "initialT1BAlive": false,
+      "firstBody": "T2A",
+      "firstT1Ms": 2178,
+      "cleanupErrors": []
+    },
+    {
+      "persistent": false,
+      "code": 0,
+      "version": "Mihomo Meta v1.19.31 windows amd64 with go1.26.8 Mon Sep 14 13:22:27 UTC 2026\nUse tags: with_gvisor",
+      "initialRoot": "T2",
+      "initialT1AAlive": false,
+      "initialT1BAlive": false,
+      "firstBody": "T2A",
+      "firstT1Ms": 2181,
+      "cleanupErrors": []
+    },
+    {
+      "persistent": false,
+      "code": 0,
+      "version": "Mihomo Meta v1.19.31 windows amd64 with go1.26.8 Mon Sep 14 13:22:27 UTC 2026\nUse tags: with_gvisor",
+      "initialRoot": "T2",
+      "initialT1AAlive": false,
+      "initialT1BAlive": false,
+      "firstBody": "T2A",
+      "firstT1Ms": 2161,
+      "cleanupErrors": []
+    },
+    {
+      "persistent": true,
+      "code": 1,
+      "version": "Mihomo Meta v1.19.31 windows amd64 with go1.26.8 Mon Sep 14 13:22:27 UTC 2026\nUse tags: with_gvisor",
+      "initialRoot": "T2",
+      "initialT1AAlive": false,
+      "initialT1BAlive": false,
+      "firstBody": "T2A",
+      "failure": "A: traffic via T1",
+      "last": false,
+      "cleanupErrors": []
+    }
+  ],
+  "32": [
+    {
+      "persistent": false,
+      "code": 0,
+      "version": "Mihomo Meta v1.19.32 windows amd64 with go1.26.8 Wed Sep 30 17:00:18 UTC 2026\nUse tags: with_gvisor",
+      "initialRoot": "T2",
+      "initialT1AAlive": false,
+      "initialT1BAlive": false,
+      "firstBody": "T2A",
+      "firstT1Ms": 2195,
+      "cleanupErrors": []
+    },
+    {
+      "persistent": false,
+      "code": 0,
+      "version": "Mihomo Meta v1.19.32 windows amd64 with go1.26.8 Wed Sep 30 17:00:18 UTC 2026\nUse tags: with_gvisor",
+      "initialRoot": "T2",
+      "initialT1AAlive": false,
+      "initialT1BAlive": false,
+      "firstBody": "T2A",
+      "firstT1Ms": 2184,
+      "cleanupErrors": []
+    },
+    {
+      "persistent": false,
+      "code": 0,
+      "version": "Mihomo Meta v1.19.32 windows amd64 with go1.26.8 Wed Sep 30 17:00:18 UTC 2026\nUse tags: with_gvisor",
+      "initialRoot": "T2",
+      "initialT1AAlive": false,
+      "initialT1BAlive": false,
+      "firstBody": "T2A",
+      "firstT1Ms": 2174,
+      "cleanupErrors": []
+    },
+    {
+      "persistent": true,
+      "code": 1,
+      "version": "Mihomo Meta v1.19.32 windows amd64 with go1.26.8 Wed Sep 30 17:00:18 UTC 2026\nUse tags: with_gvisor",
+      "initialRoot": "T2",
+      "initialT1AAlive": false,
+      "initialT1BAlive": false,
+      "firstBody": "T2A",
+      "failure": "A: traffic via T1",
+      "last": false,
+      "cleanupErrors": []
+    }
+  ]
+}

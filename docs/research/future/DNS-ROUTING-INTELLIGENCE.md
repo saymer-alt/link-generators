@@ -1,0 +1,46 @@
+# DNS ↔ Routing Intelligence — v1.11 CANDIDATE
+
+Дата независимой ревизии: 2026-10-09. PR #207 остаётся открытым: merge только после отдельного OWNER GO. Это диагностика Config Studio, не изменение YAML и не измерение сети.
+
+## Источники и исправленные выводы
+
+Проверены обе версии: [Mihomo 1.19.31 config.go](https://github.com/MetaCubeX/mihomo/blob/v1.19.31/config/config.go), [1.19.32 config.go](https://github.com/MetaCubeX/mihomo/blob/v1.19.32/config/config.go).
+
+- `DefaultRawConfig` задаёт `DNS.Enable=false`. Наличие mapping `dns:` не включает DNS.
+- `parseDNS` проверяет `respect-rules` и обязательный `proxy-server-nameserver` независимо от Enable. Структурная ошибка показывается даже при выключенном DNS.
+- `parseNameServer` извлекает ProxyName из fragment: последний bare-компонент `#PROXY&ecs=...`; параметры `key=value` не являются селекторами. HTTPS/TLS/QUIC описывают транспорт DNS. Без fragment и respect-rules запрос прямой; с respect-rules используется RULES. Известный селектор означает explicit proxy selection, не доказанный tunnel (группа может выбрать DIRECT).
+- Неизвестное имя fragment может быть интерфейсом: UNKNOWN, без догадки о прокси.
+- [DNSDialer](https://github.com/MetaCubeX/mihomo/blob/v1.19.32/tunnel/dns_dialer.go) выбирает named proxy либо интерфейс; пустой ProxyName использует dialer напрямую. Прямой encrypted resolver не является автоматически доказанной утечкой.
+- Предыдущий вывод PoC «IP-правила всегда видят fake 198.18/16» **опровергнут**: [preHandleMetadata и resolveMetadata](https://github.com/MetaCubeX/mihomo/blob/v1.19.32/tunnel/tunnel.go#L296) восстанавливают hostname и очищают fake DstIP до routing; ResolveIP при необходимости получает реальный IP. Панель сообщает UNKNOWN результата конкретного запроса.
+
+## Поддерживаемая модель
+
+`dnsRoutingAudit` переиспользует `rdParseRule`. DOMAIN/DOMAIN-SUFFIX/DOMAIN-KEYWORD/MATCH идут в исходном порядке: первое совпадение выигрывает. Exact policy key и `+.`/`.` suffix base проверяются по этой модели. Непрозрачное предшествующее GEOSITE/RULE-SET/IP/logical rule делает результат UNKNOWN; содержимое внешних providers не загружается.
+
+Неподдерживаемые policy keys (GEOSITE/RULE-SET/wildcard) и неизвестные policy endpoints также дают явный UNKNOWN, даже когда rules состоят только из MATCH,DIRECT. Негативный тест сначала воспроизвёл отсутствие этого сообщения.
+
+Resolver и массивы nameserver-policy классифицируются по каждому endpoint: DIRECT / explicit-proxy / rules / UNKNOWN. Предупреждение о различии путей появляется только при доказанном DIRECT endpoint и поддерживаемом proxy-domain rule. Смешанный список не считается целиком проксированным. Окружение, bootstrap DNS, выбранный member группы, geolocation и реальные утечки **не наблюдались**.
+
+CONFIRMED относится к structural parse error; INFERRED — возможному влиянию разницы путей; UNKNOWN — непокрытой семантике. Отсутствие finding не доказывает безопасность сети.
+
+## UI и snapshot
+
+Config Studio → Разобрать → DNS ↔ Routing. Анализ локальный; никаких запросов к nameservers/controllers. Изменение source/editor не обновляет snapshot автоматически: повторите Разобрать. Clear очищает панель. Все строки проходят csRedactText. Ошибки этой панели не подменяют validator/export gate. Quick Start синхронизирован.
+
+## Проверки
+
+- `dns-routing-core.cjs`: 17 групп, включая omitted/disabled Enable, безусловную structural check, URI fragments/parameters, policy arrays, first-match/duplicates/MATCH/suffix, unknown interface/provider, mixed endpoints, redaction.
+- `dns-routing-browser.cjs`: rendering, redaction, disabled/structural, explicit-proxy, snapshot/clear.
+- `dns-routing-mihomo-compat.cjs`: 7 parse-only synthetic cases; CI matrix 1.19.31/1.19.32. `-t` не запускает сервер и не доказывает трафик.
+- Historical `research/poc/dns-routing` не является текущим semantic acceptance gate: его исходные выводы о схемах, first-match и fake-IP superseded этой ревизией. Research не переносился в production.
+
+Финальный READY/NOT READY фиксируется в комментарии PR на точном head после завершения всех обязательных CI jobs. mergeable=true недостаточно. Field-test с реальными данными владельца NOT RUN.
+## Дополнительная подтверждённая находка независимой ревизии
+
+P2, `index.html:dnsRoutingAudit` (policy loop / dns-analysis-unknown). Repro: enabled DNS, nameserver 192.0.2.53, rules MATCH,DIRECT и nameserver-policy с geosite:cn либо endpoint #eth0. Expected: явный UNKNOWN непокрытой policy; actual до фикса: чистый verdict без UNKNOWN. Причина: общий unknown guard учитывал только nameserver/fallback и rules, но не policy keys/endpoints. Fix: policyUnknown входит в guard; неподдерживаемая policy не интерпретируется. Regression: дополнительные negative assertions в unknown группе dns-routing-core (17 групп суммарно); тест сначала упал, затем прошёл. Это gap статической диагностики, не наблюдённая DNS leak.
+
+## Final hardening (2026-10-09)
+
+Новые подтверждённые P2 в кандидатном анализаторе: literal PASS ошибочно завершал поиск первого совпадения; mode direct/global ошибочно анализировались как rule. Негативные регрессии сначала упали. Теперь PASS продолжает поиск, а non-rule mode явно даёт UNKNOWN без утверждений о пути неисполняемых правил. Structural checks остаются безусловными. Основание: resolveMetadata mode switch и match/GetRules в [Mihomo1.19.31](https://github.com/MetaCubeX/mihomo/blob/v1.19.31/tunnel/tunnel.go) и [1.19.32](https://github.com/MetaCubeX/mihomo/blob/v1.19.32/tunnel/tunnel.go). Это source proof, не наблюдение трафика.
+
+Актуальные gates: core17 групп; browser12 проверок, включая PASS/mode, повторный Parse, DNS-only URL credentials/path/query tokens, unsupported policy и неизменность source/Builder; compat7 parse-only cases, включая disabled PSNS policy и PASS. Generic field49 проверяет свежесть DNS snapshot и отсутствие YAML mutation во всех29 positive cases; final-release-browser проверяет UI Reverse/Undo и повторный Parse в браузерной матрице. Точные final head и completed CI фиксируются в описании #207 после синхронизации с финальным main. PR остаётся OPEN до отдельного OWNER GO.

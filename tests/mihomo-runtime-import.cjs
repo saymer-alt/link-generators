@@ -98,12 +98,12 @@ async function rtStatus(page) {
       try { out.push(normalizeRuntimeController(input)); } catch (e) { out.push('ERR:' + e.message); }
     }
     try { normalizeRuntimeController('ftp://x:1'); } catch (e) { out.push('ERR-scheme'); }
-    try { normalizeRuntimeController(''); } catch (e) { out.push('ERR-empty'); }
+    out.push(normalizeRuntimeController(''));
     try { normalizeRuntimeController('no-port-here'); } catch (e) { out.push('ERR-noport'); }
     return out;
   });
-  assert.deepEqual(norm, ['http://10.0.0.2:9090', 'http://10.0.0.2:9090', 'https://ctrl.example.net:9090/base', 'ERR-scheme', 'ERR-empty', 'ERR-noport'], 'нормализация: ' + JSON.stringify(norm));
-  ok('controller URL: host:port → http://, trailing /, path сохранение, схема/пустой/без-порта отклонены');
+  assert.deepEqual(norm, ['http://10.0.0.2:9090', 'http://10.0.0.2:9090', 'https://ctrl.example.net:9090/base', 'ERR-scheme', 'http://192.168.1.1:9090', 'ERR-noport'], 'нормализация: ' + JSON.stringify(norm));
+  ok('controller URL: host:port → http://, trailing /, path сохранение, пустой → default, схема/без-порта отклонены');
 
   // === 5. Нет запроса до клика ===
   let hits = 0;
@@ -136,9 +136,9 @@ async function rtStatus(page) {
   await page.locator('#rtFetchBtn').click();
   await page.waitForTimeout(300);
   const genericMsg = await rtStatus(page);
-  assert.match(genericMsg, /Не удалось обратиться к Mihomo controller/);
+  assert.match(genericMsg, /Сетевой отказ: причина не установлена/);
   assert.ok(!genericMsg.includes('CORS_DENIED') && !genericMsg.includes('PERMISSION_DENIED'), 'не выдумывать причины: ' + genericMsg);
-  assert.match(genericMsg, /адрес\/listen, CORS, разрешение браузера/);
+  assert.match(genericMsg, /адрес\/listen, CORS, разрешение локальной сети/);
   assert.match(genericMsg, /Вставить JSON/);
   ok('generic network failure: checklist-формулировка, без ложных CORS/permission claims');
 

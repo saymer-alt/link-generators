@@ -138,7 +138,7 @@ assert.match(dialerC, /- name: WARP-DIALER\s*\n\s*type: select\s*\n\s*use:\s*\n\
 assert.match(dialerC, /dialer-proxy: WARP-DIALER/);
 cases++;
 const dialerC2 = subBase({ wgDialerProviders: [geoUrl, geoUrl2] });
-const c2Block = dialerC2.slice(dialerC2.indexOf('- name: WARP-DIALER'), dialerC2.indexOf('⚡ Fastest'));
+const c2Block = dialerC2.slice(dialerC2.indexOf('- name: SHARED-DIALER'), dialerC2.indexOf('⚡ Fastest'));
 assert.equal((c2Block.match(/^\s+- account\.geodema\.org(-2)?$/gm) || []).length, 2);
 cases++;
 assert.throws(() => subBase({ wgDialerProxy: 'WARP-DIALER', wgDialerProviders: ['https://ghost.example.com/sub'] }),
@@ -147,4 +147,22 @@ assert.throws(() => subBase({ wgDialerProxy: 'VPS-SE', wgDialerProviders: [geoUr
   /conflicts with an existing proxy or group/);
 cases += 2;
 
+// UX54 intentional delta is exactly the new implicit group name. Explicit
+// historical name retains byte-equivalent YAML; other scenarios above remain parity.
+for(const provider of [false,true]){
+  const request={core:'mihomo',input:provider?'https://sub.example.invalid/feed\n'+dialerInput:dialerInput,wgBeans:[wgDialerBean],options:{addTun:false,webUI:false,mihomoSubscriptionMode:provider,...(provider?{wgDialerProviders:['https://sub.example.invalid/feed']}:{wgDialerGroupMembers:['VPS-DK']})}};
+  const implicit=current.buildFromRequest(request).data;
+  const legacy=current.buildFromRequest({...request,options:{...request.options,wgDialerProxy:'WARP-DIALER'}}).data;
+  assert.ok(implicit.includes('SHARED-DIALER'));assert.equal(implicit.replaceAll('SHARED-DIALER','WARP-DIALER'),legacy);cases++;
+}
+if(process.env.BASELINE_REF){
+  const old=api(execFileSync('git',['show',`${process.env.BASELINE_REF}:web4core.runtime.js`],{cwd:root,encoding:'utf8'}));
+  for(const provider of [false,true]){
+    const request={core:'mihomo',input:provider?'https://sub.example.invalid/feed\n'+dialerInput:dialerInput,wgBeans:[wgDialerBean],options:{addTun:false,webUI:false,mihomoSubscriptionMode:provider,...(provider?{wgDialerProviders:['https://sub.example.invalid/feed']}:{wgDialerGroupMembers:['VPS-DK']})}};
+    const before=old.buildFromRequest(request).data, after=current.buildFromRequest(request).data;
+    assert.notEqual(after,before);assert.equal(after.replaceAll('SHARED-DIALER','WARP-DIALER'),before);
+    const migrated=current.buildFromRequest({...request,options:{...request.options,wgDialerProxy:'WARP-DIALER'}}).data;
+    assert.equal(migrated,before);cases+=2;
+  }
+}
 console.log(`Runtime: ${cases} cases passed`);

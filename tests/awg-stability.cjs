@@ -79,7 +79,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   r = await build();
   assert.equal(r.state, 'VALID');
   assert.match(r.yaml, /persistent-keepalive: 25/, 'missing + ON → 25');
-  assert.ok(r.cards.some(t => t.includes('🛡 NAT keepalive') && t.includes('persistent-keepalive: 25')), 'card note о политике');
+  assert.ok(r.cards.some(t => t.includes('AWG keepalive:') && t.includes('persistent-keepalive: 25')), 'card note о политике');
   const traceMissing = JSON.parse(await policyTrace())[0];
   const pkEntry = traceMissing.report.find(e => e.key === 'persistent-keepalive');
   assert.ok(pkEntry && pkEntry.status === 'SUPPORTED_NORMALIZED', 'trace: SUPPORTED_NORMALIZED');
@@ -93,7 +93,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.equal(r.state, 'VALID');
   assert.match(r.yaml, /persistent-keepalive: 25/, 'range 25-35 + ON → 25');
   assert.match(r.yaml, /random-trailers: true/, 'RT diagnostic OFF: RandomTrailers сохранён');
-  assert.ok(r.cards.some(t => t.includes('25-35 → 25') && t.includes('explicit compatibility fallback')), 'card warn: range fallback с объяснением');
+  assert.ok(r.cards.some(t => t.includes('25-35 → 25') && t.includes('случайный диапазон исходного профиля не сохраняется')), 'card warn: range fallback с объяснением');
   const traceRange = JSON.parse(await policyTrace())[0];
   const rangeEntry = traceRange.report.find(e => e.key === 'persistent-keepalive');
   assert.ok(rangeEntry && rangeEntry.status === 'SUPPORTED_NORMALIZED', 'range: статус trace');
@@ -113,7 +113,10 @@ const ok = name => { passed++; console.log('  ok —', name); };
 
   // C-сценарий: keepalive ON + RT diagnostic ON
   await page.locator('#cfgAwgKeepalive').check();
+  await page.locator('#awgDiagnosticDetails > summary').click();
   await page.locator('#cfgAwgRtDiag').check();
+  await page.locator('#awgDiagnosticDetails > summary').click();
+  assert.equal(await page.locator('#awgRtDiagWarn').isVisible(), true, 'active diagnostic warning survives collapsed details');
   assert.equal(await page.evaluate(() => document.getElementById('awgRtDiagWarn').style.display), 'block', '🧪 ON: заметный красный WARN показан');
   assert.ok((await page.locator('#awgRtDiagWarn').textContent()).includes('controlled experiment'), 'WARN: не универсальный fix');
   r = await build();
@@ -131,6 +134,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   ok('C (ON/ON): pk 25 + RandomTrailers off + WARN + trace');
 
   // RT diagnostic OFF обратно → исходный RT возвращается (оригиналы не мутированы)
+  await page.locator('#awgDiagnosticDetails > summary').click();
   await page.locator('#cfgAwgRtDiag').uncheck();
   assert.equal(await page.evaluate(() => document.getElementById('awgRtDiagWarn').style.display), 'none', '🧪 OFF: WARN скрыт');
   r = await build();

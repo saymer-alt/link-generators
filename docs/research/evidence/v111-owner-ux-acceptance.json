@@ -1,0 +1,614 @@
+{
+  "baseline": {
+    "sha": "fed4fef899cb9758035e22a07642b950ab0228d8",
+    "engine": "chromium",
+    "passed": 5,
+    "failed": 22,
+    "checks": [
+      {
+        "name": "UX01 add controls precede cards and separate import",
+        "pass": false
+      },
+      {
+        "name": "UX01/02 four visible focused cards in append order",
+        "pass": false
+      },
+      {
+        "name": "UX01 doubleclick creates exactly one card",
+        "pass": true
+      },
+      {
+        "name": "UX02 delete and re-add reuses free name without renaming",
+        "pass": false
+      },
+      {
+        "name": "UX02 manual duplicate remains strict validation",
+        "pass": true
+      },
+      {
+        "name": "UX02 imported names and order survive manual addition",
+        "pass": false
+      },
+      {
+        "name": "UX02 project roundtrip retains policy names and priority",
+        "pass": true
+      },
+      {
+        "name": "UX04 no automatic request; empty field defaults only on Fetch",
+        "pass": false
+      },
+      {
+        "name": "UX04 default secret requires target confirmation and cancel sends nothing",
+        "pass": false
+      },
+      {
+        "name": "UX05 UI URL normalization, prefix, IPv6 and credentials rejection",
+        "pass": false
+      },
+      {
+        "name": "UX06 HTTP, malformed JSON and unknown network failure stay distinct",
+        "pass": false
+      },
+      {
+        "name": "UX06 timeout uses existing eight second abort",
+        "pass": true
+      },
+      {
+        "name": "UX07 empty Inspector offers normal Build then default offline probe",
+        "pass": false
+      },
+      {
+        "name": "UX08 stale coverage offers rebuild and retains chosen domains",
+        "pass": false
+      },
+      {
+        "name": "UX07 network Build cancel does not send or mutate project",
+        "pass": false
+      },
+      {
+        "name": "UX07 consent uses normal subscription Build and custom domain",
+        "pass": false
+      },
+      {
+        "name": "UX07 pending diagnostic cannot overwrite changed query/settings",
+        "pass": false
+      },
+      {
+        "name": "UX03 real normal Build with 19+ nodes and unchanged YAML",
+        "pass": false
+      },
+      {
+        "name": "UX03 Builder graph navigation/redaction count=1",
+        "pass": false
+      },
+      {
+        "name": "UX03 Builder graph navigation/redaction count=12",
+        "pass": false
+      },
+      {
+        "name": "UX03 Builder graph navigation/redaction count=50",
+        "pass": false
+      },
+      {
+        "name": "UX03 Builder graph navigation/redaction count=100",
+        "pass": false
+      },
+      {
+        "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+        "pass": false
+      },
+      {
+        "name": "UX03 Config Studio same controls, focus, reset and YAML invariant",
+        "pass": false
+      },
+      {
+        "name": "UX03 mobile 320/360/390 controls fit viewport",
+        "pass": false
+      },
+      {
+        "name": "UX03 repeated Parse/Focus and empty/error clear safely",
+        "pass": false
+      },
+      {
+        "name": "no page errors",
+        "pass": true
+      }
+    ]
+  },
+  "candidate": [
+    {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 28,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX01 add controls precede cards and separate import",
+          "pass": true
+        },
+        {
+          "name": "UX01/02 four visible focused cards in append order",
+          "pass": true
+        },
+        {
+          "name": "UX01 doubleclick creates exactly one card",
+          "pass": true
+        },
+        {
+          "name": "UX02 delete and re-add reuses free name without renaming",
+          "pass": true
+        },
+        {
+          "name": "UX02 manual duplicate remains strict validation",
+          "pass": true
+        },
+        {
+          "name": "UX02 imported names and order survive manual addition",
+          "pass": true
+        },
+        {
+          "name": "UX02 project roundtrip retains policy names and priority",
+          "pass": true
+        },
+        {
+          "name": "UX04 no automatic request; empty field defaults only on Fetch",
+          "pass": true
+        },
+        {
+          "name": "UX04 default secret requires target confirmation and cancel sends nothing",
+          "pass": true
+        },
+        {
+          "name": "UX05 UI URL normalization, prefix, IPv6 and credentials rejection",
+          "pass": true
+        },
+        {
+          "name": "UX06 HTTP, malformed JSON and unknown network failure stay distinct",
+          "pass": true
+        },
+        {
+          "name": "UX06 timeout uses existing eight second abort",
+          "pass": true
+        },
+        {
+          "name": "UX07 empty Inspector offers normal Build then default offline probe",
+          "pass": true
+        },
+        {
+          "name": "UX08 stale coverage offers rebuild and retains chosen domains",
+          "pass": true
+        },
+        {
+          "name": "UX07 network Build cancel does not send or mutate project",
+          "pass": true
+        },
+        {
+          "name": "UX07 consent uses normal subscription Build and custom domain",
+          "pass": true
+        },
+        {
+          "name": "UX07 pending diagnostic cannot overwrite changed query/settings",
+          "pass": true
+        },
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
+          "pass": true
+        },
+        {
+          "name": "UX03 real normal Build with 19+ nodes and unchanged YAML",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=1",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=12",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=50",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=100",
+          "pass": true
+        },
+        {
+          "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+          "pass": true
+        },
+        {
+          "name": "UX03 Config Studio same controls, focus, reset and YAML invariant",
+          "pass": true
+        },
+        {
+          "name": "UX03 mobile 320/360/390 controls fit viewport",
+          "pass": true
+        },
+        {
+          "name": "UX03 repeated Parse/Focus and empty/error clear safely",
+          "pass": true
+        },
+        {
+          "name": "no page errors",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "platform": "Windows",
+      "engine": "firefox",
+      "passed": 28,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX01 add controls precede cards and separate import",
+          "pass": true
+        },
+        {
+          "name": "UX01/02 four visible focused cards in append order",
+          "pass": true
+        },
+        {
+          "name": "UX01 doubleclick creates exactly one card",
+          "pass": true
+        },
+        {
+          "name": "UX02 delete and re-add reuses free name without renaming",
+          "pass": true
+        },
+        {
+          "name": "UX02 manual duplicate remains strict validation",
+          "pass": true
+        },
+        {
+          "name": "UX02 imported names and order survive manual addition",
+          "pass": true
+        },
+        {
+          "name": "UX02 project roundtrip retains policy names and priority",
+          "pass": true
+        },
+        {
+          "name": "UX04 no automatic request; empty field defaults only on Fetch",
+          "pass": true
+        },
+        {
+          "name": "UX04 default secret requires target confirmation and cancel sends nothing",
+          "pass": true
+        },
+        {
+          "name": "UX05 UI URL normalization, prefix, IPv6 and credentials rejection",
+          "pass": true
+        },
+        {
+          "name": "UX06 HTTP, malformed JSON and unknown network failure stay distinct",
+          "pass": true
+        },
+        {
+          "name": "UX06 timeout uses existing eight second abort",
+          "pass": true
+        },
+        {
+          "name": "UX07 empty Inspector offers normal Build then default offline probe",
+          "pass": true
+        },
+        {
+          "name": "UX08 stale coverage offers rebuild and retains chosen domains",
+          "pass": true
+        },
+        {
+          "name": "UX07 network Build cancel does not send or mutate project",
+          "pass": true
+        },
+        {
+          "name": "UX07 consent uses normal subscription Build and custom domain",
+          "pass": true
+        },
+        {
+          "name": "UX07 pending diagnostic cannot overwrite changed query/settings",
+          "pass": true
+        },
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
+          "pass": true
+        },
+        {
+          "name": "UX03 real normal Build with 19+ nodes and unchanged YAML",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=1",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=12",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=50",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=100",
+          "pass": true
+        },
+        {
+          "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+          "pass": true
+        },
+        {
+          "name": "UX03 Config Studio same controls, focus, reset and YAML invariant",
+          "pass": true
+        },
+        {
+          "name": "UX03 mobile 320/360/390 controls fit viewport",
+          "pass": true
+        },
+        {
+          "name": "UX03 repeated Parse/Focus and empty/error clear safely",
+          "pass": true
+        },
+        {
+          "name": "no page errors",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "platform": "Windows",
+      "engine": "webkit",
+      "passed": 28,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX01 add controls precede cards and separate import",
+          "pass": true
+        },
+        {
+          "name": "UX01/02 four visible focused cards in append order",
+          "pass": true
+        },
+        {
+          "name": "UX01 doubleclick creates exactly one card",
+          "pass": true
+        },
+        {
+          "name": "UX02 delete and re-add reuses free name without renaming",
+          "pass": true
+        },
+        {
+          "name": "UX02 manual duplicate remains strict validation",
+          "pass": true
+        },
+        {
+          "name": "UX02 imported names and order survive manual addition",
+          "pass": true
+        },
+        {
+          "name": "UX02 project roundtrip retains policy names and priority",
+          "pass": true
+        },
+        {
+          "name": "UX04 no automatic request; empty field defaults only on Fetch",
+          "pass": true
+        },
+        {
+          "name": "UX04 default secret requires target confirmation and cancel sends nothing",
+          "pass": true
+        },
+        {
+          "name": "UX05 UI URL normalization, prefix, IPv6 and credentials rejection",
+          "pass": true
+        },
+        {
+          "name": "UX06 HTTP, malformed JSON and unknown network failure stay distinct",
+          "pass": true
+        },
+        {
+          "name": "UX06 timeout uses existing eight second abort",
+          "pass": true
+        },
+        {
+          "name": "UX07 empty Inspector offers normal Build then default offline probe",
+          "pass": true
+        },
+        {
+          "name": "UX08 stale coverage offers rebuild and retains chosen domains",
+          "pass": true
+        },
+        {
+          "name": "UX07 network Build cancel does not send or mutate project",
+          "pass": true
+        },
+        {
+          "name": "UX07 consent uses normal subscription Build and custom domain",
+          "pass": true
+        },
+        {
+          "name": "UX07 pending diagnostic cannot overwrite changed query/settings",
+          "pass": true
+        },
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
+          "pass": true
+        },
+        {
+          "name": "UX03 real normal Build with 19+ nodes and unchanged YAML",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=1",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=12",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=50",
+          "pass": true
+        },
+        {
+          "name": "UX03 Builder graph navigation/redaction count=100",
+          "pass": true
+        },
+        {
+          "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+          "pass": true
+        },
+        {
+          "name": "UX03 Config Studio same controls, focus, reset and YAML invariant",
+          "pass": true
+        },
+        {
+          "name": "UX03 mobile 320/360/390 controls fit viewport",
+          "pass": true
+        },
+        {
+          "name": "UX03 repeated Parse/Focus and empty/error clear safely",
+          "pass": true
+        },
+        {
+          "name": "no page errors",
+          "pass": true
+        }
+      ]
+    }
+  ],
+  "parity": {
+    "scenarios": 10,
+    "passed": 10
+  },
+  "notes": [
+    "Baseline failures are expected regression evidence, not 22 independent bugs.",
+    "Runtime/network endpoints are mocked; no owner device acceptance is claimed."
+  ],
+  "localFirstRegression": {
+    "total": 58,
+    "passed": 57,
+    "failed": 1,
+    "failedCommand": "node tests/rule-provider-explorer-browser.cjs",
+    "cause": "Lazy read-only Explorer controls incorrectly changed Build fingerprint",
+    "afterFix": {
+      "command": "node tests/rule-provider-explorer-browser.cjs",
+      "passedCases": 51
+    }
+  },
+  "asyncPolicyRace": {
+    "sourceBefore": "0ab781192f4a38578d7327e1c80ba112fb8c47cf",
+    "before": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 0,
+      "failed": 1,
+      "checks": [
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
+          "pass": false
+        }
+      ]
+    },
+    "after": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 1,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX07 async policy mutation rejects old Build commit",
+          "pass": true
+        }
+      ]
+    }
+  },
+  "intermediateFirefoxTimeout": {
+    "passed": 27,
+    "failed": 1,
+    "check": "UX06 timeout uses existing eight second abort",
+    "driverBudgetMs": 10000,
+    "mockClosedAfterMs": 8500,
+    "change": "Hold mocked route until the application abort is observed; then release. Driver budget 15000ms; application deadline unchanged at 8000ms.",
+    "focusedAfter": {
+      "platform": "Windows",
+      "engine": "firefox",
+      "passed": 1,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX06 timeout uses existing eight second abort",
+          "pass": true
+        }
+      ]
+    }
+  },
+  "firstPRCI": {
+    "head": "0ab781192f4a38578d7327e1c80ba112fb8c47cf",
+    "generatorRun": 37968565024,
+    "conclusion": "success",
+    "jobs": 6,
+    "runtimeRun": 37968565201
+  },
+  "reviewWheel": {
+    "comment": "https://github.com/saymer-alt/link-generators/pull/225#discussion_r4232970497",
+    "reviewedHead": "0ab781192f4a38578d7327e1c80ba112fb8c47cf",
+    "before": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 0,
+      "failed": 1,
+      "checks": [
+        {
+          "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+          "pass": false
+        }
+      ]
+    },
+    "after": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 1,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX03 pan uses real pointer movement; wheel without modifier keeps scale",
+          "pass": true
+        }
+      ]
+    }
+  },
+  "zoomBelow25": {
+    "before": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 0,
+      "failed": 1,
+      "checks": [
+        {
+          "name": "UX03 Builder graph navigation/redaction count=50",
+          "pass": false
+        }
+      ]
+    },
+    "after": {
+      "platform": "Windows",
+      "engine": "chromium",
+      "passed": 1,
+      "failed": 0,
+      "checks": [
+        {
+          "name": "UX03 Builder graph navigation/redaction count=50",
+          "pass": true
+        }
+      ]
+    }
+  },
+  "secondPRCI": {
+    "head": "c0fbd1423b42455ace033d2dff424f59b9be1725",
+    "generatorRun": 37969797727,
+    "conclusion": "success",
+    "jobs": 6,
+    "runtimeRun": 37969797688
+  }
+}

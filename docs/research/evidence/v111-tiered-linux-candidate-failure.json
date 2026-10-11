@@ -1,0 +1,27 @@
+{
+  "run": 37959310823,
+  "job": 113917779592,
+  "head": "d57e01937e19298657bd1a6a20ac154a1b55a1fd",
+  "version": "Mihomo Meta v1.19.31 linux amd64 with go1.26.8 Mon Sep 14 13:20:38 UTC 2026\nUse tags: with_gvisor",
+  "sample": 7,
+  "error": "listen EADDRINUSE: address already in use 127.0.0.1:36191",
+  "healthPort": 36191,
+  "passedStages": [
+    "controller startup s1",
+    "A: traffic via T1",
+    "B: traffic switched to T1B",
+    "C: traffic via T2",
+    "D: traffic back to T1"
+  ],
+  "lastSuccess": {
+    "ms": 16138,
+    "label": "s1-urltest",
+    "durationMs": 6,
+    "body": "T1B"
+  },
+  "cleanupErrors": [],
+  "originalClassification": [
+    "UNEXPECTED_RESPONSE"
+  ],
+  "correctedClassification": "BIND_ERROR (allocation before restart spawn)"
+}

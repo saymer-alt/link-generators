@@ -2,7 +2,49 @@
 
 Все заметные изменения проекта. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 
-## [Unreleased]
+## [1.11.0] — кандидат выпуска
+
+### Подготовка v1.11.0
+
+Релиз ещё не опубликован. Main сохраняет `1.11.0-dev / main`; кандидат production получает `1.11.0 / stable` отдельно, без изменения действующей stable до Owner GO. [Текст будущего GitHub Release](docs/release-drafts/v1.11.0.md). [Историческая хронология разработки](docs/research/V1.11-DEVELOPMENT-CHANGELOG.md).
+
+### Added
+
+- **Config Studio 2.0 (#183–186, #244):** локальный bounded-импорт YAML, структурная диагностика, редактор рабочей копии, список правок, semantic/text diff, Undo/Reset и экспорт. Интеграция Builder → Studio и Reverse → Builder сохраняет исходник и требует подтверждения восстановления.
+- **Project Save/Restore и Reverse Build (#208–214):** `.lgproject.json` сохраняет поддерживаемое состояние Builder, WG/AWG и опции. Preview/Cancel/Confirm/Undo; YAML-reverse сообщает EXACT/DERIVED/MISSING/UNSUPPORTED/CONFLICT, а не обещает полную обратимость произвольного YAML.
+- **DNS ↔ Routing Intelligence (#207):** resolver policies/fragments, respect-rules/PSNS, first-match/PASS, DIRECT/GLOBAL и честные INFERRED/UNKNOWN. Анализ не меняет DNS-настройки и не наблюдает реальную сеть.
+- **Studio proxy-provider (#245, UX-52):** HTTP(S), интервал, необязательный path, download target и health-check; создание даже без proxies, source-preserving правка, Undo/diff/export. Без автоматической загрузки подписки и подключения к `use:`.
+- **Демонстрационные проверки (UX-53):** общие `gemini.google.com`, `youtube.com`, `unknown-service.example` при пустом вводе; эффективный одиночный адрес виден отдельно, ввод/YAML не заполняются, сеть не используется.
+
+### Changed
+
+- **Routing Intelligence / Visual Routing Graph (#202–204, #230–239):** согласованные маршруты и зависимости, поиск/фокус/fullscreen, текстовая альтернатива и управление раскрытием панелей. Статические выводы не выдаются за наблюдение трафика.
+- **UX-01–54 (#225–245):** формы и карточки, доступность и фокус, понятный Reset/Undo, компактные WG/AWG, subscription/runtime lists, мобильная компоновка и единые действия с YAML. Реестр и браузерные регрессии сохраняют занятые ID.
+- **WG/AWG (UX-54):** новое неявное имя общей группы `SHARED-DIALER`; явные `WARP-DIALER` и пользовательские имена поддерживаются. Существующие YAML, имена и dialer-proxy targets не переименовываются.
+- **Формат проекта остаётся v1:** проекты не выпускались в stable v1.10.0. Тестовые v1 с пустым именем активной группы и историческими ссылками закрепляют WARP-DIALER без изменения targets/beans; промежуточные тестовые v2 той же структуры читаются и сохраняются в v1. Фактический target профиля имеет приоритет над переопределённым исходным bean.
+- **Physical Topology убрана из обычного публичного GUI** по решению владельца (#239). Исследования, экспериментальные исходники и тесты сохранены за выключенным внутренним gate; публичная доступность этой функции не заявляется.
+- Сохранены production SEO, sitemap и Google verification; добавлены актуальная privacy/dataflow-модель, SECURITY.md, community entrypoints и инструкции начинающим (#229/#231/#234/#237/#240–243).
+
+### Fixed
+
+- **UX-51:** Copy/Download/Studio работают только для актуального VALID YAML; защитный fingerprint/validation guard сохранён, disabled click не запускает скрытый Build.
+- В Studio provider download target входит в reference/rename model; dangling targets диагностируются, удаление используемой цели блокируется до явного переназначения.
+- Reverse сохраняет поддерживаемые gateway/profile/DNS OFF/TUN OFF настройки и DPR-имена; отсутствующие и циклические WG/AWG targets не принимаются молча (#215/#218/#220/#221).
+- Атомарное восстановление при render failure, отмена/reset, гонки async Build/import, ограниченные runtime deadlines и очистка старых результатов (#192–224).
+- Длинные поля/имена, native controls в WebKit, раскрытия, клавиатура и горизонтальное переполнение; сохранены AWL/Tiered/DPR guards и их routing-семантика.
+
+### Security
+
+- Bounded YAML/JSON, strict UTF-8/BOM, ограничения сложности, отказ от неоднозначных правок/aliases и опасных ключей; safe text rendering вместо исполнения пользовательского HTML.
+- Секреты и URL подписок скрыты в диагностике/trace/diff, включая короткие token paths и совпадение с косметическими префиксами приоритетных групп. Redaction выполняется до косметического преобразования.
+- Исходный файл не перезаписывается автоматически; экспорт содержит функциональные секреты и выполняется только по явному действию. Опциональные сетевые операции и device identity описаны в DATAFLOW, без заявления о полном отсутствии сети.
+
+### Verification / Limits
+
+- Generator CI, Owner Gate Chromium/Firefox/WebKit (реестр UX-01–54), Config Studio/editor/roundtrip, Project/Reverse, AWL 266, Tiered, DPR, security/stress/chaos и штатный runtime provenance. Точные SHA/CI — в плане подготовки релиза.
+- Mihomo 1.19.31 (minimum) / 1.19.32 (recommended): реальные parse checks, отдельные локальные loopback traffic/failover tests. Ни parse acceptance, ни loopback не доказывают внешний handshake/production-маршрут.
+- YAML parity для незатронутых сценариев; изменение default dialer-имени проверяется как intentional delta. Произвольный YAML неполностью обратим; runtime-selected и непрозрачные GEO/provider зависимости могут оставаться UNKNOWN.
+- **Native browser zoom 200% — NOT RUN.** Реальные маршруты/DNS leaks/WAN/WG/UDP handshakes и устройства владельца не подтверждены этой приёмкой. Production promotion, tag и release требуют отдельного Owner GO.
 
 ## [1.10.0] - 2026-10-07
 

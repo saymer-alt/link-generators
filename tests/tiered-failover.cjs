@@ -49,7 +49,8 @@ const ok = name => { passed++; console.log('  ok —', name); };
   // 2. ON: два эшелона через настоящий UI-путь (select + клик), как пользователь
   await page.locator('#cfgTieredFailover').check();
   assert.equal(await page.evaluate(() => document.getElementById('tieredPanel').style.display), 'block', 'панель показана');
-  assert.equal(await page.evaluate(() => (window.__tierCardsState || []).length), 2, 'дефолт: два эшелона');
+  assert.equal(await page.evaluate(() => (window.__tierCardsState || []).length), 1, 'дефолт: одна группа приоритета');
+  await page.locator('#btnTierAdd').click(); // two-group scenario: explicitly add the second priority
   // Реестр целей (dialerTargetsCache) наполняется при загруженных WG/AWG —
   // загружаем два WG-профиля, они же станут участниками эшелонов.
   const fx = n => path.join(root, 'tests', 'fixtures', n);
@@ -68,8 +69,8 @@ const ok = name => { passed++; console.log('  ok —', name); };
         let opt = sel.querySelector('option[value="' + v + '"]');
         if (!opt) { opt = document.createElement('option'); opt.value = v; opt.textContent = v; sel.appendChild(opt); }
         sel.value = v;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
       }, { i: cardIdx, v: value });
-      await page.locator('#tierCards .tier-card').nth(cardIdx).locator('.tier-add-member').click();
       await page.waitForTimeout(60);
       const added = await page.evaluate(({ i, v }) => {
         const card = document.querySelectorAll('#tierCards .tier-card')[i];
@@ -108,7 +109,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.ok(d1.rules.includes('MATCH,🪜 TIERED-AUTO'), 'MATCH уходит в root');
   assert.ok(!d1.rules.includes('MATCH,GLOBAL'), 'старого MATCH,GLOBAL больше нет');
   const trace = await page.evaluate(() => document.getElementById('tieredTrace').textContent);
-  assert.match(trace, /Tiered Failover: 2 эшелон\(ов\), строгий приоритет → 1 WARP \[url-test × 2\] → 2 Commercial \[url-test × 1\]/, 'trace объясняет конфигурацию');
+  assert.match(trace, /Приоритетные группы серверов: 2 группы, строгий порядок → WARP.*Самый быстрый.*Commercial/, 'trace объясняет конфигурацию');
   ok('ON: tier-группы + root + GLOBAL/MATCH переписаны + trace');
 
   // 3. Детерминизм: rebuild → тот же YAML
@@ -151,8 +152,8 @@ const ok = name => { passed++; console.log('  ok —', name); };
     const sel = card.querySelector('.tier-member-select');
     const opt = document.createElement('option'); opt.value = 'ghost-proxy'; opt.textContent = 'ghost-proxy';
     sel.appendChild(opt); sel.value = 'ghost-proxy';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await page.locator('#tierCards .tier-card').nth(0).locator('.tier-add-member').click();
   r = await build();
   assert.match(r.toast, /не найден в текущей сборке/, 'неизвестный выход назван');
   ok('валидация: неизвестный участник → явный отказ');
@@ -189,7 +190,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   await build();
   await page.evaluate(() => { document.getElementById('routingDiagnostics').open = true; });
   const preview = await page.locator('#rdPreview').textContent();
-  assert.match(preview, /🪜 TIERED-AUTO/, 'Inspector: semantic path через tier root');
+  assert.match(preview, /Приоритетные группы серверов/, 'Inspector: readable semantic path through the unchanged YAML tier root');
   assert.match(preview, /Фактически выбранный участник определяется Mihomo во время работы/, 'runtime-selected честность');
   ok('Inspector: semantic path показывает tier root без ложного runtime-claim');
 
@@ -212,7 +213,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   ok('320/360/412/480 layout: без overflow');
 
   // 13. UX-контракт #165: компактные контролы, disabled ↑/↓ на краях, destructive-стиль,
-  //     единый «＋ Добавить эшелон», стратегия/имя — визуально главное
+  //     единый «＋ Добавить группу приоритета», стратегия/имя — визуально главное
   const ux = await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('#tierCards .tier-card'));
     const up0 = cards[0].querySelector('.tier-up');
@@ -236,7 +237,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.equal(ux.up0Disabled, true, 'первый эшелон: ↑ disabled');
   assert.equal(ux.downLastDisabled, true, 'последний эшелон: ↓ disabled');
   assert.ok(ux.upAria && ux.delAria, 'aria-labels сохранены');
-  assert.equal(ux.addLevel.includes('Добавить эшелон'), true, 'единый «＋ Добавить эшелон»: ' + ux.addLevel);
+  assert.equal(ux.addLevel.includes('Добавить группу приоритета'), true, 'единый «＋ Добавить группу приоритета»: ' + ux.addLevel);
   assert.equal(ux.delDistinct, true, 'destructive delete визуально отличён от neutral');
   assert.notEqual(ux.delBg, ux.upBg, 'destructive delete: другой background');
   assert.match(ux.compact, /^2px$/, 'компактные контролы (padding-top ' + ux.compact + ')');
@@ -249,7 +250,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
     const sel = document.querySelectorAll('#tierCards .tier-card')[1].querySelector('.tier-member-select');
     const v = sel.options[1] ? sel.options[1].value : '';
     sel.value = v;
-    sel.dispatchEvent(new Event('input', { bubbles: true })); // как реальный выбор пользователя
+    sel.dispatchEvent(new Event('change', { bubbles: true })); // confirmed selection auto-adds
     window.__raceProbe = v;
   });
   // внеочередной re-render (то, что делает debounced refreshWgTargetSelectors)
@@ -258,8 +259,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
     const sel = document.querySelectorAll('#tierCards .tier-card')[1].querySelector('.tier-member-select');
     return { value: sel.value, expected: window.__raceProbe };
   });
-  assert.equal(raceSel.value, raceSel.expected, 'pendingSelect пережил re-render: ' + JSON.stringify(raceSel));
-  await page.locator('#tierCards .tier-card').nth(1).locator('.tier-add-member').click();
+  assert.equal(raceSel.value, '', 'pendingSelect пережил re-render: ' + JSON.stringify(raceSel));
   await page.waitForTimeout(40);
   const raceMember = await page.evaluate(() => {
     const card = document.querySelectorAll('#tierCards .tier-card')[1];
@@ -274,6 +274,49 @@ const ok = name => { passed++; console.log('  ok —', name); };
   });
   await page.waitForTimeout(40);
   ok('race #165 (продукт): select → re-render → выбор сохранён → Add добавляет его');
+
+  // 15. P2 UX v1.11 (#160): явная «＋ Добавить» + hint «выбор ещё не добавляет»
+  {
+    const p2 = await page.evaluate(() => {
+      const btn = document.querySelector('#tierCards .tier-card .tier-add-member');
+      const hint = document.querySelector('#tierCards .tier-card .hint');
+      return { addText: btn ? btn.textContent : '', hintText: hint ? hint.textContent : '' };
+    });
+    assert.equal(p2.addText, '', 'явная текстовая кнопка добавления: ' + JSON.stringify(p2.addText));
+    assert.ok(p2.hintText.includes('автоматически'), 'hint про то, что выбор сам не добавляет: ' + JSON.stringify(p2.hintText));
+    ok('P2 UX: текстовая «＋ Добавить» + hint');
+  }
+
+  // 16. P2 UX v1.11 (#160): дубликат выхода между эшелонами → warning-lint, не build-ошибка
+  {
+    await page.evaluate(() => {
+      window.__tierCardsState = [
+        { name: 'DupA', strategy: 'url-test', members: ['probe-target-x'] },
+        { name: 'DupB', strategy: 'url-test', members: ['probe-target-x'] }
+      ];
+      renderTierCards();
+    });
+    const dup = await page.evaluate(() => {
+      const b = document.getElementById('tierDupWarn');
+      return { visible: !!b && b.style.display !== 'none', text: b ? b.textContent : '' };
+    });
+    assert.equal(dup.visible, true, 'дубликат-линт показан');
+    assert.ok(dup.text.includes('DupA') && dup.text.includes('DupB'), 'линт называет оба эшелона: ' + JSON.stringify(dup.text));
+    assert.ok(dup.text.includes('допустимо'), 'линт помечает конфигурацию легальной (не ERROR)');
+    await page.evaluate(() => { window.__tierCardsState[1].members = []; renderTierCards(); });
+    assert.equal(await page.evaluate(() => document.getElementById('tierDupWarn').style.display === 'none'), true, 'без дубликатов линт скрыт');
+    ok('P2 UX: дубликат выхода между эшелонами → warning-lint');
+  }
+
+  // 17. P2 UX v1.11 (#160): новые проекты начинают с одной пустой группы «Приоритет 1»
+  {
+    await page.evaluate(() => { window.__tierCardsState = []; });
+    await page.locator('#cfgTieredFailover').uncheck();
+    await page.locator('#cfgTieredFailover').check();
+    const names = await page.evaluate(() => (window.__tierCardsState || []).map(t => t.name));
+    assert.deepEqual(names, ['Приоритет 1'], 'дефолтные имена: ' + JSON.stringify(names));
+    ok('P2 UX: одна новая группа «Приоритет 1»');
+  }
 
   assert.deepEqual(errors, [], 'no page errors');
   passed += 1;

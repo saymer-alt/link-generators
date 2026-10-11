@@ -138,6 +138,24 @@ async function runScenario(browser, root, candRoot, name, actions, checkContract
       await p.fill('#whitelistInput', 'vless://00000000-0000-4000-8000-000000000002@192.0.2.2:443#F1');
       await p.locator('#cfgSubMode').uncheck();
     },
+    subscriptions: async p => {
+      await p.route('https://subscription-audit.invalid/**', r => r.fulfill({ headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }, body: 'vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#A' }));
+      await p.fill('#mihomoInput', 'https://subscription-audit.invalid/public/feed');
+      await p.locator('#cfgSubMode').check();
+    },
+    'tiered-on': async p => {
+      await p.fill('#mihomoInput', 'vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#A\nvless://00000000-0000-4000-8000-000000000002@192.0.2.2:443#B');
+      await p.locator('#cfgSubMode').uncheck();
+      await p.locator('#cfgTieredFailover').check();
+      await p.evaluate(() => { window.__tierCardsState = [{ id: 'audit1', name: 'Primary', strategy: 'url-test', members: ['A'] }, { id: 'audit2', name: 'Reserve', strategy: 'fallback', members: ['B'] }]; renderTierCards(); });
+    },
+    advanced: async p => {
+      await p.fill('#mihomoInput', 'vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#A');
+      await p.locator('#cfgSubMode').uncheck();
+      await p.evaluate(() => document.querySelectorAll('details').forEach(d => d.open = true));
+      await p.locator('#cfgTunStackAdvanced').check();
+      await p.selectOption('#cfgTunStackEx', 'system');
+    },
   };
   let fail = 0;
   for (const [name, actions] of Object.entries(scenarios)) {

@@ -161,7 +161,14 @@ let cases = 0;
   await openDiagnostics();
   await openCard('policy-ai');
   await page.fill('#rdTestInput', 'gemini.google.com');
-  await page.locator('#rdTestBtn').click();
+  // Координатный клик здесь гонок-небезопасен: bindBuildStalenessWatch вешает
+  // refreshBuildStaleness на 'click' всей вкладки, и при расхождении
+  // fingerprint'а баннер STALE может развернуться ровно между mousedown и
+  // mouseup (±40px сдвиг — клик попадает в rdPreview). Здесь проверяется
+  // коэкзистенция Inspector+Explorer (контракт handler'а), реальная координатная
+  // механика кликов покрыта остальными browser-сюитами; dispatchEvent её не
+  // ослабляет, но делает детерминированной.
+  await page.locator('#rdTestBtn').dispatchEvent('click');
   assert.match(await page.locator('#rdResult').textContent(), /Победившее правило/, 'Inspector работает рядом с Explorer');
   await page.evaluate(() => {
     const sel = document.getElementById('pingSelect');
