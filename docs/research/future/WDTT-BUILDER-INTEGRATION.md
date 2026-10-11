@@ -1,67 +1,65 @@
-# WDTT in Builder — proposed design for v1.12+
+# Интеграция WDTT в Mihomo Config Builder — проект для v1.12+
 
-Date: 2026-10-11. Owner proposal: [#250](https://github.com/saymer-alt/link-generators/issues/250), roadmap [#160](https://github.com/saymer-alt/link-generators/issues/160).
-Status: DESIGN ONLY / NO PRODUCT CODE / NOT FIELD VERIFIED. Field trials expected during 12–18 October 2026; specific day and device not confirmed.
-Production stable v1.11.0 is unchanged.
+**Дата:** 11.10.2026. **Статус:** ИДЕЯ / DESIGN, не реализовано, натурные испытания ещё не пройдены. Основа — [#250](https://github.com/saymer-alt/link-generators/issues/250), [roadmap #160](https://github.com/saymer-alt/link-generators/issues/160).
+**Полевой этап ожидается на неделе 12–18 октября 2026**, без утверждённых дня и оборудования. Работающая production v1.11.0 не изменяется.
 
-## Architecture
+## Архитектура
 
-Mihomo remains a normal WireGuard outbound. WDTT is an EXTERNAL UDP transport managed on the target device, not a Mihomo protocol. Intended route:
+WDTT — **внешний локальный UDP-транспорт**, а не тип прокси в Mihomo. В генераторе он оборачивает обычный импортированный WireGuard:
 
-    Mihomo WireGuard outbound (type: wireguard; 127.0.0.1:local UDP port)
-       -> WDTT wt-client (same device and network namespace)
-       -> real VK TURN transport
-       -> WDTT remote server
-       -> WG endpoint
-       -> Internet
+    Mihomo outbound: type: wireguard; endpoint 127.0.0.1:<UDP_PORT>
+      → локальный wt-client (WDTT)
+      → настоящий VK TURN
+      → удалённый WDTT сервер
+      → WireGuard endpoint
+      → Интернет
 
-An alternative wg-obfuscator may offer direct UDP obfuscation, but it is not the same as WDTT/VK TURN. It needs its own proof and configuration contract; never invent protocol type wdtt, URL scheme wdtt:// or implicit WDTT support in Mihomo. AmneziaWG 3.x compatibility must be proven separately.
+Альтернативный wg-obfuscator — **не** VK TURN; у него свой отдельный конфигурационный и сетевой контракт. Не создавать выдуманных типов Mihomo, ссылок wdtt:// или csqtt://. Совместимость AmneziaWG 3.x с такой схемой не доказана — отдельный gate.
 
-In containers 127.0.0.1 resolves inside a network namespace: a separate WDTT container may not be reachable from Mihomo via loopback. Never silently rewrite networking or bind local transport to a public interface to work around this.
+**Контейнеры и VPS:** адрес 127.0.0.1 относится к network namespace. Когда Mihomo и wt-client в разных контейнерах, loopback может быть недоступен. Не вводить автоматически адреса Docker bridge, bind 0.0.0.0, правила policy routing, изменения firewall или разрешение DIRECT как «обход».
 
-## Proposed Builder controls — only after design and field gates
+## Предлагаемый интерфейс Builder
 
-- For each imported WG profile: Transport = Direct UDP (current default) / Local UDP service (explicit opt-in).
-- When local selected: external service WDTT (real VK TURN) or later separately validated wg-obfuscator; bind host 127.0.0.1 and numeric port 1–65535. Example 42000 is NOT a prescribed default.
-- Keep original remote WG endpoint in the project; show it as read-only, and ensure switching back to Direct UDP restores the original server and port exactly.
-- Transport mode and Auto Whitelist placement (#249 PRIMARY/FALLBACK) are independent axes: no implicit movement between primary and fallback.
-- Show persistent visible warning: external wt-client must already be running on target; Builder cannot confirm actual VK access, handshake, DNS path, performance or service health.
-- No VK login/token/cookies, TURN credentials, shell execution, installation, server control, external network probing or secrets upload from browser. Any companion-export of a wt-client config is a separately reviewed opt-in artifact, not extra keys in Mihomo YAML.
+- В карточке импортированного WireGuard: **«Транспорт: Прямой UDP (по умолчанию) / Локальный UDP-транспорт (эксперимент)»**.
+- В opt-in режиме: тип службы **WDTT (VK TURN)**; позже — отдельно проверенный **wg-obfuscator**.
+- Хост слушателя — строго loopback, отдельное поле UDP-порта 1–65535; 42000 — лишь пример, не рекомендованный порт службы.
+- Отображать **исходный адрес/порт WG-сервера** без раскрытия секретов. Переход в локальный режим подменяет endpoint только в генерируемом YAML; выключение возвращает исходный endpoint **точно**, не теряя настройки проекта.
+- Выбор транспорта (direct/local) и назначение WG/AWG в **PRIMARY/FALLBACK** из [#249](https://github.com/saymer-alt/link-generators/issues/249) — независимые параметры. Не менять приоритет автоматически.
+- Показывать предупреждение: **«Необходим запущенный wt-client на устройстве; Builder создаёт только YAML, но не проверяет VK, состояние службы, handshake, DNS и доступность интернета»**.
+- Браузер не авторизуется в VK, не запрашивает TURN cookies/tokens/credentials, не устанавливает Entware и не управляет внешним VPS.
+- Возможный экспорт инструкции или шаблона запуска wt-client — **отдельное решение после review**, не смешивать с Mihomo YAML и не включать реальные credentials.
 
-## Phased architecture decision
+## Этапы реализации
 
-A0 source/read-only audit: test whether current WG .conf import and web4core already emit localhost/port in standard type: wireguard YAML; verify with real mihomo -t 1.19.31 and 1.19.32 using SYNTHETIC keys. If existing WG support suffices, prefer documentation over changing parsers.
+**Этап A — read-only audit:** проверить, способен ли существующий импорт WG-файла и web4core уже формировать стандартный YAML с Endpoint на 127.0.0.1:port. Прогнать синтетический файл на реальном Mihomo 1.19.31 и 1.19.32. Если достаточно стандартной WG-конфигурации, сначала документировать её, а не переписывать парсер.
 
-A1 only if UX adds value: opt-in card settings, preserving original endpoint and transport selection in current Builder project model. Suggested transport.kind values direct/local are PROPOSAL, not approved schema. Old projects must default to Direct UDP with byte-identical generated YAML. Save/Load, Reset/Undo, Reverse Build and original credentials must remain consistent.
+**Этап B — минимальный opt-in UX:** только при доказанной полезности отдельной кнопки. Хранить выбор транспорта, локальный UDP-порт и исходный endpoint в проекте; точная структура и schemaVersion требуют отдельного согласования. Старые проекты по умолчанию используют прямой UDP с **byte-parity** старого YAML. После Save/Load/Reset/Undo/Reverse исходные адреса и ключи не должны теряться.
 
-A2 only after W1–W10 real field gates: optional WDTT-specific diagnostics and companion instructions with explicit boundary KAS/Entware vs browser.
+**Этап C — WDTT-специфичные подсказки и companion-export:** только после полевого W1–W10 и юридического gate. Не выдавать лабораторный Pion TURN PoC за работу с VK TURN.
 
-Engine semantics belong to saymer-alt/web4core branch link-generators, not manual changes to vendored web4core.runtime.js. entware-go builds/packages binaries after license approval; keenetic-auto-setup runs gated preflight/lifecycle; wt-client transports packets; Mihomo runs WG; Builder generates YAML.
+**Разделение ответственности:** link-generators отвечает за интерфейс и YAML; web4core:link-generators — за общие parser/engine semantics (vendored runtime вручную не менять); entware-go — за сборку и пакеты после разрешения; KAS — за безопасный lifecycle и диагностику; Mihomo — за WireGuard; wt-client — за транспорт.
 
-## Safety and test matrix
+## Тестовый контракт для v1.12
 
-| Test | Required behaviour |
+| ID | Что проверить |
 |---|---|
-| B01 | WG imported with synthetic Endpoint 127.0.0.1:42000 yields ordinary type: wireguard; mihomo -t 1.19.31/1.19.32 |
-| B02 | Direct -> local -> direct restores original endpoint; old project output byte-identical |
-| B03 | Reject port 0, 65536, negative, garbage/non-integer, non-loopback; invalid WG peer/key, unsupported AWG/multi-peer fail closed |
-| B04 | Project Save/Load/Reset/Undo/Reverse; no loss of keys, no phantom services |
-| B05 | WG dialer, two independent WG profiles, AWL PRIMARY/FALLBACK #249, static/proxy-provider mixtures; names and routing no cycles |
-| B06 | Router, VPS local/Gateway, TUN/Per-Proxy/Tiered/DPR all retain current guards |
-| B07 | Browser Chromium/Firefox/WebKit, keyboard, mobile, 200% zoom; no inert controls, no hidden auto-fetch |
-| B08 | No secrets in logs/diagnostics/issues; exported user project containing credentials must warn |
-| B09 | For every actual bug: reproducible RED test before fix -> GREEN afterwards; wire suite into Generator CI |
-| B10 | Source runtime provenance, complete CI; distinguish config validation from live network proof |
+| B01 | Импорт синтетического WG с 127.0.0.1:42000 → обычный type: wireguard, валидность через mihomo -t 1.19.31/1.19.32 |
+| B02 | Прямой UDP → локальный → прямой: точное восстановление server:port, byte-parity без новой опции |
+| B03 | Ошибка на портах 0/65536/отрицательный/мусор, чужом адресе listener, отсутствующем WG peer/key, неподдержанном AWG |
+| B04 | Save/Load/Reset/Undo/Reverse без потери ключей, адреса и состояния, старые проекты без миграционных сюрпризов |
+| B05 | WG dialer, отдельные WG-профили, смешанные provider/static и PRIMARY/FALLBACK #249 без циклов/конфликтов имён |
+| B06 | Router/VPS-local/VPS-gateway, TUN/Per-Proxy/Tiered/DPR — прежние ограничения и fail-closed |
+| B07 | Chromium/Firefox/WebKit, клавиатура, узкий экран и масштаб 200%; реальные поведенческие браузерные тесты |
+| B08 | Не выводить ключи, токены, приватные IP в диагностику/Issues; предупреждение о секретах в экспортируемом проекте |
+| B09 | Каждый найденный баг: воспроизводимый RED на исходной версии → GREEN после исправления; suite подключить к CI |
+| B10 | Provenance web4core, полные Node/browser/Mihomo тесты; не путать конфиг-тест с реальным сетевым доказательством |
 
-## Evidence and blocking prerequisites
+## Уже известно и что блокирует
 
-[KAS PR #124](https://github.com/saymer-alt/keenetic-auto-setup/pull/124): research and acceptance gates.
-[KAS PR #125](https://github.com/saymer-alt/keenetic-auto-setup/pull/125): isolated gated sandbox / config conversion; laboratory TURN E2E.
-[entware-go PR #10](https://github.com/saymer-alt/entware-go/pull/10): build-only, multiple CPU architectures, locally observed WG handshake + TCP + UDP + DNS through Pion TURN.
-None of those constitutes REAL VK TURN / real Keenetic acceptance.
+- [KAS #124](https://github.com/saymer-alt/keenetic-auto-setup/pull/124): документация и test gates.
+- [KAS #125](https://github.com/saymer-alt/keenetic-auto-setup/pull/125): изолированный sandbox и лабораторная цепочка.
+- [entware-go #10](https://github.com/saymer-alt/entware-go/pull/10): build-only AMD64/ARM64/MIPSel/MIPSBE, Pion TURN/DTLS, тестовый WG-handshake, TCP/UDP/DNS.
 
-BLOCKERS: fhttp license/notice, real VK client-server credentials (private), production-server security review, installed hardware ABI/RAM/kernel, controlled device, reboot ordering, fail-closed/leaks and rollback. No distributable IPK/install while gates are open; do not reuse quarantined packages. A successful compile, emulator run, or mihomo -t cannot prove connectivity.
+**Не доказано:** реальный VK TURN, аппаратный Keenetic E2E, reboot, отсутствие DNS/IPv6 leaks, точная ресурсная цена и устойчивость. **Не закрыты** лицензия/notice fhttp, review сервера, установка Entware/rollback. До закрытия gate — никаких готовых или карантинных IPK для установки/публикации и изменения production.
 
-Field protocol: [WDTT-FIELD-PLAN.md](WDTT-FIELD-PLAN.md).
-
-Release policy: staged research first; no automatic WDTT dependency for #249 or v1.12; separate owner GO before implementation and before eventual stable promotion.
+Отдельный протокол: [WDTT-FIELD-PLAN.md](WDTT-FIELD-PLAN.md). Решение об имплементации — только после review дизайна и явного разрешения владельца. WDTT не должен блокировать весь выпуск v1.12 при отсутствии полевого proof.
