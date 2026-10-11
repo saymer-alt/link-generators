@@ -703,3 +703,63 @@ deployed worker `sub.saymer-87.workers.dev` (POST-контракт с device hea
 реальные CORS/сетевые особенности браузера, живой Keenetic/VPS при необходимости.
 Manual-сюиты (`*.manual.cjs`: reality-handshake matrix, awl-soak) — по явному
 запросу владельца, guard не даёт их случайно подключить к CI.
+
+## Reverse Build / Config Studio 2.0 (DAY-01)
+
+- `tests/project-roundtrip-browser.cjs` — сохранить/загрузить проект,
+  поле-в-поле равенство, byte-parity повторного Build, модификация
+  состава, undo, bounded-ошибка битого файла.
+- `tests/reverse-yaml-browser.cjs` — YAML Reverse: предпросмотр
+  восстановления (счётчики/статусы/сравнение), byte-parity для
+  подписочных конфигов, честный UNSUPPORTED/MISSING для прямых узлов.
+- `tests/qa-reverse-integration.cjs` — полный сценарий владельца
+  6 подписок + 8 WG/AWG + DPR: Save/Load/модификация −1 AWG +2 подписки;
+  фаза A сохраняет проверку отсутствия прежнего DPR×Tiered конфликта; native Load Preview/Cancel/Confirm проверяется в новой сессии. При MIHOMO_BIN итоговые modified и reversed YAML проходят реальный -t.
+- `tests/qa-fixes-browser.cjs` — матрица DPR ON/OFF × Tiered ON/OFF
+  (все комбинации VALID) + WG base64-ключи (32 байта, сообщение без
+  значения ключа).
+- `tests/cs20-ux-browser.cjs` — секреты редактора Studio: показать/
+  скрыть/заменить, замаскированность диффа и статусов.
+
+
+## Независимый аудит v1.11 (2026-10-09)
+
+- `independent-product-browser.cjs`: 6 групп — настоящий Preview/Cancel/Confirm, stale YAML/Builder, loss acknowledgment, blocked conflict, atomic Apply fault injection, Undo/passthrough, async Build invalidation, typed Compare/source classification. CI browser.
+- `independent-boundaries-browser.cjs`: 7 проверок — типы JSON, depth/nodes/unsafe keys, WG IDs/shape, Builder/Studio SVG/aria/select redaction, keyboard focus и изоляция focus. CI browser.
+- `independent-reverse-profiles-browser.cjs`: 3 группы — реальный Build → Reverse → Build byte parity gateway DNS OFF/ON, custom device/MTU/resolvers, Yacd/custom health-check; disabled TUN. CI browser и обе Mihomo matrix jobs.
+- `cs20-ux-browser.cjs`: 4 проверки, включая Save без изменений (исходные байты) и Reset секретной замены.
+- `qa-reverse-integration.cjs`: 6 browser checks либо 7 с MIHOMO_BIN; 6+8 → новая сессия Load Preview/Confirm → 8+7 → YAML Reverse. С MIHOMO_BIN modified и reversed outputs проходят -t. Теперь входит в обе matrix jobs.
+- `security-stress.cjs`: 49 групп; browser: 59 проверок. Viewports 320/360/375/390/412/480/768/1024/1366/1440/1920/2560, Studio и PT overflow.
+
+Локально: 53 CJS suites в общем прогоне + отдельный parity (10/10 vs main955ecdf) = 54; harness node:test 31/31. Последующие focused reruns покрывают final Load consent, секреты и расширенные widths. Linux runtime labs выполняются в CI с pinned Mihomo 1.19.31/32; локально Windows 1.19.31 parse-only. Это не Firefox/WebKit, не WAN/handshake и не owner field test. Ненулевых Edge exits в этом прогоне не было.
+
+PR #207 проверяется отдельно: после final hardening dns-routing-core (17 групп), dns-routing-browser (12 проверок), dns-routing-mihomo-compat (7 parse-only cases, обе версии в CI). Эти файлы остаются на candidate branch до OWNER GO; наличие записи в этом разделе не означает promotion. Исторический отчёт: [V1.11-CODEX-INDEPENDENT-AUDIT-AND-REPAIR](research/V1.11-CODEX-INDEPENDENT-AUDIT-AND-REPAIR.md).
+
+
+## Synthetic field acceptance (2026-10-09)
+
+`tests/field-acceptance-browser.cjs`: 29 positive +20 negative scenarios, deterministic generator `tools/synthetic-fieldtest/generate.cjs`, инструкция `tools/synthetic-fieldtest/README.md`. Suite входит в browser и обе pinned Mihomo matrix jobs. Новые negative regressions: WG dialer на непереносимый direct node блокирует YAML Restore; emitted WG invalid IPv4/endpoint port не получает web VALID. Project Save/новый context/Load Cancel/Confirm/Build/Undo, edits после обоих путей, unknown sections/independent synthetic server YAML и honest unsupported boundaries. HTTP(S) requests вне локального js-yaml route блокируются; subscription expansion — in-memory mock. Local persistent lab исключительно в ignored fieldtest-private; CI использует временный каталог. Real owner data/handshakes не используются. Отчёт: [V1.11-REAL-FIXTURE-ACCEPTANCE](research/V1.11-REAL-FIXTURE-ACCEPTANCE.md).
+
+### Финальный пользовательский сценарий и браузерная приёмка (2026-10-09)
+
+`tests/final-release-browser.cjs`: настоящие upload/fill/click/download для 6 подписок +8 WG/AWG →8 +7, Save/reload/Load Cancel/Confirm, сохранение опций, WG dialer, DPR SELECT Reverse parity, Studio/VRG, Reverse Cancel/Confirm/Undo и Physical Topology. Проверяет 6 разделов на 12 ширинах (72 раскладки), root overflow, видимые 24px targets, keyboard focus, ширину вложенных полей и DNS enable summary. В #207 также проверяет свежие DNS snapshots. Live network запрещён.
+
+`node tools/synthetic-fieldtest/browser-matrix.cjs` использует внешние Playwright dependencies и PLAYWRIGHT_BROWSERS_PATH; AUDIT_ROOT выбирает другой checkout. Результаты по умолчанию в ignored fieldtest-private/results/browser-matrix. Каждый браузер запускается независимо: недоступный NOT RUN, ошибка FAIL. Chromium включён в Generator CI; четыре браузера проверены локально. Это не реальные телефоны и не полная WCAG-сертификация.
+
+Полная локальная регрессия: 55 suites PASS; parity отдельно 10/10, harness 31/31. Окончательные SHA и exact-head CI фиксируются в итоговой передаче владельцу. См. [готовность к приёмке](research/V1.11-FINAL-RELEASE-READINESS.md).
+
+### Evening chaos (2026-10-09)
+
+`tests/evening-chaos-browser.cjs`: 21 барьерный/отказный/метаморфный сценарий, seed111009. Проверяет late file/fetch/rejection, повторный render failure, secret Reset, typed/fail-closed guards и 3000-rule YAML. AUDIT_ROOT позволяет проверить DNS-кандидат; CHAOS_CASE — адресный диагностический фильтр. HTTP(S) блокируется, фикстуры synthetic, pageerror и deadline не считаются PASS.
+
+`tools/synthetic-fieldtest/loopback-runtime.cjs` требует MIHOMO_BIN и JS_YAML_PATH, запускает только loopback proxy/target/mock DNS, TUN/sniffer выключены. Выполняется в обеих pinned Mihomo CI jobs. Разделяет parse/process/traffic/failover/recovery; remote handshake NOT RUN.
+
+`tools/synthetic-fieldtest/mutation-audit.cjs <v111-chaos-mutants> <ignored-output>` запускается вручную только в отдельном чистом worktree. Unmutated controls обязательны; index.html возвращается в finally. Raw mutation logs не публиковать: при выключенной redaction отрицательные assertions могут содержать synthetic credentials. См. [Evening Chaos Audit](research/V1.11-EVENING-CHAOS-AUDIT.md).
+
+### Post-merge DNS acceptance (2026-10-09)
+
+OWNER GO #207 выполнен: merge 1296a05935b0b37bd24f5a857d45888b5c1ddfe7. На точном post-merge main повторены field49 (149 Windows1.19.31 parse checks), chaos21, DNS17/12/7; полный Generator CI с обеими Linux pinned версиями SUCCESS.
+
+`node tests/post-merge-dns-browser.cjs` — три дополнительные browser integration группы: Router AWL/DPR/Tiered/WG + imported DNS policy arrays; Gateway DNS OFF editor/export/Parse/Reverse Confirm/Build; unreachable rule/consistent rename/disabled structural metamorphic properties. AUDIT_ROOT позволяет проверить точный post-merge checkout до включения suite в main. HTTP(S) блокируется, output metadata-only в ignored fieldtest-private/results/post-merge-integration. Suite включена в обязательный browser CI.
+
+См. [post-merge acceptance и Windows checklist](research/V1.11-POST-MERGE-ACCEPTANCE.md), [release notes DRAFT](research/V1.11.0-RELEASE-NOTES-DRAFT.md). Production version/stable/tag/release не менялись.

@@ -50,12 +50,12 @@ const ok = name => { passed++; console.log('  ok —', name); };
 
   // current snapshot: MATCHED через inline-провайдер + runtime-selected + FALLBACK + INVALID
   const res1 = await runCoverage('chat.openai.com\nunmatched.example\ngarbage line!!');
-  assert.match(res1, /chat\.openai\.com: правило #1 RULE-SET,policy-ai,AI \(inline-провайдер «policy-ai»\)/, 'победившее правило + inline-провайдер названы');
+  assert.match(res1, /chat\.openai\.com:\nПравило: #1 RULE-SET,policy-ai,AI \(inline-провайдер «policy-ai»\)/, 'победившее правило + inline-провайдер названы');
   assert.match(res1, /SELECT-группа «AI» → \[/, 'семантический путь группы');
-  assert.match(res1, /runtime-selected/, 'select-группа честно помечена runtime-selected');
-  assert.match(res1, /unmatched\.example: fallback MATCH/, 'только MATCH → fallback (честная формулировка)');
+  assert.match(res1, /Фактический сервер выбирается Mihomo во время работы/, 'select-группа честно помечена runtime-selected');
+  assert.match(res1, /unmatched\.example:\nПравило: MATCH, запасная маршрутизация./, 'только MATCH → fallback (честная формулировка)');
   assert.match(res1, /GLOBAL → \[/, 'GLOBAL раскрыт с фактическим составом');
-  assert.match(res1, /garbage line!!: INVALID/, 'мусорный ввод помечен INVALID');
+  assert.match(res1, /garbage line!!:\nНекорректный ввод/, 'мусорный ввод помечен INVALID');
   assert.ok(!res1.includes('предыдущей сборки'), 'current snapshot: без stale-маркеров');
   ok('coverage: MATCHED/inline-provider + runtime-selected + FALLBACK + INVALID');
 
@@ -63,16 +63,16 @@ const ok = name => { passed++; console.log('  ok —', name); };
   await page.locator('#policyCards .policy-card .policy-target').first().selectOption('DIRECT');
   await page.waitForTimeout(30);
   const res2 = await runCoverage('chat.openai.com');
-  assert.match(res2, /⚠ Snapshot предыдущей сборки/, 'stale заголовок');
-  assert.match(res2, /\(⚠ предыдущая сборка\)/, 'строчный stale-маркер');
+  assert.match(res2, /Настройки изменены/, 'stale предлагает rebuild');
+  assert.equal(await page.locator('#dcBuildCheckBtn').isVisible(), true, 'явное действие rebuild');
   ok('coverage: stale-build контракт — snapshot помечен, скрытого Build нет');
 
   // новый Build → снова current
   await build();
   const res3 = await runCoverage('chat.openai.com');
   assert.ok(!res3.includes('предыдущей сборки'), 'после Build — current');
-  assert.match(res3, /chat\.openai\.com: правило #1 RULE-SET,policy-ai,DIRECT/, 'target сменился на DIRECT — правило то же, таргет новый');
-  assert.match(res3, /→ DIRECT/, 'цепочка теперь DIRECT (не runtime-selected группа)');
+  assert.match(res3, /chat\.openai\.com:\nПравило: #1 RULE-SET,policy-ai,DIRECT/, 'target сменился на DIRECT — правило то же, таргет новый');
+  assert.match(res3, /Маршрут: DIRECT/, 'цепочка теперь DIRECT (не runtime-selected группа)');
   ok('coverage: после Build — current, новый target виден');
 
   // dialer-chain: два WG (A через B) → FALLBACK-домен показывает цепочку в составе GLOBAL
@@ -82,14 +82,14 @@ const ok = name => { passed++; console.log('  ok —', name); };
   await page.locator('#wgTarget' + (await page.evaluate(() => wgProfiles[0].id))).selectOption('wg-simple-b');
   await build();
   const res4 = await runCoverage('dialer-chain.example');
-  assert.match(res4, /dialer-chain\.example: fallback MATCH/);
+  assert.match(res4, /dialer-chain\.example:\nПравило: MATCH, запасная маршрутизация./);
   assert.match(res4, /wg-simple-a \(через wg-simple-b\)/, 'dialer-proxy помечен в составе GLOBAL');
   ok('coverage: dialer-chain в статическом пути (через …)');
 
   // до Build: честный отказ
   await page.evaluate(() => { lastRoutingDoc = null; });
   const res5 = await runCoverage('example.com');
-  assert.match(res5, /Сначала выполните Build/, 'без Build — «Сначала выполните Build»');
+  assert.match(res5, /Сначала соберите конфигурацию/, 'без Build — явное предложение сборки');
   ok('coverage: без Build — честный отказ, без выдумок');
 
   // 360px: панель не ломает layout

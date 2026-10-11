@@ -1,0 +1,620 @@
+{
+  "31": [
+    {
+      "name": "no-start",
+      "expected": "CORE_EXIT",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "CORE_EXIT",
+        "CONTROLLER_NOT_READY",
+        "MIXED_NOT_READY",
+        "T1A_HEALTH_NOT_OBSERVED",
+        "T1B_HEALTH_NOT_OBSERVED",
+        "T2A_HEALTH_NOT_OBSERVED",
+        "T2B_HEALTH_NOT_OBSERVED",
+        "T3A_HEALTH_NOT_OBSERVED"
+      ],
+      "healthMaxMs": 0,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "controller-no-mixed",
+      "expected": "MIXED_NOT_READY",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "MIXED_NOT_READY",
+        "T1_NO_EXPECTED_TRAFFIC",
+        "ECONNREFUSED"
+      ],
+      "healthMaxMs": 19,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "root-not-t1",
+      "expected": "ROOT_NOT_T1",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "ROOT_NOT_T1"
+      ],
+      "healthMaxMs": 18,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "t1-no-traffic",
+      "expected": "T1_NO_EXPECTED_TRAFFIC",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "T1_NO_EXPECTED_TRAFFIC",
+        "request timeout"
+      ],
+      "healthMaxMs": 18,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "one-broken",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 19,
+      "firstT1Ms": 12279,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "both-broken",
+      "expected": "ROOT_NOT_T1",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "ROOT_NOT_T1",
+        "T1A_DOWN",
+        "T1A_HEALTH_NOT_OBSERVED",
+        "T1B_DOWN",
+        "T1B_HEALTH_NOT_OBSERVED"
+      ],
+      "healthMaxMs": 20,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "unexpected-response",
+      "expected": "UNEXPECTED_RESPONSE",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "T1_NO_EXPECTED_TRAFFIC",
+        "UNEXPECTED_RESPONSE"
+      ],
+      "healthMaxMs": 15,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "late-health",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 803,
+      "firstT1Ms": 249,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "core-crash",
+      "expected": "CORE_EXIT",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "CORE_EXIT",
+        "CONTROLLER_NOT_READY",
+        "MIXED_NOT_READY",
+        "T1A_HEALTH_NOT_OBSERVED",
+        "T1B_HEALTH_NOT_OBSERVED",
+        "T2A_HEALTH_NOT_OBSERVED",
+        "T2B_HEALTH_NOT_OBSERVED",
+        "T3A_HEALTH_NOT_OBSERVED"
+      ],
+      "healthMaxMs": 0,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "old-process",
+      "expected": "STALE_PROCESS",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "T1_NO_EXPECTED_TRAFFIC",
+        "CONTROLLER_NOT_READY",
+        "MIXED_NOT_READY",
+        "UNEXPECTED_RESPONSE",
+        "STALE_PROCESS"
+      ],
+      "healthMaxMs": 117,
+      "firstT1Ms": 264,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "cold-immediate",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 21,
+      "firstT1Ms": 280,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "mock-start-late",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 19,
+      "firstT1Ms": 1333,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "bounded-contention",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 20,
+      "firstT1Ms": 271,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "transient-reset",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 20,
+      "firstT1Ms": 2279,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "delayed-response",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 116,
+      "firstT1Ms": 385,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "explicit-target-host",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 21,
+      "firstT1Ms": 268,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "32": [
+    {
+      "name": "no-start",
+      "expected": "CORE_EXIT",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "CORE_EXIT",
+        "CONTROLLER_NOT_READY",
+        "MIXED_NOT_READY",
+        "T1A_HEALTH_NOT_OBSERVED",
+        "T1B_HEALTH_NOT_OBSERVED",
+        "T2A_HEALTH_NOT_OBSERVED",
+        "T2B_HEALTH_NOT_OBSERVED",
+        "T3A_HEALTH_NOT_OBSERVED"
+      ],
+      "healthMaxMs": 0,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "controller-no-mixed",
+      "expected": "MIXED_NOT_READY",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "MIXED_NOT_READY",
+        "T1_NO_EXPECTED_TRAFFIC",
+        "ECONNREFUSED"
+      ],
+      "healthMaxMs": 19,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "root-not-t1",
+      "expected": "ROOT_NOT_T1",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "ROOT_NOT_T1"
+      ],
+      "healthMaxMs": 19,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "t1-no-traffic",
+      "expected": "T1_NO_EXPECTED_TRAFFIC",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "T1_NO_EXPECTED_TRAFFIC",
+        "request timeout"
+      ],
+      "healthMaxMs": 20,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "one-broken",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 19,
+      "firstT1Ms": 10146,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "both-broken",
+      "expected": "ROOT_NOT_T1",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "ROOT_NOT_T1",
+        "T1A_DOWN",
+        "T1A_HEALTH_NOT_OBSERVED",
+        "T1B_DOWN",
+        "T1B_HEALTH_NOT_OBSERVED"
+      ],
+      "healthMaxMs": 17,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "unexpected-response",
+      "expected": "UNEXPECTED_RESPONSE",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "T1_NO_EXPECTED_TRAFFIC",
+        "UNEXPECTED_RESPONSE"
+      ],
+      "healthMaxMs": 20,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "late-health",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 803,
+      "firstT1Ms": 291,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "core-crash",
+      "expected": "CORE_EXIT",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "CORE_EXIT",
+        "CONTROLLER_NOT_READY",
+        "MIXED_NOT_READY",
+        "T1A_HEALTH_NOT_OBSERVED",
+        "T1B_HEALTH_NOT_OBSERVED",
+        "T2A_HEALTH_NOT_OBSERVED",
+        "T2B_HEALTH_NOT_OBSERVED",
+        "T3A_HEALTH_NOT_OBSERVED"
+      ],
+      "healthMaxMs": 0,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "old-process",
+      "expected": "STALE_PROCESS",
+      "detected": true,
+      "status": "FAIL",
+      "classification": [
+        "T1_NO_EXPECTED_TRAFFIC",
+        "CONTROLLER_NOT_READY",
+        "MIXED_NOT_READY",
+        "UNEXPECTED_RESPONSE",
+        "STALE_PROCESS"
+      ],
+      "healthMaxMs": 116,
+      "firstT1Ms": 248,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "cold-immediate",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 20,
+      "firstT1Ms": 289,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "mock-start-late",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 20,
+      "firstT1Ms": 1763,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "bounded-contention",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 21,
+      "firstT1Ms": 374,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "transient-reset",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 21,
+      "firstT1Ms": 2171,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "delayed-response",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 116,
+      "firstT1Ms": 354,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "explicit-target-host",
+      "expected": "PASS",
+      "detected": true,
+      "status": "PASS",
+      "classification": [],
+      "healthMaxMs": 20,
+      "firstT1Ms": 264,
+      "cleanupErrors": [],
+      "sockets": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}
