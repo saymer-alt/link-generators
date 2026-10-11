@@ -282,7 +282,7 @@ const FIXTURE = [
 // UX52: provider insertion is local, additive and preserves surrounding bytes.
 const providerFields = {name:'new-sub',url:'https://sub.example.invalid/token/SYNTH_SECRET?key=SYNTH_QUERY',interval:'86400',proxy:'DIRECT',healthEnable:true,healthUrl:'https://health.example.invalid/check',healthInterval:'300',expectedStatus:'200/204'};
 const providerOp = fields => ({opKind:'add-provider',name:fields.name,fields});
-for(const section of ['', 'proxy-providers:\n', 'proxy-providers: null # empty\n', 'proxy-providers: {} # empty\n', 'proxy-providers:\n  old: {type: http, url: "https://old.example.invalid/sub", interval: 10}\n', 'proxy-providers: {old: {type: http, url: "https://old.example.invalid/sub"}}\n']) {
+for(const section of ['', 'proxy-providers:\n', 'proxy-providers: null # empty\n', 'proxy-providers: {} # empty\n', 'proxy-providers:\n  old: {type: http, url: "https://old.example.invalid/sub", interval: 10}\n', 'proxy-providers: {old: {type: http, url: "https://old.example.invalid/sub"}}\n', 'proxy-providers: {old: {},}\n', 'proxy-providers: {old: {} # comment with comma,\n  }\n']) {
   for(const nl of ['\n','\r\n']) {
     const source='\uFEFF# keep header\n'+section+'rules:\n  - MATCH,DIRECT # keep tail\n';
     const src=source.replace(/\n/g,nl), r=api.csReplay(src,[providerOp(providerFields)],CSY);

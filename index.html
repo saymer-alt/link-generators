@@ -8171,7 +8171,9 @@ function csPlanAddProvider(csDoc, src, plain, fields) {
   let patches;
   if (map && map.flow) {
     const end = src.lastIndexOf('}', map.range[1] - 1);
-    patches = [{ start: end, end, text: (map.items.length ? ', ' : '') + q(name) + ': ' + q(provider) }];
+    const last = map.items[map.items.length - 1];
+    const tail = last ? src.slice((last.value || last.key).range[1], end).replace(/#[^\r\n]*/g, '') : '';
+    patches = [{ start: end, end, text: (last && !tail.includes(',') ? ', ' : '') + q(name) + ': ' + q(provider) }];
   } else {
     let indent = '  ';
     if (map && map.items && map.items.length) {

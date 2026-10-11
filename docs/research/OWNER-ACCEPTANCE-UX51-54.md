@@ -15,8 +15,8 @@ Baseline: `36081f9c94cbff2f8a905e32ae809ca9eb9b2624` (main). Реестр UX-01�
 
 ## Локальные проверки
 
-- Chromium/Firefox: Owner Gate 106/106; WebKit и GitHub exact-head результаты — в итоговом handoff.
-- Config editor 43 группы; source-preserving roundtrip 10; Studio browser 32.
+- Chromium/Firefox/WebKit: Owner Gate 106/106 в каждом; GitHub exact-head результаты — в итоговом handoff.
+- Config editor 47 групп; source-preserving roundtrip 10; Studio browser 32.
 - AWL 266 + restoration/bypass guards; Tiered 18; chaos 21; security/stress browser 59.
 - YAML parity: 10 незатронутых сценариев. Runtime с baseline: отдельная проверка intentional delta имени и byte parity явного исторического имени, в том числе provider-backed.
 - Реальный Mihomo 1.19.31/1.19.32: по 13 сценариев Studio export/dialer. Несколько WG/AWG, статическая/provider-backed группа, оба имени. `-t` не доказывает handshake/доступность серверов.
