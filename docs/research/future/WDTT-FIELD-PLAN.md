@@ -1,57 +1,62 @@
-# WDTT field acceptance — planned for 12–18 October 2026
+# WDTT — план полевых испытаний на неделе 12–18 октября 2026
 
-Status: PLANNED / NOT RUN. Owner expects field trials during the week, no fixed day or hardware authorization recorded. This text is an evidence checklist, NOT permission to install or alter routers/VPS. Related: [Builder design](WDTT-BUILDER-INTEGRATION.md), [#250](https://github.com/saymer-alt/link-generators/issues/250), [KAS #125](https://github.com/saymer-alt/keenetic-auto-setup/pull/125), [entware-go #10](https://github.com/saymer-alt/entware-go/pull/10).
+**Статус:** ЗАПЛАНИРОВАНО / NOT RUN. Владелец ожидает испытания на ближайшей неделе, без утверждённой даты и оборудования. Это **план доказательств, не разрешение на установку**. Ссылки: [дизайн Builder](WDTT-BUILDER-INTEGRATION.md), [#250](https://github.com/saymer-alt/link-generators/issues/250), [KAS #125](https://github.com/saymer-alt/keenetic-auto-setup/pull/125), [entware-go #10](https://github.com/saymer-alt/entware-go/pull/10).
 
-## Preflight and STOP gates
+## A. STOP-gates до любых изменений
 
-1. Confirm fhttp license/notice, upstream obligations, no secrets or unsafe binary distribution. While unresolved: READ-ONLY PREFLIGHT ONLY; no quarantined IPK or live install.
-2. Owner separately approves exact isolated device and server for each active probe/install. Candidate KN-4210 or KN-1010 subject to actual availability and ABI/RAM; no production home/work router/VPS. No assumption that QEMU equals hardware proof.
-3. Read-only capture: firmware/kernel, architecture ABI (ARM64/MIPSel softfloat), RAM/swap/storage/Entware, current ports and services, baseline network, recoverable rollback/out-of-band access.
-4. Verify server pair for REAL VK TURN (not local Pion/mock); secure credentials only private restricted files, never command args or GitHub.
-5. Confirm fail-closed network and independent baseline DIRECT WireGuard, no automatic fallback to unaudited DIRECT, no routing/firewall/TUN modifications outside controlled sandbox.
-6. If any gate fails: STOP; record BLOCKED with reason, do not bypass admission controls.
+1. **Лицензирование:** подтверждён статус fhttp, notices и лицензионная совместимость всех компонентов. До этого допускается **только read-only preflight**, не установка, выдача IPK или обход install-admission. Карантинные бинарники запрещены.
+2. **Разрешения:** владелец отдельно согласовал конкретное устройство, тестовый сервер и сетевые действия. Производственные домашние/рабочие Keenetic и production VPS не трогать. KN-4210 и KN-1010 — возможные стенды, если подтвердится доступность и пригодность.
+3. **Состояние стенда:** read-only снимок модели, KeeneticOS/kernel, ARM64/MIPSel ABI, RAM/swap, Entware/ext4, портов, текущих сервисов, маршрутов, DNS, VLAN/IPv6, возможности восстановления доступа.
+4. **Реальный VK:** заранее подтверждена корректная клиент-серверная пара VK TURN. Логин/секреты — лишь в приватном защищённом файле, не в argv, переписке, PR или логе.
+5. **Безопасность:** исключены подмена системного TUN, лишний WireGuard Manager, изменение firewall или DIRECT fallback на production. Перед испытанием есть исходная схема Direct WG и документированный rollback.
+6. Если любой gate не пройден — **STOP/BLOCKED**, сохраняем отчёт; не используем локальный Pion TURN как «доказательство VK» и не отключаем проверки ради запуска.
 
-## Tests W1–W10
+## B. Полевая матрица W1–W10
 
-| Gate | Evidence and acceptance |
+| Gate | Условие PASS |
 |---|---|
-| W1 Real VK | Demonstrate actual VK TURN endpoint transaction, not Pion TURN lab or simulated network |
-| W2 WireGuard | Fresh handshake and tx/rx counters on both ends, no duplicate WG manager running |
-| W3 TCP | Actual TCP payload through WG+WDTT and intended remote egress; no silent DIRECT |
-| W4 UDP | Verify varying UDP payloads (64/512/1200/1400 when MTU permits) plus counters |
-| W5 DNS | DNS queries follow intended tunnel; classify IPv4/IPv6, no resolver leak |
-| W6 NAT/MTU | Compare direct WG baseline, loss, fragmentation, reconnect and MTU; record limitations |
-| W7 Service down | Stop wt-client or VK service: failure is closed, no unexpected direct route; recovery on restart |
-| W8 Reboot | Controlled device reboots; service/Entware mount ordering, no early escape or broken startup |
-| W9 Security | Loopback-only socket, process namespaces, secrets permissions, no stdout/argv/core/log exposure, no recursive TUN |
-| W10 Rollback | Tear down only owned sandbox/process/config; restore untouched existing services/routing/firewall |
+| W1 — реальный VK TURN | Доказан обмен через действительный VK TURN endpoint, а не Pion/mock/localhost lab |
+| W2 — WireGuard handshake | Свежий WG handshake и увеличение tx/rx с обеих сторон по пути WDTT, без второго WG-демона |
+| W3 — TCP | Реальные HTTP/HTTPS-данные проходят через WDTT+WG по ожидаемому выходу; нет незаметного DIRECT |
+| W4 — UDP | Передача UDP 64/512/1200/1400 байт, где позволяет MTU, подтверждена счётчиками |
+| W5 — DNS | Запросы уходят через предусмотренный резолвер/туннель; нет неожиданных IPv4/IPv6 DNS leaks |
+| W6 — NAT/MTU | Проверены потери, фрагментация, NAT/reconnect и MTU; сравнение с тем же стендом на прямом WG |
+| W7 — отказ транспорта | Остановка wt-client или разрыв VK прекращают работу fail-closed, без обхода через DIRECT; restart восстанавливает |
+| W8 — перезагрузка | При reboot корректны порядок монтирования Entware, запуск службы, отсутствие гонок и чужих процессов |
+| W9 — безопасность | UDP-сокет loopback-only; ключи не в argv/stdout/stderr/core/log; нет routing-loop или общедоступного listener |
+| W10 — откат | Удалены только собственные файлы/процессы sandbox, первоначальные Mihomo/Entware/KAS/route/firewall сохранены |
 
-Optional soak proposal: 15–30 min per stable condition and repeat on a changed access path if available. Record time to handshake/recovery, Mbps TCP/UDP, packet loss, CPU %, RSS, swap, interface counters and relevant log excerpts. Do not label soak as long-term stability proof.
+**Предлагаемая дополнительная выдержка:** 15–30 минут работы в одной среде с повторением при изменённой сети по возможности. Это не доказательство долговременной стабильности. Измерять CPU %, RSS/PSS, swap, handshake/recovery time, TCP/UDP throughput, packet loss и реальные MTU. Для сравнений нужен Direct WG baseline **на том же стенде**.
 
-## Fill-in report (no live credentials)
+## C. Шаблон обезличенного результата
 
-    Test date: YYYY-MM-DD; site/network anonymized
-    Device / firmware / architecture / RAM / kernel / Entware:
-    Binary git commit / SHA256 / build provenance:
-    License notice approved: PASS | FAIL | BLOCKED
-    Mode: local Pion laboratory | real VK TURN (exact classification required)
-    Config: synthetic/redacted; loopback namespace and listener:
-    Route and DNS: intended path / IPv4-IPv6 policy:
-    Direct WG baseline: handshake, TCP/UDP/DNS, RSS, throughput:
-    W1: PASS | FAIL | NOT RUN | BLOCKED  Evidence:
-    W2: PASS | FAIL | NOT RUN | BLOCKED  Evidence:
-    W3: PASS | FAIL | NOT RUN | BLOCKED  Evidence:
-    W4: PASS | FAIL | NOT RUN | BLOCKED  Evidence:
-    W5: PASS | FAIL | NOT RUN | BLOCKED  Evidence:
-    W6: PASS | FAIL | NOT RUN | BLOCKED  Evidence:
-    W7: PASS | FAIL | NOT RUN | BLOCKED  Evidence:
-    W8: PASS | FAIL | NOT RUN | BLOCKED  Evidence:
-    W9: PASS | FAIL | NOT RUN | BLOCKED  Evidence:
-    W10: PASS | FAIL | NOT RUN | BLOCKED  Evidence:
-    Resource profile; packet loss; MTU; restart/recovery timing:
-    Open blockers / environment caveats:
-    Owner decision: iterate / design only / proceed with separate implementation GO
+    Дата/время: YYYY-MM-DD, сеть/регион обезличены
+    Стенд: модель, версия KeeneticOS, kernel, ABI, RAM, swap, Entware
+    Бинарник: коммит/версия, SHA256, происхождение сборки
+    Разрешение владельца, preflight и лицензия: PASS|FAIL|BLOCKED
+    Тип транспорта: Pion lab | реальный VK TURN (обязательно различать)
+    wt-client listener: 127.0.0.1:PORT, network namespace
+    IPv4/IPv6, DNS, policy routing, firewall, fail-closed guard:
+    Direct WG baseline: handshake, TCP, UDP, DNS, CPU/RSS/throughput
+    W1 реальный VK: PASS|FAIL|NOT RUN|BLOCKED — evidence:
+    W2 handshake: PASS|FAIL|NOT RUN|BLOCKED — evidence:
+    W3 TCP: PASS|FAIL|NOT RUN|BLOCKED — evidence:
+    W4 UDP: PASS|FAIL|NOT RUN|BLOCKED — evidence:
+    W5 DNS: PASS|FAIL|NOT RUN|BLOCKED — evidence:
+    W6 NAT/MTU: PASS|FAIL|NOT RUN|BLOCKED — evidence:
+    W7 отказ/restart: PASS|FAIL|NOT RUN|BLOCKED — evidence:
+    W8 reboot: PASS|FAIL|NOT RUN|BLOCKED — evidence:
+    W9 security: PASS|FAIL|NOT RUN|BLOCKED — evidence:
+    W10 rollback: PASS|FAIL|NOT RUN|BLOCKED — evidence:
+    CPU/RSS/MTU/потери/времена восстановления:
+    Блокеры и ограничения:
+    Решение владельца: продолжить research | доработать | отдельный GO на Builder
 
-Redact WG private keys, VK secrets/cookies, subscription tokens and sensitive IPs before posting. NEVER treat NOT RUN or BLOCKED as PASS. If tests fail, preserve evidence without pretending the blocker is resolved.
+Не публиковать WG private keys, VK cookies/token, приватные конфиги, subscription URLs с токенами и секретные IP. Статусы NOT RUN, BLOCKED и INFERRED не считаются PASS.
 
-After trials: post sanitized result to #250; update KAS/entware-go evidence; decide minimum Builder UI or docs-only approach. Full product merge requires its own PR with RED->GREEN regression, Node/browser/Mihomo CI and separate owner approval; stable v1.11.0 remains untouched.
+## D. Что после полевых испытаний
+
+1. Приложить к [#250](https://github.com/saymer-alt/link-generators/issues/250) обезличенный отчёт и ссылки на безопасные доказательства. Сверить результаты с KAS/entware-go PR, не изменяя production.
+2. Если fhttp/VK/Keenetic/reboot gate не закрыт — оставить WDTT исследованием; не выдавать пакеты и не обещать возможность установки.
+3. Если W1–W10 доказаны — по отдельному разрешению разработать **минимальный** opt-in Builder: обычный WireGuard YAML с локальным endpoint, сохранением оригинального server:port и совместимостью #249 PRIMARY/FALLBACK.
+4. После разработки обязательны browser/Mihomo регрессии, RED→GREEN для исправленных багов, полный CI и отдельное решение о продвижении. Выпущенный stable v1.11.0 остаётся нетронутым.
