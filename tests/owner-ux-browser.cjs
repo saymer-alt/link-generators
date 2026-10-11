@@ -1259,13 +1259,13 @@ async function check(name, fn) {
     await r2Reveal(n,'csProviderAddBody');
     await n.evaluate(()=>ensureCsYaml());
     const before=await n.evaluate(()=>csImportText), requests=[];n.on('request',r=>requests.push(r.url()));
-    await n.locator('#csProvider_name').fill('fresh-sub');await n.locator('#csProvider_url').fill('https://sub.example.invalid/token/SYNTH_PROVIDER_SECRET?key=SYNTH_QUERY');
+    await n.locator('#csProvider_name').fill('fresh-sub');await n.locator('#csProvider_url').fill('https://sub.example.invalid/s5hort?key=SYNTH_QUERY');
     await n.locator('#csProviderAddApply').focus();await n.keyboard.press('Enter');
     await n.waitForFunction(()=>csWorking && !csWorkingErr);
     assert.match(await n.locator('#csProviderAddStatus').textContent(),/без подключения/);
-    let exported=await n.evaluate(()=>csExportText());assert.ok(exported.includes('SYNTH_PROVIDER_SECRET'));assert.ok(exported.includes('fresh-sub'));
+    let exported=await n.evaluate(()=>csExportText());assert.ok(exported.includes('s5hort'));assert.ok(exported.includes('fresh-sub'));
     assert.deepEqual(await n.evaluate(()=>jsyaml.load(csExportText())['proxy-groups']),await n.evaluate(()=>csCurrentDoc['proxy-groups']));
-    assert.doesNotMatch(await n.locator('#csDiffOut').textContent(),/SYNTH_PROVIDER_SECRET|SYNTH_QUERY/);
+    assert.doesNotMatch(await n.locator('#csDiffOut').textContent(),/s5hort|SYNTH_QUERY/);
     await n.locator('#csProvider_name').fill('fresh-sub');await n.locator('#csProvider_url').fill('https://second.example.invalid/sub');await n.locator('#csProviderAddApply').click();await n.waitForFunction(()=>document.getElementById('csProviderAddStatus').textContent.startsWith('✖'));
     assert.equal(await n.evaluate(()=>csOps.length),1);
     await n.locator('#csUndoBtn').click();assert.equal(await n.evaluate(()=>csExportText()),before);

@@ -9830,7 +9830,7 @@ function csAfterOpsChange() {
   }
   box.style.display = 'block';
   csWorking = null; csWorkingErr = 'правки ещё обрабатываются';
-  const redactionDoc = { config: csCurrentDoc, secret: csOps.filter(op => csIsSecretKey(op.field)).map(op => op.newText), added: csOps.filter(op => ['add','add-provider'].includes(op.opKind)).map(op => op.fields) };
+  const redactionDoc = { config: csCurrentDoc, secret: csOps.filter(op => csIsSecretKey(op.field)).map(op => op.newText).concat(csOps.filter(op => op.opKind === 'add-provider').map(op => op.fields.url)), added: csOps.filter(op => ['add','add-provider'].includes(op.opKind)).map(op => op.fields) };
   if (exportNote) exportNote.textContent = 'Правок в сессии: ' + csOps.length + ' — экспорт применит их к оригиналу.';
   list.textContent = csRedactText(csOps.map((op, i) => {
     if (op.opKind === 'field-edit') return (i + 1) + '. ' + op.type + ' «' + csCurrentName(op.name) + '» · ' + op.field + ': ' + (op.showOld || '••••••') + ' → ' + (op.showNew || '••••••');
@@ -9989,7 +9989,7 @@ function csEditorClick(e) {
       const op={opKind:'add-provider',name:fields.name,fields};
       const plan=csPlanOp(CSY.parseDocument(text,{keepSourceTokens:true}),text,CSY.parse(text),op);
       const status=document.getElementById('csProviderAddStatus');
-      if(plan.error){status.textContent='✖ '+csRedactText(plan.error,{config:csCurrentDoc,fields});return;}
+      if(plan.error){status.textContent='✖ '+csRedactText(plan.error,{config:csCurrentDoc,fields,secret:[fields.url]});return;}
       csOps.push(op);csAfterOpsChange();
       status.textContent='Подписка добавлена без подключения к группе. Для использования добавьте её имя в use: вручную.';
       document.getElementById('csProvider_url').value='';document.getElementById('csProvider_name').value='';
