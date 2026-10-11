@@ -15,7 +15,7 @@ Baseline: `36081f9c94cbff2f8a905e32ae809ca9eb9b2624` (main). Реестр UX-01�
 
 ## Локальные проверки
 
-- Chromium/Firefox/WebKit: Owner Gate 106/106 в каждом; GitHub exact-head результаты — в итоговом handoff.
+- Chromium/Firefox/WebKit: Owner Gate 108/108 в каждом на CI после исправления замечания ревью; GitHub exact-head результаты — в итоговом handoff.
 - Config editor 49 групп; source-preserving roundtrip 10; Studio browser 32.
 - AWL 266 + restoration/bypass guards; Tiered 18; chaos 21; security/stress browser 59.
 - YAML parity: 10 незатронутых сценариев. Runtime с baseline: отдельная проверка intentional delta имени и byte parity явного исторического имени, в том числе provider-backed.
@@ -28,7 +28,7 @@ Baseline: `36081f9c94cbff2f8a905e32ae809ca9eb9b2624` (main). Реестр UX-01�
 
 ## Границы интеграции
 
-Один consumer PR в main. Candidate source опубликован отдельно; production provenance требует его интеграции в web4core:link-generators, затем удаления временного `.github/web4core-source-ref`. Эта проверка не ослабляется. Merge consumer, main/stable, теги и релизы требуют отдельного Owner GO.
+Один consumer PR #245 в main. По отдельному Owner GO source-ветка web4core:link-generators обновлена fast-forward с `a89ad04bd8902cf8bf839b111cad312395e69cb5` на `fea3cede102ca69137975b31a20317a4c42e052b`; опубликованный SHA проверен. Временный `.github/web4core-source-ref` удалён: production provenance использует штатную source-ветку, без ослабления проверки. Merge consumer, main/stable, теги и релизы требуют отдельного Owner GO.
 
 ## Замечание автоматического ревью UX-52
 
