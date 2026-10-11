@@ -858,7 +858,8 @@
                 <option value="mixed">mixed</option>
               </select>
               <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
-              <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
+              <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline. MIPS доступен на Mihomo ≥ 1.19.31 (производительность зависит от сервера). system/mixed — экспериментальные варианты; выбранный стек генератор молча не меняет.</div>
+              <div id="vpsTunStackWarning" class="hint" role="note" style="display:none;margin-top:8px;color:var(--warn-text, #855100)"></div>
             </div>
             <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
           </div>
@@ -3584,6 +3585,14 @@ function applyProfileUiState(target) {
   const hint = document.getElementById('profileHint');
   const snap = profileSnapshots[target];
   hint.textContent = PROFILE_HINTS[target] || '';
+  // VPS stack: наблюдение на одном сервере, не универсальная блокировка протокола.
+  const stackWarning = document.getElementById('vpsTunStackWarning');
+  const stackWarnings = {
+    'vps-local': '⚠️ VPS SOCKS: TUN отключён этим профилем. MIPS/gVisor/system/mixed не используются в генерируемом YAML. Для TUN нужен другой профиль.',
+    'vps-gateway': '⚠️ VPS Gateway: на одном тестовом VPS с активным UFW system/mixed не прошли сетевую проверку; при system отказывал TCP через TUN, хотя UDP работал. Причина не установлена. Начинайте с gVisor; MIPS — альтернатива при Mihomo ≥ 1.19.31. system/mixed выбирайте только после самостоятельной проверки TCP, UDP и DNS.'
+  };
+  stackWarning.textContent = stackWarnings[target] || '';
+  stackWarning.style.display = target === 'router' ? 'none' : '';
   // VPS-профили: БС и Per-Proxy недоступны по контракту (router-only).
   // Отключение делается здесь, а не только в Build — но Build и не доверяет DOM.
   const vps = target !== 'router';
