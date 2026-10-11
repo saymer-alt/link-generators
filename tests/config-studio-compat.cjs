@@ -54,6 +54,10 @@ const SCENARIOS = [
   ['rule-target', [{ opKind: 'rule-target', ruleIndex: 1, newTarget: 'Alpha-SS' }]],
   ['add-proxy', [{ opKind: 'add', fields: { name: 'Gamma-SS', type: 'ss', server: '203.0.113.30', port: '8443', password: 'compat-synth-pass-c', cipher: 'aes-128-gcm' } }]],
   ['UX52-add-provider', [{opKind:'add-provider',fields:{name:'owner-sub',url:'https://sub.example.invalid/token/SYNTH_ONLY',interval:'86400',path:'providers/owner.yaml',proxy:'DIRECT',healthEnable:true,healthUrl:'https://health.example.invalid/check',healthInterval:'300',expectedStatus:'200/204'}}]],
+  ['UX52-provider-rename-download-target', [
+    {opKind:'add-provider',fields:{name:'owner-sub',url:'https://sub.example.invalid/token/SYNTH_ONLY',interval:'86400',path:'providers/owner.yaml',proxy:'Alpha-SS',healthEnable:false,healthUrl:'https://health.example.invalid/check',healthInterval:'300'}},
+    {opKind:'rename',type:'proxy',name:'Alpha-SS',new:'Renamed-download'}
+  ]],
   ['multi-edit', [
     { opKind: 'field-edit', type: 'proxy', name: 'Beta-SS', field: 'server', newText: '203.0.113.20' },
     { opKind: 'rename', type: 'proxy', name: 'Beta-SS', new: 'Beta-SS-2' },

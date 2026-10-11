@@ -7535,6 +7535,9 @@ function csCollectRefs(doc) {
   (Array.isArray(doc && doc.proxies) ? doc.proxies : []).forEach((p, pi) => {
     if (p && typeof p['dialer-proxy'] === 'string' && p['dialer-proxy']) refs.push({ kind: 'dialer-proxy', from: p.name, fromKind: 'proxy', fromPath: { proxyIndex: pi }, to: p['dialer-proxy'], toKind: kindOf(p['dialer-proxy']) });
   });
+  for (const [name, p] of Object.entries((doc && doc['proxy-providers']) || {})) {
+    if (p && typeof p.proxy === 'string' && p.proxy) refs.push({kind:'provider-proxy',from:name,fromKind:'provider',fromPath:{providerName:name},to:p.proxy,toKind:kindOf(p.proxy)});
+  }
   (Array.isArray(doc && doc.rules) ? doc.rules : []).forEach((r, ri) => {
     const t = csRuleTarget(r);
     if (t) refs.push({ kind: 'rule-target', from: 'rule #' + (ri + 1), fromKind: 'rule', fromPath: { ruleIndex: ri }, to: t, toKind: kindOf(t) });
@@ -7558,6 +7561,7 @@ function csDiagnostics(doc) {
   dupIn(groupList, 'group');
   const { refs, proxyNames, groupNames, provNames, rpNames } = csCollectRefs(doc);
   for (const r of refs) {
+    if (r.kind === 'provider-proxy' && !['proxy','group','builtin'].includes(r.toKind)) { err('CS-DANGLING-REF', 'proxy-provider «' + r.from + '»: цель загрузки proxy «' + r.to + '» не найдена среди proxies/groups/builtins'); continue; }
     if (r.toKind === 'unknown') {
       if (r.kind === 'group-member' || r.kind === 'dialer-proxy') { err('CS-DANGLING-REF', r.kind === 'dialer-proxy' ? 'dialer-proxy «' + r.from + '» → «' + r.to + '»: цель не найдена среди proxies/groups/providers' : 'группа «' + r.from + '» содержит несуществующего участника «' + r.to + '»'); }
       else if (r.kind === 'group-use') { err('CS-DANGLING-REF', 'группа «' + r.from + '» использует несуществующий provider «' + r.to + '»'); }
@@ -7832,7 +7836,7 @@ function csLineStart(src, pos) {
 // Определения имён и ссылочные позиции (CST). Reference model = csCollectRefs
 // (plain-doc), здесь те же семантики по узлам документа.
 function csWalkNamed(csDoc) {
-  const out = { proxyDefs: [], groupDefs: [], providerDefs: [], rpDefs: [], memberRefs: [], useRefs: [], dialerRefs: [] };
+  const out = { proxyDefs: [], groupDefs: [], providerDefs: [], rpDefs: [], memberRefs: [], useRefs: [], dialerRefs: [], providerProxyRefs: [] };
   const pSeq = csSeqOf(csDoc, 'proxies');
   if (pSeq) for (const it of pSeq.items) {
     const pair = (it.items || []).find(p => p.key && p.key.value === 'name');
@@ -7857,6 +7861,8 @@ function csWalkNamed(csDoc) {
     for (const pair of map.items) {
       const def = { name: String(pair.key.value), keyNode: pair.key, item: pair.value, section: key };
       if (key === 'proxy-providers') out.providerDefs.push(def); else out.rpDefs.push(def);
+      const proxy = key === 'proxy-providers' && pair.value && (pair.value.items || []).find(p => p.key && p.key.value === 'proxy');
+      if (proxy && proxy.value && proxy.value.range) out.providerProxyRefs.push({from:def.name,node:proxy.value});
     }
   }
   return out;
@@ -7951,6 +7957,7 @@ function csPlanRename(csDoc, doc, type, oldName, newName) {
     patches.push({ start: def.valueNode.range[0], end: def.valueNode.range[1], text: csFormatScalar(newName) });
     for (const r of walk.memberRefs) if (r.node.value === oldName) { patches.push({ start: r.node.range[0], end: r.node.range[1], text: csFormatScalar(newName) }); refCount++; }
     for (const r of walk.dialerRefs) if (r.node.value === oldName) { patches.push({ start: r.node.range[0], end: r.node.range[1], text: csFormatScalar(newName) }); refCount++; }
+    for (const r of walk.providerProxyRefs) if (r.node.value === oldName) { patches.push({ start: r.node.range[0], end: r.node.range[1], text: csFormatScalar(newName) }); refCount++; }
     for (let i = 0; i < (doc.rules || []).length; i++) {
       const text = String(doc.rules[i]);
       const ti = csRuleTargetIndex(text);
@@ -8005,6 +8012,8 @@ function csPlanDelete(csDoc, src, doc, type, name, opts) {
   }
   if (type === 'proxy' || type === 'group') {
     const refs = csRefsToName(doc, name);
+    const downloads = refs.filter(r => r.kind === 'provider-proxy');
+    if (downloads.length) return {error:'REFS-PROVIDER-PROXY',refs:downloads,message:'Цель загрузки используется proxy-provider: сначала явно переназначьте поле proxy у провайдера.'};
     if (refs.length && !(opts && opts.removeRefs)) {
       return { error: 'REFS', refs, message: 'Удаление «' + name + '» затронет ' + refs.length + ' ссыл(ок/и). «Удалить и исправить ссылки» уберёт их из групп/dialer-proxy.' };
     }

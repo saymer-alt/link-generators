@@ -88,7 +88,7 @@ const normalizeHwid = yaml => yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, '  - <HWI
   assert.equal(project.options.tunMips, true);
   assert.equal(project.domainPolicy.cards[0].name, 'ai');
   assert.equal(project.tiered.cards[0].name, 'main');
-  ok('проект сохранён: схема v1, 2 WG (с ключами и именами файлов), опции/карточки на месте');
+  ok('проект сохранён: схема v2, 2 WG (с ключами и именами файлов), опции/карточки на месте');
 
   // --- 4. Новая вкладка: загрузить проект → Builder восстановлен ---
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href);

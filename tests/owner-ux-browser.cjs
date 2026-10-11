@@ -1274,6 +1274,18 @@ async function check(name, fn) {
     for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,850],[320,850]]){await n.setViewportSize({width,height});await r2Reveal(n,'csProviderAddBody');assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);await screenshot(n,'#csProviderAddPanel','ux52-'+width);}
     assert.deepEqual(requests,[]);assert.equal(await n.evaluate(()=>csImportText),before);
   });
+  await check('UX52 acceptance provider download target follows rename and blocks deletion',async()=>{
+    for(const [type,target] of [['proxy','Local'],['group','ROOT']]){
+      const n=await fresh(false);await importStudio(n);await r2Reveal(n,'csProviderAddBody');
+      await n.locator('#csProvider_name').fill('download-sub');await n.locator('#csProvider_url').fill('https://sub.example.invalid/token/SYNTH_ONLY');await n.locator('#csProvider_proxy').selectOption(target);await n.locator('#csProviderAddApply').click();await n.waitForFunction(()=>csWorking&&!csWorkingErr);
+      await n.locator('#csEditType').selectOption(type);await n.locator('#csEditObject').selectOption(target);await r2Reveal(n,'csRenameInput');await n.locator('#csRenameInput').fill('Renamed-download');await n.locator('#csRenameBtn').click();await n.waitForFunction(()=>document.getElementById('csRenameBtn').dataset.csConfirm==='1');await n.locator('#csRenameBtn').click();
+      await n.waitForFunction(()=>csWorking&&!csWorkingErr&&jsyaml.load(csExportText())['proxy-providers']['download-sub'].proxy==='Renamed-download');
+      assert.equal(await n.evaluate(()=>csDiagnostics(jsyaml.load(csExportText())).filter(d=>d.severity==='error').length),0);
+      const before=await n.evaluate(()=>csExportText());
+      const blocked=await n.evaluate(({type})=>{const CSY=globalThis.CSYaml, text=csExportText();return csPlanOp(CSY.parseDocument(text,{keepSourceTokens:true}),text,CSY.parse(text),{opKind:'delete',type,name:'Renamed-download',removeRefs:true});},{type});
+      assert.ok(blocked.error);assert.equal(await n.evaluate(()=>csExportText()),before);
+    }
+  });
   await check('UX54 acceptance project migration and neutral default',async()=>{
     const n=await fresh(false);await n.locator('#mihomoInput').fill(link);
     assert.equal(await n.evaluate(()=>rbCollectProject().schemaVersion),2);

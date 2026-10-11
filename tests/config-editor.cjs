@@ -298,4 +298,14 @@ for(const section of ['', 'proxy-providers:\n', 'proxy-providers: null # empty\n
 }
 for(const fields of [{...providerFields,name:''},{...providerFields,name:'DIRECT'},{...providerFields,url:''},{...providerFields,url:'file:///secret'},{...providerFields,interval:'1.5'},{...providerFields,interval:'-1'},{...providerFields,healthInterval:'1x'},{...providerFields,healthUrl:''},{...providerFields,expectedStatus:'299-200'},{...providerFields,proxy:'missing'},{...providerFields,path:'../outside'}]){assert.ok(plan('rules: [MATCH,DIRECT]\n',providerOp(fields)).error);ok();}
 for(const src of ['proxy-providers: []\n','proxy-providers: wrong\n','proxy-providers: {x: {}, x: {}}\n','x: &alias {}\nproxy-providers: *alias\n','rules: []\n...\n']){assert.throws(()=>api.csReplay(src,[providerOp(providerFields)],CSY));ok();}
+// UX52 review: download target is a reference, including add -> rename sessions.
+for(const type of ['proxy','group']){
+  const name=type==='proxy'?'Old-Exit':'MAIN';
+  const added=api.csReplay(FIXTURE,[providerOp({...providerFields,proxy:name})],CSY).text;
+  const renamed=api.csReplay(added,[{opKind:'rename',type,name,new:'Renamed-download'}],CSY).text;
+  assert.equal(parse(renamed)['proxy-providers']['new-sub'].proxy,'Renamed-download');
+  assert.equal(plan(added,{opKind:'delete',type,name,removeRefs:true}).error,'REFS-PROVIDER-PROXY');
+  assert.ok(api.csDiagnostics(parse(renamed.replace('proxy: Renamed-download','proxy: Missing-download'))).some(d=>d.severity==='error'&&d.message.includes('Missing-download')));
+  ok();
+}
 console.log('PASS config-editor: ' + cases + ' groups');
