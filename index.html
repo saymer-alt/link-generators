@@ -427,7 +427,7 @@
  <a href="#routingDiagnostics">Проверка домена</a><a href="#ruleProviderExplorer">Провайдеры правил</a><a href="#domainCoveragePanel">Покрытие доменов</a><a href="#vrgPanel">Граф зависимостей Build</a>
 
  <a href="#perProxyAdvancedDetails">Расширенный TUN / вход на каждый прокси</a><a href="#wgDialerAdvanced">Общая dialer-группа</a>
- <a href="#mihomoValidationBox">Результат проверки YAML</a><button type="button" class="btn btn-gray" onclick="switchTab(null, 'studio')">Config Studio: анализ готового YAML / DNS / редактор</button>
+ <a href="#mihomoValidationBox">Результат проверки YAML</a><button type="button" class="btn btn-gray" id="builderOpenStudioFromDirectory" onclick="openBuilderYamlInStudio()">Config Studio: анализ готового YAML / DNS / редактор</button>
  </div>
 </details>
 <section class="builder-workspace" aria-labelledby="ux-start">
@@ -782,7 +782,7 @@
             </details>
           </details>
         </details>
-<div class="btn-group"><button type="button" class="btn btn-gray" id="builderValidationJump" onclick="builderJump('mihomoValidationBox')">К результатам проверки YAML</button><button type="button" class="btn btn-gray" onclick="switchTab(null, 'studio')">Открыть Config Studio — готовый YAML и DNS-анализ</button></div>
+<div class="btn-group"><button type="button" class="btn btn-gray" id="builderValidationJump" onclick="builderJump('mihomoValidationBox')">К результатам проверки YAML</button><button type="button" class="btn btn-gray" id="builderOpenStudioFromDiagnostics" onclick="openBuilderYamlInStudio()">Открыть Config Studio — готовый YAML и DNS-анализ</button></div>
 </div>
 </section>
 <section id="physicalTopologyInternal" class="builder-workspace" aria-labelledby="ux-lab" hidden inert>
@@ -3266,7 +3266,7 @@ function renderBuilderActionStatus() {
   el.dataset.state = state;
   document.getElementById('builderRebuildBtn').hidden = state !== 'STALE';
   el.textContent = {NOT_BUILT:'Конфигурация ещё не собрана',BUILDING:'Выполняется Build / проверка…',CURRENT:'YAML актуален — базовая проверка пройдена',STALE:'Конфигурация требует пересборки. Параметры изменились. Предыдущий YAML доступен для просмотра, но больше не соответствует текущим настройкам.',ERROR:'Ошибка сборки / проверки — исправьте данные и повторите Build'}[state];
-  for (const id of ['copyYamlBtn','downloadYamlBtn','openYamlStudioBtn']) document.getElementById(id).disabled = !isBuilderYamlReady();
+  for (const id of ['copyYamlBtn','downloadYamlBtn','openYamlStudioBtn','builderOpenStudioFromDirectory','builderOpenStudioFromDiagnostics']) document.getElementById(id).disabled = !isBuilderYamlReady();
   refreshAwgKeepaliveActual();
 }
 function buildFailure(message) {
