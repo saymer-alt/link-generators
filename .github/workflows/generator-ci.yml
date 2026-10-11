@@ -302,6 +302,9 @@ jobs:
       - name: Config Studio browser regression (#176)
         run: node tests/config-studio-browser.cjs
 
+      - name: Builder to Config Studio handoff regression (v1.11 UX)
+        run: node tests/builder-studio-handoff-browser.cjs
+
       - name: Visual Routing Graph integration browser regression (#177/MEGA-01)
         run: node tests/vrg-integration-browser.cjs
 
