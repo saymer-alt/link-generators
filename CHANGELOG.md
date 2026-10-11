@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- **Owner acceptance UX-51–54:** синхронизированы disabled-действия Builder → Studio, общие демонстрационные офлайн-проверки; добавлена HTTP(S) подписка в source-preserving редактор (без автоматического use). Новый default общей dialer-группы SHARED-DIALER; формат проекта остаётся v1, совместимая обработка старых тестовых проектов без переименования targets/YAML.
+
 ### Added
 
 - **DNS ↔ Routing (#207, v1.11-dev, интегрирован в main по OWNER GO):** независимая ревизия исправила disabled default, unconditional structural checks, fragments/array policies, first-match precedence и explicit proxy classification; ложное объяснение fake-IP заменено UNKNOWN. Quick Start и source provenance синхронизированы; 17 core groups, 12 browser checks, 7 parse cases; PASS и non-rule mode исправлены; parse-only CI matrix 1.19.31/1.19.32. Реальная сеть не проверялась; #207 объединён в main 09.10.2026, production release не опубликован. Post-merge acceptance49/21 и три дополнительные DNS integration groups: docs/research/V1.11-POST-MERGE-ACCEPTANCE.md; release notes — отдельный черновик.

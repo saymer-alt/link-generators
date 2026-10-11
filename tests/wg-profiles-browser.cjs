@@ -31,7 +31,7 @@ const fx = n => path.join(__dirname, 'fixtures', n);
       await page.waitForFunction(() => ['VALID', 'INVALID'].includes(MIHOMO_VALIDATION_STATE.state));
       return page.evaluate(() => ({ state: MIHOMO_VALIDATION_STATE.state, yaml: document.getElementById('mihomoOutput').value }));
     };
-    const wgNames = y => (y.match(/^  - name: (.+)$/gm) || []).map(l => l.replace('  - name: ', '').trim()).filter(n => !['⚡ Fastest', 'GLOBAL', 'WARP-DIALER'].includes(n));
+    const wgNames = y => (y.match(/^  - name: (.+)$/gm) || []).map(l => l.replace('  - name: ', '').trim()).filter(n => !['⚡ Fastest', 'GLOBAL', 'WARP-DIALER', 'SHARED-DIALER'].includes(n));
     const proxyBlockOf = (y, name) => {
       const lines = y.split('\n');
       const start = lines.findIndex(l => { const t = l.trim().replace(/^- /, ''); return t === `name: ${name}` || t === `name: "${name}"` || t === `name: '${name}'`; });
@@ -143,7 +143,7 @@ const fx = n => path.join(__dirname, 'fixtures', n);
     assert.equal((r.yaml.match(/dialer-proxy: VPS-SE/g) || []).length, 1, 'единственный WG получил dialer-proxy от своей карточки');
     ok('per-profile dialer (таргет = существующий proxy) работает');
 
-    // смешанный сценарий §16: 2 direct + 2 разных dialer-таргета (+ группа WARP-DIALER)
+    // смешанный сценарий §16: 2 direct + 2 разных dialer-таргета (+ группа SHARED-DIALER)
     await page.evaluate(() => {
       const mk = (filename, name, addr) => ({
         id: ++wgProfileSeq, filename, mode: 'direct', target: '',
@@ -151,7 +151,7 @@ const fx = n => path.join(__dirname, 'fixtures', n);
           `[Interface]\nPrivateKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAddress = ${addr}/32\n[Peer]\nPublicKey = CkGOZHbIxJvSSWWGFlHpNkGt0HhRIcKbmTIrmA9TcHk=\nAllowedIPs = 0.0.0.0/0\nEndpoint = 198.51.100.55:51820\n`, name),
       });
       wgProfiles = [mk('home.conf', 'wg-home', '10.7.1.2'), mk('office.conf', 'wg-office', '10.7.2.2')];
-      wgProfiles[1].mode = 'proxy'; wgProfiles[1].target = 'WARP-DIALER';
+      wgProfiles[1].mode = 'proxy'; wgProfiles[1].target = 'SHARED-DIALER';
       wgProfiles.push(mk('warp-ee.conf', 'wg-warp-ee', '10.7.3.2'));
       wgProfiles[2].mode = 'proxy'; wgProfiles[2].target = 'VPS-EE';
       syncWgCollections();
@@ -162,10 +162,10 @@ const fx = n => path.join(__dirname, 'fixtures', n);
     r = await build();
     assert.equal(r.state, 'VALID');
     assert.ok(!proxyHasDialer(r.yaml, 'wg-home'), 'home.conf — напрямую');
-    assert.match(proxyBlockOf(r.yaml, 'wg-office'), /dialer-proxy: WARP-DIALER/, 'office.conf — через WARP-DIALER');
+    assert.match(proxyBlockOf(r.yaml, 'wg-office'), /dialer-proxy: SHARED-DIALER/, 'office.conf — через SHARED-DIALER');
     assert.match(proxyBlockOf(r.yaml, 'wg-warp-ee'), /dialer-proxy: VPS-EE/, 'warp-ee.conf — через VPS-EE');
-    assert.ok(/name: WARP-DIALER/.test(r.yaml), 'dialer-группа WARP-DIALER построена');
-    assert.match(r.yaml.match(/  - name: WARP-DIALER[\s\S]*?(?=  - name: |rules:)/)[0], /wg-home/, 'группа содержит транзитный узел');
+    assert.ok(/name: SHARED-DIALER/.test(r.yaml), 'dialer-группа SHARED-DIALER построена');
+    assert.match(r.yaml.match(/  - name: SHARED-DIALER[\s\S]*?(?=  - name: |rules:)/)[0], /wg-home/, 'группа содержит транзитный узел');
     ok('смешанный direct+dialer: таргеты независимы, группа построена');
 
     // пустой таргет при режиме «Через proxy» — честная ошибка, не тихий direct
