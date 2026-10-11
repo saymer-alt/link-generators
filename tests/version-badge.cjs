@@ -13,7 +13,7 @@ let cases = 0;
 // --- Node-side guard: single source-of-truth ---
 {
   assert.equal((html.match(/const GENERATOR_META = Object\.freeze/g) || []).length, 1, 'GENERATOR_META определяется ровно один раз');
-  assert.equal((html.match(/version:\s*'1\.11\.0-dev'/g) || []).length, 1, 'version-литерал живёт только в GENERATOR_META');
+  assert.equal((html.match(/version:\s*'1\.12\.0-dev'/g) || []).length, 1, 'version-литерал живёт только в GENERATOR_META');
   assert.equal((html.match(/channel:\s*'main'/g) || []).length, 1, 'channel-литерал живёт только в GENERATOR_META');
   assert.match(html, /<span id="genVersionBadge"[^>]*><\/span>/, 'бейдж пуст в HTML — текст приходит из GENERATOR_META');
   assert.ok(!/EXPERIMENTAL\s*[·-]\s*v?1\.11-dev/.test(html), 'Physical Topology badge не содержит устаревающий v1.11-dev literal');
