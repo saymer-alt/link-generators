@@ -7407,7 +7407,7 @@ function csLoadBounded(text, loader) {
       for (const list of ['proxies', 'use']) if (item[list] !== undefined && (!Array.isArray(item[list]) || item[list].some(x => typeof x !== 'string'))) throw new Error('CS-SHAPE: members/use должны быть списками строк');
     }
   }
-  for (const key of ['proxy-providers', 'rule-providers']) if (doc[key] !== undefined && (!map(doc[key]) || Object.values(doc[key]).some(v => !map(v)))) throw new Error('CS-SHAPE: providers должны быть объектами');
+  for (const key of ['proxy-providers', 'rule-providers']) if (doc[key] !== undefined && !(key === 'proxy-providers' && doc[key] === null) && (!map(doc[key]) || Object.values(doc[key]).some(v => !map(v)))) throw new Error('CS-SHAPE: providers должны быть объектами');
   return doc;
 }
 function csIsSecretKey(key) {
@@ -9528,6 +9528,38 @@ function csCurrentName(orig) {
 }
 function csEditorEnabled() { return !!csCurrentDoc; }
 
+function csRefreshProviderTargets(doc) {
+  const select=document.getElementById('csProvider_proxy');
+  if(!select || !doc)return;
+  const selected=csCurrentName(select.value);
+  select.textContent='';
+  for(const name of new Set(['DIRECT',...(doc.proxies||[]).map(p=>p.name),...(doc['proxy-groups']||[]).map(g=>g.name)])){
+    const option=document.createElement('option');option.value=name;option.textContent=csRedactText(name,doc);select.appendChild(option);
+  }
+  select.value=selected; // исчезнувшая цель требует нового явного выбора
+}
+function csRenderAddProvider() {
+  const providerBody = document.getElementById('csProviderAddBody');
+  if (providerBody) {
+    providerBody.textContent = '';
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0';
+    for (const [key,label,value] of [['name','Имя',''],['url','URL подписки (HTTP/S)',''],['interval','Обновление, секунд','86400'],['path','Path (необязательно)',''],['proxy','Цель загрузки','DIRECT'],['healthEnable','Health-check enable','false'],['healthUrl','Health-check URL','https://www.gstatic.com/generate_204'],['healthInterval','Health-check интервал, секунд','300'],['expectedStatus','Expected status (необязательно)','']]) {
+      const wrap = document.createElement('label'); wrap.className = 'hint';
+      wrap.style.cssText = 'flex:1 1 180px;min-width:0'; wrap.textContent = label;
+      const el = document.createElement(key === 'healthEnable' || key === 'proxy' ? 'select' : 'input');
+      el.id = 'csProvider_' + key; el.setAttribute('aria-label', label);
+      el.style.cssText = 'display:block;width:100%;min-width:0;box-sizing:border-box;padding:6px';
+      if (key === 'healthEnable' || key === 'proxy') {
+        const choices = key === 'healthEnable' ? ['false','true'] : [...new Set(['DIRECT', ...(csCurrentDoc.proxies || []).map(x=>x.name), ...(csCurrentDoc['proxy-groups'] || []).map(x=>x.name)])];
+        for (const choice of choices) { const o=document.createElement('option');o.value=choice;o.textContent=csRedactText(choice,csCurrentDoc);el.appendChild(o); }
+      } else el.type = key === 'url' ? 'password' : 'text';
+      el.value=value;wrap.appendChild(el);grid.appendChild(wrap);
+    }
+    const button=document.createElement('button');button.id='csProviderAddApply';button.type='button';button.className='btn btn-gray';button.textContent='➕ Добавить подписку';
+    providerBody.append(grid,button);
+  }
+}
 function csRefreshEditor() {
   const card = document.getElementById('csEditorCard');
   if (!card) return;
@@ -9549,6 +9581,7 @@ function csRefreshEditor() {
     objSel.appendChild(o);
   }
   if (mapped.some(m => m.orig === prev)) objSel.value = prev;
+  csRenderAddProvider();
   csRenderForm();
   csAfterOpsChange();
 }
@@ -9718,26 +9751,6 @@ function csRenderForm() {
     addBtn.textContent = '➕ Добавить';
     addBody.append(addNote, addGrid, addBtn);
   }
-  const providerBody = document.getElementById('csProviderAddBody');
-  if (providerBody) {
-    providerBody.textContent = '';
-    const grid = document.createElement('div');
-    grid.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0';
-    for (const [key,label,value] of [['name','Имя',''],['url','URL подписки (HTTP/S)',''],['interval','Обновление, секунд','86400'],['path','Path (необязательно)',''],['proxy','Цель загрузки','DIRECT'],['healthEnable','Health-check enable','false'],['healthUrl','Health-check URL','https://www.gstatic.com/generate_204'],['healthInterval','Health-check интервал, секунд','300'],['expectedStatus','Expected status (необязательно)','']]) {
-      const wrap = document.createElement('label'); wrap.className = 'hint';
-      wrap.style.cssText = 'flex:1 1 180px;min-width:0'; wrap.textContent = label;
-      const el = document.createElement(key === 'healthEnable' || key === 'proxy' ? 'select' : 'input');
-      el.id = 'csProvider_' + key; el.setAttribute('aria-label', label);
-      el.style.cssText = 'display:block;width:100%;min-width:0;box-sizing:border-box;padding:6px';
-      if (key === 'healthEnable' || key === 'proxy') {
-        const choices = key === 'healthEnable' ? ['false','true'] : [...new Set(['DIRECT', ...(csCurrentDoc.proxies || []).map(x=>x.name), ...(csCurrentDoc['proxy-groups'] || []).map(x=>x.name)])];
-        for (const choice of choices) { const o=document.createElement('option');o.value=choice;o.textContent=csRedactText(choice,csCurrentDoc);el.appendChild(o); }
-      } else el.type = key === 'url' ? 'password' : 'text';
-      el.value=value;wrap.appendChild(el);grid.appendChild(wrap);
-    }
-    const button=document.createElement('button');button.id='csProviderAddApply';button.type='button';button.className='btn btn-gray';button.textContent='➕ Добавить подписку';
-    providerBody.append(grid,button);
-  }
   // правила — отдельная панель
   const rulesBody = document.getElementById('csRulesBody');
   if (rulesBody) {
@@ -9810,6 +9823,7 @@ function csAfterOpsChange() {
   if (!csOps.length) {
     box.style.display = 'none';
     csWorking = null; csWorkingErr = null;
+    csRefreshProviderTargets(csCurrentDoc);
     if (exportNote) exportNote.textContent = 'Изменений нет — экспорт идентичен оригиналу (байт-в-байт).';
     if (status) status.textContent = 'Статическая валидация: ' + (csDiagnostics(csCurrentDoc).some(d => d.severity === 'error') ? 'FAIL' : 'PASS') + ' (оригинал) · Runtime-валидация Mihomo: NOT RUN';
     return;
@@ -9854,6 +9868,7 @@ function csAfterOpsChange() {
     let valid = 'FAIL';
     try {
       const doc = csLoadBounded(csWorking.text, jsyaml);
+      csRefreshProviderTargets(doc);
       const errs = csDiagnostics(doc).filter(x => x.severity === 'error');
       valid = errs.length ? 'FAIL' : 'PASS';
       if (errs.length) status.textContent = 'Статическая валидация: FAIL\n' + errs.map(x => '✖ ' + x.message).join('\n');

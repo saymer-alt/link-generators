@@ -1274,12 +1274,22 @@ async function check(name, fn) {
     for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,850],[320,850]]){await n.setViewportSize({width,height});await r2Reveal(n,'csProviderAddBody');assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);await screenshot(n,'#csProviderAddPanel','ux52-'+width);}
     assert.deepEqual(requests,[]);assert.equal(await n.evaluate(()=>csImportText),before);
   });
+  await check('UX52 acceptance provider-only configs absent empty and existing sections',async()=>{
+    for(const section of ['', 'proxy-providers:\n', 'proxy-providers: {}\n', 'proxy-providers:\n  old: {type: http, url: "https://old.example.invalid/sub", interval: 10}\n']){
+      const n=await fresh(false);await openStudio(n);const src=section+'rules:\n  - MATCH,DIRECT\n';
+      assert.equal(await n.evaluate(src=>csRunAnalysis(src),src),true);await r2Reveal(n,'csProviderAddBody');assert.equal(await n.locator('#csProvider_name').count(),1);
+      await n.locator('#csProvider_name').fill('provider-only');await n.locator('#csProvider_url').fill('https://sub.example.invalid/feed');await n.locator('#csProviderAddApply').click();await n.waitForFunction(()=>csWorking&&!csWorkingErr);
+      assert.equal(await n.evaluate(()=>jsyaml.load(csExportText())['proxy-providers']['provider-only'].type),'http');assert.equal(await n.evaluate(()=>csImportText),src);
+      await n.locator('#csUndoBtn').click();assert.equal(await n.evaluate(()=>csExportText()),src);
+    }
+  });
   await check('UX52 acceptance provider download target follows rename and blocks deletion',async()=>{
     for(const [type,target] of [['proxy','Local'],['group','ROOT']]){
       const n=await fresh(false);await importStudio(n);await r2Reveal(n,'csProviderAddBody');
       await n.locator('#csProvider_name').fill('download-sub');await n.locator('#csProvider_url').fill('https://sub.example.invalid/token/SYNTH_ONLY');await n.locator('#csProvider_proxy').selectOption(target);await n.locator('#csProviderAddApply').click();await n.waitForFunction(()=>csWorking&&!csWorkingErr);
       await n.locator('#csEditType').selectOption(type);await n.locator('#csEditObject').selectOption(target);await r2Reveal(n,'csRenameInput');await n.locator('#csRenameInput').fill('Renamed-download');await n.locator('#csRenameBtn').click();await n.waitForFunction(()=>document.getElementById('csRenameBtn').dataset.csConfirm==='1');await n.locator('#csRenameBtn').click();
       await n.waitForFunction(()=>csWorking&&!csWorkingErr&&jsyaml.load(csExportText())['proxy-providers']['download-sub'].proxy==='Renamed-download');
+      assert.equal(await n.locator('#csProvider_proxy option[value=Renamed-download]').count(),1);assert.equal(await n.locator('#csProvider_proxy').locator('option').evaluateAll((xs,target)=>xs.some(o=>o.value===target),target),false);
       assert.equal(await n.evaluate(()=>csDiagnostics(jsyaml.load(csExportText())).filter(d=>d.severity==='error').length),0);
       const before=await n.evaluate(()=>csExportText());
       const blocked=await n.evaluate(({type})=>{const CSY=globalThis.CSYaml, text=csExportText();return csPlanOp(CSY.parseDocument(text,{keepSourceTokens:true}),text,CSY.parse(text),{opKind:'delete',type,name:'Renamed-download',removeRefs:true});},{type});
