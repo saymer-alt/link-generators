@@ -7057,8 +7057,10 @@ function rbMigrateProject(p) {
   if (p && p.schemaVersion === 2) return { ok: true, project: { ...p, schemaVersion: 1 } };
   const d = p && p.dialer;
   const active = d && ['members', 'providers'].some(k => typeof d[k] === 'string' && d[k].trim());
+  // В Build имя берётся из mode/target; исходный bean может хранить старое,
+  // уже переопределённое значение и сам по себе не является ссылкой.
   const legacyRef = (Array.isArray(p?.wgProfiles) && p.wgProfiles.some(w =>
-    w?.target === 'WARP-DIALER' || w?.bean?.wireguard?.dialerProxy === 'WARP-DIALER')) ||
+    w?.mode === 'proxy' && typeof w.target === 'string' && w.target.trim() === 'WARP-DIALER')) ||
     (Array.isArray(p?.domainPolicy?.cards) && p.domainPolicy.cards.some(c => c?.target === 'WARP-DIALER')) ||
     (Array.isArray(p?.tiered?.cards) && p.tiered.cards.some(c => Array.isArray(c?.members) && c.members.includes('WARP-DIALER')));
   if (p?.schemaVersion === 1 && active && typeof d.name === 'string' && !d.name.trim() && legacyRef) {

@@ -1319,9 +1319,12 @@ async function check(name, fn) {
       const saved=await n.evaluate(()=>rbCollectProject());assert.equal(saved.schemaVersion,1);await n.evaluate(p=>rbApplyProject(p),saved);await build(n);
     }
     const noRefs=await n.evaluate(p=>{p.wgProfiles=[];return rbParseProjectText(JSON.stringify(p));},project);assert.equal(noRefs.project.dialer.name,'');
-    for(const source of ['bean','policy','tiered']){
+    const overridden=JSON.parse(JSON.stringify(project));for(const w of overridden.wgProfiles)w.bean.wireguard.dialerProxy='WARP-DIALER';
+    const parsedOverride=await n.evaluate(p=>rbParseProjectText(JSON.stringify(p)),overridden);assert.equal(parsedOverride.ok,true);assert.deepEqual(parsedOverride.project,overridden);
+    await n.evaluate(p=>rbApplyProject(p),parsedOverride.project);await build(n);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+    for(const source of ['profile','policy','tiered']){
       const old=JSON.parse(JSON.stringify(project));old.dialer.name='  ';old.wgProfiles=[];old.passthrough={'source-config':{rules:['MATCH,WARP-DIALER']}};
-      if(source==='bean'){old.wgProfiles=JSON.parse(JSON.stringify(project.wgProfiles));for(const w of old.wgProfiles){w.target='';w.bean.wireguard.dialerProxy='WARP-DIALER';}}
+      if(source==='profile'){old.wgProfiles=JSON.parse(JSON.stringify(project.wgProfiles));for(const w of old.wgProfiles)w.target=' WARP-DIALER ';}
       if(source==='policy')old.domainPolicy.cards=[{name:'legacy',domains:'example.invalid',target:'WARP-DIALER'}];
       if(source==='tiered')old.tiered.cards=[{name:'legacy',strategy:'fallback',members:['WARP-DIALER']}];
       const parsed=await n.evaluate(p=>rbParseProjectText(JSON.stringify(p)),old);assert.equal(parsed.ok,true);assert.equal(parsed.project.dialer.name,'WARP-DIALER');assert.deepEqual({...parsed.project,dialer:old.dialer},old);
