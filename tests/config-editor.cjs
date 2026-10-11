@@ -279,4 +279,23 @@ const FIXTURE = [
   ok();
 }
 
+// UX52: provider insertion is local, additive and preserves surrounding bytes.
+const providerFields = {name:'new-sub',url:'https://sub.example.invalid/token/SYNTH_SECRET?key=SYNTH_QUERY',interval:'86400',proxy:'DIRECT',healthEnable:true,healthUrl:'https://health.example.invalid/check',healthInterval:'300',expectedStatus:'200/204'};
+const providerOp = fields => ({opKind:'add-provider',name:fields.name,fields});
+for(const section of ['', 'proxy-providers:\n', 'proxy-providers: null # empty\n', 'proxy-providers: {} # empty\n', 'proxy-providers:\n  old: {type: http, url: "https://old.example.invalid/sub", interval: 10}\n', 'proxy-providers: {old: {type: http, url: "https://old.example.invalid/sub"}}\n']) {
+  for(const nl of ['\n','\r\n']) {
+    const source='\uFEFF# keep header\n'+section+'rules:\n  - MATCH,DIRECT # keep tail\n';
+    const src=source.replace(/\n/g,nl), r=api.csReplay(src,[providerOp(providerFields)],CSY);
+    assert.ok(r.text.startsWith('\uFEFF# keep header'+nl));
+    assert.ok(r.text.includes('rules:'+nl+'  - MATCH,DIRECT # keep tail'+nl));
+    if(nl==='\r\n')assert.ok(!/(?<!\r)\n/.test(r.text));
+    const doc=parse(r.text);assert.equal(doc['proxy-providers']['new-sub'].url,providerFields.url);assert.equal(doc['proxy-providers']['new-sub']['health-check']['expected-status'],'200/204');
+    if(section.includes('old:'))assert.deepEqual(doc['proxy-providers'].old,parse(src)['proxy-providers'].old);
+    const twice=api.csReplay(src,[providerOp(providerFields),providerOp({...providerFields,name:'second'})],CSY);
+    assert.ok(parse(twice.text)['proxy-providers'].second);assert.equal(api.csReplay(src,[],CSY).text,src);
+    assert.ok(plan(r.text,providerOp(providerFields)).error);ok();
+  }
+}
+for(const fields of [{...providerFields,name:''},{...providerFields,name:'DIRECT'},{...providerFields,url:''},{...providerFields,url:'file:///secret'},{...providerFields,interval:'1.5'},{...providerFields,interval:'-1'},{...providerFields,healthInterval:'1x'},{...providerFields,healthUrl:''},{...providerFields,expectedStatus:'299-200'},{...providerFields,proxy:'missing'},{...providerFields,path:'../outside'}]){assert.ok(plan('rules: [MATCH,DIRECT]\n',providerOp(fields)).error);ok();}
+for(const src of ['proxy-providers: []\n','proxy-providers: wrong\n','proxy-providers: {x: {}, x: {}}\n','x: &alias {}\nproxy-providers: *alias\n','rules: []\n...\n']){assert.throws(()=>api.csReplay(src,[providerOp(providerFields)],CSY));ok();}
 console.log('PASS config-editor: ' + cases + ' groups');

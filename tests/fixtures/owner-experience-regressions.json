@@ -363,6 +363,34 @@
       "scenario_prefixes": [
         "UX50 Studio integration "
       ]
+    },
+    {
+      "id": "UX-51",
+      "summary": "Builder to Studio action availability",
+      "scenario_prefixes": [
+        "UX51 acceptance "
+      ]
+    },
+    {
+      "id": "UX-52",
+      "summary": "Add HTTP subscription provider preserving source",
+      "scenario_prefixes": [
+        "UX52 acceptance "
+      ]
+    },
+    {
+      "id": "UX-53",
+      "summary": "Shared offline routing demo inputs",
+      "scenario_prefixes": [
+        "UX53 acceptance "
+      ]
+    },
+    {
+      "id": "UX-54",
+      "summary": "Neutral dialer default and legacy project migration",
+      "scenario_prefixes": [
+        "UX54 acceptance "
+      ]
     }
   ]
 }

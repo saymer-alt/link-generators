@@ -159,9 +159,9 @@ const fx = n => path.join(__dirname, 'fixtures', n);
     document.getElementById('wgDialerMembers').value = 'VPS-SE\nVPS-EE';
     document.getElementById('wgDialerMembers').dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await page.waitForFunction(() => dialerTargetsCache.some(t => t.value === 'WARP-DIALER'), null, { timeout: 10000 });
+  await page.waitForFunction(() => dialerTargetsCache.some(t => t.value === 'SHARED-DIALER'), null, { timeout: 10000 });
   opts = await optionsOf(0);
-  assert.ok(opts.some(o => o.value === 'WARP-DIALER'), 'provider/статик dialer-группа появилась в списке');
+  assert.ok(opts.some(o => o.value === 'SHARED-DIALER'), 'provider/статик dialer-группа появилась в списке');
   ok('dynamic refresh: dialer-группа появляется в dropdown');
 
   // 9. URL-подписка из ОСНОВНОГО input автоматически становится target.
@@ -201,8 +201,8 @@ const fx = n => path.join(__dirname, 'fixtures', n);
     document.getElementById('wgDialerProviders').value = 'https://subs.example.invalid/token';
     document.getElementById('wgDialerProviders').dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await page.waitForFunction(() => dialerTargetsCache.some(t => t.value === 'WARP-DIALER'), null, { timeout: 10000 });
-  ok('ADVANCED legacy provider-backed WARP-DIALER остаётся доступен');
+  await page.waitForFunction(() => dialerTargetsCache.some(t => t.value === 'SHARED-DIALER'), null, { timeout: 10000 });
+  ok('ADVANCED legacy provider-backed SHARED-DIALER остаётся доступен');
 
   // 10. цикл A → B → A: централизованный детектор отклоняет сборку
   await page.evaluate(() => {

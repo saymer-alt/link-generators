@@ -708,15 +708,15 @@
 <select id="pingSelect"></select>
 <input type="text" id="pingCustomUrl" placeholder="https://example.com/generate_204" style="display:none;margin-top:6px" autocomplete="off"></div>
 <div class="card">
-<div class="card-title">🔗 Ручная общая dialer-группа (Legacy)</div>
+<div class="card-title">🔗 Общая группа промежуточного выхода (расширено)</div>
 
 
 <details id="wgDialerAdvanced" class="advanced-panel" style="margin-top:15px">
-        <summary><span class="disclosure-chevron" aria-hidden="true">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Ручная общая dialer-группа (Legacy)</span></summary>
+        <summary><span class="disclosure-chevron" aria-hidden="true">▶</span> <span class="advanced-badge">ADVANCED</span> <span>Общая группа промежуточного выхода (расширено)</span></summary>
         <div class="hint">Обычно этот раздел не нужен. Для каждого WG/AWG используйте настройку «Через промежуточный proxy» в его карточке — генератор сам создаст безопасную группу (для подписки — provider-backed). Этот блок — ручной/Legacy путь: общая dialer-группа, которую несколько WG/AWG используют совместно, для особых схем.</div>
         <label class="label" for="wgDialerInput" style="display:block;margin-bottom:5px;">Переопределить имя группы (необязательно):</label>
-        <input type="text" id="wgDialerInput" style="width:100%;padding:8px;box-sizing:border-box;" placeholder="Пусто = WARP-DIALER">
-        <div class="hint" style="margin-top:5px;">Если имя не задано, используется <code>WARP-DIALER</code>. Это внутреннее имя Mihomo proxy-group, а не имя сервера.</div>
+        <input type="text" id="wgDialerInput" style="width:100%;padding:8px;box-sizing:border-box;" placeholder="Пусто = SHARED-DIALER">
+        <div class="hint" style="margin-top:5px;">Если имя не задано, используется <code>SHARED-DIALER</code>. Это внутреннее имя Mihomo proxy-group, а не имя сервера.</div>
         <label class="label" for="wgDialerMembers" style="display:block;margin-bottom:5px;margin-top:10px;">Статические участники группы (ADVANCED, точные имена proxy):</label>
         <textarea id="wgDialerMembers" rows="3" style="width:100%;padding:8px;box-sizing:border-box;font-family:monospace;" placeholder="Proxy-A&#10;Proxy-B&#10;WG-Backup"></textarea>
         <div class="hint" style="margin-top:5px;">По одному уже существующему proxy в строке. Для обычного сценария ничего здесь не печатайте — выбирайте готовую цель прямо в карточке WG/AWG.</div>
@@ -924,7 +924,8 @@
           <input type="text" id="csRuleProbe" placeholder="домен или IP — какое правило сработает" aria-label="Проверить одно доменное имя" style="flex:1;min-width:180px;padding:4px 8px">
           <button type="button" class="btn btn-gray" id="csRuleProbeBtn">Проверить</button>
         </div>
-        <div id="csRuleProbeOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
+        <div id="csRuleEffectiveInput" class="hint" aria-live="polite"></div>
+      <div id="csRuleProbeOut" class="hint" style="margin-top:6px;white-space:pre-line"></div>
       </details>
       <details id="csTracePanel" style="margin-top:8px">
         <summary style="cursor:pointer">Semantic Trace</summary>
@@ -965,6 +966,12 @@
       <details id="csAddPanel" class="cs-subpanel" style="margin-top:8px">
         <summary style="cursor:pointer">➕ Добавить новый прокси</summary>
         <div id="csAddBody" style="margin-top:6px"></div>
+      </details>
+      <details id="csProviderAddPanel" class="cs-subpanel" style="margin-top:8px">
+        <summary>➕ Добавить подписку (proxy-provider)</summary>
+        <div class="hint">Создаётся HTTP(S) provider без подключения к маршрутизации. Чтобы использовать его серверы, вручную добавьте имя в <code>use:</code> нужной группы. Подписка здесь не загружается. Пустой path — Mihomo выберет путь хранения.</div>
+        <div id="csProviderAddBody" style="margin-top:6px"></div>
+        <div id="csProviderAddStatus" class="hint" aria-live="polite"></div>
       </details>
       <details id="csRulesPanel" class="cs-subpanel" style="margin-top:8px">
         <summary style="cursor:pointer">🎯 Цель правила</summary>
@@ -2429,7 +2436,7 @@ function initWgUpload() {
         filename: freshNames[i],
         bean,
         mode: hasGroupSrc ? 'proxy' : 'direct',
-        target: globalTarget || (hasGroupSrc ? 'WARP-DIALER' : ''),
+        target: globalTarget || (hasGroupSrc ? 'SHARED-DIALER' : ''),
       });
     });
     syncWgCollections();
@@ -2492,7 +2499,7 @@ function wgProfileEndpoint(bean) {
   return '';
 }
 
-// Ручная общая dialer-группа (Legacy) видна только когда есть хотя бы один
+// Общая группа промежуточного выхода (расширено) видна только когда есть хотя бы один
 // WG/AWG профиль: обычный сценарий настраивается в карточке профиля.
 function updateWgDialerAdvancedVisibility() {
   const adv = document.getElementById('wgDialerAdvanced');
@@ -2700,7 +2707,7 @@ document.addEventListener('change', (e) => {
       // Пре-выбор: dialer-группа пользователя, если она реально существует
       // в текущей конфигурации; иначе пусто (никаких выдуманных имён).
       const g = (document.getElementById('wgDialerInput').value || '').trim();
-      const def = (g || 'WARP-DIALER');
+      const def = (g || 'SHARED-DIALER');
       if (dialerTargetsCache.some(x => x.value === def)) {
         wgProfiles[idx].target = def;
         wgProfiles[idx].targetSource = 'select';
@@ -3259,7 +3266,7 @@ function renderBuilderActionStatus() {
   el.dataset.state = state;
   document.getElementById('builderRebuildBtn').hidden = state !== 'STALE';
   el.textContent = {NOT_BUILT:'Конфигурация ещё не собрана',BUILDING:'Выполняется Build / проверка…',CURRENT:'YAML актуален — базовая проверка пройдена',STALE:'Конфигурация требует пересборки. Параметры изменились. Предыдущий YAML доступен для просмотра, но больше не соответствует текущим настройкам.',ERROR:'Ошибка сборки / проверки — исправьте данные и повторите Build'}[state];
-  for (const id of ['copyYamlBtn','downloadYamlBtn']) document.getElementById(id).disabled = !isBuilderYamlReady();
+  for (const id of ['copyYamlBtn','downloadYamlBtn','openYamlStudioBtn']) document.getElementById(id).disabled = !isBuilderYamlReady();
   refreshAwgKeepaliveActual();
 }
 function buildFailure(message) {
@@ -6946,7 +6953,7 @@ function ptNetworkDiagnostics(spec, model, opts) {
 // bounded-разбор — pure-функции (без DOM). Контракт формата:
 // docs/research/PORTABLE-BUILDER-PROJECT.md. Сбор/применение состояния
 // Builder (DOM) живёт в RB-UI, здесь только данные.
-const RB_PROJECT_SCHEMA_VERSION = 1;
+const RB_PROJECT_SCHEMA_VERSION = 2;
 const RB_PROJECT_MAX_BYTES = 4 * 1024 * 1024;
 const RB_PROFILES = new Set(['router', 'vps-local', 'vps-gateway']);
 const RB_DASHBOARDS = new Set(['metacubexd', 'yacd', 'zashboard', 'custom']);
@@ -7042,9 +7049,17 @@ function rbValidateProject(p) {
   return errors;
 }
 
-// Миграции: v1 — текущая; >1 отвергается валидацией. Новые версии добавляют
-// упорядоченные шаги rbMigrations[1→2] и т.д.
-const RB_MIGRATIONS = {};
+// v1: пустое имя активной общей группы означало WARP-DIALER.
+// Закрепляем исторический default; имена/targets/beans/passthrough не меняем.
+// v2: пустое имя новой группы означает SHARED-DIALER.
+const RB_MIGRATIONS = {
+  1: p => {
+    const d = p.dialer;
+    const active = d && ['members', 'providers'].some(k => typeof d[k] === 'string' && d[k].trim());
+    return active && typeof d.name === 'string' && !d.name.trim()
+      ? { ...p, dialer: { ...d, name: 'WARP-DIALER' } } : { ...p };
+  }
+};
 function rbMigrateProject(p) {
   let cur = p;
   while (cur && cur.schemaVersion < RB_PROJECT_SCHEMA_VERSION) {
@@ -8119,6 +8134,79 @@ function csPlanAddProxy(csDoc, src, fields) {
   return { patches: [{ start: last.range[1], end: last.range[1], text }],
     semantic: { opKind: 'add', type: 'proxy', name: fields.name, new: fields.name } };
 }
+// HTTP(S) provider: только создание, без изменения групп/use и сетевых запросов.
+function csPlanAddProvider(csDoc, src, plain, fields) {
+  if (csDoc.errors.length) return { error: 'неоднозначный YAML — исходник сохранён' };
+  const all = new Set(CS_BUILTIN_TARGETS);
+  for (const key of ['proxies', 'proxy-groups']) (plain[key] || []).forEach(x => { if (x && x.name) all.add(x.name); });
+  for (const key of ['proxy-providers', 'rule-providers']) Object.keys(plain[key] || {}).forEach(x => all.add(x));
+  const name = String(fields.name || '').trim();
+  const nameErr = csValidateNewName(name, [all]);
+  if (nameErr) return { error: nameErr };
+  const http = value => { try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !!u.hostname; } catch (_) { return false; } };
+  if (!http(fields.url)) return { error: 'url: требуется HTTP(S) адрес подписки (значение скрыто)' };
+  const integer = v => /^\d+$/.test(String(v)) && Number.isSafeInteger(Number(v)) && Number(v) > 0 && Number(v) <= 2147483647;
+  if (!integer(fields.interval)) return { error: 'interval: требуется положительное целое число секунд' };
+  if (typeof fields.healthEnable !== 'boolean') return { error: 'health-check.enable: требуется явный выбор' };
+  if (!http(fields.healthUrl)) return { error: 'health-check.url: требуется HTTP(S) адрес (значение скрыто)' };
+  if (!integer(fields.healthInterval)) return { error: 'health-check.interval: требуется положительное целое число секунд' };
+  const status = String(fields.expectedStatus || '').trim();
+  if (status && (!/^\d{3}(?:-\d{3})?(?:\/\d{3}(?:-\d{3})?)*$/.test(status) || status.split('/').some(part => { const [a,b=a] = part.split('-').map(Number); return a < 100 || b > 599 || a > b; }))) return { error: 'expected-status: HTTP-код или диапазоны, например 200/204 или 200-299' };
+  const proxy = String(fields.proxy || '').trim();
+  const targets = new Set(['DIRECT', ...(plain.proxies || []).map(x => x.name), ...(plain['proxy-groups'] || []).map(x => x.name)]);
+  if (!targets.has(proxy)) return { error: 'proxy: выберите существующую цель загрузки' };
+  const path = String(fields.path || '').trim();
+  if (path && (/^[\\/]|^[A-Za-z]:|[\r\n\0]/.test(path) || path.split(/[\\/]/).includes('..'))) return { error: 'path: требуется относительный путь внутри каталога Mihomo' };
+  const provider = { type: 'http', url: String(fields.url).trim(), interval: Number(fields.interval) };
+  if (path) provider.path = path;
+  provider.proxy = proxy;
+  provider['health-check'] = { enable: fields.healthEnable, url: String(fields.healthUrl).trim(), interval: Number(fields.healthInterval) };
+  if (status) provider['health-check']['expected-status'] = status;
+  const nl = src.includes('\r\n') ? '\r\n' : '\n';
+  const q = v => JSON.stringify(v);
+  const pair = csTopPair(csDoc, 'proxy-providers');
+  const map = pair && pair.value;
+  if (map && map.type !== 'PLAIN' && !Array.isArray(map.items)) return { error: 'proxy-providers: требуется отображение, исходник сохранён' };
+  if (map && !Array.isArray(map.items) && map.value !== null) return { error: 'proxy-providers: требуется отображение, исходник сохранён' };
+  let patches;
+  if (map && map.flow) {
+    const end = src.lastIndexOf('}', map.range[1] - 1);
+    patches = [{ start: end, end, text: (map.items.length ? ', ' : '') + q(name) + ': ' + q(provider) }];
+  } else {
+    let indent = '  ';
+    if (map && map.items && map.items.length) {
+      const first = map.items[0].key;
+      indent = src.slice(csLineStart(src, first.range[0]), first.range[0]);
+      if (!/^ +$/.test(indent)) return { error: 'proxy-providers: неоднозначный отступ' };
+    }
+    const lines = [indent + q(name) + ':'];
+    for (const [key, value] of Object.entries(provider)) {
+      if (key === 'health-check') {
+        lines.push(indent + '  health-check:');
+        for (const [k,v] of Object.entries(value)) lines.push(indent + '    ' + k + ': ' + q(v));
+      } else lines.push(indent + '  ' + key + ': ' + q(value));
+    }
+    const text = lines.join(nl) + nl;
+    if (!pair) {
+      const end = src.length;
+      // Концевой YAML document marker меняет область вставки: безопасный отказ.
+      if (/^\.\.\.[ \t]*(?:#.*)?$/m.test(src)) return { error: 'концевой маркер документа: добавьте секцию вручную' };
+      patches = [{ start: end, end, text: (end && !src.endsWith('\n') ? nl : '') + 'proxy-providers:' + nl + text }];
+    } else if (map && map.items && map.items.length) {
+      const end = map.range[1];
+      patches = [{ start: end, end, text: (src[end-1] === '\n' ? '' : nl) + text }];
+    } else {
+      // Пустая block-секция: сохраняем комментарий ключа, заменяем только null.
+      if (map && map.range && src.slice(map.range[0], map.range[1]).trim()) {
+        patches = [{ start: map.range[0], end: map.range[1], text: '' }];
+      } else patches = [];
+      const eol = src.indexOf('\n', pair.key.range[1]);
+      const end = eol < 0 ? src.length : eol + 1;
+      patches.push({ start: end, end, text: (eol < 0 ? nl : '') + text });
+    }
+  }
+  return { patches, semantic: { opKind: 'add-provider', type: 'proxy-providers', name, new: name } };
+}
 // Применение патчей: сортировка по убыванию позиции, контроль пересечений.
 function csApplyPatches(src, patches) {
   const sorted = patches.slice().sort((a, b) => b.start - a.start);
@@ -8160,6 +8248,7 @@ function csPlanOp(csDoc, src, plain, op) {
     case 'delete': return csPlanDelete(csDoc, src, plain, op.type, op.name, { removeRefs: !!op.removeRefs });
     case 'group-members': return csPlanGroupMembers(csDoc, src, op.name, op.members);
     case 'rule-target': return csPlanRuleTarget(csDoc, op.ruleIndex, op.newTarget);
+    case 'add-provider': return csPlanAddProvider(csDoc, src, plain, op.fields);
     case 'add': return csPlanAddProxy(csDoc, src, op.fields);
     default: return { error: 'неизвестный тип правки: ' + op.opKind };
   }
@@ -8653,7 +8742,7 @@ function runRoutingInspector() {
   if (!out) return;
   if (!diagnosticsCurrent()) { offerDiagnosticBuild('inspector'); return; }
   document.getElementById('rdBuildCheckBtn').hidden = true;
-  const input = document.getElementById('rdTestInput').value.trim() || 'gemini.google.com';
+  const input = document.getElementById('rdTestInput').value.trim() || ROUTING_DEMO_DOMAIN;
   document.getElementById('rdEffectiveInput').textContent = 'Офлайн-проверка: ' + input;
   const res = routingInspect(lastRoutingDoc, input);
   const labelOf = (idx) => {
@@ -9249,6 +9338,7 @@ function csRunAnalysis(sourceText) {
   document.getElementById('csDnsRoutingOut').textContent = csDnsRoutingText(doc);
   document.getElementById('csDomainOut').textContent = '';
   document.getElementById('csRuleProbeOut').textContent = '';
+  document.getElementById('csRuleEffectiveInput').textContent = '';
   document.getElementById('csDomainInput').value = '';
   document.getElementById('csRuleProbe').value = '';
   sumCard.style.display = 'block';
@@ -9315,9 +9405,10 @@ function runCsDomainCoverage() {
   const out = document.getElementById('csDomainOut');
   if (!out) return;
   if (!csCurrentDoc) { out.textContent = 'Сначала разберите конфиг.'; return; }
-  const res = cdgDomainCoverage(csCurrentDoc, document.getElementById('csDomainInput').value, {});
+  const entered = document.getElementById('csDomainInput').value.trim();
+  const res = cdgDomainCoverage(csCurrentDoc, entered || DC_EXAMPLES, {});
   if (!res.results.length) { out.textContent = 'Введите домены (по одному в строке).'; return; }
-  out.textContent = domainCoverageDisplayText(res, csCurrentDoc);
+  out.textContent = (entered ? 'Проверены введённые домены' : 'Проверены демонстрационные домены') + RD_NL + domainCoverageDisplayText(res, csCurrentDoc);
 }
 
 // Проверка одного домена/IP по импортированному конфигу (routingInspect — то же
@@ -9326,7 +9417,8 @@ function runCsRuleProbe() {
   const out = document.getElementById('csRuleProbeOut');
   if (!out) return;
   if (!csCurrentDoc) { out.textContent = 'Сначала разберите конфиг.'; return; }
-  const input = document.getElementById('csRuleProbe').value;
+  const input = document.getElementById('csRuleProbe').value.trim() || ROUTING_DEMO_DOMAIN;
+  document.getElementById('csRuleEffectiveInput').textContent = csRedactText('Офлайн-проверка: ' + input, csCurrentDoc);
   const res = routingInspect(csCurrentDoc, input);
   if (res.verdict === 'EMPTY') { out.textContent = res.message; return; }
   if (res.verdict === 'UNKNOWN') { out.textContent = csRedactText('⚠ UNKNOWN — результат не может быть доказан офлайн. Причина: ' + (res.firstUnknown ? res.firstUnknown.reason : '—'), csCurrentDoc); return; }
@@ -9615,6 +9707,26 @@ function csRenderForm() {
     addBtn.textContent = '➕ Добавить';
     addBody.append(addNote, addGrid, addBtn);
   }
+  const providerBody = document.getElementById('csProviderAddBody');
+  if (providerBody) {
+    providerBody.textContent = '';
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0';
+    for (const [key,label,value] of [['name','Имя',''],['url','URL подписки (HTTP/S)',''],['interval','Обновление, секунд','86400'],['path','Path (необязательно)',''],['proxy','Цель загрузки','DIRECT'],['healthEnable','Health-check enable','false'],['healthUrl','Health-check URL','https://www.gstatic.com/generate_204'],['healthInterval','Health-check интервал, секунд','300'],['expectedStatus','Expected status (необязательно)','']]) {
+      const wrap = document.createElement('label'); wrap.className = 'hint';
+      wrap.style.cssText = 'flex:1 1 180px;min-width:0'; wrap.textContent = label;
+      const el = document.createElement(key === 'healthEnable' || key === 'proxy' ? 'select' : 'input');
+      el.id = 'csProvider_' + key; el.setAttribute('aria-label', label);
+      el.style.cssText = 'display:block;width:100%;min-width:0;box-sizing:border-box;padding:6px';
+      if (key === 'healthEnable' || key === 'proxy') {
+        const choices = key === 'healthEnable' ? ['false','true'] : [...new Set(['DIRECT', ...(csCurrentDoc.proxies || []).map(x=>x.name), ...(csCurrentDoc['proxy-groups'] || []).map(x=>x.name)])];
+        for (const choice of choices) { const o=document.createElement('option');o.value=choice;o.textContent=csRedactText(choice,csCurrentDoc);el.appendChild(o); }
+      } else el.type = key === 'url' ? 'password' : 'text';
+      el.value=value;wrap.appendChild(el);grid.appendChild(wrap);
+    }
+    const button=document.createElement('button');button.id='csProviderAddApply';button.type='button';button.className='btn btn-gray';button.textContent='➕ Добавить подписку';
+    providerBody.append(grid,button);
+  }
   // правила — отдельная панель
   const rulesBody = document.getElementById('csRulesBody');
   if (rulesBody) {
@@ -9693,7 +9805,7 @@ function csAfterOpsChange() {
   }
   box.style.display = 'block';
   csWorking = null; csWorkingErr = 'правки ещё обрабатываются';
-  const redactionDoc = { config: csCurrentDoc, secret: csOps.filter(op => csIsSecretKey(op.field)).map(op => op.newText), added: csOps.filter(op => op.opKind === 'add').map(op => op.fields) };
+  const redactionDoc = { config: csCurrentDoc, secret: csOps.filter(op => csIsSecretKey(op.field)).map(op => op.newText), added: csOps.filter(op => ['add','add-provider'].includes(op.opKind)).map(op => op.fields) };
   if (exportNote) exportNote.textContent = 'Правок в сессии: ' + csOps.length + ' — экспорт применит их к оригиналу.';
   list.textContent = csRedactText(csOps.map((op, i) => {
     if (op.opKind === 'field-edit') return (i + 1) + '. ' + op.type + ' «' + csCurrentName(op.name) + '» · ' + op.field + ': ' + (op.showOld || '••••••') + ' → ' + (op.showNew || '••••••');
@@ -9701,6 +9813,7 @@ function csAfterOpsChange() {
     if (op.opKind === 'delete') return (i + 1) + '. удаление ' + op.type + ' «' + op.name + '»' + (op.refsAffected ? ' (исправлено ссылок: ' + op.refsAffected + ')' : '');
     if (op.opKind === 'group-members') return (i + 1) + '. участники группы «' + op.name + '»: ' + op.new.join(', ');
     if (op.opKind === 'rule-target') return (i + 1) + '. ' + op.name + ': цель ' + op.old + ' → ' + op.new;
+    if (op.opKind === 'add-provider') return (i + 1) + '. добавлена подписка «' + op.name + '» (без подключения к группе)';
     if (op.opKind === 'add') return (i + 1) + '. добавлен прокси «' + op.name + '»';
     return (i + 1) + '. ' + op.opKind;
   }).join('\n'), redactionDoc);
@@ -9835,6 +9948,26 @@ function csEditorClick(e) {
     const members = document.getElementById('csMembersInput').value.split('\n');
     csPushOp({ opKind: 'group-members', name: orig, members });
     csAfterOpsChange();
+    return;
+  }
+  if (id === 'csProviderAddApply') {
+    e.preventDefault();
+    const fields = {};
+    for (const key of ['name','url','interval','path','proxy','healthEnable','healthUrl','healthInterval','expectedStatus']) fields[key]=document.getElementById('csProvider_'+key).value;
+    fields.healthEnable = fields.healthEnable === 'true';
+    const seq = csEditorSeq;
+    ensureCsYaml().then(CSY => {
+      if (seq !== csEditorSeq) return;
+      const text=csWorking && !csWorkingErr ? csWorking.text : csImportText;
+      if (csWorkingErr) throw new Error('Сначала исправьте или сбросьте конфликтующие правки.');
+      const op={opKind:'add-provider',name:fields.name,fields};
+      const plan=csPlanOp(CSY.parseDocument(text,{keepSourceTokens:true}),text,CSY.parse(text),op);
+      const status=document.getElementById('csProviderAddStatus');
+      if(plan.error){status.textContent='✖ '+csRedactText(plan.error,{config:csCurrentDoc,fields});return;}
+      csOps.push(op);csAfterOpsChange();
+      status.textContent='Подписка добавлена без подключения к группе. Для использования добавьте её имя в use: вручную.';
+      document.getElementById('csProvider_url').value='';document.getElementById('csProvider_name').value='';
+    }).catch(()=>{if(seq===csEditorSeq)document.getElementById('csProviderAddStatus').textContent='✖ Добавление не применено: проверьте YAML и правки сессии (значения скрыты).';});
     return;
   }
   if (id === 'csAddApply') {
@@ -10374,7 +10507,8 @@ function renderVrgBuilder() {
 // Domain Coverage UI (v1.9 PHASE 5): первый consumer Config Dependency Graph.
 // Только отображение результатов ядра (cdgDomainCoverage); snapshot последнего
 // Build; STALE помечает каждую строку, скрытый Build не выполняется.
-const DC_EXAMPLES = 'gemini.google.com\nyoutube.com\nunknown-service.example';
+const ROUTING_DEMO_DOMAIN = 'gemini.google.com';
+const DC_EXAMPLES = ROUTING_DEMO_DOMAIN + '\nyoutube.com\nunknown-service.example';
 function runDomainCoverage() {
   diagnosticActionSeq++;
   const out = document.getElementById('dcResults');

@@ -81,7 +81,7 @@ const normalizeHwid = yaml => yaml.replace(/^[ \t]+- [0-9a-f]{32}$/gm, '  - <HWI
   const projectPath = path.join(outputDir, 'downloaded-project.lgproject.json');
   await download.saveAs(projectPath);
   const project = JSON.parse(fs.readFileSync(projectPath, 'utf8'));
-  assert.equal(project.schemaVersion, 1);
+  assert.equal(project.schemaVersion, 2);
   assert.equal(project.wgProfiles.length, 2);
   assert.ok(project.wgProfiles.some(w => w.filename === 'wg-simple-a.conf' && w.bean.wireguard.privateKey === PRIV_A));
   assert.equal(project.sources.subMode, true);

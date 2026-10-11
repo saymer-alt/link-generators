@@ -1141,10 +1141,10 @@ async function check(name, fn) {
   });
   await check('UX47 Studio integration rejects missing stale invalid and tampered output',async()=>{
     const n=await fresh(false);assert.equal(await n.locator('#openYamlStudioBtn').count(),1);
-    await n.locator('#openYamlStudioBtn').click();assert.equal(await n.evaluate(()=>csCurrentDoc),null);
-    await n.locator('#mihomoInput').fill(link);await build(n);await n.locator('#cfgLan').uncheck();await n.locator('#openYamlStudioBtn').click();assert.equal(await n.evaluate(()=>csCurrentDoc),null);
-    await build(n);await n.evaluate(()=>setMihomoValidationState('INVALID'));await n.locator('#openYamlStudioBtn').click();assert.equal(await n.evaluate(()=>csCurrentDoc),null);
-    await build(n);await n.evaluate(()=>document.getElementById('mihomoOutput').value='proxies: [');await n.locator('#openYamlStudioBtn').click();assert.equal(await n.evaluate(()=>csCurrentDoc),null);
+    await n.evaluate(()=>openBuilderYamlInStudio());assert.equal(await n.evaluate(()=>csCurrentDoc),null);
+    await n.locator('#mihomoInput').fill(link);await build(n);await n.locator('#cfgLan').uncheck();await n.evaluate(()=>openBuilderYamlInStudio());assert.equal(await n.evaluate(()=>csCurrentDoc),null);
+    await build(n);await n.evaluate(()=>setMihomoValidationState('INVALID'));await n.evaluate(()=>openBuilderYamlInStudio());assert.equal(await n.evaluate(()=>csCurrentDoc),null);
+    await build(n);await n.evaluate(()=>document.getElementById('mihomoOutput').value='proxies: [');await n.evaluate(()=>openBuilderYamlInStudio());assert.equal(await n.evaluate(()=>csCurrentDoc),null);
   });
   await check('UX47 Studio integration cancel replacement and failed parse preserve document',async()=>{
     const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);await importStudio(n);
@@ -1220,6 +1220,77 @@ async function check(name, fn) {
     await n.locator('#csParseBtn').click();assert.equal(await w.evaluate(e=>vrgNavigation.get(e).height),null);h=await w.evaluate(e=>e.clientHeight);assert.ok(h>=300&&h<=400);
     await n.locator('#csImportInput').fill('{}');await n.locator('#csParseBtn').click();assert.ok(await w.evaluate(e=>e.clientHeight)<=124,'empty document remains compact');await n.locator('#csImportInput').fill(studioFixture);await n.locator('#csParseBtn').click();
     for(const width of [390,320]){await n.setViewportSize({width,height:850});await n.locator('#csParseBtn').click();const data=await w.evaluate(e=>({height:e.clientHeight,pixels:parseInt(e.closest('.vrg-frame').querySelector('.vrg-height-pixels').textContent),slider:Number(e.closest('.vrg-frame').querySelector('input[type=range]').value)}));assert.ok(data.height>=200&&data.height<=425);assert.ok(Math.abs(data.height-data.pixels)<=2);assert.ok(Math.abs(data.height-data.slider)<=10);assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);}
+  });
+  await check('UX51 acceptance action availability and defensive guard',async()=>{
+    const n=await fresh(false), ids=['copyYamlBtn','downloadYamlBtn','openYamlStudioBtn'];
+    const disabled=async expected=>{for(const id of ids)assert.equal(await n.locator('#'+id).isDisabled(),expected,id);};
+    await disabled(true);
+    const before=await n.evaluate(()=>({seq:mihomoValidationSeq,toast:document.getElementById('toast').textContent}));
+    await n.locator('#openYamlStudioBtn').evaluate(e=>e.click());
+    assert.deepEqual(await n.evaluate(()=>({seq:mihomoValidationSeq,toast:document.getElementById('toast').textContent})),before);
+    await n.locator('.tab',{hasText:'Config Studio'}).click();assert.equal(await n.locator('#csImportInput').isVisible(),true);
+    await n.locator('.tab',{hasText:'Mihomo Config Builder'}).click();await n.locator('#mihomoInput').fill(link);await build(n);await disabled(false);
+    for(const state of ['NOT_BUILT','VALIDATING','INVALID']){await n.evaluate(state=>setMihomoValidationState(state),state);await disabled(true);}
+    await build(n);await n.evaluate(()=>{builderBuildAttempts++;renderBuilderActionStatus();});await disabled(true);
+    await n.evaluate(()=>{builderBuildAttempts--;builderBuildError=true;renderBuilderActionStatus();});await disabled(true);
+    await n.evaluate(()=>{builderBuildError=false;renderBuilderActionStatus();});await disabled(false);
+    await n.locator('#cfgLan').uncheck();await disabled(true);await n.evaluate(()=>openBuilderYamlInStudio());assert.equal(await n.evaluate(()=>csCurrentDoc),null);
+    await build(n);await disabled(false);await n.locator('#openYamlStudioBtn').focus();await n.keyboard.press('Enter');assert.equal(await n.locator('#tab-studio').evaluate(e=>e.classList.contains('active')),true);
+  });
+  for(const consumer of ['Builder','Studio'])await check('UX53 acceptance shared routing demos '+consumer,async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);await build(n);
+    let input='dcInput',out='dcResults',probe='rdTestInput',probeOut='rdEffectiveInput';
+    if(consumer==='Studio'){await importStudio(n);input='csDomainInput';out='csDomainOut';probe='csRuleProbe';probeOut='csRuleEffectiveInput';}
+    const snapshot=await n.evaluate(()=>({yaml:document.getElementById('mihomoOutput').value,studio:csImportText,seq:mihomoValidationSeq}));
+    const requests=[];n.on('request',r=>requests.push(r.url()));
+    await n.evaluate(consumer=>consumer==='Studio'?runCsDomainCoverage():runDomainCoverage(),consumer);
+    let text=await n.locator('#'+out).textContent();assert.match(text,/Проверены демонстрационные домены/);for(const domain of ['gemini.google.com','youtube.com','unknown-service.example'])assert.ok(text.includes(domain));
+    assert.equal(await n.locator('#'+input).inputValue(),'');
+    await r2Reveal(n,input);await n.locator('#'+input).fill('only.example');await n.evaluate(consumer=>consumer==='Studio'?runCsDomainCoverage():runDomainCoverage(),consumer);
+    text=await n.locator('#'+out).textContent();assert.ok(text.includes('only.example'));assert.ok(!text.includes('youtube.com'));
+    await n.evaluate(consumer=>consumer==='Studio'?runCsRuleProbe():runRoutingInspector(),consumer);
+    assert.ok((await n.locator('#'+probeOut).textContent()).includes('gemini.google.com'));assert.equal(await n.locator('#'+probe).inputValue(),'');
+    await r2Reveal(n,probe);await n.locator('#'+probe).fill('only.example');await n.evaluate(consumer=>consumer==='Studio'?runCsRuleProbe():runRoutingInspector(),consumer);assert.ok((await n.locator('#'+probeOut).textContent()).includes('only.example'));assert.ok(!(await n.locator('#'+probeOut).textContent()).includes('gemini.google.com'));
+    assert.deepEqual(await n.evaluate(()=>({yaml:document.getElementById('mihomoOutput').value,studio:csImportText,seq:mihomoValidationSeq})),snapshot);assert.deepEqual(requests,[]);
+  });
+  await check('UX52 acceptance provider UI Undo Reset export and viewport matrix',async()=>{
+    const n=await fresh(false);await importStudio(n);
+    assert.equal(await n.locator('#csProviderAddPanel').count(),1);
+    await r2Reveal(n,'csProviderAddBody');
+    await n.evaluate(()=>ensureCsYaml());
+    const before=await n.evaluate(()=>csImportText), requests=[];n.on('request',r=>requests.push(r.url()));
+    await n.locator('#csProvider_name').fill('fresh-sub');await n.locator('#csProvider_url').fill('https://sub.example.invalid/token/SYNTH_PROVIDER_SECRET?key=SYNTH_QUERY');
+    await n.locator('#csProviderAddApply').focus();await n.keyboard.press('Enter');
+    await n.waitForFunction(()=>csWorking && !csWorkingErr);
+    assert.match(await n.locator('#csProviderAddStatus').textContent(),/без подключения/);
+    let exported=await n.evaluate(()=>csExportText());assert.ok(exported.includes('SYNTH_PROVIDER_SECRET'));assert.ok(exported.includes('fresh-sub'));
+    assert.deepEqual(await n.evaluate(()=>jsyaml.load(csExportText())['proxy-groups']),await n.evaluate(()=>csCurrentDoc['proxy-groups']));
+    assert.doesNotMatch(await n.locator('#csDiffOut').textContent(),/SYNTH_PROVIDER_SECRET|SYNTH_QUERY/);
+    await n.locator('#csProvider_name').fill('fresh-sub');await n.locator('#csProvider_url').fill('https://second.example.invalid/sub');await n.locator('#csProviderAddApply').click();await n.waitForFunction(()=>document.getElementById('csProviderAddStatus').textContent.startsWith('✖'));
+    assert.equal(await n.evaluate(()=>csOps.length),1);
+    await n.locator('#csUndoBtn').click();assert.equal(await n.evaluate(()=>csExportText()),before);
+    await n.locator('#csProvider_name').fill('another');await n.locator('#csProviderAddApply').click();await n.waitForFunction(()=>csWorking && !csWorkingErr);
+    await n.locator('#csResetBtn').click();assert.equal(await n.evaluate(()=>csExportText()),before);
+    for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[390,850],[320,850]]){await n.setViewportSize({width,height});await r2Reveal(n,'csProviderAddBody');assert.equal(await n.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);await screenshot(n,'#csProviderAddPanel','ux52-'+width);}
+    assert.deepEqual(requests,[]);assert.equal(await n.evaluate(()=>csImportText),before);
+  });
+  await check('UX54 acceptance project migration and neutral default',async()=>{
+    const n=await fresh(false);await n.locator('#mihomoInput').fill(link);
+    assert.equal(await n.evaluate(()=>rbCollectProject().schemaVersion),2);
+    const f=path.join(root,'tests','fixtures');await n.locator('#wgFile').setInputFiles([path.join(f,'wg-simple-a.conf'),path.join(f,'awg31.conf')]);await n.waitForFunction(()=>wgProfiles.length===2);
+    const project=await n.evaluate(()=>{document.getElementById('wgDialerMembers').value='DIRECT';for(const w of wgProfiles){w.mode='proxy';w.target='SHARED-DIALER';}return rbCollectProject();});
+    await n.evaluate(p=>rbApplyProject(p),project);await build(n);
+    const yaml=await n.locator('#mihomoOutput').inputValue();assert.ok(yaml.includes('SHARED-DIALER'));assert.ok(!yaml.includes('WARP-DIALER'));
+    for(const explicit of [false,true]){
+      const old=JSON.parse(JSON.stringify(project));old.schemaVersion=1;old.dialer.name=explicit?'WARP-DIALER':'';for(const w of old.wgProfiles)w.target='WARP-DIALER';
+      await n.evaluate(p=>rbApplyProject(p),old);assert.equal(await n.locator('#wgDialerInput').inputValue(),'WARP-DIALER');await build(n);
+      const legacy=await n.locator('#mihomoOutput').inputValue();assert.ok(legacy.includes('WARP-DIALER'));assert.ok(!legacy.includes('SHARED-DIALER'));
+      const round=await n.evaluate(()=>rbParseProjectText(JSON.stringify(rbCollectProject())));assert.equal(round.ok,true);assert.equal(round.project.schemaVersion,2);assert.equal(round.project.dialer.name,'WARP-DIALER');
+      assert.deepEqual(round.project.wgProfiles,old.wgProfiles);
+    }
+    await n.evaluate(p=>rbApplyProject(p),project);await build(n);assert.equal(await n.locator('#mihomoOutput').inputValue(),yaml);
+    const empty=await n.evaluate(p=>{p.schemaVersion=1;p.dialer={name:'',members:'',providers:''};p.wgProfiles=[];return rbParseProjectText(JSON.stringify(p));},project);assert.equal(empty.project.dialer.name,'');
+    await r2Reveal(n,'wgDialerInput');await screenshot(n,'#wgDialerAdvanced','ux54-shared-dialer');
   });
   await check('no page errors', async () => { for (const page of pages) assert.deepEqual(page.errors, []); });
   await browser.close();
