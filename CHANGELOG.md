@@ -2,6 +2,25 @@
 
 Все заметные изменения проекта. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 
+## [1.11.1] — 2026-10-13
+
+### Исправлено
+
+- **Firefox tooltip (#262, PR #267):** контекстные подсказки ограничены client viewport, включая место классического scrollbar; длинные динамические WG-подсказки прокручиваются внутри доступной области и не перекрывают собственную кнопку. Сохранены hover/focus/click/Escape; позиция обновляется при scroll/resize и после обновления Firefox hover styles.
+- **Смешанный ввод (#263, PR #269):** у основного поля объяснены proxy-ссылки, URL-подписки и отдельные WG/AWG-файлы. Переход к настройке подписок фокусирует существующий флаг без изменения его значения. Смешивание поддерживается в обоих режимах; различается обработка подписки при Build.
+- **Advanced TUN stack (#253, PR #272):** пустой выбор system/mixed отображает явное приглашение выбрать стек, в том числе после восстановления старого проекта с gVisor. Стек не назначается автоматически; SOCKS-only и Per-Proxy guards сохранены.
+
+### Добавлено
+
+- **Runtime importer (#264, PR #270):** готовые адреса `192.168.1.1:9090`, `192.168.0.1:9090`, `127.0.0.1:9090` и свой endpoint с сохранением custom-ввода только в памяти вкладки. Это адрес уже работающего Mihomo для чтения `GET /providers/proxies`, не настройка bind/listen в YAML.
+- При отправке API secret на новый endpoint требуется явное подтверждение получателя. Смена endpoint отменяет незавершённый запрос и убирает зависший статус загрузки; автоматических запросов, worker relay или сохранения endpoint/secret в проекте/localStorage нет.
+
+### Проверки и границы
+
+- Автоматические browser-регрессии Chromium/Firefox/WebKit, keyboard/mouse, viewport/scrollbar/scroll/resize; RED-before/GREEN-after, Sub Mode + WG/AWG + subscription, Project roundtrip, security/privacy, Owner Experience Gate, AWL/Tiered/DPR, runtime provenance и реальные Mihomo 1.19.31/1.19.32. YAML byte parity со stable v1.11.0 — 10/10 неизменённых сценариев.
+- **POST-RELEASE FIELD / NOT RUN:** ручная проверка native Firefox zoom 150/200/250/300% на компьютере Владимира перенесена владельцем на после публикации. Headless/viewport CI не заменяет её и не подтверждает реальные сетевые маршруты.
+- Полный RU/EN и расширение TUN/MIPS в SOCKS-only остаются вне патча, в scope v1.12. [Release notes](docs/release-drafts/v1.11.1.md), [Owner GO и exact release evidence](https://github.com/saymer-alt/link-generators/issues/273).
+
 ## [1.11.0] — кандидат выпуска
 
 ### Подготовка v1.11.0
