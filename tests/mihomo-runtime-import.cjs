@@ -263,7 +263,7 @@ async function rtStatus(page) {
     ctrl: document.getElementById('rtControllerInput').value,
     secret: document.getElementById('rtSecretInput').value
   }));
-  assert.equal(afterReload.ctrl, '192.168.1.1:9090', 'reload restores built-in preset, not user controller');
+  assert.equal(afterReload.ctrl, '', 'controller адрес не персистится');
   assert.equal(afterReload.secret, '', 'secret не переживает reload');
   ok('privacy: secret/runtime JSON/controller не персистятся');
 
