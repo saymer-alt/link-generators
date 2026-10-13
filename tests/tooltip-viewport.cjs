@@ -54,7 +54,7 @@ const root = process.env.TEST_ROOT || path.resolve(__dirname, '..');
       await page.setViewportSize({width:320,height:720});
       await page.evaluate(()=>Object.defineProperty(document.documentElement,'clientWidth',{configurable:true,get:()=>innerWidth-17}));
       const reserved=page.getByRole('button',{name:'Подсказка: Allow LAN',exact:true});
-      await reserved.scrollIntoViewIfNeeded();await reserved.hover();
+      await reserved.scrollIntoViewIfNeeded();await reserved.hover();await reserved.focus();
       await geometry(reserved,'17px reserved scrollbar area');
       console.log(engine+': tooltip geometry/keyboard/scroll/resize/dynamic PASS');
     } finally {await browser.close();}
