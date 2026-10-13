@@ -218,6 +218,12 @@ jobs:
           OWNER_UX_BROWSER: ${{ matrix.browser }}
         run: node tests/owner-ux-browser.cjs
 
+      - name: Tooltip viewport matrix (#262)
+        env:
+          HOME: /root
+          TEST_ENGINES: ${{ matrix.browser }}
+        run: node tests/tooltip-viewport.cjs
+
   browser:
     name: deterministic / browser
     runs-on: ubuntu-latest
@@ -268,6 +274,11 @@ jobs:
           echo "parity base: $base"
           git worktree add "$RUNNER_TEMP/parity-base" "$base"
           node tests/parity.cjs "$RUNNER_TEMP/parity-base" .
+
+      - name: Tooltip viewport Chromium (#262)
+        env:
+          TEST_ENGINES: chromium
+        run: node tests/tooltip-viewport.cjs
 
       - name: Help UX regression
         run: node tests/help-ux-browser.cjs
