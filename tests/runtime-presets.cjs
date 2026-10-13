@@ -7,13 +7,14 @@ const root=process.env.TEST_ROOT||path.resolve(__dirname,'..');
  for(const engine of (process.env.TEST_ENGINES||'chromium,firefox,webkit').split(',')){
   const browser=await pw[engine].launch({headless:true});
   try{
-   const page=await browser.newPage();let requests=[],response=200,accept=true,dialogs=0;
+   const page=await browser.newPage();let requests=[],response=200,accept=true,dialogs=0,held=[];
    page.on('dialog',d=>{dialogs++;assert.ok(!d.message().includes('synthetic-api-secret'));return accept?d.accept():d.dismiss();});
    await page.route('**/*',r=>{
     const u=r.request().url();
     if(u.startsWith('file:'))return r.continue();
     if(u.startsWith('https://cdn.jsdelivr.net/'))return r.fulfill({path:process.env.JS_YAML_PATH,contentType:'text/javascript'});
     requests.push({url:u,method:r.request().method(),auth:r.request().headers().authorization});
+    if(response===-1){held.push(r);return;}
     if(response===0)return r.abort();
     return r.fulfill({status:response,contentType:'application/json',body:JSON.stringify({providers:{Test:{proxies:[{name:'Synthetic node',type:'Trojan',alive:true}]}}})});
    });
@@ -57,6 +58,14 @@ const root=process.env.TEST_ROOT||path.resolve(__dirname,'..');
    assert.equal(await page.locator('#mihomoOutput').inputValue(),yaml,'runtime actions leave YAML untouched');
    assert.equal(await build(),yaml,'generated YAML byte parity');
    assert.ok(dialogs>=4);
+   // Endpoint change must not leave a cancelled operation stuck at Loading.
+   await page.locator('#cfgServerList').check();await page.locator('#rtSecretInput').fill('');response=-1;
+   for(const change of ['preset','input']){
+    await page.locator('#rtFetchBtn').click();await page.waitForFunction(()=>document.getElementById('rtStatus').textContent==='Загрузка…');
+    if(change==='preset')await select.selectOption('127.0.0.1:9090');else await input.fill('https://changed.example:9443');
+    assert.match(await page.locator('#rtStatus').innerText(),/отменён/,'cancelled endpoint operation has explicit status');
+    for(const r of held.splice(0))await r.abort().catch(()=>{});
+   }
    for(const width of [320,390,768,1366]){await page.setViewportSize({width,height:720});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'no overflow');}
    console.log(engine+': presets/custom/consent/HTTP/errors/privacy/YAML PASS');
   }finally{await browser.close();}

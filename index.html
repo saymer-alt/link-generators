@@ -4649,13 +4649,22 @@ function initRuntimeImport() {
   // Пустое поле сохраняет исторический default-on-Fetch контракт.
   preset.value = !input.value ? '192.168.1.1:9090' : isPreset(input.value) ? input.value : 'custom';
   if (preset.value === 'custom') customAddress = input.value;
-  input.addEventListener('input', () => {
+  function endpointChanged() {
+    const pending = !!rtImportAbort;
     cancelRuntimeImport();
+    if (pending) {
+      const status = document.getElementById('rtStatus');
+      status.textContent = 'Запрос отменён: адрес изменён. Нажмите «Получить узлы из Mihomo» для нового запроса.';
+      status.style.display = '';
+    }
+  }
+  input.addEventListener('input', () => {
+    endpointChanged();
     preset.value = isPreset(input.value) ? input.value : 'custom';
     if (preset.value === 'custom') customAddress = input.value;
   });
   preset.addEventListener('change', () => {
-    cancelRuntimeImport();
+    endpointChanged();
     input.value = preset.value === 'custom' ? customAddress : preset.value;
     if (preset.value === 'custom') input.focus();
   });
