@@ -18,6 +18,7 @@ const root = process.env.TEST_ROOT || path.resolve(__dirname, '..');
         document.getElementById('mihomoInput').after(host);
       });
       async function geometry(btn, context) {
+        await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
         const r = await btn.evaluate(b => {
           const p=b.parentElement.querySelector('.ctx-help-pop'), r=p.getBoundingClientRect();
           return {visible:getComputedStyle(p).display!=='none',left:r.left,right:r.right,top:r.top,bottom:r.bottom,w:document.documentElement.clientWidth,h:document.documentElement.clientHeight};
@@ -48,6 +49,13 @@ const root = process.env.TEST_ROOT || path.resolve(__dirname, '..');
           assert.equal(await btn.evaluate(b=>getComputedStyle(b.parentElement.querySelector('.ctx-help-pop')).display),'none');
         }
       }
+      // Deterministic classic-scrollbar reservation model, in addition to real
+      // geometry above (headless platforms may use overlay scrollbars).
+      await page.setViewportSize({width:320,height:720});
+      await page.evaluate(()=>Object.defineProperty(document.documentElement,'clientWidth',{configurable:true,get:()=>innerWidth-17}));
+      const reserved=page.getByRole('button',{name:'Подсказка: Allow LAN',exact:true});
+      await reserved.scrollIntoViewIfNeeded();await reserved.hover();
+      await geometry(reserved,'17px reserved scrollbar area');
       console.log(engine+': tooltip geometry/keyboard/scroll/resize/dynamic PASS');
     } finally {await browser.close();}
   }
