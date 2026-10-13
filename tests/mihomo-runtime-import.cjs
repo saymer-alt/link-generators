@@ -47,6 +47,8 @@ async function rtStatus(page) {
 (async () => {
   const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
   const page = await browser.newPage();
+  // #264: explicit recipient consent is exercised separately in runtime-presets.cjs.
+  page.on('dialog', d => d.accept());
   page.setDefaultTimeout(20000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -261,7 +263,7 @@ async function rtStatus(page) {
     ctrl: document.getElementById('rtControllerInput').value,
     secret: document.getElementById('rtSecretInput').value
   }));
-  assert.equal(afterReload.ctrl, '', 'controller адрес не персистится');
+  assert.equal(afterReload.ctrl, '192.168.1.1:9090', 'reload restores built-in preset, not user controller');
   assert.equal(afterReload.secret, '', 'secret не переживает reload');
   ok('privacy: secret/runtime JSON/controller не персистятся');
 
