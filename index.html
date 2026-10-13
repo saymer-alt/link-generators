@@ -11559,10 +11559,13 @@ setMihomoValidationState('NOT_BUILT');
     const pop = btn && btn.parentElement.querySelector('.ctx-help-pop');
     if (!pop || getComputedStyle(pop).display === 'none') return;
     const trigger = btn.getBoundingClientRect();
-    pop.style.maxHeight = '';
-    const rect = pop.getBoundingClientRect();
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
+    // 100vw включает классический scrollbar; размер и координаты должны
+    // использовать одну client-область, а не только уменьшенный локальный pw.
+    pop.style.maxWidth = Math.max(0, vw - 16) + 'px';
+    pop.style.maxHeight = Math.max(0, vh - 16) + 'px';
+    const rect = pop.getBoundingClientRect();
     const pw = Math.min(rect.width, Math.max(0, vw - 16));
     const above = Math.max(0, trigger.top - 16);
     const below = Math.max(0, vh - trigger.bottom - 16);
