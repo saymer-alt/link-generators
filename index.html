@@ -11581,7 +11581,7 @@ setMihomoValidationState('NOT_BUILT');
   // Контекстная подсказка фиксируется в viewport: left/right/top/bottom
   // ограничены видимой областью даже при большом zoom и кнопке у края страницы.
   function placeHelp(btn) {
-    const pop = btn && btn.parentElement.querySelector('.ctx-help-pop');
+    const pop = btn && btn.parentElement && btn.parentElement.querySelector('.ctx-help-pop');
     if (!pop || getComputedStyle(pop).display === 'none') return;
     const trigger = btn.getBoundingClientRect();
     const vw = document.documentElement.clientWidth;
@@ -11608,7 +11608,7 @@ setMihomoValidationState('NOT_BUILT');
   // Делегирование покрывает и динамические подсказки импортированных WG/AWG.
   document.addEventListener('pointerover', function (e) {
     const btn = e.target.closest ? e.target.closest('.ctx-help') : null;
-    if (btn) placeHelp(btn);
+    if (btn) { placeHelp(btn); requestAnimationFrame(function () { placeHelp(btn); }); }
   }, true);
   document.addEventListener('focusin', function (e) {
     if (e.target.matches && e.target.matches('.ctx-help')) placeHelp(e.target);
