@@ -862,10 +862,12 @@
             <div class="advanced-stack-control">
               <label><input type="checkbox" id="cfgTunStackAdvanced"> Включить расширенный TUN stack (system / mixed)</label>
               <select id="cfgTunStackEx" style="display:none">
+                <option value="" disabled>Выберите system / mixed</option>
                 <option value="system">system</option>
                 <option value="mixed">mixed</option>
               </select>
               <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
+              <div class="hint">Пока system / mixed не выбран, продолжает действовать MIPS или gVisor по настройке выше. Включение расширенного выбора само по себе стек не меняет.</div>
               <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
             </div>
             <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
