@@ -230,6 +230,12 @@ jobs:
           TEST_ENGINES: ${{ matrix.browser }}
         run: node tests/submode-clarity.cjs
 
+      - name: Runtime preset matrix (#264)
+        env:
+          HOME: /root
+          TEST_ENGINES: ${{ matrix.browser }}
+        run: node tests/runtime-presets.cjs
+
   browser:
     name: deterministic / browser
     runs-on: ubuntu-latest
@@ -290,6 +296,11 @@ jobs:
         env:
           TEST_ENGINES: chromium
         run: node tests/submode-clarity.cjs
+
+      - name: Runtime preset Chromium (#264)
+        env:
+          TEST_ENGINES: chromium
+        run: node tests/runtime-presets.cjs
 
       - name: Help UX regression
         run: node tests/help-ux-browser.cjs
