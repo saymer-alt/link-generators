@@ -230,13 +230,13 @@
   .ctx-help-wrap{position:relative;display:inline-block;margin-left:6px}
   .ctx-help{width:16px;height:16px;line-height:14px;padding:0;border-radius:3px;border:1px solid var(--luna);background:linear-gradient(180deg,#7ab3f7,var(--luna));color:#fff;font-size:.72rem;font-weight:bold;cursor:help;vertical-align:middle;font-family:Tahoma,Verdana,Arial,sans-serif}
   .ctx-help:hover,.ctx-help:focus-visible{box-shadow:0 0 0 2px #ffd9a0;outline:none}
-  .ctx-help-pop{display:none;position:absolute;bottom:calc(100% + 8px);right:-8px;z-index:60;width:min(300px,78vw);padding:8px 10px;border:1px solid #000;background:var(--tooltip);color:var(--text);font-size:.8rem;font-weight:normal;line-height:1.45;box-shadow:3px 3px 6px rgba(0,0,0,.35);text-align:left}
+  .ctx-help-pop{display:none;position:fixed;top:8px;left:8px;z-index:1001;width:min(300px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;padding:8px 10px;border:1px solid #000;background:var(--tooltip);color:var(--text);font-size:.8rem;font-weight:normal;line-height:1.45;box-shadow:3px 3px 6px rgba(0,0,0,.35);text-align:left}
   /* Открытие: hover (мышь), focus-within (клавиатура), .open (клик/тач, через JS).
      Все три пути ведут к одному и тому же поповеру; закрытие — mouseleave,
      повторный клик/тап, клик снаружи и Escape (для .open). */
   .ctx-help-wrap:hover .ctx-help-pop,.ctx-help-wrap:focus-within .ctx-help-pop{display:block}
   .ctx-help-wrap.open .ctx-help-pop{display:block}
-  @media (max-width:640px){.ctx-help-pop{right:auto;left:50%;transform:translateX(-50%)}}
+  /* Tooltip координаты рассчитываются относительно viewport, включая узкий экран и Firefox. */
   /* Responsive */
   @media (max-width:768px){body{padding:8px}.container{border-radius:0}.tab{padding:7px 10px 6px}.card{padding:14px 10px 10px}}
   /* #142: обе вкладки в строку помещаются только с ~447px; 391–446px — dead zone
@@ -11544,6 +11544,41 @@ setMihomoValidationState('NOT_BUILT');
 // === CONTEXT HELP: один делегированный обработчик на все ?-маркеры.
 // Клик — открыть/закрыть; снаружи/Escape — закрыть; состояние чекбоксов и Build не затрагивается.
 (function () {
+  // Контекстная подсказка фиксируется в viewport: left/right/top/bottom
+  // ограничены видимой областью даже при большом zoom и кнопке у края страницы.
+  function placeHelp(btn) {
+    const pop = btn && btn.parentElement.querySelector('.ctx-help-pop');
+    if (!pop || getComputedStyle(pop).display === 'none') return;
+    const trigger = btn.getBoundingClientRect();
+    const rect = pop.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    const pw = Math.min(rect.width, Math.max(0, vw - 16));
+    const ph = Math.min(rect.height, Math.max(0, vh - 16));
+    const left = Math.max(8, Math.min(trigger.right - pw + 8, vw - pw - 8));
+    let top = trigger.top - ph - 8;
+    if (top < 8) top = trigger.bottom + 8;
+    top = Math.max(8, Math.min(top, vh - ph - 8));
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(top) + 'px';
+  }
+  // Делегирование покрывает и динамические подсказки импортированных WG/AWG.
+  document.addEventListener('pointerover', function (e) {
+    const btn = e.target.closest ? e.target.closest('.ctx-help') : null;
+    if (btn) placeHelp(btn);
+  }, true);
+  document.addEventListener('focusin', function (e) {
+    if (e.target.matches && e.target.matches('.ctx-help')) placeHelp(e.target);
+  }, true);
+  function refreshVisibleHelp() {
+    document.querySelectorAll('.ctx-help-wrap').forEach(function (wrap) {
+      if (wrap.classList.contains('open') || wrap.matches(':hover, :focus-within')) {
+        placeHelp(wrap.querySelector('.ctx-help'));
+      }
+    });
+  }
+  window.addEventListener('resize', refreshVisibleHelp);
+  window.addEventListener('scroll', refreshVisibleHelp, { passive: true });
   document.addEventListener('click', function (e) {
     const btn = e.target.closest ? e.target.closest('.ctx-help') : null;
     document.querySelectorAll('.ctx-help-wrap.open').forEach(function (w) {
@@ -11555,6 +11590,7 @@ setMihomoValidationState('NOT_BUILT');
     const wrap = btn.parentElement;
     const open = wrap.classList.toggle('open');
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) placeHelp(btn);
   }, false);
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
