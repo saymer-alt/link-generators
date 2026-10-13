@@ -224,6 +224,12 @@ jobs:
           TEST_ENGINES: ${{ matrix.browser }}
         run: node tests/tooltip-viewport.cjs
 
+      - name: Sub Mode clarity matrix (#263)
+        env:
+          HOME: /root
+          TEST_ENGINES: ${{ matrix.browser }}
+        run: node tests/submode-clarity.cjs
+
   browser:
     name: deterministic / browser
     runs-on: ubuntu-latest
@@ -279,6 +285,11 @@ jobs:
         env:
           TEST_ENGINES: chromium
         run: node tests/tooltip-viewport.cjs
+
+      - name: Sub Mode clarity Chromium (#263)
+        env:
+          TEST_ENGINES: chromium
+        run: node tests/submode-clarity.cjs
 
       - name: Help UX regression
         run: node tests/help-ux-browser.cjs
