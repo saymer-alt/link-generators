@@ -4638,8 +4638,8 @@ function initRuntimeImport() {
   let customAddress = '';
   const isPreset = value => Array.from(preset.options).some(o => o.value !== 'custom' && o.value === value);
   // Не заменять заранее указанный нестандартный адрес и не терять custom draft.
-  if (!input.value) input.value = preset.value;
-  preset.value = isPreset(input.value) ? input.value : 'custom';
+  // Пустое поле сохраняет исторический default-on-Fetch контракт.
+  preset.value = !input.value ? '192.168.1.1:9090' : isPreset(input.value) ? input.value : 'custom';
   if (preset.value === 'custom') customAddress = input.value;
   input.addEventListener('input', () => {
     cancelRuntimeImport();
