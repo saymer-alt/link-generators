@@ -4537,6 +4537,7 @@ function normalizeRuntimeController(input) {
 
 let rtImportSeq = 0, rtImportAbort = null;
 let rtSecretApprovedEndpoint = null;
+let resetRuntimeImportPreferences = () => { rtSecretApprovedEndpoint = null; };
 function cancelRuntimeImport() {
   rtImportSeq++;
   if (rtImportAbort) rtImportAbort.abort();
@@ -4638,6 +4639,10 @@ function initRuntimeImport() {
   const preset = document.getElementById('rtControllerPreset');
   const input = document.getElementById('rtControllerInput');
   let customAddress = '';
+  resetRuntimeImportPreferences = () => {
+    customAddress = '';
+    rtSecretApprovedEndpoint = null;
+  };
   const isPreset = value => Array.from(preset.options).some(o => o.value !== 'custom' && o.value === value);
   // Не заменять заранее указанный нестандартный адрес и не терять custom draft.
   // Пустое поле сохраняет исторический default-on-Fetch контракт.
@@ -11701,7 +11706,7 @@ function rbCommitProjectReset() {
   document.getElementById('wgDnsWarning').style.display = 'none';
   subscriptionPreviewSeq++; serverListLoadSeq++; serverListState = SERVER_LIST_STATE.IDLE;
   lastInspectedBuildInput = lastInspectedFallbackInput = null;
-  clearSubscriptionPreview(); cancelRuntimeImport();
+  clearSubscriptionPreview(); cancelRuntimeImport(); resetRuntimeImportPreferences();
   runtimeProviderModel = { providers: [], fetchedAt: null }; rtControllerMemory = '';
   serverListSource = serverListNameOrigins = null;
   subscriptionListNames = []; subscriptionListNodes = 0; subscriptionSelection.clear();
