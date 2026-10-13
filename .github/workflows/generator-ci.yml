@@ -234,7 +234,9 @@ jobs:
         env:
           HOME: /root
           TEST_ENGINES: ${{ matrix.browser }}
-        run: node tests/runtime-presets.cjs
+        run: |
+          node tests/runtime-presets.cjs
+          node tests/runtime-reset-consent.cjs
 
       - name: Advanced stack choice matrix (#253)
         env:
@@ -306,7 +308,9 @@ jobs:
       - name: Runtime preset Chromium (#264)
         env:
           TEST_ENGINES: chromium
-        run: node tests/runtime-presets.cjs
+        run: |
+          node tests/runtime-presets.cjs
+          node tests/runtime-reset-consent.cjs
 
       - name: Advanced stack choice Chromium (#253)
         env:
