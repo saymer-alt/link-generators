@@ -854,10 +854,12 @@
             <div class="advanced-stack-control">
               <label><input type="checkbox" id="cfgTunStackAdvanced"> Включить расширенный TUN stack (system / mixed)</label>
               <select id="cfgTunStackEx" style="display:none">
+                <option value="" disabled>Выберите system / mixed</option>
                 <option value="system">system</option>
                 <option value="mixed">mixed</option>
               </select>
               <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
+              <div class="hint">Пока system / mixed не выбран, продолжает действовать MIPS или gVisor по настройке выше. Включение расширенного выбора само по себе стек не меняет.</div>
               <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline. MIPS доступен на Mihomo ≥ 1.19.31 (производительность зависит от сервера). system/mixed — экспериментальные варианты; выбранный стек генератор молча не меняет.</div>
               <div id="vpsTunStackWarning" class="hint" role="note" style="display:none;margin-top:8px;color:var(--warn-text, #855100)"></div>
             </div>
