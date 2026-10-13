@@ -230,13 +230,13 @@
   .ctx-help-wrap{position:relative;display:inline-block;margin-left:6px}
   .ctx-help{width:16px;height:16px;line-height:14px;padding:0;border-radius:3px;border:1px solid var(--luna);background:linear-gradient(180deg,#7ab3f7,var(--luna));color:#fff;font-size:.72rem;font-weight:bold;cursor:help;vertical-align:middle;font-family:Tahoma,Verdana,Arial,sans-serif}
   .ctx-help:hover,.ctx-help:focus-visible{box-shadow:0 0 0 2px #ffd9a0;outline:none}
-  .ctx-help-pop{display:none;position:absolute;bottom:calc(100% + 8px);right:-8px;z-index:60;width:min(300px,78vw);padding:8px 10px;border:1px solid #000;background:var(--tooltip);color:var(--text);font-size:.8rem;font-weight:normal;line-height:1.45;box-shadow:3px 3px 6px rgba(0,0,0,.35);text-align:left}
+  .ctx-help-pop{display:none;position:fixed;top:8px;left:8px;z-index:1001;width:min(300px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;padding:8px 10px;border:1px solid #000;background:var(--tooltip);color:var(--text);font-size:.8rem;font-weight:normal;line-height:1.45;box-shadow:3px 3px 6px rgba(0,0,0,.35);text-align:left}
   /* Открытие: hover (мышь), focus-within (клавиатура), .open (клик/тач, через JS).
      Все три пути ведут к одному и тому же поповеру; закрытие — mouseleave,
      повторный клик/тап, клик снаружи и Escape (для .open). */
   .ctx-help-wrap:hover .ctx-help-pop,.ctx-help-wrap:focus-within .ctx-help-pop{display:block}
   .ctx-help-wrap.open .ctx-help-pop{display:block}
-  @media (max-width:640px){.ctx-help-pop{right:auto;left:50%;transform:translateX(-50%)}}
+  /* Tooltip координаты рассчитываются относительно viewport, включая узкий экран и Firefox. */
   /* Responsive */
   @media (max-width:768px){body{padding:8px}.container{border-radius:0}.tab{padding:7px 10px 6px}.card{padding:14px 10px 10px}}
   /* #142: обе вкладки в строку помещаются только с ~447px; 391–446px — dead zone
@@ -475,6 +475,7 @@
 <div class="card">
 <div class="card-title">📋 3. Основные серверы и подписки</div>
 <label for="mihomoInput">Основные серверы и подписки</label>
+<div class="hint" id="subModeInputHint">Обычные proxy-ссылки и HTTP(S) URL-подписки можно смешивать в обоих режимах настройки «Использовать URL-подписки». WG/AWG добавляются отдельно файлами в разделе ниже. <a href="#cfgSubMode" id="subModeJump" onclick="event.preventDefault();builderJump('cfgSubMode')">Перейти к настройке URL-подписок ↓</a> Включено — подписки обновляет Mihomo; выключено — при Build браузер читает их один раз и встраивает узлы.</div>
 <a href="#realityModernInput" id="realityModernJump">Совместимость VLESS / REALITY с X25519MLKEM768</a><textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки, созданные во вкладке «⚡ WARP MASQUE Links»"></textarea>
 <div id="whitelistPanel" style="display:none">
         <label for="whitelistInput">Резервные серверы и подписки</label>
@@ -523,11 +524,18 @@
             <div style="margin-top:6px">
               <div class="hint">Работающий Mihomo знает фактический список узлов провайдеров — он может отличаться от browser-preview (#158). Импортер только читает <code>GET /providers/proxies</code> ради имён узлов для Exclude Filter: он не меняет running Mihomo, не делает API-мутаций и не перезаписывает YAML.</div>
               <div class="tier-add-row" style="margin-top:6px">
+                <select id="rtControllerPreset" aria-label="Готовый адрес Mihomo runtime" style="flex:1 1 180px;min-width:0">
+                  <option value="192.168.1.1:9090">192.168.1.1:9090</option>
+                  <option value="192.168.0.1:9090">192.168.0.1:9090</option>
+                  <option value="127.0.0.1:9090">127.0.0.1:9090</option>
+                  <option value="custom">Свой адрес…</option>
+                </select>
                 <input type="text" id="rtControllerInput" placeholder="192.168.1.1:9090 или http://192.168.1.1:9090" style="flex:1 1 200px;min-width:0;padding:4px 8px" aria-label="Адрес Mihomo external-controller">
                 <input type="password" id="rtSecretInput" placeholder="API secret (необязательно)" style="flex:1 1 140px;min-width:0;padding:4px 8px" aria-label="API secret контроллера (только память)" autocomplete="off">
                 <button type="button" class="btn btn-gray" id="rtFetchBtn">📥 Получить узлы из Mihomo</button>
               </div>
               <div class="hint">Если адрес не указан, используется 192.168.1.1:9090. Запрос выполняется только по нажатию кнопки.</div>
+              <div class="hint" id="rtPresetHint">Выберите готовый адрес или введите свой: host:port либо http(s)://host:port[/prefix]. Выбор адреса не отправляет запрос. Отправку API secret на новый адрес нужно подтвердить отдельно.</div>
               <div class="hint">Адрес и secret не сохраняются (только память вкладки, до перезагрузки страницы). Запрос идёт из браузера напрямую в контроллер — через проектный воркер он не передаётся никогда. Если браузер не пускает (CORS / разрешение локальной сети / listen-адрес) — используйте «Вставить JSON» или «Загрузить .json» ниже: откройте <code>http://&lt;контроллер&gt;/providers/proxies</code> в соседней вкладке и скопируйте ответ.</div>
               <div class="tier-add-row">
                 <button type="button" class="btn btn-gray" id="rtPasteBtn">📋 Вставить JSON</button>
@@ -854,10 +862,12 @@
             <div class="advanced-stack-control">
               <label><input type="checkbox" id="cfgTunStackAdvanced"> Включить расширенный TUN stack (system / mixed)</label>
               <select id="cfgTunStackEx" style="display:none">
+                <option value="" disabled>Выберите system / mixed</option>
                 <option value="system">system</option>
                 <option value="mixed">mixed</option>
               </select>
               <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
+              <div class="hint">Пока system / mixed не выбран, продолжает действовать MIPS или gVisor по настройке выше. Включение расширенного выбора само по себе стек не меняет.</div>
               <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
             </div>
             <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
@@ -1029,7 +1039,7 @@
 // channel — metadata конкретной сборки, НЕ определение git-ветки в рантайме:
 // development build = X.Y.Z-dev / main; release promotion (main → stable) отдельно
 // переводит её на X.Y.Z / stable. UI (бейдж) читает только эти значения.
-const GENERATOR_META = Object.freeze({ version: '1.11.0', channel: 'stable' });
+const GENERATOR_META = Object.freeze({ version: '1.11.1', channel: 'stable' });
 (function renderGeneratorMeta() {
   const el = document.getElementById('genVersionBadge');
   if (el) {
@@ -4526,6 +4536,8 @@ function normalizeRuntimeController(input) {
 }
 
 let rtImportSeq = 0, rtImportAbort = null;
+let rtSecretApprovedEndpoint = null;
+let resetRuntimeImportPreferences = () => { rtSecretApprovedEndpoint = null; };
 function cancelRuntimeImport() {
   rtImportSeq++;
   if (rtImportAbort) rtImportAbort.abort();
@@ -4545,6 +4557,11 @@ async function fetchRuntimeProviders() {
       !window.confirm('Адрес не указан. Отправить API secret на ' + base + '/providers/proxies?')) {
     say('Запрос отменён. API secret не отправлен.'); return;
   }
+  if (secret && document.getElementById('rtControllerInput').value.trim() && rtSecretApprovedEndpoint !== base &&
+      !window.confirm('Отправить API secret на ' + base + '/providers/proxies? Подтвердите адрес получателя.')) {
+    say('Запрос отменён. API secret не отправлен.'); return;
+  }
+  if (secret) rtSecretApprovedEndpoint = base;
   const headers = { Accept: 'application/json' };
   if (secret) headers.Authorization = 'Bearer ' + secret;
   say('Загрузка…');
@@ -4619,6 +4636,37 @@ function clearRuntimeList() {
 function initRuntimeImport() {
   const fetchBtn = document.getElementById('rtFetchBtn');
   if (!fetchBtn) return;
+  const preset = document.getElementById('rtControllerPreset');
+  const input = document.getElementById('rtControllerInput');
+  let customAddress = '';
+  resetRuntimeImportPreferences = () => {
+    customAddress = '';
+    rtSecretApprovedEndpoint = null;
+  };
+  const isPreset = value => Array.from(preset.options).some(o => o.value !== 'custom' && o.value === value);
+  // Не заменять заранее указанный нестандартный адрес и не терять custom draft.
+  // Пустое поле сохраняет исторический default-on-Fetch контракт.
+  preset.value = !input.value ? '192.168.1.1:9090' : isPreset(input.value) ? input.value : 'custom';
+  if (preset.value === 'custom') customAddress = input.value;
+  function endpointChanged() {
+    const pending = !!rtImportAbort;
+    cancelRuntimeImport();
+    if (pending) {
+      const status = document.getElementById('rtStatus');
+      status.textContent = 'Запрос отменён: адрес изменён. Нажмите «Получить узлы из Mihomo» для нового запроса.';
+      status.style.display = '';
+    }
+  }
+  input.addEventListener('input', () => {
+    endpointChanged();
+    preset.value = isPreset(input.value) ? input.value : 'custom';
+    if (preset.value === 'custom') customAddress = input.value;
+  });
+  preset.addEventListener('change', () => {
+    endpointChanged();
+    input.value = preset.value === 'custom' ? customAddress : preset.value;
+    if (preset.value === 'custom') input.focus();
+  });
   fetchBtn.addEventListener('click', fetchRuntimeProviders);
   document.getElementById('rtPasteBtn').addEventListener('click', async () => {
     cancelRuntimeImport();
@@ -4760,7 +4808,7 @@ function updateMihomoOptionStates() {
   if (!tun) { perTun.checked = false; }
   if (!socks) perSocks.checked = false;
   stackAdv.disabled = !tun;
-  if (!stackAdv.checked) stackEx.value = '';
+  if (!stackAdv.checked || (stackEx.value !== 'system' && stackEx.value !== 'mixed')) stackEx.value = '';
   stackEx.style.display = stackAdv.checked ? '' : 'none';
   const advancedStackActive = stackAdv.checked && (stackEx.value === 'system' || stackEx.value === 'mixed');
   mips.disabled = !tun || advancedStackActive;
@@ -8573,7 +8621,7 @@ bindTieredUI();
 // чисто визуальные контролы (подсказки, rdTestInput) fingerprint не меняют и
 // ложного STALE не дают. Старый diagnostic output сохраняется для сравнения,
 // но визуально помечен как previous Build.
-const BUILD_STALE_EXCLUDED_IDS = new Set(['subListSearch', 'rdTestInput', 'dcInput', 'vrgFocusSelect', 'policyPresetSelect', 'rtControllerInput', 'rtSecretInput', 'ptSpecInput', 'csImportInput', 'csDomainInput', 'csRuleProbe']);
+const BUILD_STALE_EXCLUDED_IDS = new Set(['subListSearch', 'rdTestInput', 'dcInput', 'vrgFocusSelect', 'policyPresetSelect', 'rtControllerInput', 'rtControllerPreset', 'rtSecretInput', 'ptSpecInput', 'csImportInput', 'csDomainInput', 'csRuleProbe']);
 let lastBuildFingerprint = null;
 
 function buildStateFingerprint() {
@@ -11544,6 +11592,50 @@ setMihomoValidationState('NOT_BUILT');
 // === CONTEXT HELP: один делегированный обработчик на все ?-маркеры.
 // Клик — открыть/закрыть; снаружи/Escape — закрыть; состояние чекбоксов и Build не затрагивается.
 (function () {
+  // Контекстная подсказка фиксируется в viewport: left/right/top/bottom
+  // ограничены видимой областью даже при большом zoom и кнопке у края страницы.
+  function placeHelp(btn) {
+    const pop = btn && btn.parentElement && btn.parentElement.querySelector('.ctx-help-pop');
+    if (!pop || getComputedStyle(pop).display === 'none') return;
+    const trigger = btn.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    // 100vw включает классический scrollbar; размер и координаты должны
+    // использовать одну client-область, а не только уменьшенный локальный pw.
+    pop.style.maxWidth = Math.max(0, vw - 16) + 'px';
+    pop.style.maxHeight = Math.max(0, vh - 16) + 'px';
+    const rect = pop.getBoundingClientRect();
+    const pw = Math.min(rect.width, Math.max(0, vw - 16));
+    const above = Math.max(0, trigger.top - 16);
+    const below = Math.max(0, vh - trigger.bottom - 16);
+    const useAbove = rect.height <= above || (rect.height > below && above >= below);
+    // В низком viewport длинная WG-подсказка прокручивается на стороне
+    // с большим запасом, не перекрывая собственную кнопку ?.
+    pop.style.maxHeight = Math.floor(useAbove ? above : below) + 'px';
+    const ph = pop.getBoundingClientRect().height;
+    const left = Math.max(8, Math.min(trigger.right - pw + 8, vw - pw - 8));
+    let top = useAbove ? trigger.top - ph - 8 : trigger.bottom + 8;
+    top = Math.max(8, Math.min(top, vh - ph - 8));
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(top) + 'px';
+  }
+  // Делегирование покрывает и динамические подсказки импортированных WG/AWG.
+  document.addEventListener('pointerover', function (e) {
+    const btn = e.target.closest ? e.target.closest('.ctx-help') : null;
+    if (btn) { placeHelp(btn); requestAnimationFrame(function () { placeHelp(btn); }); }
+  }, true);
+  document.addEventListener('focusin', function (e) {
+    if (e.target.matches && e.target.matches('.ctx-help')) placeHelp(e.target);
+  }, true);
+  function refreshVisibleHelp() {
+    document.querySelectorAll('.ctx-help-wrap').forEach(function (wrap) {
+      if (wrap.classList.contains('open') || wrap.matches(':hover, :focus-within')) {
+        placeHelp(wrap.querySelector('.ctx-help'));
+      }
+    });
+  }
+  window.addEventListener('resize', refreshVisibleHelp);
+  window.addEventListener('scroll', refreshVisibleHelp, { passive: true });
   document.addEventListener('click', function (e) {
     const btn = e.target.closest ? e.target.closest('.ctx-help') : null;
     document.querySelectorAll('.ctx-help-wrap.open').forEach(function (w) {
@@ -11555,6 +11647,7 @@ setMihomoValidationState('NOT_BUILT');
     const wrap = btn.parentElement;
     const open = wrap.classList.toggle('open');
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) placeHelp(btn);
   }, false);
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
@@ -11613,7 +11706,7 @@ function rbCommitProjectReset() {
   document.getElementById('wgDnsWarning').style.display = 'none';
   subscriptionPreviewSeq++; serverListLoadSeq++; serverListState = SERVER_LIST_STATE.IDLE;
   lastInspectedBuildInput = lastInspectedFallbackInput = null;
-  clearSubscriptionPreview(); cancelRuntimeImport();
+  clearSubscriptionPreview(); cancelRuntimeImport(); resetRuntimeImportPreferences();
   runtimeProviderModel = { providers: [], fetchedAt: null }; rtControllerMemory = '';
   serverListSource = serverListNameOrigins = null;
   subscriptionListNames = []; subscriptionListNodes = 0; subscriptionSelection.clear();
