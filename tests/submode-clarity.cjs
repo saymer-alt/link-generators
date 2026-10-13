@@ -19,6 +19,7 @@ const link='vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#Static';
    const hint=page.locator('#subModeInputHint');
    assert.equal(await hint.count(),1,'input-local subscription explanation exists');
    assert.match(await hint.innerText(),/WG\/AWG.*файл/);
+   assert.match(await hint.innerText(),/в обоих режимах/,'mixed input supported ON and OFF');
    await page.locator('#subModeJump').click();
    assert.equal(await page.evaluate(()=>document.activeElement.id),'cfgSubMode');
    assert.equal(await page.locator('#cfgSubMode').isChecked(),false,'navigation does not toggle');
