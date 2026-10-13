@@ -132,6 +132,32 @@ const root = path.resolve(__dirname, '..');
     assert.equal(await visOf(hoverLabel), false, 'mouseleave закрывает hover-tooltip');
     ok('hover: tooltip открывается наведением и закрывается уходом курсора');
 
+    // #262 field regression (Firefox desktop): у левых кнопок ? абсолютная
+    // позиция right:-8px раньше отправляла начало 300px поповера за viewport.
+    // Нельзя проверять только display: видимость = bounding box внутри окна.
+    for (const viewport of [{width:320,height:720},{width:390,height:720},{width:768,height:740},{width:1366,height:768}]) {
+      await page.setViewportSize(viewport);
+      for (const label of ['Подсказка: Allow LAN','Подсказка: TUN Interface','Подсказка: Mixed Port']) {
+        const actualButton = page.locator(`.ctx-help[aria-label="${label}"]`);
+        await actualButton.scrollIntoViewIfNeeded();
+        await actualButton.hover();
+        const r = await actualButton.evaluate(b => {
+          const pop = b.parentElement.querySelector('.ctx-help-pop');
+          const rect = pop.getBoundingClientRect();
+          return { visible:getComputedStyle(pop).display !== 'none',
+            left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,
+            width:document.documentElement.clientWidth,height:document.documentElement.clientHeight };
+        });
+        assert.equal(r.visible,true, 'tooltip visible: '+label);
+        assert.ok(r.left >= 7 && r.right <= r.width - 7,
+          'tooltip horizontal clipped: '+label+' '+viewport.width+' '+JSON.stringify(r));
+        assert.ok(r.top >= 7 && r.bottom <= r.height - 7,
+          'tooltip vertical clipped: '+label+' '+viewport.width+' '+JSON.stringify(r));
+      }
+    }
+    await page.setViewportSize({width:1280,height:800});
+    ok('Firefox/desktop и mobile: подсказки внутри viewport, включая левый край');
+
     // focus-within: фокус клавиатуры открывает, уход фокуса закрывает
     const focusLabel = 'Подсказка: Allow LAN';
     await page.locator(`.ctx-help[aria-label="${focusLabel}"]`).focus();
