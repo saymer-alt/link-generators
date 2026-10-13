@@ -42,6 +42,10 @@ const root=process.env.TEST_ROOT||path.resolve(__dirname,'..');
    assert.equal(await select.inputValue(),'','no silent assignment of stack');
    assert.match(await select.evaluate(e=>e.selectedOptions[0]?.textContent||''),/Выберите/,'empty advanced select must explain choice');
    assert.equal(await build(),before,'unselected advanced stack preserves fallback YAML');
+   const legacy=await page.evaluate(()=>rbCollectProject());legacy.options.tunStackEx='gvisor';
+   await page.evaluate(p=>rbApplyProject(p),legacy);
+   assert.match(await select.evaluate(e=>e.selectedOptions[0]?.textContent||''),/Выберите/,'legacy gvisor project restores explicit placeholder');
+   assert.equal(await build(),before,'legacy fallback project byte parity');
    for(const stack of ['system','mixed']){
     await select.selectOption(stack);const yaml=await build();assert.match(yaml,new RegExp('stack: '+stack));
     const p=await page.evaluate(()=>rbCollectProject());await page.evaluate(p=>rbApplyProject(p),p);assert.equal(await build(),yaml,'project preserves stack');

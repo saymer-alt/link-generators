@@ -4794,7 +4794,7 @@ function updateMihomoOptionStates() {
   if (!tun) { perTun.checked = false; }
   if (!socks) perSocks.checked = false;
   stackAdv.disabled = !tun;
-  if (!stackAdv.checked) stackEx.value = '';
+  if (!stackAdv.checked || (stackEx.value !== 'system' && stackEx.value !== 'mixed')) stackEx.value = '';
   stackEx.style.display = stackAdv.checked ? '' : 'none';
   const advancedStackActive = stackAdv.checked && (stackEx.value === 'system' || stackEx.value === 'mixed');
   mips.disabled = !tun || advancedStackActive;
