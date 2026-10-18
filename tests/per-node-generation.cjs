@@ -30,26 +30,30 @@ function specOf(ids, extra) {
 }
 const credsOf = ids => Object.fromEntries([{ k: 'cr-c' }, ...ids.slice(0, -1).map((_, i) => ({ k: 'cr-' + i }))].map((x, i) => [x.k, 'synth-' + i]));
 
-// --- 1. entry→exit: 2 READY артефакта, overlay нет ---
+// --- 1. entry→exit: entry READY; exit без исходящего ребра блокирован no-DIRECT (#284) ---
 {
   const ids = [['e1', 'entry'], ['x1', 'exit']];
   const r = api.ptGenerateArtifacts(specOf(ids), credsOf(ids));
   assert.equal(r.ok, true);
   assert.equal(r.summary.nodes, 2);
-  assert.equal(r.summary.ready, 2, JSON.stringify(r.summary));
-  assert.deepEqual(r.artifacts.map(a => a.status), ['READY', 'READY']);
+  assert.equal(r.summary.ready, 1, JSON.stringify(r.summary));
+  assert.deepEqual(r.artifacts.map(a => a.status), ['READY', 'EXTERNAL_CONTRACT_REQUIRED']);
   assert.ok(r.artifacts[0].files['config.yaml'].includes('port: 40000'), 'listener порт из clientLink endpoint');
   assert.ok(r.artifacts[0].files['config.yaml'].includes('server: 198.51.100.1'), 'outbound на следующий узел');
+  const ban = r.artifacts[1].blockers.find(b => b.code === 'PT-GEN-DIRECT-BAN');
+  assert.ok(ban, 'exit без исходящего ребра блокирован PT-GEN-DIRECT-BAN (no-DIRECT #284)');
+  assert.equal(r.artifacts[1].files['config.yaml'], undefined, 'exit-артефакт без MATCH,DIRECT не генерируется');
   ok();
 }
 
-// --- 2. entry→transit→exit: 3 READY ---
+// --- 2. entry→transit→exit: entry+transit READY, exit блокирован no-DIRECT (#284) ---
 {
   const ids = [['e', 'entry'], ['t', 'transit'], ['x', 'exit']];
   const r = api.ptGenerateArtifacts(specOf(ids), credsOf(ids));
-  assert.equal(r.summary.ready, 3, JSON.stringify(r.summary));
+  assert.equal(r.summary.ready, 2, JSON.stringify(r.summary));
   assert.ok(r.artifacts[1].files['config.yaml'].includes('type: shadowsocks'), 'transit: вход shadowsocks-listener');
   assert.ok(r.artifacts[1].files['config.yaml'].includes('type: ss'), 'transit: выход ss-outbound');
+  assert.ok(r.artifacts[2].blockers.some(b => b.code === 'PT-GEN-DIRECT-BAN'), 'exit блокирован no-DIRECT');
   ok();
 }
 
@@ -71,8 +75,9 @@ const credsOf = ids => Object.fromEntries([{ k: 'cr-c' }, ...ids.slice(0, -1).ma
 {
   const ids = [['e', 'entry'], ['t1', 'transit'], ['t2', 'transit'], ['x', 'exit']];
   const r = api.ptGenerateArtifacts(specOf(ids), credsOf(ids));
-  assert.equal(r.summary.ready, 4, JSON.stringify(r.summary));
+  assert.equal(r.summary.ready, 3, JSON.stringify(r.summary));
   assert.equal(r.artifacts.length, 4);
+  assert.ok(r.artifacts[3].blockers.some(b => b.code === 'PT-GEN-DIRECT-BAN'), 'exit блокирован no-DIRECT');
   ok();
 }
 
@@ -87,14 +92,21 @@ const credsOf = ids => Object.fromEntries([{ k: 'cr-c' }, ...ids.slice(0, -1).ma
   ok();
 }
 
-// --- 6. missing contract: нет clientLink → PT-GEN-INBOUND блокер ---
+// --- 6. missing contract: нет clientLink → PT-GEN-INBOUND + узел же последний:
+// PT-GEN-DIRECT-BAN (no-DIRECT #284): entry остаётся PLACEHOLDERS_REQUIRED
+// (исходящее ребро e→x валидно), а exit x теперь блокирован PT-GEN-DIRECT-BAN ---
 {
-  const spec = specOf([['e', 'entry'], ['x', 'exit']]);
+  const ids = [['e', 'entry'], ['x', 'exit']];
+  const spec = specOf(ids);
   delete spec.clientLink;
-  const r = api.ptGenerateArtifacts(spec, credsOf([['e', 'entry'], ['x', 'exit']]));
+  const r = api.ptGenerateArtifacts(spec, credsOf(ids));
   const e = r.artifacts[0];
   assert.ok(e.blockers.some(b => b.code === 'PT-GEN-INBOUND'));
   assert.equal(e.status, 'PLACEHOLDERS_REQUIRED');
+  const x = r.artifacts[1];
+  assert.ok(x.blockers.some(b => b.code === 'PT-GEN-DIRECT-BAN'), 'exit без исходящего ребра блокирован no-DIRECT');
+  assert.equal(x.status, 'EXTERNAL_CONTRACT_REQUIRED');
+  assert.equal(x.files['config.yaml'], undefined, 'MATCH,DIRECT не эмитится');
   ok();
 }
 

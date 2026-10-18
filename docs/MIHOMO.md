@@ -29,10 +29,13 @@ false`). Включение автоматическое — без нового
 в inline `rule-providers` (`policy-<slug>`), категории-группы и `RULE-SET`-правила
 перед неизменным `MATCH,GLOBAL`. В режиме URL-подписок категория получает
 `NAME-AUTO` (url-test, `use:` на общий provider — несколько групп на один
-провайдер) и select `[NAME-AUTO, ⚡ Fastest, GLOBAL, DIRECT]`; без подписок —
-select `[⚡ Fastest, GLOBAL, DIRECT]`; в БС-режиме — select `[GLOBAL, DIRECT]`
-(плоский fallback не вкладывается, #2588). `proxy: DIRECT` у провайдеров —
-обязательный контракт (без него холодный старт дедлочит фетч подписки).
+провайдер) и select `[NAME-AUTO, ⚡ Fastest, GLOBAL, REJECT]`; без подписок —
+select `[⚡ Fastest, GLOBAL, REJECT]`; в БС-режиме — select `[GLOBAL, REJECT]`
+(плоский fallback не вкладывается, #2588). Финальный участник категорийных групп —
+REJECT, никогда DIRECT: действует конституция no-DIRECT (#284), таргет `DIRECT`
+отвергается движком fail-closed. Провайдер-режим (URL-подписки) блокируется на
+Build — см. [POLICY-ROUTING.md](POLICY-ROUTING.md) и
+[NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md).
 Выключенный режим — byte-parity. Полное описание, ограничения (ECH/DoH/hardcoded IP,
 домен-детект для TUN) и PoC-доказательства — [POLICY-ROUTING.md](POLICY-ROUTING.md).
 

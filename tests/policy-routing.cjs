@@ -101,7 +101,7 @@ let cases = 0;
   const fallback = doc['proxy-groups'].find((g) => g.type === 'fallback');
   assert.ok(!(fallback.proxies || []).includes('AI'), 'policy name not inside the fallback');
   const select = doc['proxy-groups'].find((g) => g.name === 'AI');
-  assert.deepEqual(select.proxies, ['GLOBAL', 'DIRECT']);
+  assert.deepEqual(select.proxies, ['GLOBAL', 'REJECT']); // no-DIRECT #284: escape slot = REJECT
   cases += 5;
 }
 
@@ -113,7 +113,7 @@ let cases = 0;
   assert.ok(!doc['proxy-groups'].some((g) => (g.name || '').endsWith('-AUTO')));
   assert.ok(!doc['proxy-providers'], 'no providers in static mode');
   const ai = doc['proxy-groups'].find((g) => g.name === 'AI');
-  assert.deepEqual(ai.proxies, ['⚡ Fastest', 'GLOBAL', 'DIRECT']);
+  assert.deepEqual(ai.proxies, ['⚡ Fastest', 'GLOBAL', 'REJECT']); // no-DIRECT #284
   cases += 3;
 }
 
