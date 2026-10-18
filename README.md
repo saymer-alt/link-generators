@@ -90,7 +90,8 @@ anti-DPI стратегия. Источник такого файла может
 включая H2 Safe Ports Only; если транспорт не найден, используется встроенная
 стратегия. Сравните и проверьте конечный результат, а не предполагайте, что
 найденные WARPSCOUT узел/порт автоматически останутся рабочими. Практические сценарии:
-[Windows](docs/WARPSCOUT-WINDOWS.md), [Keenetic / Entware](docs/WARPSCOUT-KEENETIC.md) и [VPS](docs/WARPSCOUT-VPS.md).
+[Windows](docs/WARPSCOUT-WINDOWS.md), [Keenetic / Entware: AWG с Cloudflare NODE за пределами РФ](docs/WARPSCOUT-KEENETIC.md) и [VPS](docs/WARPSCOUT-VPS.md).
+Для Keenetic основной сценарий — AWG с `-exclude-country RU`; обычный WG и MASQUE H2/H3 в инструкции факультативны. Такой фильтр выбирает **страну узла Cloudflare**, не гарантируя смену `SEEN AS` / выходного GeoIP.
 
 ## Поддерживаемые протоколы
 
@@ -203,7 +204,7 @@ Owner Acceptance Round 2: понятный Reset с отменой по умол
 | [VALIDATION](docs/VALIDATION.md) | pre-copy валидатор подробно |
 | [VPS-GATEWAY](docs/VPS-GATEWAY.md) | опциональный профиль для amnezia-mihomo-gateway |
 | [WARPSCOUT-WINDOWS](docs/WARPSCOUT-WINDOWS.md) | WARP / MASQUE H3 / H2 на Windows и подготовка данных для генератора |
-| [WARPSCOUT-KEENETIC](docs/WARPSCOUT-KEENETIC.md) | установка и полевые WARP / AWG / MASQUE H3 / H2 проверки на Keenetic / Entware |
+| [WARPSCOUT-KEENETIC](docs/WARPSCOUT-KEENETIC.md) | пошаговый подбор рабочего **AWG с non-RU Cloudflare NODE** на Keenetic/Entware; WG и MASQUE факультативно |
 | [WARPSCOUT-VPS](docs/WARPSCOUT-VPS.md) | установка на Ubuntu/Debian, сканы с VPS и диагностика H3/H2 через Mihomo |
 | [WEB4CORE-FORK](docs/WEB4CORE-FORK.md) | source-level fork, ветка `link-generators` и сборка runtime |
 | [UPDATES](docs/UPDATES.md) | жизненный цикл `web4core.runtime.js` |
