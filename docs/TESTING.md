@@ -1,5 +1,23 @@
 # TESTING — реальная тестовая стратегия
 
+## No-DIRECT egress invariant — 2026-10-18
+
+Конституция #284 (owner decision): Builder не выпускает YAML с токеном
+`DIRECT`; при исчерпании прокси — REJECT/отказ, не хост-эгресс. Реестр путей,
+доказательство cold-start deadlock провайдеров подписок (локальный A/B-эксперимент
+на mihomo v1.19.31: `proxy: DIRECT` → загрузка есть; поле удалено → fetch идёт
+по правилам конфига → пустой GLOBAL → REJECT → immediate EOF) и границы
+гарантии — [NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md).
+
+- Движок: `wc tools/tests/mihomo-no-direct.test.mjs` (лексика+структура по всем
+  режимам, fail-closed DIRECT-таргет, dialer-нормализация) + обновлённые
+  `mihomo-policy-routing`/`mihomo-policy-targets`.
+- Consumer-реестр по вендоренному рантайму: `node tests/no-direct-egress.cjs`.
+- Страница (guard, опции таргетов, гейты Sub-ON/legacy DIRECT, PT-блокер):
+  `node tests/no-direct-browser.cjs` (Playwright, как `browser.cjs`).
+- PT: `tests/per-node-generation.cjs` — exit без исходящего ребра больше не
+  даёт `MATCH,DIRECT` (блокер `PT-GEN-DIRECT-BAN`).
+
 ## MASQUE/DPI генератор: детерминированная регрессия — 2026-09-18
 
 `tests/masque-dpi-regression.cjs` (Playwright, env как у `browser.cjs`): `Math.random`

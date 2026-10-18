@@ -128,6 +128,9 @@ jobs:
       - name: Domain Policy Routing regression
         run: node tests/policy-routing.cjs
 
+      - name: No-DIRECT egress invariant regression (#284)
+        run: node tests/no-direct-egress.cjs
+
       - name: Routing Diagnostics core regression
         run: node tests/routing-inspector.cjs
 
@@ -442,6 +445,9 @@ jobs:
 
       - name: Auto-Whitelist browser regression
         run: node tests/whitelist.cjs
+
+      - name: No-DIRECT browser regression (#284)
+        run: node tests/no-direct-browser.cjs
 
   mihomo-compat:
     name: mihomo compat / ${{ matrix.version }}

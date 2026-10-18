@@ -13,7 +13,7 @@ Builder явно загружает подписки при Build и разво�
 |---|---|---|---|---|---|---|
 | AWL | Tiered | Нет | Один владелец MATCH; подтверждение выключает Tiered, сохраняя данные | Tiered и карточки disabled, причина видна | Build отклоняет конфликт; postprocessor отклоняет AWL-флаг и структуру AWL YAML, включая override | UX18, tiered-failover |
 | AWL | Per-Proxy | Нет | Подтверждение выключает master/дочерние флаги | Per-Proxy disabled | Build отклоняет DOM bypass; engine запрещает fallbackInput + per-proxy | UX18, whitelist |
-| AWL | DPR SELECT | Да | Независимые SELECT [GLOBAL, DIRECT], без AUTO категорий | DPR доступен | mihomoDomainPolicy в engine | UX18, policy-routing-browser |
+| AWL | DPR SELECT | Да | Независимые SELECT [GLOBAL, REJECT], без AUTO категорий | DPR доступен | mihomoDomainPolicy в engine | UX18, policy-routing-browser |
 | AWL | Обычный TUN / Mixed / Web UI | Да | Опции сохраняются | Прежние зависимости inbound | Прежняя нормализация родителей | whitelist, profile-matrix |
 | AWL | Router | Да | Плоский GLOBAL fallback PRIMARY→FALLBACK; MATCH,GLOBAL | AWL доступен | Build profile guard | whitelist, UX18 |
 | AWL | VPS local / gateway | Нет | Router-only | AWL виден disabled с причиной | Build и загрузка конфликтующего проекта отклонены | profile-matrix, UX18 |
@@ -96,8 +96,10 @@ rules:
 проверку к ручному Ping MetaCubeXD (`/delay`), который не передаёт expected-status.
 Строгая проверка `expected-status` у HTTP providers сохраняется отдельно.
 `DIRECT` отсутствует среди целей GLOBAL.
-Поле `proxy: DIRECT` у HTTP provider сохранено: оно относится только к скачиванию
-подписки, не является fallback пользовательского трафика.
+Поле `proxy: DIRECT` у HTTP provider — документированное исключение уровня движка
+(download-only bootstrap; конституция no-DIRECT #284): режим URL-подписок
+блокируется на Build гейтом страницы, совместимый путь — Sub Mode OFF.
+Подробнее: [NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md).
 
 ## Поведение и ограничения
 
