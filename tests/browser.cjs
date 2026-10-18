@@ -892,12 +892,18 @@ const expectedAwg = {
       check('duplicate proxy', { proxies: [p,p] }, 'INVALID');
       check('listener port', { listeners: [{ name: 'a', port: 0 }] }, 'INVALID');
       check('duplicate listener', { listeners: [{ name: 'a' }, { name: 'a' }] }, 'INVALID');
-      for (const type of ['select','url-test','fallback','load-balance','relay']) check(type, { 'proxy-groups': [{ name: 'a', type, proxies: ['DIRECT'] }] }, 'VALID');
+      // no-DIRECT #284 (revised): DIRECT как участник группы — INVALID
+      // (user data plane); проверки enum типов групп используют имя прокси.
+      for (const type of ['select','url-test','fallback','load-balance','relay']) check(type + ' DIRECT member', { 'proxy-groups': [{ name: 'a', type, proxies: ['DIRECT'] }] }, 'INVALID');
+      for (const type of ['select','url-test','fallback','load-balance','relay']) check(type, { proxies: [p], 'proxy-groups': [{ name: 'a', type, proxies: ['test'] }] }, 'VALID');
       check('bad group type', { 'proxy-groups': [{ name: 'a', type: 'fallback2' }] }, 'INVALID');
       check('bad reference', { 'proxy-groups': [{ name: 'a', type: 'select', proxies: ['missing'] }] }, 'INVALID');
-      check('forward reference', { 'proxy-groups': [{ name: 'a', type: 'select', proxies: ['b'] }, { name: 'b', type: 'select', proxies: ['DIRECT'] }] }, 'VALID');
+      check('forward reference', { proxies: [p], 'proxy-groups': [{ name: 'a', type: 'select', proxies: ['b'] }, { name: 'b', type: 'select', proxies: ['test'] }] }, 'VALID');
       check('empty group', { 'proxy-groups': [{ name: 'a', type: 'select', proxies: [] }] }, 'VALID', 1);
-      check('name collision', { proxies: [p], 'proxy-groups': [{ name: 'test', type: 'select', proxies: ['DIRECT'] }] }, 'VALID', 1);
+      // no-DIRECT #284 (revised): имя группы 'test' коллидирует с прокси (warning 1)
+      // + DIRECT-участник → INVALID (direct-egress)
+      check('name collision + DIRECT member', { proxies: [p], 'proxy-groups': [{ name: 'test', type: 'select', proxies: ['DIRECT'] }] }, 'INVALID', 1);
+      check('rule to DIRECT', { proxies: [p], rules: ['DOMAIN-SUFFIX,x.example,DIRECT', 'MATCH,test'] }, 'INVALID');
       for (const range of ['20000-22000','20000','70000-80000','22000-20000','20000,21000']) {
         check('range ' + range, { proxies: [{ name: 'm', type: 'mieru', server: p.server, transport: 'TCP', 'port-range': range }] }, range === '20000-22000' ? 'VALID' : 'INVALID');
       }
