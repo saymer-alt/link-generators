@@ -31,13 +31,13 @@ false`). Включение автоматическое — без нового
 `NAME-AUTO` (url-test, `use:` на общий provider — несколько групп на один
 провайдер) и select `[NAME-AUTO, ⚡ Fastest, GLOBAL, REJECT]`; без подписок —
 select `[⚡ Fastest, GLOBAL, REJECT]`; в БС-режиме — select `[GLOBAL, REJECT]`
-(плоский fallback не вкладывается, #2588). Финальный участник категорийных групп —
-REJECT, никогда DIRECT: действует конституция no-DIRECT (#284), таргет `DIRECT`
-отвергается движком fail-closed. Провайдер-режим (URL-подписки) блокируется на
-Build — см. [POLICY-ROUTING.md](POLICY-ROUTING.md) и
-[NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md).
-Выключенный режим — byte-parity. Полное описание, ограничения (ECH/DoH/hardcoded IP,
-домен-детект для TUN) и PoC-доказательства — [POLICY-ROUTING.md](POLICY-ROUTING.md).
+(плоский fallback не вкладывается, #2588). Финальный участник категорийных
+групп — REJECT, никогда DIRECT: DIRECT не является пользовательским выходом
+(no-DIRECT #284 revised), таргет `DIRECT` отвергается движком fail-closed.
+`proxy: DIRECT` у провайдеров — служебный транспорт скачивания (service plane),
+не пользовательский egress. Выключенный режим — byte-parity. Полное описание,
+ограничения (ECH/DoH/hardcoded IP, домен-детект для TUN) и PoC-доказательства —
+[POLICY-ROUTING.md](POLICY-ROUTING.md).
 
 ## Настройки вкладки «⚙️ Mihomo Config Builder»
 

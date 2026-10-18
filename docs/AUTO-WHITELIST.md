@@ -96,9 +96,8 @@ rules:
 проверку к ручному Ping MetaCubeXD (`/delay`), который не передаёт expected-status.
 Строгая проверка `expected-status` у HTTP providers сохраняется отдельно.
 `DIRECT` отсутствует среди целей GLOBAL.
-Поле `proxy: DIRECT` у HTTP provider — документированное исключение уровня движка
-(download-only bootstrap; конституция no-DIRECT #284): режим URL-подписок
-блокируется на Build гейтом страницы, совместимый путь — Sub Mode OFF.
+Поле `proxy: DIRECT` у HTTP provider — служебный транспорт скачивания подписки
+(service plane, no-DIRECT #284 revised): не является пользовательским egress.
 Подробнее: [NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md).
 
 ## Поведение и ограничения

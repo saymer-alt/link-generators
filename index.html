@@ -3248,17 +3248,26 @@ function validateMihomoYaml(yaml) {
   }
 
 
-  // --- No-DIRECT egress invariant (#284): лексический guard на итоговый YAML ---
-  // Builder не имеет права выпускать YAML с токеном DIRECT (участник группы,
-  // правило, запасной выход или автоподстановка). Guard выполняется последним:
-  // пока токен присутствует, статус INVALID и Copy/Download заблокированы.
-  const directHits = String(yaml).split('\n')
-    .map((line, idx) => ({ no: idx + 1, line }))
-    .filter(x => /\bDIRECT\b/.test(x.line));
-  if (directHits.length) {
-    const shown = directHits.slice(0, 3).map(x => 'строка ' + x.no + ': ' + x.line.trim().slice(0, 120)).join('; ');
-    err('', 'no-direct-invariant', 'DIRECT ×' + directHits.length,
-      'итоговый YAML содержит запрещённый токен DIRECT (политика no-DIRECT #284): ' + shown + (directHits.length > 3 ? '; …и ещё ' + (directHits.length - 3) : '') + '. Прямой выход запрещён — пересоберите конфиг без DIRECT-маршрутов.');
+  // --- No-DIRECT egress policy (#284, revised): семантическая проверка user data plane ---
+  // Запрещён DIRECT как ЦЕЛЬ пользовательской маршрутизации: участник
+  // proxy-groups или таргет правила. Служебные ключи (proxy: DIRECT у
+  // провайдеров, dialer-proxy) проверкой не затрагиваются — это service plane.
+  // Проверка структурная (по разобранному документу), не лексическая.
+  if (Array.isArray(doc['proxy-groups'])) {
+    doc['proxy-groups'].forEach((g) => {
+      if (!g || typeof g !== 'object') return;
+      if (Array.isArray(g.proxies) && g.proxies.includes('DIRECT')) {
+        err((typeof g.name === 'string' && g.name) || 'proxy-groups', 'direct-egress', 'DIRECT',
+          'группа содержит DIRECT как участника — пользовательский прямой выход запрещён политикой no-DIRECT (#284). Финальный участник групп — REJECT.');
+      }
+    });
+  }
+  if (Array.isArray(doc.rules)) {
+    doc.rules.forEach((r, i) => {
+      const m = typeof r === 'string' ? r.trim().match(/^[^,]+(?:,[^,]*)?,\s*DIRECT\s*$/i) : null;
+      if (m) err('rules[' + i + ']', 'direct-egress', String(r).slice(0, 60),
+        'правило ведёт пользовательский трафик напрямую в DIRECT — запрещено политикой no-DIRECT (#284). Используйте GLOBAL / SELECT / REJECT.');
+    });
   }
 
   return { status: errors.length ? 'INVALID' : 'VALID', errors, warnings };
@@ -6576,9 +6585,9 @@ function ptNodeArtifactYaml(nodeLabel, role, inbound, outbound, credentials) {
     L.push('rules:');
     L.push('  - MATCH,pt-out');
   }
-  // Артефакт без исходящего ребра не генерируется: прежний fallback
-  // `MATCH,DIRECT` запрещён политикой no-DIRECT (#284) и де-анонимизировал бы
-  // цепочку — см. блокер PT-GEN-DIRECT-BAN в ptGenerateArtifacts.
+  // Артефакт без исходящего ребра не генерируется (PT-GEN-DIRECT-BAN):
+  // прежний fallback `MATCH,DIRECT` направлял весь пользовательский трафик
+  // напрямую с публичного IP VPS — запрещено политикой no-DIRECT (#284).
   return L.join('\n') + '\n';
 }
 // Главная функция: spec (raw) → артефакты. Цепочка валидируется ptAnalyzeTopology.
@@ -6630,11 +6639,12 @@ function ptGenerateArtifacts(spec, credentials) {
       if (outbound.endpointRef && !PT_REF_PATTERN.test(outbound.endpointRef)) nodeBlockers.push({ code: 'PT-GEN-REFERENCE', message: 'endpoint reference исходящей ссылки имеет неподдерживаемый формат' });
       if (outbound.credentialRef && !PT_REF_PATTERN.test(outbound.credentialRef)) nodeBlockers.push({ code: 'PT-GEN-REFERENCE', message: 'credential reference исходящей ссылки имеет неподдерживаемый формат' });
     } else if (idx === nodes.length - 1) {
-      // No-DIRECT egress invariant (#284): exit-узел без исходящего ребра
-      // раньше завершился бы `MATCH,DIRECT` — прямой выход запрещён политикой.
-      // Артефакт config.yaml не генерируется; контракт требует финальный
-      // overlay или явный исходящий транспорт.
-      nodeBlockers.push({ code: 'PT-GEN-DIRECT-BAN', message: 'у последнего узла нет исходящего ребра: DIRECT-выход запрещён политикой no-DIRECT (#284), config.yaml не генерируется — добавьте финальный overlay (final-overlay) или явный исходящий транспорт' });
+      // No-DIRECT egress policy (#284): exit-узел без исходящего ребра — это
+      // РЕАЛЬНЫЙ пользовательский трафик, уходящий напрямую с публичного IP
+      // VPS (не service plane). Артефакт config.yaml не генерируется;
+      // безопасная альтернатива: финальный overlay (final-overlay) или явный
+      // исходящий транспорт до узла.
+      nodeBlockers.push({ code: 'PT-GEN-DIRECT-BAN', message: 'у последнего узла нет исходящего ребра: такой артефакт направлял бы весь пользовательский трафик напрямую с публичного IP VPS (MATCH,DIRECT) — это запрещено политикой no-DIRECT (#284). Добавьте финальный overlay (final-overlay) или явный исходящий транспорт до узла' });
     }
     const needsCred =
       (inbound && inbound.kind && ptOwnTransport(inbound.kind) && ptOwnTransport(inbound.kind).needsPassword && (!inbound.credentialRef || !credentials || typeof credentials[inbound.credentialRef] !== 'string' || !credentials[inbound.credentialRef])) ||
@@ -6644,8 +6654,9 @@ function ptGenerateArtifacts(spec, credentials) {
     const status = external ? 'EXTERNAL_CONTRACT_REQUIRED' : (nodeBlockers.length || needsCred ? 'PLACEHOLDERS_REQUIRED' : 'READY');
     // конфиг генерируется ТОЛЬКО при полном первоклассном контракте (вход+выход).
     // Неподдерживаемый исходящий транспорт = контракт без конфига: fallback в
-    // DIRECT де-анонимизировал бы цепочку, поэтому «честный DIRECT» не эмитим
-    // (теперь и по политике no-DIRECT #284 — блокер PT-GEN-DIRECT-BAN).
+    // DIRECT де-анонимизировал бы цепочку — поэтому exit-узел без исходящего
+    // ребра не генерирует config.yaml (PT-GEN-DIRECT-BAN, no-DIRECT #284:
+    // пользовательский трафик не должен уходить напрямую с VPS).
     if (nodeBlockers.length === 0) {
       files['config.yaml'] = ptNodeArtifactYaml(
         node.label, node.role,
@@ -10809,41 +10820,21 @@ async function buildMihomo() {
   const api = globalThis.web4core;
   if (!api?.buildFromRequest) return buildFailure('❌ web4core.runtime не загружен!', true);
   const subMode = document.getElementById('cfgSubMode').checked;
-  // === No-DIRECT egress invariant (#284, owner decision 2026-10-18) ===
-  // (1) Subscription proxy-providers: mihomo загружает провайдера по правилам
-  // конфига; без явного прямого транспорта скачивание невозможно никогда
-  // (проверено на mihomo 1.19.31: пустой provider-backed GLOBAL → REJECT →
-  // immediate EOF, cold-start deadlock). Прямой канал запрещён инвариантом,
-  // поэтому provider-режим (URL-подписки) блокируется: совместимый выход —
-  // разворот подписки в статические узлы на Build (Sub Mode OFF).
-  // (2) Legacy-состояния с явным DIRECT (таргет карты политики, dialer-таргет
-  // WG/AWG-профиля) читаются, но Build блокируется до явного обновления —
-  // молчаливая смена пользовательских маршрутов запрещена.
-  if (subMode) {
-    const isSubLine = s => /^https?:\/\//i.test(s) && !/^https?:\/\/[^\/@]+@/i.test(s);
-    const subUrlLines = raw.split('\n').map(s => s.trim()).filter(isSubLine);
-    // AWL: fallback-подписки (whitelistInput) в Sub Mode ON тоже превращаются в
-    // proxy-providers — тот же запрещённый bootstrap-транспорт.
-    const awlOn = document.getElementById('cfgAutoWhitelist') && document.getElementById('cfgAutoWhitelist').checked;
-    const fallbackRaw = awlOn && document.getElementById('whitelistInput') ? document.getElementById('whitelistInput').value : '';
-    const fallbackSubLines = fallbackRaw.split('\n').map(s => s.trim()).filter(isSubLine);
-    if (subUrlLines.length || fallbackSubLines.length) {
-      mihomoValidationSeq++;
-      setMihomoValidationState('NOT_BUILT');
-      return buildFailure('❌ No-DIRECT (#284): режим «📡 Использовать URL-подписки» (proxy-provider) требует прямой канал скачивания провайдера — прямой выход запрещён политикой проекта' + (fallbackSubLines.length ? ' (включая fallback-подписки белых списков)' : '') + '. Выключите «📡 Использовать URL-подписки»: подписка будет развёрнута в статические узлы прямо на Build (полностью совместимо с запретом). Автообновление провайдеров вернётся, когда у Mihomo появится совместимый bootstrap-транспорт.', true);
-    }
-  }
+  // === No-DIRECT egress policy (#284, owner decision revised 2026-10-18) ===
+  // DIRECT запрещён как пользовательский выход/таргет (user data plane):
+  // движок отклоняет DPR-таргет DIRECT, категории-группы заканчиваются REJECT,
+  // UI не предлагает DIRECT. Служебный транспорт (proxy-providers с
+  // `proxy: DIRECT`, dialer-proxy, PT exit-артефакты) — service plane,
+  // работает как раньше; Sub Mode ON (динамические подписки) сохранён.
+  // Legacy-карточки политик с явным DIRECT таргетом: читаются, но Build
+  // блокируется до явного обновления (молчаливая смена маршрутов запрещена).
   const directPolicyCards = Array.from(document.querySelectorAll('#policyCards .policy-card'))
     .map((card, i) => ({ i: i + 1, name: card.querySelector('.policy-name') ? card.querySelector('.policy-name').value.trim() : '', target: card.querySelector('.policy-target') ? card.querySelector('.policy-target').value : '' }))
     .filter(c => c.target === 'DIRECT');
-  const directDialerProfiles = wgProfiles.filter(p => p.mode === 'proxy' && String(p.target || '').trim() === 'DIRECT');
-  if (directPolicyCards.length || directDialerProfiles.length) {
-    const parts = [];
-    if (directPolicyCards.length) parts.push('карты политик с таргетом DIRECT: ' + directPolicyCards.map(c => '«' + (c.name || '#' + c.i) + '»').join(', '));
-    if (directDialerProfiles.length) parts.push('WG/AWG-профили с dialer-таргетом DIRECT: ' + directDialerProfiles.map(p => p.filename || p.bean.name).join(', '));
+  if (directPolicyCards.length) {
     mihomoValidationSeq++;
     setMihomoValidationState('NOT_BUILT');
-    return buildFailure('❌ No-DIRECT (#284): явный DIRECT в пользовательских маршрутах запрещён — ' + parts.join('; ') + '. Обновите таргеты явно (GLOBAL / REJECT / SELECT; WG-профилю — режим «Напрямую» в карточке) и пересоберите.', true);
+    return buildFailure('❌ No-DIRECT (#284): явный DIRECT как пользовательский выход запрещён — карты политик с таргетом DIRECT: ' + directPolicyCards.map(c => '«' + (c.name || '#' + c.i) + '»').join(', ') + '. Обновите таргеты явно (GLOBAL / REJECT / SELECT) и пересоберите.', true);
   }
   const excludeFilterRaw = document.getElementById('excludeFilterInput').value.trim();
   // Итоговый Exclude Filter = ручное выражение ИЛИ выбранные в списке серверов
@@ -10951,7 +10942,7 @@ async function buildMihomo() {
   // который будет сгенерирован прямо сейчас.
   const registryNow = dialedProfiles.length ? computeDialerTargetsSync() : [];
   const knownTargets = new Set(registryNow.map(t => t.value));
-  // (DIRECT не добавляется: no-DIRECT #284 — таргеты DIRECT блокируются гейтом выше.)
+  knownTargets.add('DIRECT'); // dialer-таргет = service plane (handshake напрямую), не пользовательский egress
   const danglingTargets = dialedProfiles.filter(p => p.target.trim() && !knownTargets.has(p.target.trim()));
   if (danglingTargets.length) {
     const p = danglingTargets[0];

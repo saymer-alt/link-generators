@@ -1,16 +1,14 @@
 # VALIDATION — pre-copy валидатор Mihomo YAML
 
-## No-DIRECT egress invariant (#284, 2026-10-18)
+## No-DIRECT egress policy (#284, revised 2026-10-18) — семантическая проверка
 
-Финальная проверка валидатора: итоговый YAML не имеет права содержать
-литеральный токен `DIRECT` (`/\bDIRECT\b/` по всему тексту). Любое совпадение →
-`INVALID` с правилом `no-direct-invariant` (перечислены строки с токеном),
-Copy/Download блокируются существующим VALID-гейтом. Это конституция проекта
-(owner decision 2026-10-18): при отказе всех прокси трафик блокируется
-(REJECT/отказ dial), а не уходит напрямую с хоста. Реестр источников и
-задокументированное исключение bootstrap-провайдеров (Sub Mode ON блокируется
-гейтом страницы раньше) — [NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md).
-Компромисс осознанный: имя прокси с подстрокой «DIRECT» тоже блокирует сборку.
+Структурная проверка user data plane по разобранному документу: DIRECT как
+участник любой `proxy-groups[].proxies` или как таргет любого правила →
+`INVALID` (правило `direct-egress`). Служебные ключи не затрагиваются:
+`proxy-providers.*.proxy` (bootstrap скачивания подписок) и `dialer-proxy`
+(установление WG-соединения) остаются VALID — service plane. Политика
+поведенческая, не лексическая: сканирование текста заменено семантикой + end-to-end
+outage-тестом ([NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md)).
 
 ## YAML 1.1 scalar safety
 

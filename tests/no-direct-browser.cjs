@@ -1,7 +1,11 @@
-// No-DIRECT egress invariant (#284) — browser layer regression (Playwright,
-// канал msedge). Покрывает page-слой: лексический guard валидатора, отсутствие
-// опции DIRECT в таргетах политик, блокировку Build для legacy DIRECT-карт и
-// dialer-таргетов, блокировку provider-режима (Sub Mode ON), PT-GEN-DIRECT-BAN.
+// No-DIRECT egress policy (#284, revised 2026-10-18) — browser layer
+// regression (Playwright, канал msedge). Семантика, не лексика:
+//   - валидатор: DIRECT как участник группы или таргет правила → INVALID
+//     (user data plane); служебные ключи (provider proxy, dialer-proxy) → VALID;
+//   - DPR UI: опция DIRECT недоступна, legacy-карта с DIRECT видна как
+//     запрещённая и блокирует Build до явного обновления;
+//   - PT: exit-узел без исходящего ребра → PT-GEN-DIRECT-BAN (пользовательский
+//     трафик не уходит напрямую с VPS); цепочка с final-overlay генерируется.
 // Требует NODE_PATH (playwright) и JS_YAML_PATH — см. docs/TESTING.md.
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -28,18 +32,21 @@ const root = path.resolve(__dirname, '..');
       if (btn) btn.click();
     });
 
-    // 1. Лексический guard: YAML с DIRECT → INVALID (no-direct-invariant),
-    //    чистый YAML → VALID.
+    // 1. Семантический валидатор: DIRECT-участник группы и DIRECT-таргет
+    //    правила → INVALID (no-direct-egress); служебные ключи не затронуты.
     {
-      const dirty = await page.evaluate(() => validateMihomoYaml('mixed-port: 7890\nmode: rule\nrules:\n  - "MATCH,DIRECT"'));
-      assert.equal(dirty.status, 'INVALID');
-      assert.ok(dirty.errors.some(e => e.field === 'no-direct-invariant'), 'guard rule present: ' + JSON.stringify(dirty.errors));
-      const clean = await page.evaluate(() => validateMihomoYaml('mixed-port: 7890\nmode: rule\nrules:\n  - "MATCH,REJECT"'));
-      assert.equal(clean.status, 'VALID');
-      cases += 2;
+      const groupMember = await page.evaluate(() => validateMihomoYaml('proxies:\n  - name: a\n    type: ss\n    server: 192.0.2.1\n    port: 443\nproxy-groups:\n  - name: g\n    type: select\n    proxies: [a, DIRECT]\nrules:\n  - "MATCH,g"'));
+      assert.equal(groupMember.status, 'INVALID');
+      assert.ok(groupMember.errors.some(e => e.field === 'direct-egress'), 'group member DIRECT flagged');
+      const ruleTarget = await page.evaluate(() => validateMihomoYaml('proxies:\n  - name: a\n    type: ss\n    server: 192.0.2.1\n    port: 443\nrules:\n  - "DOMAIN-SUFFIX,x.example,DIRECT"\n  - "MATCH,a"'));
+      assert.equal(ruleTarget.status, 'INVALID');
+      assert.ok(ruleTarget.errors.some(e => e.field === 'direct-egress'), 'rule target DIRECT flagged');
+      const servicePlane = await page.evaluate(() => validateMihomoYaml('mixed-port: 7890\nproxy-providers:\n  feed:\n    type: http\n    url: "https://feed.example.invalid/s"\n    proxy: DIRECT\nproxies:\n  - name: wg\n    type: wireguard\n    server: 192.0.2.73\n    port: 51820\n    private-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n    public-key: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=\n    ip: 10.66.1.2\n    allowed-ips: [0.0.0.0/0]\n    dialer-proxy: DIRECT\nproxy-groups:\n  - name: GLOBAL\n    type: select\n    proxies: [wg, REJECT]\nrules:\n  - "MATCH,GLOBAL"'));
+      assert.equal(servicePlane.status, 'VALID', 'service-plane keys (provider proxy, dialer-proxy) stay VALID: ' + JSON.stringify(servicePlane.errors));
+      cases += 3;
     }
 
-    // 2. Карточка политики: опции таргета не содержат DIRECT.
+    // 2. DPR UI: новая карточка — опций DIRECT нет.
     {
       await page.evaluate(() => {
         document.getElementById('cfgPolicyRouting').checked = true;
@@ -53,65 +60,50 @@ const root = path.resolve(__dirname, '..');
     }
 
     // 3. Legacy-карта с target DIRECT: отображается запрещённой опцией, Build
-    //    блокируется с сообщением No-DIRECT; после явного обновления таргета
-    //    сборка проходит без DIRECT.
+    //    блокируется; после явного обновления таргета сборка проходит.
     {
       await page.evaluate(() => addPolicyCard({ name: 'LEG', domains: 'legacy.example.com', target: 'DIRECT' }));
       const legacyOptions = await page.evaluate(() => Array.from(document.querySelectorAll('#policyCards .policy-card .policy-target')[1].options).map(o => o.value));
       assert.ok(legacyOptions.includes('DIRECT'), 'legacy DIRECT card keeps its state visible');
       await page.locator('#mihomoInput').fill('vless://00000000-0000-4000-8000-000000000001@192.0.2.1:443#A');
+      await page.evaluate(() => { document.getElementById('cfgSubMode').checked = false; }); // статический ввод — Sub OFF
       await page.evaluate(() => buildMihomo());
       await page.waitForFunction(() => window.__lastToast && window.__lastToast.includes('No-DIRECT'));
-      const blocked = await page.evaluate(() => builderBuildError === true);
-      assert.equal(blocked, true, 'build blocked for legacy DIRECT card');
+      assert.equal(await page.evaluate(() => builderBuildError === true), true, 'build blocked for legacy DIRECT card');
       cases += 2;
-      // Явное обновление таргета → сборка проходит, DIRECT нет.
       await page.evaluate(() => {
         const sel = document.querySelectorAll('#policyCards .policy-card .policy-target')[1];
         sel.value = 'REJECT';
-        document.getElementById('cfgSubMode').checked = false; // статический ввод, не provider-режим
         builderBuildError = false;
         buildMihomo();
       });
       await page.waitForFunction(() => (document.getElementById('mihomoOutput').value || '').includes('RULE-SET'));
       const yaml = await page.evaluate(() => document.getElementById('mihomoOutput').value);
-      assert.ok(!/\bDIRECT\b/.test(yaml), 'no DIRECT in rebuilt YAML');
-      assert.ok(yaml.includes('RULE-SET,policy-leg,REJECT') || yaml.includes('"RULE-SET,policy-leg,REJECT"'), 'legacy card now REJECT-targeted');
+      assert.ok(yaml.includes('"RULE-SET,policy-leg,REJECT"') || yaml.includes('RULE-SET,policy-leg,REJECT'), 'legacy card now REJECT-targeted');
+      assert.ok(!/\bDIRECT\b/.test(yaml.split('proxies:')[0]) || !yaml.split('\n').some(l => /,\s*DIRECT\s*$/.test(l.trim())), 'no DIRECT routing in rebuilt YAML');
       cases += 2;
     }
 
-    // 4. Sub Mode ON с URL-подпиской: Build блокируется с сообщением No-DIRECT.
+    // 4. Sub Mode ON (динамические подписки) — положительная регрессия:
+    //    provider-сборка работает, провайдер несёт служебный bootstrap-транспорт.
     {
       await page.evaluate(() => {
+        document.getElementById('policyCards').textContent = '';
         document.getElementById('cfgSubMode').checked = true;
         document.getElementById('mihomoInput').value = 'https://subs.example.invalid/token';
         builderBuildError = false;
         window.__lastToast = '';
         buildMihomo();
       });
-      await page.waitForFunction(() => window.__lastToast && window.__lastToast.includes('No-DIRECT'));
-      const state = await page.evaluate(() => ({ err: builderBuildError, validation: MIHOMO_VALIDATION_STATE.state }));
-      assert.equal(state.err, true);
-      assert.equal(state.validation, 'NOT_BUILT', 'provider mode refuses to build (Copy gated by NOT_BUILT, stale preview retained per existing early-exit contract)');
+      await page.waitForFunction(() => MIHOMO_VALIDATION_STATE.state === 'VALID', null, { timeout: 20000 });
+      const yaml = await page.evaluate(() => document.getElementById('mihomoOutput').value);
+      assert.ok(yaml.includes('proxy-providers:'), 'provider YAML built');
+      assert.ok(/proxy:\s*'?(DIRECT)"?\s*$|\bproxy: DIRECT\b/.test(yaml), 'service-plane bootstrap field present');
       cases += 2;
     }
 
-    // 5. WG-профиль с dialer-таргетом DIRECT (legacy): Build блокируется.
-    {
-      await page.evaluate(() => {
-        document.getElementById('cfgSubMode').checked = false;
-        window.__lastToast = '';
-        wgProfiles.push({ id: 'wg-test', filename: 'direct-test.conf', bean: { name: 'WG-A', proto: 'wireguard', host: '192.0.2.73', port: 51820, wireguard: { privateKey: 'A'.repeat(43), publicKey: 'B'.repeat(43), ip: '10.66.1.2', allowedIPs: ['0.0.0.0/0'] } }, mode: 'proxy', target: 'DIRECT' });
-        syncWgCollections();
-        buildMihomo();
-      });
-      await page.waitForFunction(() => window.__lastToast && window.__lastToast.includes('No-DIRECT'));
-      const blocked = await page.evaluate(() => builderBuildError === true && window.__lastToast.includes('WG/AWG'));
-      assert.equal(blocked, true, 'legacy dialer DIRECT target blocked with explicit message');
-      cases += 1;
-    }
-
-    // 6. PT: exit-узел без исходящего ребра → PT-GEN-DIRECT-BAN, config.yaml нет.
+    // 5. PT: exit-узел без исходящего ребра → PT-GEN-DIRECT-BAN, config.yaml
+    //    не генерируется; цепочка с финальным overlay — генерируется.
     {
       const pt = await page.evaluate(() => {
         const spec = {
@@ -120,13 +112,14 @@ const root = path.resolve(__dirname, '..');
           clientLink: { transport: { kind: 'ss', endpoint: 'ep-c', credentialRef: 'cr-c' } },
           endpoints: { 'ep-c': '192.0.2.1:40000', 'ep-0': '198.51.100.1:4001' },
         };
-        const creds = { 'cr-c': 'synth-c', 'cr-0': 'synth-0' };
-        return ptGenerateArtifacts(spec, creds);
+        return ptGenerateArtifacts(spec, { 'cr-c': 'synth-c', 'cr-0': 'synth-0' });
       });
       assert.equal(pt.ok, true);
       const exit = pt.artifacts.find(a => a.nodeId === 'x');
-      assert.ok(exit.blockers.some(b => b.code === 'PT-GEN-DIRECT-BAN'), 'PT exit blocked by no-DIRECT');
+      assert.ok(exit.blockers.some(b => b.code === 'PT-GEN-DIRECT-BAN'), 'PT exit blocked by no-DIRECT (user traffic to VPS IP)');
       assert.equal(exit.files['config.yaml'], undefined, 'no MATCH,DIRECT artifact');
+      const entry = pt.artifacts[0];
+      assert.equal(entry.status, 'READY', 'entry unaffected');
       cases += 2;
     }
 
@@ -135,5 +128,5 @@ const root = path.resolve(__dirname, '..');
   } finally {
     await browser.close();
   }
-  if (cases < 10) { console.error('browser registry smaller than expected'); process.exit(1); }
+  if (cases < 9) { console.error('browser registry smaller than expected'); process.exit(1); }
 })().catch((e) => { console.error(e); process.exit(1); });

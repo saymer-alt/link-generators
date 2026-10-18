@@ -4000,7 +4000,7 @@
       if (Number.isFinite(wg.persistentKeepalive) && wg.persistentKeepalive > 0) p["persistent-keepalive"] = wg.persistentKeepalive;
       if (wg.reserved !== void 0) p.reserved = wg.reserved;
       p["ip-version"] = "ipv4";
-      if (typeof wg.dialerProxy === "string" && wg.dialerProxy.trim() && wg.dialerProxy.trim() !== "DIRECT") p["dialer-proxy"] = wg.dialerProxy.trim();
+      if (typeof wg.dialerProxy === "string" && wg.dialerProxy.trim()) p["dialer-proxy"] = wg.dialerProxy.trim();
       if (hasPeers) p.peers = peers.map(mapPeer).filter(Boolean);
       if (wg.ipStack && typeof wg.ipStack === "object" && Object.keys(wg.ipStack).length) p["ip-stack"] = wg.ipStack;
       if (wg["amnezia-wg-option"] && typeof wg["amnezia-wg-option"] === "object") {
@@ -4259,13 +4259,13 @@
       const deviceModel = typeof opts?.deviceModel === "string" ? opts.deviceModel.trim() : "";
       providers[providerName] = {
         type: "http",
-        // Provider bootstrap transport (download-only, never referenced by
-        // groups or rules): mihomo routes provider fetches through the
-        // config rule chain when `proxy` is absent — verified on v1.19.31
-        // (MATCH,GLOBAL over an empty provider-backed group ⇒ immediate
-        // EOF, provider never loads; explicit DIRECT dial loads normally).
-        // The link-generators Builder blocks this mode under the no-DIRECT
-        // egress invariant (issue #284) instead of emitting such YAML.
+        // Service/transport plane (no-DIRECT #284 revised): the explicit
+        // direct dial is the provider bootstrap transport — mihomo routes
+        // provider fetches through the config rule chain when `proxy` is
+        // absent (verified on v1.19.31: empty provider-backed GLOBAL ⇒
+        // immediate EOF, cold-start deadlock; explicit DIRECT dial loads
+        // normally). Download-only: never referenced by user-traffic
+        // groups or rules.
         proxy: "DIRECT",
         header: {
           "x-hwid": [deviceHwid || generateSecretHex32()],
@@ -4699,7 +4699,6 @@
   }
   function applyMihomoWgDialer(proxies, dialer) {
     if (!dialer || dialer.stampAll === false) return proxies;
-    if (dialer.target === "DIRECT") return proxies;
     let applied = 0;
     let explicit = 0;
     const out = (Array.isArray(proxies) ? proxies : []).map((p) => {

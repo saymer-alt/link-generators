@@ -1,22 +1,27 @@
 # TESTING — реальная тестовая стратегия
 
-## No-DIRECT egress invariant — 2026-10-18
+## No-DIRECT egress policy (behavioral, revised) — 2026-10-18
 
-Конституция #284 (owner decision): Builder не выпускает YAML с токеном
-`DIRECT`; при исчерпании прокси — REJECT/отказ, не хост-эгресс. Реестр путей,
-доказательство cold-start deadlock провайдеров подписок (локальный A/B-эксперимент
-на mihomo v1.19.31: `proxy: DIRECT` → загрузка есть; поле удалено → fetch идёт
-по правилам конфига → пустой GLOBAL → REJECT → immediate EOF) и границы
-гарантии — [NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md).
+Политика #284 (revised): генератор не создаёт маршрутов, по которым
+**пользовательский трафик** уходит напрямую с публичного IP хоста; DIRECT не
+является пользовательским выходом/фолбэком. Service plane (bootstrap
+провайдеров `proxy: DIRECT`, dialer-proxy, DNS) работает как раньше —
+Sub Mode ON (динамические подписки) сохранён. Доказательство cold-start
+deadlock провайдеров (локальный A/B-эксперимент на mihomo v1.19.31:
+`proxy: DIRECT` → загрузка есть; поле удалено → fetch идёт по правилам
+конфига → пустой GLOBAL → REJECT → immediate EOF), реестр путей, границы
+гарантий и открытый вопрос по PT exit-артефактам —
+[NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md).
 
-- Движок: `wc tools/tests/mihomo-no-direct.test.mjs` (лексика+структура по всем
-  режимам, fail-closed DIRECT-таргет, dialer-нормализация) + обновлённые
-  `mihomo-policy-routing`/`mihomo-policy-targets`.
-- Consumer-реестр по вендоренному рантайму: `node tests/no-direct-egress.cjs`.
-- Страница (guard, опции таргетов, гейты Sub-ON/legacy DIRECT, PT-блокер):
-  `node tests/no-direct-browser.cjs` (Playwright, как `browser.cjs`).
-- PT: `tests/per-node-generation.cjs` — exit без исходящего ребра больше не
-  даёт `MATCH,DIRECT` (блокер `PT-GEN-DIRECT-BAN`).
+- Движок: `wc tools/tests/mihomo-no-direct.test.mjs` (семантика user data
+  plane + service-plane parity) + обновлённые `mihomo-policy-routing` /
+  `mihomo-policy-targets`.
+- Consumer-реестр по вендоренному рантайму: `node tests/no-direct-egress.cjs`
+  (семантика + положительная регрессия Sub-ON провайдеров).
+- Страница (семантический валидатор, DPR UI, legacy-гейт, Sub-ON положительная
+  регрессия, PT-блокер): `node tests/no-direct-browser.cjs` (Playwright).
+- PT: `tests/per-node-generation.cjs` — exit без исходящего ребра не
+  генерирует `MATCH,DIRECT` (блокер `PT-GEN-DIRECT-BAN`).
 
 ## MASQUE/DPI генератор: детерминированная регрессия — 2026-09-18
 
