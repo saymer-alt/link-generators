@@ -43,6 +43,9 @@ assert.deepEqual(v2.identities.entries,[{id:first.id,label:first.label,hwid:H1}]
 assert.equal('createdAt' in v2.identities.entries[0],false,'no unrelated browser registry metadata exported');
 assert.equal(v2.identities.providerBindings.length,3);
 assert.equal(api.rbParseProjectText(snapshot(v2)).ok,true,'v2 round-trip');
+const otherBrowser = success(api.rbPortableFromLegacy(v1(),second),'independent browser identity');
+assert.equal(otherBrowser.identities.entries[0].hwid,H2,'independent project copies explicitly chosen HWID');
+assert.equal(v2.identities.entries[0].hwid,H1,'original project remains unchanged');
 
 const two = success(api.rbPortableAddAndAssign(v2,'src-2',second),'assign second identity atomically');
 const three = success(api.rbPortableAssign(two,'src-3',second.id),'share second identity');
