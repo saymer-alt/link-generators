@@ -5,6 +5,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const vm = require('node:vm');
+const inlineScripts = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)].map(m => m[1]).filter(Boolean);
+assert.ok(inlineScripts.length, 'inline script exists');
+for (const code of inlineScripts) assert.doesNotThrow(
+  () => new vm.Script(code, {filename:'index.html inline'}),
+  'full inline Browser JS must parse, not only the isolated RB-CORE segment'
+);
 const start = html.indexOf('// === REVERSE BUILD CORE (OWNER-REVERSE-01, PR B) — RB-CORE-START ===');
 const end = html.indexOf('// === REVERSE BUILD CORE — RB-CORE-END ===', start);
 assert.ok(start >= 0 && end > start, 'RB-CORE markers found');
