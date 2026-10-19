@@ -370,6 +370,9 @@ jobs:
       - name: Portable v2 project browser lifecycle (#280)
         run: node tests/portable-project-browser.cjs
 
+      - name: Per-subscription identity UI and cross-browser reuse (#280)
+        run: node tests/portable-identity-ui-browser.cjs
+
       - name: YAML Reverse Build browser regression (OWNER-REVERSE-01)
         run: node tests/reverse-yaml-browser.cjs
 
