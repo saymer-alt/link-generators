@@ -201,7 +201,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   });
   assert.deepEqual(inspectorGraph, { match: 'MATCH,GLOBAL', type: 'select', first: '🪜 TIERED-AUTO' },
     'source YAML places Tiered root first INSIDE manual GLOBAL selector');
-  assert.doesNotMatch(preview, /MATCH\\s*→\\s*Приоритетные группы серверов/, 'Inspector must not bypass GLOBAL');
+  assert.doesNotMatch(preview, /MATCH\s*→\s*Приоритетные группы серверов/, 'Inspector must not bypass GLOBAL');
   ok('Inspector: manual GLOBAL shown; Tiered remains first eligible choice, not claimed selected');
 
   // 11. Privacy: имена эшелонов/участников — без секретов (ключи только в proxies)
