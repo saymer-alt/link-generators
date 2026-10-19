@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const vm = require('node:vm');
-const inlineScripts = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)].map(m => m[1]).filter(Boolean);
+const inlineScripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).filter(Boolean);
 assert.ok(inlineScripts.length, 'inline script exists');
 for (const code of inlineScripts) assert.doesNotThrow(
   () => new vm.Script(code, {filename:'index.html inline'}),
