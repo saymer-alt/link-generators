@@ -60,7 +60,7 @@ const ok = name => { passed++; console.log('  ok —', name); };
   ok('coverage: MATCHED/inline-provider + runtime-selected + FALLBACK + INVALID');
 
   // stale snapshot: изменение таргета после Build → coverage помечает предыдущей сборкой
-  await page.locator('#policyCards .policy-card .policy-target').first().selectOption('DIRECT');
+  await page.locator('#policyCards .policy-card .policy-target').first().selectOption('REJECT'); // DIRECT запрещён no-DIRECT #284
   await page.waitForTimeout(30);
   const res2 = await runCoverage('chat.openai.com');
   assert.match(res2, /Настройки изменены/, 'stale предлагает rebuild');
@@ -71,8 +71,8 @@ const ok = name => { passed++; console.log('  ok —', name); };
   await build();
   const res3 = await runCoverage('chat.openai.com');
   assert.ok(!res3.includes('предыдущей сборки'), 'после Build — current');
-  assert.match(res3, /chat\.openai\.com:\nПравило: #1 RULE-SET,policy-ai,DIRECT/, 'target сменился на DIRECT — правило то же, таргет новый');
-  assert.match(res3, /Маршрут: DIRECT/, 'цепочка теперь DIRECT (не runtime-selected группа)');
+  assert.match(res3, /chat\.openai\.com:\nПравило: #1 RULE-SET,policy-ai,REJECT/, 'target сменился на REJECT — правило то же, таргет новый');
+  assert.match(res3, /Маршрут: REJECT/, 'цепочка теперь REJECT (fail-closed таргет no-DIRECT #284)');
   ok('coverage: после Build — current, новый target виден');
 
   // dialer-chain: два WG (A через B) → FALLBACK-домен показывает цепочку в составе GLOBAL

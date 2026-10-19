@@ -232,12 +232,12 @@ async function check(name, fn) {
   });
   await check('UX08 stale coverage offers rebuild and retains chosen domains', async () => {
     await d.locator('#dcInput').fill('chat.openai.com\nowner.example');
-    await d.locator('#policyCards .policy-target').first().selectOption('DIRECT');
+    await d.locator('#policyCards .policy-target').first().selectOption('REJECT'); // no-DIRECT #284: таргет DIRECT недоступен
     await d.locator('#dcRunBtn').click();
     assert.equal(await d.locator('#dcBuildCheckBtn').isVisible(), true);
     assert.ok(!(await d.locator('#dcResults').textContent()).includes('SELECT-группа'));
     await d.locator('#dcBuildCheckBtn').click();
-    await d.waitForFunction(() => document.getElementById('dcResults').textContent.includes('Маршрут: DIRECT'));
+    await d.waitForFunction(() => document.getElementById('dcResults').textContent.includes('Маршрут: REJECT'));
     assert.equal(await d.locator('#dcInput').inputValue(), 'chat.openai.com\nowner.example');
   });
   await check('UX07 network Build cancel does not send or mutate project', async () => {
