@@ -161,9 +161,21 @@ async function runScenario(browser, root, candRoot, name, actions, checkContract
   for (const [name, actions] of Object.entries(scenarios)) {
     const a = await runScenario(browser, baseRoot, candRoot, name, actions, false);
     const b = await runScenario(browser, candRoot, candRoot, name, actions, true);
-    const same = a === b;
+    // #279 is an INTENTIONAL and narrowly scoped contract delta:
+    // Tiered must route through manual GLOBAL, not bypass it via MATCH,TIERED-AUTO.
+    // Compare every other YAML byte exactly; do not waive whole-scenario parity.
+    let expected = a;
+    if (name === 'tiered-on') {
+      const oldMatch = 'MATCH,🪜 TIERED-AUTO';
+      const newMatch = 'MATCH,GLOBAL';
+      assert.equal(a.split(oldMatch).length - 1, 1, 'tiered-on base must contain exactly one old MATCH root');
+      assert.equal(b.split(newMatch).length - 1, 1, 'tiered-on candidate must contain exactly one manual MATCH,GLOBAL');
+      assert.ok(!b.includes(oldMatch), 'tiered-on candidate must not bypass GLOBAL');
+      expected = a.replace(oldMatch, newMatch);
+    }
+    const same = expected === b;
     if (!same) fail++;
-    console.log(`${same ? 'PARITY-OK ' : 'PARITY-DIFF'} ${name} (base ${a.length}B / cand ${b.length}B)`);
+    console.log(`${same ? (name === 'tiered-on' ? 'PARITY-EXPECTED ' : 'PARITY-OK ') : 'PARITY-DIFF'} ${name} (base ${a.length}B / cand ${b.length}B)`);
     if (!same) {
       const out = process.env.PARITY_OUT_DIR || process.env.RUNNER_TEMP || '.';
       fs.mkdirSync(out, { recursive: true });

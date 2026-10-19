@@ -1039,7 +1039,7 @@
 // channel — metadata конкретной сборки, НЕ определение git-ветки в рантайме:
 // development build = X.Y.Z-dev / main; release promotion (main → stable) отдельно
 // переводит её на X.Y.Z / stable. UI (бейдж) читает только эти значения.
-const GENERATOR_META = Object.freeze({ version: '1.11.1', channel: 'stable' });
+const GENERATOR_META = Object.freeze({ version: '1.11.2', channel: 'stable' });
 (function renderGeneratorMeta() {
   const el = document.getElementById('genVersionBadge');
   if (el) {
@@ -3066,11 +3066,9 @@ function validateMihomoYaml(yaml) {
       }
     });
     // DPR-контракт: последнее правило — дефолт в GLOBAL-достижимую группу.
-    // QA-01: с активным Tiered Failover финальное правило — MATCH,🪜 TIERED-AUTO
-    // (пост-патч), а сам корень входит в GLOBAL.proxies — контракт «дефолт
-    // завершается GLOBAL-веткой» сохранён. Принимаем tiered-дефолт только
-    // когда группа-корень реально существует в конфиге (структурная проверка,
-    // не подавление ошибки).
+    // QA-01: новый Tiered сохраняет MATCH,GLOBAL для ручного выбора в
+    // mode: rule. Legacy MATCH,TIERED-AUTO принимается для импортированных
+    // YAML при существующем root, но Builder больше его не генерирует.
     if (ruleProviderNames.size) {
       const lastRule = doc.rules[doc.rules.length - 1];
       const tieredRootExists = (Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []).some(g => g && g.name === '🪜 TIERED-AUTO');
@@ -8382,9 +8380,9 @@ function buildTieredGroups(tiers, existingNames) {
   return { groups: out, rootName, tiers };
 }
 
-// Post-build патч: doc → +tier groups, GLOBAL получает root первым участником,
-// MATCH,GLOBAL → MATCH,<root>. Только при включённой настройке; выключена —
-// yaml возвращается без изменений (ALL PARITY).
+// Post-build патч: doc → +tier groups, GLOBAL получает root первым участником.
+// MATCH,GLOBAL остаётся последним правилом для ручного выбора в mode: rule.
+// При выключенном Tiered YAML не изменяется (ALL PARITY).
 function applyTieredFailover(yaml, tiersOverride) {
   if (!tieredEnabled() && !tiersOverride) return yaml;
   if (document.getElementById('cfgAutoWhitelist').checked) throw Error('Автоматические белые списки несовместимы с приоритетными группами серверов. Выберите один режим.');
@@ -8403,7 +8401,7 @@ function applyTieredFailover(yaml, tiersOverride) {
   const global = doc['proxy-groups'].find(g => g.name === 'GLOBAL');
   if (!global || !Array.isArray(global.proxies)) throw Error('Приоритетные группы серверов: группа GLOBAL не найдена в сборке');
   global.proxies.unshift(rootName);
-  doc.rules = (Array.isArray(doc.rules) ? doc.rules : []).map(r => (r === 'MATCH,GLOBAL' ? 'MATCH,' + rootName : r));
+  // #279: rewiring MATCH directly to root bypasses manual GLOBAL in rule mode.
   const summary = 'Приоритетные группы серверов: ' + tierGroupCount(tiers.length) + ', строгий порядок → ' +
     tiers.map(t => t.name.trim() + ' [' + tierStrategyLabel(t.strategy) + '; участников: ' + t.members.length + ']').join(' → ');
   const traceEl = document.getElementById('tieredTrace');
