@@ -68,7 +68,7 @@ failure(api.rbPortableReorder(three,[U[0],'https://new.example.invalid/feed',U[2
 failure(api.rbPortableReorder(three,undefined),'nonstring');
 failure(api.rbPortableAssign(three,'missing',second.id),'unknown source');
 failure(api.rbPortableAssign(three,'src-1','missing'),'unknown identity');
-failure(api.rbPortableAssign(three,'src-2',first.id),'orphan identity cannot be silently removed');
+failure(api.rbPortableAssign(two,'src-2',first.id),'orphan identity cannot be silently removed');
 failure(api.rbPortableAddAndAssign(three,'src-2',second),'no duplicate identities');
 failure(api.rbPortableAddAndAssign(three,'missing',{id:'dev-third',label:'Third',hwid:H2}),'new identity needs known source');
 failure(api.rbPortableAddAndAssign(three,'src-2',{id:'dev-third',label:'Third',hwid:'too-short'}),'invalid HWID');
