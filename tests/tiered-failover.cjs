@@ -1,6 +1,6 @@
 // Tiered Failover (#148, v1.10) — browser regression.
 // Контракт: DEFAULT OFF = ALL PARITY; ON = tier-группы (🪜 N name), root
-// «🪜 TIERED-AUTO» (fallback) первым участником GLOBAL + MATCH,<root>;
+// «🪜 TIERED-AUTO» (fallback) первым участником GLOBAL + MATCH,GLOBAL;
 // детерминированные имена; валидация (пустое имя/эшелон, неизвестный выход,
 // дубликаты); trace без секретов; stale-контракт; graph/coverage видят эшелоны.
 const assert = require('node:assert/strict');
@@ -106,11 +106,12 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.deepEqual(rootG.proxies, ['🪜 1 WARP', '🪜 2 Commercial'], 'root обходит эшелоны по порядку');
   const global = d1['proxy-groups'].find(g => g.name === 'GLOBAL');
   assert.equal(global.proxies[0], '🪜 TIERED-AUTO', 'GLOBAL получает root первым участником');
-  assert.ok(d1.rules.includes('MATCH,🪜 TIERED-AUTO'), 'MATCH уходит в root');
-  assert.ok(!d1.rules.includes('MATCH,GLOBAL'), 'старого MATCH,GLOBAL больше нет');
+  assert.equal(d1.rules[d1.rules.length - 1], 'MATCH,GLOBAL', 'MATCH обязательно проходит через ручной GLOBAL в mode: rule');
+  assert.ok(!d1.rules.includes('MATCH,🪜 TIERED-AUTO'), 'автоматика не должна обходить GLOBAL напрямую');
+  assert.ok(!global.proxies.includes('DIRECT'), 'Tiered не добавляет пользовательский DIRECT при переходе на GLOBAL');
   const trace = await page.evaluate(() => document.getElementById('tieredTrace').textContent);
   assert.match(trace, /Приоритетные группы серверов: 2 группы, строгий порядок → WARP.*Самый быстрый.*Commercial/, 'trace объясняет конфигурацию');
-  ok('ON: tier-группы + root + GLOBAL/MATCH переписаны + trace');
+  ok('ON: tier-группы + root внутри GLOBAL + ручной MATCH,GLOBAL + trace');
 
   // 3. Детерминизм: rebuild → тот же YAML
   const yamlOnce = r.yaml;
