@@ -511,6 +511,26 @@
               <button type="button" class="btn btn-gray" id="rbPortableReturnBtn" hidden>Вернуться к локальному HWID (v1)</button>
             </div>
             <div id="rbPortableModeNotice" class="hint" role="status" aria-live="polite" style="margin-top:6px">Текущий проект v1: HWID хранится только в браузере и не переносится в файл проекта.</div>
+            <div id="rbPortablePanel" hidden style="margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:12px">
+              <strong>🔗 HWID каждой подписки (проект v2)</strong>
+              <div class="hint" style="margin:6px 0">По умолчанию все подписки наследуют основной HWID. Можно назначить отдельный HWID и использовать его для нескольких подписок. URL и HWID здесь не показываются. Изменения остаются только внутри проекта.</div>
+              <div id="rbPortableMappingStatus" class="hint" role="status" aria-live="polite"></div>
+              <button type="button" id="rbPortableReorderBtn" class="btn btn-gray" hidden>↕ Сопоставить новый порядок URL</button>
+              <div id="rbPortableSources" style="margin:8px 0"></div>
+              <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+                <label for="rbPortableNewSource">Для какой подписки создать идентичность:</label>
+                <select id="rbPortableNewSource" aria-label="Подписка для нового HWID"></select>
+                <label for="rbPortableNewLabel">Понятное имя новой идентичности:</label>
+                <input id="rbPortableNewLabel" type="text" maxlength="80" autocomplete="off" placeholder="например, Provider B">
+                <label for="rbPortableNewHwid">Имеющийся HWID (только для импорта; значение скрыто):</label>
+                <input id="rbPortableNewHwid" type="password" minlength="10" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Не вводите для случайного HWID">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                  <button type="button" class="btn btn-gray" id="rbPortableRandomBtn">➕ Новый случайный HWID</button>
+                  <button type="button" class="btn btn-gray" id="rbPortableImportHwidBtn">📥 Импортировать введённый HWID</button>
+                </div>
+                <div class="hint" style="margin-top:6px">Новый HWID может занять дополнительный слот устройства у поставщика подписки. Исходные HWID нельзя посмотреть здесь; для резервного копирования экспортируйте проект v2 как конфиденциальный файл. Build и получение подписок останутся заблокированы до следующего этапа интеграции.</div>
+              </div>
+            </div>
             <div class="hint" style="margin-top:6px">Локальное имя нужно только для удобства и не меняет <code>x-device-model</code>. «Сменить ID» создаёт новый случайный HWID только по явной команде и может быть воспринят сервисом подписки как новое устройство. Удаление удаляет запись только из этого браузера: уже созданные конфиги и записи на стороне сервиса не меняются. Сам HWID нигде не отображается и в диагностику не попадает.</div>
           </div>
         </details>
@@ -11322,6 +11342,7 @@ function rbRenderPortableMode() {
   if (on) on.disabled = active;
   const off = document.getElementById('rbPortableReturnBtn');
   if (off) off.hidden = !active;
+  rbRenderPortableMappings();
 }
 // The explicit conversion does not generate an identity or alter localStorage.
 function rbActivatePortableProject() {
@@ -11354,6 +11375,126 @@ function rbReturnToLegacyProject() {
   refreshBuildStaleness();
   showToast('Проект возвращён к v1; дальнейшие сборки используют локальный HWID.');
 }
+
+
+// #280 — only symbolic identity labels in UI: do not print subscription URL,
+// actual HWID or local registry records. All mutations use validated pure v2
+// operations; the browser registry is never imported/mutated.
+function rbPortableCommitMutation(result) {
+  if (!result || !result.ok || result.project.schemaVersion !== 2) {
+    showToast('❌ Назначение HWID не сохранено: проверьте существующие привязки и формат проекта.', true);
+    return false;
+  }
+  rbPortableProjectState = rbPortableContextFromProject(result.project);
+  mihomoValidationSeq++;
+  setMihomoValidationState('NOT_BUILT');
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
+  return true;
+}
+function rbPortableSelectOption(label, value) {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  return option;
+}
+function rbRenderPortableMappings() {
+  const panel = document.getElementById('rbPortablePanel');
+  if (!panel) return;
+  panel.hidden = !rbPortableProjectState;
+  if (!rbPortableProjectState) return;
+  const project = rbCollectProject();
+  const validated = rbPortableParse(project, 2);
+  const valid = validated.ok;
+  const status = document.getElementById('rbPortableMappingStatus');
+  status.textContent = valid
+    ? 'Привязки согласованы. Сохраните проект, чтобы перенести HWID на другой компьютер.'
+    : '⚠ Изменились URL или порядок подписок. HWID не переназначены автоматически. Если изменён только порядок, нажмите «Сопоставить новый порядок URL».';
+  const reorder = document.getElementById('rbPortableReorderBtn');
+  reorder.hidden = valid;
+  const rows = document.getElementById('rbPortableSources');
+  rows.replaceChildren();
+  const src = document.getElementById('rbPortableNewSource');
+  const selected = src.value;
+  src.replaceChildren();
+  const ids = rbPortableProjectState.identities;
+  const bound = new Map(ids.providerBindings.map(v => [v.sourceId, v.identityId]));
+  const used = new Set();
+  rbPortableProjectState.subscriptionSources.forEach((source, index) => {
+    // A displayed index is informational only; sourceId is the stable key.
+    const name = 'Подписка ' + (index + 1);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0';
+    const label = document.createElement('label');
+    label.textContent = name + ' — HWID:';
+    const select = document.createElement('select');
+    select.className = 'rb-portable-bind';
+    select.dataset.sourceId = source.sourceId;
+    select.setAttribute('aria-label', 'HWID для ' + name);
+    for (const id of ids.entries) {
+      const desc = (id.id === ids.defaultId ? 'Основной · ' : '') + id.label;
+      select.appendChild(rbPortableSelectOption(desc, id.id));
+    }
+    select.value = bound.get(source.sourceId) || '';
+    select.disabled = !valid;
+    row.append(label, select);
+    rows.appendChild(row);
+    src.appendChild(rbPortableSelectOption(name, source.sourceId));
+    used.add(source.sourceId);
+  });
+  src.value = used.has(selected) ? selected : (rbPortableProjectState.subscriptionSources[0]?.sourceId || '');
+  for (const id of ['rbPortableRandomBtn', 'rbPortableImportHwidBtn', 'rbPortableNewSource']) {
+    document.getElementById(id).disabled = !valid || used.size === 0;
+  }
+}
+function rbPortableReorderCurrentSources() {
+  if (!rbPortableProjectState) return;
+  const project = rbCollectProject();
+  const result = rbPortableReorder({
+    ...project,
+    sources: {
+      ...project.sources,
+      mainInput: rbPortableProjectState.subscriptionSources.map(s => s.url).join('\n')
+    }
+  }, project.sources.mainInput);
+  if (rbPortableCommitMutation(result)) showToast('Порядок подписок сопоставлен по точному URL без замены HWID.');
+}
+function rbPortableBindSource(sourceId, identityId) {
+  if (!rbPortableProjectState) return;
+  if (rbPortableCommitMutation(rbPortableAssign(rbCollectProject(), sourceId, identityId)))
+    showToast('HWID выбранной подписки обновлён. Остальные привязки сохранены.');
+}
+function rbPortableCreateIdentity(manual) {
+  const source = document.getElementById('rbPortableNewSource').value;
+  const input = document.getElementById('rbPortableNewHwid');
+  const labelInput = document.getElementById('rbPortableNewLabel');
+  const label = labelInput.value.trim();
+  const hwid = manual ? input.value.trim() : deviceIdentityRandomHex32();
+  // Clear any entered secret before all success/failure notifications.
+  input.value = '';
+  if (!rbPortableProjectState || !source) return;
+  if (!label || label.length > 80 || !isValidDeviceHwid(hwid)) {
+    return showToast('❌ Укажите короткое имя и корректный HWID (10–64 символа, A–Z/a–z/0–9/=/-). Значение скрыто.', true);
+  }
+  const project = rbCollectProject();
+  const id = 'ident-' + deviceIdentityRandomHex32().slice(0,16);
+  const result = rbPortableAddAndAssign(project, source, { id, label, hwid });
+  if (rbPortableCommitMutation(result)) {
+    labelInput.value = '';
+    showToast('Новая проектная идентичность назначена выбранной подписке. HWID не отображается.');
+  }
+}
+document.getElementById('rbPortableReorderBtn').addEventListener('click', rbPortableReorderCurrentSources);
+document.getElementById('rbPortableSources').addEventListener('change', e => {
+  if (!e.target.matches('select.rb-portable-bind')) return;
+  rbPortableBindSource(e.target.dataset.sourceId, e.target.value);
+});
+document.getElementById('rbPortableRandomBtn').addEventListener('click', () => rbPortableCreateIdentity(false));
+document.getElementById('rbPortableImportHwidBtn').addEventListener('click', () => rbPortableCreateIdentity(true));
+document.getElementById('mihomoInput').addEventListener('input', () => {
+  if (rbPortableProjectState) rbRenderPortableMappings();
+});
 
 document.getElementById('rbPortableActivateBtn').addEventListener('click', rbActivatePortableProject);
 document.getElementById('rbPortableReturnBtn').addEventListener('click', rbReturnToLegacyProject);
