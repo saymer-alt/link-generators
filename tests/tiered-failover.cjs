@@ -184,16 +184,25 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.deepEqual(graphCheck.problems, [], 'graph: referential integrity сохранена');
   ok('Config Dependency Graph: эшелоны попадают в граф с integrity');
 
-  // 10. Inspector semantic path через root
+  // 10. Inspector must show the real first routing decision: manual GLOBAL.
+  // The current member of GLOBAL is runtime/controller selection, so a static
+  // Inspector must not claim that every request necessarily enters Tiered.
   await page.locator('#cfgPolicyRouting').check();
   await page.locator('#policyPresetSelect').selectOption('ai');
   await page.locator('#btnPolicyAdd').click();
   await build();
   await page.evaluate(() => { document.getElementById('routingDiagnostics').open = true; });
   const preview = await page.locator('#rdPreview').textContent();
-  assert.match(preview, /Приоритетные группы серверов/, 'Inspector: readable semantic path through the unchanged YAML tier root');
-  assert.match(preview, /Фактически выбранный участник определяется Mihomo во время работы/, 'runtime-selected честность');
-  ok('Inspector: semantic path показывает tier root без ложного runtime-claim');
+  assert.match(preview, /GLOBAL/, 'Inspector reports manual GLOBAL as first routing decision');
+  const inspectorGraph = await page.evaluate(() => {
+    const d = jsyaml.load(document.getElementById('mihomoOutput').value);
+    const global = (d['proxy-groups'] || []).find(g => g.name === 'GLOBAL');
+    return { match: d.rules.at(-1), type: global && global.type, first: global && global.proxies && global.proxies[0] };
+  });
+  assert.deepEqual(inspectorGraph, { match: 'MATCH,GLOBAL', type: 'select', first: '🪜 TIERED-AUTO' },
+    'source YAML places Tiered root first INSIDE manual GLOBAL selector');
+  assert.doesNotMatch(preview, /MATCH\\s*→\\s*Приоритетные группы серверов/, 'Inspector must not bypass GLOBAL');
+  ok('Inspector: manual GLOBAL shown; Tiered remains first eligible choice, not claimed selected');
 
   // 11. Privacy: имена эшелонов/участников — без секретов (ключи только в proxies)
   const privacyProbe = await page.evaluate(() => {
