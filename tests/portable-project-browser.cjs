@@ -26,9 +26,13 @@ const collect = page => page.evaluate(() => {
   const ctxB=await browser.newContext({acceptDownloads:true});
   const errors=[];
   let probeCount=0;
+  const dismissOnImport = new WeakSet();
   async function attach(page) {
     page.on('pageerror',e=>errors.push(e.message));
-    page.on('dialog',d=>d.accept());
+    page.on('dialog',d=>{
+      if (dismissOnImport.has(page)) { dismissOnImport.delete(page); d.dismiss(); }
+      else d.accept();
+    });
     page.on('request',r=>{if(U.some(url=>r.url().startsWith(url)))probeCount++});
     if(process.env.JS_YAML_PATH)await page.route('https://cdn.jsdelivr.net/**',r=>r.fulfill({path:process.env.JS_YAML_PATH,contentType:'text/javascript'}));
     await page.goto(pageUrl);await loaded(page);
@@ -130,7 +134,7 @@ const collect = page => page.evaluate(() => {
   assert.equal(await b.evaluate(()=>localStorage.getItem(DEVICE_IDENTITY_STORAGE_KEY)),registryBefore);
 
   // Cancelled import is an atomic no-op; malformed projects fail validation.
-  b.once('dialog',d=>d.dismiss());
+  dismissOnImport.add(b);
   await b.locator('#rbProjectFile').setInputFiles(f3);
   await b.waitForTimeout(200);
   assert.deepEqual(await collect(b),beforeFailed);
