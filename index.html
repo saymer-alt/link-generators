@@ -11357,7 +11357,7 @@ async function rbLoadProject(file) {
   const project = parsed.project;
   if (beforeRead !== rbProjectFingerprint(rbCollectProject())) return showToast('Builder изменился во время чтения файла. Загрузите проект повторно.', true);
   const counts = rbProjectCounts(project);
-  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
+  const legacyIdentityNotice = parsed.identityStatus === 'LEGACY_IDENTITY_MISSING'\n    ? '⚠ В файле нет переносимого HWID: будет использована текущая идентичность этого браузера. На другом компьютере сервис подписки может считать её новым устройством.\n' : '';\n  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + legacyIdentityNotice + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
   if (!confirm(preview)) {
     return showToast('Загрузка проекта отменена.');
   }
