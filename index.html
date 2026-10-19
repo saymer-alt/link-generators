@@ -506,6 +506,11 @@
             <div style="margin-top:8px">
               <button type="button" class="btn btn-gray" id="btnDeviceIdentityNew">➕ ID для другого устройства</button>
             </div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn btn-gray" id="rbPortableActivateBtn">🔐 Подготовить переносимый проект v2</button>
+              <button type="button" class="btn btn-gray" id="rbPortableReturnBtn" hidden>Вернуться к локальному HWID (v1)</button>
+            </div>
+            <div id="rbPortableModeNotice" class="hint" role="status" aria-live="polite" style="margin-top:6px">Текущий проект v1: HWID хранится только в браузере и не переносится в файл проекта.</div>
             <div class="hint" style="margin-top:6px">Локальное имя нужно только для удобства и не меняет <code>x-device-model</code>. «Сменить ID» создаёт новый случайный HWID только по явной команде и может быть воспринят сервисом подписки как новое устройство. Удаление удаляет запись только из этого браузера: уже созданные конфиги и записи на стороне сервиса не меняются. Сам HWID нигде не отображается и в диагностику не попадает.</div>
           </div>
         </details>
@@ -3941,6 +3946,7 @@ function deleteActiveDeviceIdentity() {
 }
 
 function subscriptionPreviewHeaders() {
+  if (rbPortableProjectState) throw new Error('Project v2: browser-preview недоступен до подключения HWID для каждого провайдера.');
   // Allowlist контракта fetchSubscription: ровно два заголовка с доказанной
   // необходимостью (x-hwid — HWID-gate Geodema/Remnawave, x-device-model —
   // подпись устройства). Больше ничего не отправляем.
@@ -10978,6 +10984,11 @@ async function buildMihomo() {
   const attemptEpoch = builderProjectEpoch;
   builderBuildError = false; builderBuildAttempts++; renderBuilderActionStatus();
   try {
+  if (rbPortableProjectState) {
+    mihomoValidationSeq++;
+    setMihomoValidationState('NOT_BUILT');
+    return buildFailure('Проект v2: Build временно заблокирован до интеграции HWID в движок (локальный HWID браузера НЕ подставляется).', true);
+  }
   if (wgUploadPending) {
     mihomoValidationSeq++;
     resetCompatSummary();
@@ -11291,7 +11302,61 @@ function copyText(text) {
 // bounded (rbParseProjectText) с подтверждением и undo; ни localStorage,
 // ни сети, ни секретов в логах/статусах.
 let rbUndoProjectState = null;
+// Project-scoped identity mapping is intentionally in RAM only and never
+// imported into link-generators.device-identities.v1/localStorage.
+let rbPortableProjectState = null;
+function rbPortableContextFromProject(project) {
+  if (project.schemaVersion !== 2) return null;
+  return {
+    subscriptionSources: JSON.parse(JSON.stringify(project.sources.subscriptionSources)),
+    identities: JSON.parse(JSON.stringify(project.identities))
+  };
+}
+function rbRenderPortableMode() {
+  const active = !!rbPortableProjectState;
+  const notice = document.getElementById('rbPortableModeNotice');
+  if (notice) notice.textContent = active
+    ? 'Проект v2: переносимые HWID внутри проекта; Build и browser-preview пока заблокированы до подключения движка. Локальный реестр не изменён.'
+    : 'Проект v1: HWID хранится только в браузере и не переносится в файл проекта.';
+  const on = document.getElementById('rbPortableActivateBtn');
+  if (on) on.disabled = active;
+  const off = document.getElementById('rbPortableReturnBtn');
+  if (off) off.hidden = !active;
+}
+// The explicit conversion does not generate an identity or alter localStorage.
+function rbActivatePortableProject() {
+  if (rbPortableProjectState) return showToast('Проект уже использует переносимый формат v2.');
+  const converted = rbPortableFromLegacy(rbCollectProject(), getActiveDeviceIdentity());
+  if (!converted.ok) return showToast('❌ v2: ' + converted.error, true);
+  if (!confirm('Создать переносимый проект v2 из текущих настроек?\n\n' +
+      'В экспортируемом файле будет сохранён реальный HWID устройства, URL/токены подписок и, если есть, приватные ключи WG/AWG. ' +
+      'Файл храните как секрет. В браузерный реестр новые HWID НЕ добавляются. ' +
+      'Build и browser-preview для v2 пока недоступны до интеграции движка.')) return;
+  rbPortableProjectState = rbPortableContextFromProject(converted.project);
+  mihomoValidationSeq++;
+  setMihomoValidationState('NOT_BUILT');
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
+  showToast('Переносимый проект v2 подготовлен. Используйте «💾 Сохранить проект».');
+}
+function rbReturnToLegacyProject() {
+  if (!rbPortableProjectState) return;
+  if (!confirm('Вернуться к проекту v1?\n\n' +
+    'Переносимые HWID и назначения подписок будут УДАЛЕНЫ из текущего рабочего проекта. ' +
+    'Build/preview снова будут использовать активный локальный HWID этого браузера, который может отличаться. ' +
+    'Сначала сохраните v2, если хотите его оставить.')) return;
+  rbPortableProjectState = null;
+  mihomoValidationSeq++;
+  setMihomoValidationState('NOT_BUILT');
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
+  showToast('Проект возвращён к v1; дальнейшие сборки используют локальный HWID.');
+}
 
+document.getElementById('rbPortableActivateBtn').addEventListener('click', rbActivatePortableProject);
+document.getElementById('rbPortableReturnBtn').addEventListener('click', rbReturnToLegacyProject);
 function rbReadPolicyCardsRaw() {
   return Array.from(document.querySelectorAll('#policyCards .policy-card')).map(card => {
     const t = sel => { const el = card.querySelector(sel); return el ? el.value : ''; };
@@ -11304,7 +11369,7 @@ function rbReadPolicyCardsRaw() {
 function rbCollectProject() {
   const opt = id => { const el = document.getElementById(id); return el ? el.value : ''; };
   const chk = id => { const el = document.getElementById(id); return !!(el && el.checked); };
-  return {
+  const project = {
     schemaVersion: RB_PROJECT_SCHEMA_VERSION,
     meta: {
       app: 'link-generators',
@@ -11341,6 +11406,12 @@ function rbCollectProject() {
     tiered: { enabled: chk('cfgTieredFailover'), cards: (window.__tierCardsState || []).map(t => ({ name: t.name, strategy: t.strategy, members: (t.members || []).slice() })) },
     passthrough: rbPassthrough ? JSON.parse(JSON.stringify(rbPassthrough)) : null
   };
+  if (rbPortableProjectState) {
+    project.schemaVersion = 2;
+    project.sources.subscriptionSources = JSON.parse(JSON.stringify(rbPortableProjectState.subscriptionSources));
+    project.identities = JSON.parse(JSON.stringify(rbPortableProjectState.identities));
+  }
+  return project;
 }
 
 // Проект → Builder. Значения присваиваются напрямую, зависимый UI
@@ -11349,9 +11420,6 @@ function rbCollectProject() {
 function rbApplyProject(project) {
   const copy = rbParseProjectText(JSON.stringify(project));
   if (!copy.ok) throw new Error('Проект не применён: ' + copy.error);
-  // Read-only parser accepts v2, but restoring it would discard HWIDs until
-  // the transactional project identity context/Preview/Build integration lands.
-  if (copy.project.schemaVersion === 2) throw new Error('Проект v2 проверен, но перенос HWID пока не включён; Builder не изменён.');
   const o = copy.project.options;
   if (copy.project.sources.autoWhitelist && o.profile !== 'router') throw new Error('Проект не применён: автоматические белые списки доступны только в профиле роутера.');
   const conflicts = awlConflicts(copy.project.sources.autoWhitelist, copy.project.tiered.enabled, o.perProxyMaster || o.perProxyTun || o.perProxySocks);
@@ -11389,6 +11457,10 @@ function rbApplyProject(project) {
   mihomoValidationSeq++;
   setMihomoValidationState('NOT_BUILT');
   rbPassthrough = copy.project.passthrough || null;
+  rbPortableProjectState = rbPortableContextFromProject(copy.project);
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
 }
 let rbPassthrough = null;
 function rbWriteProject(project) {
@@ -11456,6 +11528,11 @@ function rbWriteProject(project) {
 function rbSaveProject() {
   if (currentAwlConflicts().length || (document.getElementById('cfgAutoWhitelist').checked && document.getElementById('cfgProfile').value !== 'router')) { showToast('Разрешите конфликт белых списков перед сохранением проекта.', true); return; }
   const project = rbCollectProject();
+  const checked = rbParseProjectText(JSON.stringify(project));
+  if (!checked.ok) return showToast('❌ Файл не сохранён: ' + checked.error, true);
+  if (project.schemaVersion === 2 && !confirm('Экспортировать переносимый проект v2?\n\n' +
+      'Файл будет содержать ТОЧНЫЕ HWID, URL/токены подписок и WG/AWG ключи, если они добавлены. ' +
+      'Это чувствительные данные: не публикуйте файл и не пересылайте посторонним.')) return;
   const json = JSON.stringify(project, null, 2);
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + 'Z';
   const blob = new Blob([json], { type: 'application/json' });
@@ -11466,7 +11543,9 @@ function rbSaveProject() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  showToast('💾 Проект сохранён. В файле приватные ключи WG/AWG и токены подписок — никому его не передавайте.');
+  showToast(project.schemaVersion === 2
+    ? '💾 Переносимый проект v2 с HWID сохранён. Никому не передавайте файл.'
+    : '💾 Проект сохранён. В файле приватные ключи WG/AWG и токены подписок — никому его не передавайте.');
 }
 
 async function rbLoadProject(file) {
@@ -11478,14 +11557,15 @@ async function rbLoadProject(file) {
   if (epoch !== builderProjectEpoch) return;
   const parsed = rbParseProjectText(text);
   if (!parsed.ok) return showToast('❌ Проект: ' + parsed.error, true);
-  if (parsed.identityStatus === 'PORTABLE_V2_VALIDATED_ONLY')
-    return showToast('❌ Формат v2 проверен, но безопасный импорт HWID ещё не включён. Builder не изменён.', true);
   const project = parsed.project;
   if (beforeRead !== rbProjectFingerprint(rbCollectProject())) return showToast('Builder изменился во время чтения файла. Загрузите проект повторно.', true);
   const counts = rbProjectCounts(project);
   const legacyIdentityNotice = parsed.identityStatus === 'LEGACY_IDENTITY_MISSING'
     ? '⚠ В файле нет переносимого HWID: будет использована текущая идентичность этого браузера. На другом компьютере сервис подписки может считать её новым устройством.\n' : '';
-  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + legacyIdentityNotice + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
+  const portableNotice = parsed.identityStatus === 'PORTABLE_V2_VALIDATED_ONLY'
+    ? '⚠ Файл v2 содержит сохранённые HWID. Они останутся только внутри проекта и НЕ заменят локальный реестр браузера. ' +
+      'До включения поддержки в движке Build и получение browser-preview для v2 будут заблокированы.\\n' : '';
+  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + legacyIdentityNotice + portableNotice + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
   if (!confirm(preview)) {
     return showToast('Загрузка проекта отменена.');
   }
@@ -11495,7 +11575,9 @@ async function rbLoadProject(file) {
   const undoBtn = document.getElementById('rbUndoBtn');
   if (undoBtn) undoBtn.style.display = '';
   const subs = project.sources.mainInput.split('\n').filter(x => x.trim()).length;
-  showToast('✅ Проект загружен: ' + project.wgProfiles.length + ' WG/AWG, ' + subs + ' строк источников. Нажмите ⚡ Build Config.');
+  showToast(project.schemaVersion === 2
+    ? '✅ Переносимый проект v2 загружен. HWID сохранены; Build/preview пока недоступны.'
+    : '✅ Проект загружен: ' + project.wgProfiles.length + ' WG/AWG, ' + subs + ' строк источников. Нажмите ⚡ Build Config.');
 }
 
 function rbUndoRestore() {
