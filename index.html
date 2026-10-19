@@ -1039,7 +1039,7 @@
 // channel — metadata конкретной сборки, НЕ определение git-ветки в рантайме:
 // development build = X.Y.Z-dev / main; release promotion (main → stable) отдельно
 // переводит её на X.Y.Z / stable. UI (бейдж) читает только эти значения.
-const GENERATOR_META = Object.freeze({ version: '1.11.1', channel: 'stable' });
+const GENERATOR_META = Object.freeze({ version: '1.11.2', channel: 'stable' });
 (function renderGeneratorMeta() {
   const el = document.getElementById('genVersionBadge');
   if (el) {
