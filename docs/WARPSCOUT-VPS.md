@@ -1,1013 +1,363 @@
-# WARPSCOUT на VPS — Ubuntu 24.04 / Debian 12
+# WARPSCOUT на VPS: установка и поиск лучших WARP WG / MASQUE H3 / H2 endpoint'ов
 
-Практическая инструкция для серверов, на которых уже работает Mihomo из экосистемы
-`link-generators` / `amnezia-mihomo-gateway`.
+> **Для кого:** новый пользователь VPS с Ubuntu 24.04 или Debian 12, который хочет подключиться по SSH, установить WARPSCOUT и **за один последовательный проход получить список рабочих endpoint'ов WireGuard WARP, MASQUE H3 (QUIC) и MASQUE H2 (TCP), их задержки, потери и Cloudflare NODE / colo**.
+>
+> На VPS обычно начинаем с **обычного WG**, поскольку, в отличие от некоторых российских домашних сетей, на многих хостингах он работает без маскировки. Для MASQUE сначала используем **штатный SNI**, без выдуманных обязательных обходов. **Никаких фильтров по RU, DME или ARN по умолчанию:** VPS может находиться в любой стране, а задача первого прогона — увидеть действительную картину сети.
 
-Цель — не просто установить WARPSCOUT, а получить воспроизводимую диагностику **именно из
-сети конкретного VPS**:
+**Основной путь:** 1. SSH и зависимости → 2. установка → 3. WARP account → 4. WG → 5. MASQUE H3 → 6. MASQUE H2 → 7. чтение отчётов и итоговая таблица. Дальнейшие разделы — **по желанию**. Не нужно использовать Mihomo, менять маршруты, устанавливать AWG или запускать `find-sni`, если три основных скана уже проходят.
 
-1. найти WARP / WireGuard endpoint;
-2. найти MASQUE H3 / QUIC endpoint;
-3. найти MASQUE H2 / TCP endpoint;
-4. сравнить это с тем, как уже работающий Mihomo выводит трафик через H3 и H2;
-5. зафиксировать внешний IP, Cloudflare `colo`, WARP-state и фактическое поведение сервисов
-   вроде Gemini.
+## 0. Перед началом: важные отличия VPS от Keenetic
 
-Актуальный upstream: [vernette/warpscout](https://github.com/vernette/warpscout).
+- Команды ниже вводятся **на самом VPS**, в Linux SSH. Рассчитаны на **root**. Если вошли обычным пользователем с правом sudo, один раз выполните `sudo -i` и продолжайте уже в root-сессии. **Не меняйте пользователя посередине:** аккаунт WARPSCOUT хранится в текущем каталоге.
+- Нужны доступ в интернет и свободное место для небольших отчётов. Примеры проверены по синтаксису WARPSCOUT 0.16.0 и документации upstream; точные результаты зависят от сети VPS.
+- **WARPSCOUT — сканер, не VPN-маршрутизатор.** Он самостоятельно тестирует WARP и не должен менять настройки существующего Mihomo/Xray. Если на хосте глобальная TUN/policy-routing уже перехватывает **весь трафик самого VPS**, результаты могут отражать этот перехват, а не прямой канал хостера.
+- **NODE / NODE LOCATION** — узел Cloudflare, наблюдавшийся внутри WARP-туннеля; **SEEN AS** — наблюдаемая страна выхода. Они могут отличаться от страны VPS и друг от друга. Узел может измениться со временем.
+- Никогда не публикуйте `warpscout-account.json`, `warp-wg.conf`, `warp-h2.yaml`, `warp-h3.yaml`: в конфигурациях есть **приватные ключи**.
 
-> WARPSCOUT запускается как обычная программа и сам по себе не заменяет и не перезапускает Mihomo.
-> Скан идёт из сетевого namespace хоста. Если на сервере есть глобальный TUN/policy-routing,
-> который перехватывает вообще весь локальный трафик, это надо учитывать отдельно.
+## 1. Подключиться по SSH и установить зависимости
 
-## 0. Полевой контракт: node/colo — наблюдаемое состояние (Sep–Oct 2026)
+Войдите на VPS своим обычным SSH-клиентом. Для дальнейших команд нужна root-сессия:
 
-Все полевые наблюдения в этой и соседних WARPSCOUT-инструкциях относятся к
-**сентябрю–октябрю 2026** (конкретные даты указаны в разделах). Это наблюдаемые состояния,
-а не характеристики, которые можно один раз измерить и записать навсегда.
+~~~bash
+whoami
+~~~
 
-Главный контракт, который надо держать в голове:
+Если результат `root`, продолжайте. Если нет, выполните:
 
-- **Cloudflare node / colo — это наблюдаемое текущее состояние маршрута, а не постоянное
-  свойство найденного IP:port или VPS.** Anycast-маршрут определяется BGP/peering
-  провайдера и traffic-engineering Cloudflare, поэтому без смены endpoint'а, IP или самого
-  сервера «вчера FRA, сегодня ARN» — нормальная реальность (подтверждённый полевой дрифт —
-  в разделе 15).
-- **Три уровня «работает» не надо смешивать:**
-  1. *reachable* — endpoint отвечает (handshake проходит);
-  2. *tunnel works* — через endpoint поднимается туннель и передаёт данные;
-  3. *exit colo подходит сервису* — фактический Cloudflare path/colo устраивает целевой
-     сервис (например Gemini).
-  Рабочий туннель автоматически не означает подходящий выход, и наоборот.
-- **Не хардкодьте чужие endpoint'ы.** Endpoint'ы в примерах этой документации — исторические
-  наблюдения конкретных сканов, а не рекомендации и не «вечные хорошие» адреса. Свои рабочие
-  endpoint'ы ищутся сканом в своей сети и перепроверяются по триггерам из раздела 15.
-- Идея на будущее (не реализовано): автоматическая периодическая revalidation colo
-  (cron-скан + запись NODE в лог). Сейчас перепроверка — ручная операция.
+~~~bash
+sudo -i
+~~~
 
-## 1. Установка зависимостей
+Обновите список пакетов и установите нужное:
 
-Ubuntu 24.04 и Debian 12:
+~~~bash
+apt-get update && apt-get install -y curl ca-certificates tar jq
+~~~
 
-```bash
-sudo apt update
-sudo apt install -y curl ca-certificates tar jq
-```
+Если команда установки пакетов завершилась ошибкой — сначала устраните её, иначе следующие шаги могут не сработать. `jq` пригодится для последующей диагностики JSON.
 
-Если вы уже вошли как `root`, `sudo` не нужен:
+## 2. Установить WARPSCOUT и проверить запуск
 
-```bash
-apt update
-apt install -y curl ca-certificates tar jq
-```
+Выполните **одну** команду установки из официального `vernette/warpscout`:
 
-`jq` нужен только для удобного чтения JSON в диагностике.
+~~~bash
+INSTALL_DIR=/usr/local/bin sh -c "$(curl -fsSL https://raw.githubusercontent.com/vernette/warpscout/master/install.sh)"
+~~~
 
-Если `sudo` пишет `unable to resolve host <hostname>`, это отдельная проблема
-локального hostname/`/etc/hosts`; она не связана с WARPSCOUT и обычно не мешает
-самой установке. Исправить её лучше отдельно, прежде чем использовать `sudo` дальше.
-
-## 2. Установка WARPSCOUT
-
-Официальный install script upstream:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/vernette/warpscout/master/install.sh | sh
-```
-
-По умолчанию на обычном Linux бинарник ставится в:
-
-```text
-~/.local/bin/warpscout
-```
-
-Для пользователя `root` это:
-
-```text
-/root/.local/bin/warpscout
-```
-
-Сразу после install script сначала проверьте **сам бинарник по прямому пути**:
-
-```bash
-~/.local/bin/warpscout version
-```
-
-Если эта команда работает, WARPSCOUT установлен корректно независимо от состояния `PATH`.
-
-Если затем обычная команда:
-
-```bash
-warpscout version
-```
-
-отвечает `command not found`, проблема только в `PATH`. Добавьте каталог
-**в текущую SSH-сессию**:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-warpscout version
-```
-
-Для следующих login-сессий добавьте ту же строку в `~/.profile`:
-
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile
-```
-
-Либо после записи перечитайте профиль в текущем shell:
-
-```bash
-. ~/.profile
-```
+Здесь **явно задан путь `/usr/local/bin`**, поэтому на обычном VPS команда `warpscout` доступна сразу — без `export PATH`, настройки `~/.profile` и поиска `~/.local/bin`. Установщик скачивает подходящий Linux AMD64/ARM64 release. Как и перед запуском любого удалённого установщика, источник кода должен вызывать у вас доверие.
 
 Проверка:
 
-```bash
+~~~bash
 warpscout version
-```
+~~~
 
-Если `~/.local/bin/warpscout` запускается, а `warpscout` отвечает
-`command not found`, установка исправна — проблема только в `PATH`.
+Если отображается версия (например, `0.16.0`), установка завершена. Если получаете `command not found`, проверьте бинарник напрямую:
 
-Install script умеет обновлять уже установленную версию повторным запуском.
+~~~bash
+/usr/local/bin/warpscout version
+~~~
 
-### Проверено на реальном VPS
+Если напрямую работает, проверьте системный `PATH` этой shell-сессии и продолжайте с `/usr/local/bin/warpscout`. **Не устанавливайте WARPSCOUT повторно только из-за PATH.**
 
-Проверенный smoke-test от 2026-09-23:
+## 3. Подготовить каталог, один раз зарегистрировать WARP
 
-```text
-Ubuntu 24.04.5 LTS
-x86_64 / amd64
-WARPSCOUT 0.16.0
-install path для root: /root/.local/bin/warpscout
-```
+Создайте каталог и перейдите в него. **Все дальнейшие команды выполняются из него**:
 
-Наблюдавшийся сценарий после установки:
+~~~bash
+mkdir -p /root/warpscout-data && chmod 700 /root/warpscout-data && cd /root/warpscout-data && umask 077
+~~~
 
-```text
-~/.local/bin/warpscout    -> запускается
-warpscout version         -> command not found
-```
+Проверьте, есть ли уже аккаунт (при первом запуске его, скорее всего, не будет):
 
-означал именно отсутствие `/root/.local/bin` в текущем `PATH`, а не неудачную
-установку WARPSCOUT. После `export PATH="$HOME/.local/bin:$PATH"` команда становится
-доступна в той же SSH-сессии.
+~~~bash
+ls -lh warpscout-account.json
+~~~
 
-## 3. Отдельный каталог для аккаунта
+Если файла нет, зарегистрируйте аккаунт:
 
-`warpscout register` пишет `warpscout-account.json` в **текущую директорию**. Лучше сразу
-дать ему постоянное место:
-
-```bash
-mkdir -p ~/warpscout-data
-chmod 700 ~/warpscout-data
-cd ~/warpscout-data
-```
-
-Регистрация:
-
-```bash
+~~~bash
 warpscout register
-chmod 600 warpscout-account.json
-```
+~~~
 
-Файл содержит токены и приватные ключи. Не добавляйте его в Git и не пересылайте публично.
+После успеха:
 
-Повторные команды WARPSCOUT будут сообщать
-`Using cached WARP account from warpscout-account.json` — это **нормальное поведение**:
-аккаунт регистрируется один раз и переиспользуется; повторный `register` перед каждым
-сканом не нужен.
+~~~bash
+chmod 600 warpscout-account.json && ls -lh warpscout-account.json
+~~~
 
-### Как открыть warpscout-account.json через nano
+Файл `warpscout-account.json` — **данные аккаунта, не команда**. Не открывайте его в публичных логах и не выкладывайте на GitHub. Если файл уже существует и WARPSCOUT его использует, `register` **повторно не требуется**. Сообщение `Using cached WARP account from warpscout-account.json` при скане — нормальное.
 
-Если позже понадобится посмотреть или вручную проверить содержимое файла:
+При каждом новом SSH-подключении возвращайтесь в каталог:
 
-```bash
-cd ~/warpscout-data
-nano warpscout-account.json
-```
+~~~bash
+cd /root/warpscout-data && umask 077
+~~~
 
-Если вы уже находитесь в другой директории, можно открыть его полным путём:
+**Теперь всё готово для трёх основных сканов.**
 
-```bash
-nano ~/warpscout-data/warpscout-account.json
-```
+## 4. Основной скан №1 — обычный WARP / WireGuard (WG)
 
-Полезные клавиши `nano`:
+**Первым делом найдём список лучших WG endpoint'ов с этого VPS. Фильтры стран и узлов не нужны.**
 
-- `Ctrl+O` — сохранить файл;
-- `Enter` — подтвердить имя файла после `Ctrl+O`;
-- `Ctrl+X` — выйти;
-- если ничего не меняли, `Ctrl+X` просто закроет редактор;
-- если изменения были, `nano` спросит, сохранять ли их.
+~~~bash
+warpscout scan -p wg -P -jt 10 -o wg-report.txt -conf warp-wg.conf
+~~~
 
-Для обычной диагностики файл лучше **только просматривать**, а не редактировать вручную:
-WARPSCOUT сам управляет account ID, токенами и ключами. Перед копированием содержимого в чат
-или тикет обязательно удаляйте `token`, `private_key` и другие секретные значения.
+Что происходит:
 
-Все следующие команды этой инструкции удобно выполнять из:
+- `-p wg` — чистый WireGuard WARP, **не** AWG и **не** MASQUE;
+- `-P` — полноценная проверка туннеля с `TUN PING` и `LOSS`, а не только доступности UDP-порта;
+- `-jt 10` — явно задаём десять параллельных проверок; если VPS перегружен, снизьте до `4`;
+- `-o wg-report.txt` — сохранит **список всех рабочих endpoint'ов** и лучшие варианты по узлам/подсетям;
+- `-conf warp-wg.conf` — **в этом же скане** запишет нативный WG-конфиг лучшего кандидата.
 
-```bash
-cd ~/warpscout-data
-```
+После скана обязательно смотрите итоговую таблицу: `Working`, `Torn down`, `TUN PING`, `LOSS`, `SEEN AS`, `NODE`, `NODE LOCATION`. Низкий `ENDPOINT PING` сам по себе не значит, что туннель работает.
 
----
+Проверьте, что оба файла появились:
 
-## 4. Сначала снять baseline с клиента
+~~~bash
+ls -lh wg-report.txt warp-wg.conf
+~~~
 
-Перед серверными сканами сначала зафиксируйте, что видит внешний сервис от **реального
-клиентского трафика через уже работающий Mihomo на этом VPS**.
+Посмотреть **только** адрес выбранного WG endpoint'а (без ключа):
 
-1. Подключите клиент к текущему **MASQUE H3**-выходу этого VPS.
-2. Откройте в браузере:
+~~~bash
+grep -i '^Endpoint[[:space:]]*=' warp-wg.conf
+~~~
 
-   https://www.cloudflare.com/cdn-cgi/trace
+**Не надо отдельно запускать `scan -best` и `scan -conf`** — это повторные независимые сканы, в которых выбор может измениться. Один законченный прогон уже создал и список, и конфиг.
 
-3. Сохраните как минимум строки:
+## 5. Основной скан №2 — MASQUE H3 / QUIC
 
-```text
-ip=
-loc=
-colo=
-warp=
-```
+Для стандартного VPS сначала используем **обычный MASQUE H3 с SNI по умолчанию**. Не копируем SNI `4pda.to` из старых полевых испытаний как обязательное значение.
 
-4. Переключите клиент на **MASQUE H2** того же VPS.
-5. Откройте ту же ссылку ещё раз и сохраните те же поля.
+~~~bash
+warpscout scan -p masque -P -jt 10 -o h3-report.txt -conf warp-h3.yaml -conf-type mihomo
+~~~
 
-Это даёт исходное сравнение H3/H2 с точки зрения **реального пользовательского трафика**,
-до любых изменений на сервере. Поле `colo` показывает Cloudflare PoP, обслуживший этот
-HTTP-запрос. Не делайте вывод только по `colo`: рядом сохраняйте `ip`, `loc` и
-`warp`.
+- `-p masque` — **H3 / QUIC**;
+- `-P` — проверка передачи данных, задержки и потерь внутри H3-туннеля;
+- `-o h3-report.txt` — подробный список протестированных MASQUE H3 endpoint'ов;
+- `-conf warp-h3.yaml -conf-type mihomo` — готовый блок `proxies:` для Mihomo (с приватным ключом), полученный из **того же прогона**.
 
-Если H3 и H2 уже здесь дают разные значения, это важная зацепка для дальнейшей диагностики.
-Если значения совпадают, а Gemini ведёт себя по-разному, проблема, вероятно, не сводится
-только к очевидной разнице внешнего IP/страны/Cloudflare PoP.
+После успеха:
 
----
+~~~bash
+ls -lh h3-report.txt warp-h3.yaml
+~~~
 
-## 5. Затем снять baseline самого VPS
+В конечном выводе обратите внимание на `Working`, `Torn down`, `NODE` и `NODE LOCATION`. Для H3 у WARPSCOUT небольшое фиксированное множество anycast endpoint'ов; не нужно пытаться искать «новый colo» бесконечным перебором IP.
 
-До WARP/MASQUE полезно записать, что видно **напрямую с сервера**:
+**Если H3 не передал данные,** переходите к разделу 9: можно подобрать другой SNI. Но успешный H3 не требует `find-sni`.
 
-```bash
-curl -4s https://www.cloudflare.com/cdn-cgi/trace   | grep -E '^(ip|loc|colo|warp)='
-```
+## 6. Основной скан №3 — MASQUE H2 / TCP
 
-Cloudflare официально рекомендует `/cdn-cgi/trace` для определения обслуживающего дата-центра;
-поле `colo` — трёхбуквенный IATA-код Cloudflare PoP.
+H2 — отдельный транспорт Cloudflare через TCP. Проверяйте его **отдельно от H3**:
 
-Дополнительно:
+~~~bash
+warpscout scan -p masque-h2 -P -jt 10 -o h2-report.txt -conf warp-h2.yaml -conf-type mihomo
+~~~
 
-```bash
-curl -4s https://ifconfig.co/json | jq .
-```
+- `-p masque-h2` — **H2 / TCP**;
+- `-P` — проверка реальной передачи данных внутри H2;
+- `-o h2-report.txt` — результат скана H2, независимо от H3;
+- `-conf warp-h2.yaml -conf-type mihomo` — YAML для Mihomo. У H2 будет `network: h2`.
 
-Сохраните этот baseline: потом его можно сравнить с H3/H2.
+После успеха:
 
-### Проверенное наблюдение: GeoIP-источники могут расходиться
+~~~bash
+ls -lh h2-report.txt warp-h2.yaml
+~~~
 
-На контрольном VPS при реальном запуске 2026-09-23 один и тот же прямой серверный выход
-одновременно дал:
+Обычный H2 в WARPSCOUT может находить порт `500`, `1701` или `4500` и другие рабочие порты. Это **наблюдаемый результат сканера**, а не ошибка. В link-generators встроенная стратегия H2 Safe Ports Only (`443, 8443, 4443, 8095`) применяется **только когда нет импортированного точного endpoint'а**; импорт `type: masque` сохраняет выбранный WARPSCOUT `server:port` в Advanced MASQUE.
 
-- Cloudflare `/cdn-cgi/trace`: `loc=SE`, `colo=FRA`, `warp=off`;
-- `ifconfig.co/json`: страна `DE`.
+**Для MASQUE H2 и H3 фильтры `-node`, `-country`, `-exclude-node` и `-exclude-country` не применяются**: по документации WARPSCOUT выбор node в MASQUE определяется текущим маршрутом сети, а не подбором отдельного IP. Даже если VPS размещён в Европе, заранее заказывать конкретный `FRA` или `ARN` здесь нельзя.
 
-Это не противоречие в WARPSCOUT: разные сервисы используют разные геолокационные данные.
-Поэтому при сравнении H2/H3 нельзя опираться на один GeoIP-источник — сохраняйте рядом
-Cloudflare `loc/colo/warp`, внешний IP и независимый GeoIP.
+## 7. Что получилось: читаем отчёты и сравниваем NODE
 
-В том же прямом baseline обычный:
+Все три сканирования закончились успешно? Теперь можно **не выполнять дополнительных сканов**. На сервере должны быть:
 
-```bash
-curl -4s https://speed.cloudflare.com/meta | jq .
-```
+| Транспорт | Список результатов | Готовая конфигурация |
+|---|---|---|
+| WARP WG | `wg-report.txt` | `warp-wg.conf` |
+| MASQUE H3 / QUIC | `h3-report.txt` | `warp-h3.yaml` |
+| MASQUE H2 / TCP | `h2-report.txt` | `warp-h2.yaml` |
 
-вернул `{}`. Не используйте пустой прямой ответ как доказательство неисправности
-WARPSCOUT: сам WARPSCOUT обращается к `speed.cloudflare.com/meta` **через поднятый
-тестовый WARP-туннель** в своей фазе проверки и отображает результат как `SEEN AS` /
-`NODE`.
+Проверить названия и размеры:
 
----
+~~~bash
+ls -lh wg-report.txt h3-report.txt h2-report.txt warp-wg.conf warp-h3.yaml warp-h2.yaml
+~~~
 
-## 6. Найти WARP / WireGuard endpoint с этого VPS
+Быстро прочитать **отчёты, а не файлы с приватными ключами**:
 
-Обычный WARP:
+~~~bash
+head -n 35 wg-report.txt
+~~~
 
-```bash
-warpscout scan -p wg -P
-```
+~~~bash
+tail -n 35 wg-report.txt
+~~~
 
-Лучший адрес одной строкой:
+~~~bash
+head -n 35 h3-report.txt
+~~~
 
-```bash
-warpscout scan -p wg -P -best
-```
+~~~bash
+head -n 35 h2-report.txt
+~~~
 
-Сразу получить native-конфиг для нашего Mihomo Builder:
+В отчёте WG ищите **лучший endpoint по каждой подсети и Cloudflare NODE** (и, при необходимости, полный список рабочих IP:port). Это важнее, чем просто один `-best`: у разных endpoint'ов могут быть разные NODE и разные показатели.
 
-```bash
-warpscout scan -p wg -P -conf warp.conf
-```
+Для сравнения запишите такую небольшую таблицу (значения **берутся из ваших сканов**, не из примеров):
 
-Дальше `warp.conf` можно забрать с VPS и загрузить кнопкой
-**«Загрузить .conf / .awg»** в Mihomo Config Builder.
+| Протокол | Working / Probed | Лучший IP:port | TUN PING / LOSS | NODE / NODE LOCATION | SEEN AS |
+|---|---|---|---|---|---|
+| WG | из WG | из WG | из WG | из WG | из WG |
+| H3 | из H3 | из H3 | из H3 | из H3 | из H3 |
+| H2 | из H2 | из H2 | из H2 | из H2 | из H2 |
 
-Если обычный WG на конкретной сети сервера режется:
+Расшифровка показателей:
 
-```bash
-warpscout scan -p awg -P -gen-i1 quic
-```
+- **Working** — туннель действительно прошёл проверку; **Torn down** — handshake был, но передача данных оборвалась.
+- **ENDPOINT PING** — обычная задержка до удалённого IP; **TUN PING** и **LOSS** — внутри работающего туннеля. Для практического выбора обычно предпочтительны `LOSS 0%` и меньший `TUN PING`.
+- **SEEN AS** — наблюдаемая страна WARP-выхода. **NODE** — узел Cloudflare, например `FRA` / `ARN` / `DME`; **NODE LOCATION** — его расположение. Не путайте эти величины со страной самого VPS.
+- В рамках одного MASQUE-скана NODE обычно общий для найденных endpoint'ов. Смена MASQUE IP:port **не гарантирует** смену NODE.
 
-Про `-gen-i1 quic`: это смена «первого пакета» AWG-маскировки на QUIC-подобный —
-актуальный способ прохода через сети, где plain WireGuard режется. Upstream
-поддерживает и другие варианты (`dns`, `sip`, `stun`, `random`); в наших полевых
-наблюдениях Sep–Oct 2026 рабочим выбором был именно `quic`.
+Если скан сообщает «no working endpoints found», это **результат проверки данного протокола**, а не сбой установки WARPSCOUT. Сначала прочитайте раздел 9, а не переустанавливайте программу.
 
-О времени: полный `-P`-скан в наших наблюдениях занимал порядка **15–20 минут**
-на VPS. Upstream обещает «пару минут» только для базового скана без `-P`; точное
-время зависит от сети, `-jt` и протокола и **не гарантируется** — закладывайте
-запас и не прерывайте скан на полпути.
+## 8. Как дополнительно проверить Cloudflare colo и реальный выход
 
----
+Сначала выясните, куда выходит **сам VPS без WARP**, чтобы иметь сравнение:
 
-## 7. Найти MASQUE H3 / QUIC с этого VPS
+~~~bash
+curl -4fsS https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|loc|colo|warp)='
+~~~
 
-```bash
-warpscout scan -p masque -masque-sni 4pda.to
-```
+Это *direct baseline*, а не тест выбранного WG/H2/H3. Сам по себе этот ответ **не показывает WARP NODE найденного endpoint'а**. `colo=` в `cdn-cgi/trace` — Cloudflare PoP для конкретного HTTP-запроса; `NODE` WARPSCOUT — результат внутри тестового WARP-туннеля. Их нужно фиксировать отдельно.
 
-Только лучший endpoint:
+Если на VPS **уже работает Mihomo и его mixed-port SOCKS5 доступен на `127.0.0.1:7890`**, можно выполнить чтение **текущего**, уже выбранного прокси без изменения маршрутов:
 
-```bash
-warpscout scan -p masque -masque-sni 4pda.to -best
-```
+~~~bash
+curl -x socks5h://127.0.0.1:7890 -fsS https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|loc|colo|warp)='
+~~~
 
-Получить Mihomo YAML / MASQUE identity:
+~~~bash
+curl -x socks5h://127.0.0.1:7890 -fsS https://speed.cloudflare.com/meta | jq .
+~~~
 
-```bash
-warpscout scan -p masque -masque-sni 4pda.to   -conf - -conf-type mihomo
-```
+**Это проверка текущего proxy в Mihomo, а не обязательно найденных WARPSCOUT файлов.** Чтобы честно проверить *конкретный* новый WG/H2/H3 endpoint, сначала импортируйте соответствующий конфиг в подходящий клиент, выберите этот outbound и только потом повторите проверку. Если Mihomo отсутствует или используется другой порт, **пропустите эти команды** — для первичного результата достаточно WARPSCOUT.
 
-В выводе H3 будет:
+Не делайте вывод «сервис работает/не работает» только по стране GeoIP или `colo`. Сам факт рабочего туннеля — не гарантия, что целевой сайт примет именно этот WARP exit.
 
-```yaml
-type: masque
-server: ...
-port: ...
-sni: 4pda.to
-private-key: ...
-public-key: ...
-ip: 172.16.0.2
-```
+## 9. Если возникли проблемы: отдельные ветки, не обязательные шаги
 
-и **не будет** `network: h2`.
+### WG работает, но нужен определённый NODE (например, исключить ARN)
 
+**Только после просмотра первого полного отчёта WG** при необходимости можно повторить скан с явно выбранным фильтром:
 
-YAML можно вставить во вкладку **WARP MASQUE Links** и нажать **«Распарсить»**. Контракт
-импорта (v1.9, issue #125): identity-поля переносятся как раньше; найденный `type: masque`
-endpoint (сервер:порт) и его SNI попадают в секцию «⚙️ Advanced MASQUE» как **точные**
-значения и используются дословно — плашка «🛰 WARPSCOUT / Mihomo MASQUE detected» объясняет,
-какой транспорт импортирован как точный, а какой остался на встроенной стратегии генератора.
-Приоритет на транспорт: точный endpoint → свой список портов → встроенная стратегия.
-Помните: endpoint/node/colo — **наблюдение скана**, а не вечное свойство (доступность и
-exit меняются); при деградации сначала перосканируйте. Если очистить точные поля —
-генератор вернётся к собственной H3/H2 стратегии.
-После импорта и Build проверьте **фактический** node/colo выхода
-через `/cdn-cgi/trace` и `speed.cloudflare.com/meta` (раздел 11): импорт переносит identity,
-но не задаёт и не гарантирует конкретный Cloudflare path.
+~~~bash
+warpscout scan -p wg -P -jt 10 -exclude-node ARN -o wg-without-arn.txt -conf warp-wg-without-arn.conf
+~~~
 
+Или оставить только узел, который **уже видели в отчёте**, например `FRA`:
 
----
+~~~bash
+warpscout scan -p wg -P -jt 10 -node FRA -o wg-fra-report.txt -conf warp-wg-fra.conf
+~~~
 
-## 8. Найти MASQUE H2 / TCP с этого VPS
+Это **примеры**, а не универсальная политика! На другом VPS ни `ARN`, ни `FRA` могут вообще не встретиться. `no endpoint landed on node FRA` или `every endpoint was excluded by node ARN` означает, что текущая выборка не дала альтернативы. Более широкий поиск через `-n 20` возможен, но **не обещает** смены Cloudflare NODE.
 
-```bash
-warpscout scan -p masque-h2 -masque-sni 4pda.to
-```
+### H2 или H3 не работает со штатным SNI
 
-Лучший endpoint:
+WARPSCOUT по умолчанию использует `consumer-masque.cloudflareclient.com`. На некоторых маршрутах помогает другой SNI, но **не копируйте один SNI для двух транспортов без проверки**.
 
-```bash
-warpscout scan -p masque-h2 -masque-sni 4pda.to -best
-```
+Для H3:
 
-Mihomo YAML:
+~~~bash
+warpscout find-sni -p masque -jt 10
+~~~
 
-```bash
-warpscout scan -p masque-h2 -masque-sni 4pda.to   -conf - -conf-type mihomo
-```
+Для H2:
 
-У H2 в блоке будет:
+~~~bash
+warpscout find-sni -p masque-h2 -jt 10
+~~~
 
-```yaml
-network: h2
-```
+`find-sni` выводит кандидатов и рекомендацию для повторного скана. Замените **`www.apple.com` в примере ниже на реально найденное значение для соответствующего протокола**:
 
-WARPSCOUT может выбрать `500`, `1701` или `4500`. Это корректный результат его
-сканирования, но наш генератор **не обязан наследовать этот порт**. В режиме Safe Ports Only
-он использует только:
+~~~bash
+warpscout scan -p masque -P -jt 10 -masque-sni www.apple.com -o h3-custom-sni-report.txt -conf warp-h3-custom-sni.yaml -conf-type mihomo
+~~~
 
-```text
-443, 8443, 4443, 8095
-```
+~~~bash
+warpscout scan -p masque-h2 -P -jt 10 -masque-sni www.apple.com -o h2-custom-sni-report.txt -conf warp-h2-custom-sni.yaml -conf-type mihomo
+~~~
 
-Если найденный порт нужен дословно — импортируйте YAML (точный endpoint появится в
-«⚙️ Advanced MASQUE») или впишите свой список портов в поле «H2 ports»; приоритет:
-точный endpoint → свой список портов → встроенная стратегия.
+**Успех `find-sni` не заменяет полноценный `scan -P`**: на фильтрованных сетях бывает, что SNI подходит для handshake, но передача данных обрывается. Если MASQUE недоступен на данном VPS, не выдавайте результат WG за доказательство работы H2/H3 — это отдельные протоколы.
 
-Это намеренная anti-DPI стратегия проекта.
+### WG не проходит на конкретном VPS (исключение для основной задачи)
 
----
+На некоторых VPS UDP/WG всё же фильтруется. Тогда, **только как резервный вариант**, протестируйте AWG:
 
-## 9. Что означают SEEN AS и NODE на VPS
+~~~bash
+warpscout scan -p awg -P -jt 10 -gen-i1 quic -o awg-fallback-report.txt -conf warp-awg-fallback.conf
+~~~
 
-WARPSCOUT во второй фазе поднимает настоящий туннель и запрашивает
-`https://speed.cloudflare.com/meta`.
+Но на типовом неограниченном VPS **не нужно** начинать с AWG или тратить время на подбор `I1`.
 
-Из ответа он показывает:
+### Нужна дополнительная проверка скорости
 
-- **SEEN AS** — страну WARP-выхода;
-- **NODE** — Cloudflare edge node;
-- **NODE LOCATION** — расположение этого узла.
+Обычный порядок результатов строится по качеству туннеля/задержке. Для измерения скорости скачивания и выбора по ней:
 
-Для VPS это особенно полезно: GeoIP самого хостинга и фактический регион WARP могут
-отличаться.
+~~~bash
+warpscout scan -p wg -P -jt 10 -speed -best-by speed -o wg-speed-report.txt -conf warp-wg-speed.conf
+~~~
 
-Важно для MASQUE: upstream WARPSCOUT указывает, что в одном MASQUE-прогоне все endpoint'ы
-выходят через одну ноду; выбор ноды зависит от сети, из которой идёт соединение, а не от
-перебора конкретного MASQUE IP. Поэтому «просканировать ещё сто H2 IP» не означает
-«получить сто разных colo».
+Это отдельная долгая фаза и дополнительный трафик. По данным upstream, она тестирует **выбранные по ping кандидаты**, а не все IP в полном скане. Сами значения — измерение одиночного потока, не максимальная скорость многопоточного speedtest.
 
-Как читать остальные поля и сообщения вывода:
+### «Unknown command», нет файлов, `command not found`
 
-- **Working / torn down** — endpoint поднял тестовый туннель и передал данные / туннель
-  был разорван на середине; при `-P` torn-down endpoint'ы отфильтровываются и не участвуют
-  в выборе лучшего;
-- **Best** (`-best`) — один лучший адрес `ip:port` одной строкой, выбирается по TUN ping/loss;
-  `-exclude-node`/`-exclude-country` (и `-node`/`-country`) применяются **до** выбора лучшего:
-  фильтры сужают выборку, из которой `-best` берёт результат;
-- **Junk/маскировка** — для AWG WARPSCOUT подбирает маскировочные параметры, проходящие
-  фильтр (отдельная upstream-команда `find-junk`);
-- `no endpoint landed on node X` и `every endpoint was excluded by node X` — **не ошибки
-  программы**, а честный ответ скана: в текущем маршруте такие node не видны. Troubleshooting
-  и триггеры перепроверки — в разделе 15.
+| Симптом | Что делать |
+|---|---|
+| `warpscout: command not found` | Проверьте `/usr/local/bin/warpscout version` — возможно, отличается `PATH` |
+| `warpscout-account.json: no such file` | Вернитесь `cd /root/warpscout-data`; при первой установке выполните `warpscout register` |
+| `invalid value "" for flag -jt` | Здесь в примерах **число `-jt 10`**, нет зависимости от `$JT` |
+| Порты доступны, но `0 Working` | Handshake / доступность UDP — не подтверждение data path, смотрите `Torn down` и протокол |
+| Нет `warp-h2.yaml` или `warp-h3.yaml` | Проверьте итог скана: `-conf` создаётся при наличии подходящего endpoint'а; при провале протокола результат не выдумывается |
+| `no MASQUE endpoint passed data` | Попробуйте `find-sni`, затем полноценный `scan -P` или проверьте другую сеть |
+| Вывод показывает только один NODE | Это возможно по текущей BGP/peering-схеме; на MASQUE обычно так и ожидается |
+| VPS в одной стране, `SEEN AS` или `NODE LOCATION` в другой | Это не ошибка: маршрутизация WARP/Cloudflare не обязана совпадать с GeoIP хостера |
 
----
+## 10. Импорт результатов в link-generators (не обязателен для сканирования)
 
-# Диагностика уже работающего Mihomo
+Откройте [WARP & Mihomo Unified Generator](https://saymer-alt.github.io/link-generators/).
 
-Следующий раздел нужен, когда WARPSCOUT уже показал картину сети VPS, а надо понять,
-**что происходит сейчас в реальном трафике Mihomo**.
+**WG:** файл `warp-wg.conf` импортируется в **Mihomo Config Builder → Загрузить .conf / .awg**. После сборки проверьте YAML, работу целевого Mihomo и DNS/routing. Не путайте экспорт WARPSCOUT с уже установленным системным WG VPN.
 
-Примеры ниже соответствуют обычному output нашего проекта:
+**MASQUE H3/H2:** содержимое `warp-h3.yaml` и `warp-h2.yaml` по отдельности можно вставить во вкладку **WARP MASQUE Links → Импорт WARP YAML → Распарсить**. Для распознанных `proxies:` с `type: masque` генератор переносит WARP identity, per-transport SNI и **точный найденный endpoint**. Если импортируете оба профиля, следите за согласованностью identity (выбранные H2/H3 не должны иметь разные ключи/IP). Для H2 в YAML будет `network: h2`.
 
-- `mixed-port: 7890`;
-- `external-controller: 0.0.0.0:9090`;
-- основная группа `GLOBAL`;
-- controller secret пустой.
+**Не публикуйте YAML с `private-key`.** Импорт в генератор сам по себе **не доказывает** работоспособность новой конфигурации или нужный colo на production Mihomo. После импорта обязателен отдельный реальный тест.
 
-Если вы изменили эти значения — подставьте свои.
+## 11. Что сохранить о каждом VPS
 
-## 10. Узнать, какой proxy сейчас выбран
+Для своих заметок достаточно:
 
-На самом VPS:
+~~~text
+Провайдер / страна / ASN VPS, дата и время
+WARPSCOUT version
+WG: Working / Probed; несколько лучших endpoint'ов; TUN PING / LOSS; NODE; SEEN AS
+MASQUE H3: Working / Probed; лучший endpoint; TUN PING / LOSS; NODE; SEEN AS
+MASQUE H2: Working / Probed; лучший endpoint; TUN PING / LOSS; NODE; SEEN AS
+При необходимости: прямой VPS trace и trace текущего Mihomo
+Есть ли нежелательный routing drift относительно прежнего скана?
+~~~
 
-```bash
-curl -s http://127.0.0.1:9090/proxies/GLOBAL | jq '{now, all}'
-```
+**Cloudflare NODE — наблюдение момента, не пожизненное свойство endpoint'а.** Если через несколько дней `FRA` превратился в `ARN`, это не значит, что WARPSCOUT неверно работал раньше. Влияют сеть VPS, BGP/peering и Cloudflare.
 
-Пример смысла результата (имена профилей текущей терминологии — H3 / QUIC + H2 / TCP):
+### Дополнительные материалы
 
-```json
-{
-  "now": "WARP-MASQUE-H3-QUIC",
-  "all": [
-    "WARP-MASQUE-H3-QUIC",
-    "WARP-MASQUE-H2-TCP-443",
-    "REJECT"
-  ]
-}
-```
-
-Если у controller настроен `secret`, к запросам API добавьте:
-
-```bash
--H "Authorization: Bearer YOUR_SECRET"
-```
-
-## 11. Проверить текущий выход через Mihomo
-
-Запрос обязательно отправляем **через mixed-port**, а не напрямую:
-
-```bash
-curl -x socks5h://127.0.0.1:7890 -s   https://www.cloudflare.com/cdn-cgi/trace   | grep -E '^(ip|loc|colo|warp)='
-```
-
-Для WARP-трафика поле:
-
-```text
-warp=on
-```
-
-является полезной проверкой, что запрос действительно видится Cloudflare как WARP.
-
-Полный ответ Cloudflare meta:
-
-```bash
-curl -x socks5h://127.0.0.1:7890 -s   https://speed.cloudflare.com/meta | jq .
-```
-
-Независимая проверка внешнего адреса:
-
-```bash
-curl -x socks5h://127.0.0.1:7890 -s   https://ifconfig.co/json | jq .
-```
-
-### Не смешивать NODE и colo без проверки
-
-- `NODE` WARPSCOUT приходит из `speed.cloudflare.com/meta` внутри проверяемого WARP-туннеля.
-- `colo=` в `/cdn-cgi/trace` означает Cloudflare дата-центр, обслуживший именно этот HTTP-запрос.
-
-Они связаны с маршрутом через Cloudflare, но в диагностике лучше записывать оба значения,
-а не считать их автоматически одним и тем же измерением.
-
----
-
-## 12. Сравнить текущие H3 и H2 один к одному
-
-Сначала получите точные имена:
-
-```bash
-curl -s http://127.0.0.1:9090/proxies/GLOBAL | jq -r '.all[]'
-```
-
-### Выбрать H3
-
-Подставьте реальное имя H3 из списка:
-
-```bash
-curl -s -X PUT   -H 'Content-Type: application/json'   -d '{"name":"WARP-MASQUE-H3-QUIC"}'   http://127.0.0.1:9090/proxies/GLOBAL
-```
-
-После переключения:
-
-```bash
-curl -x socks5h://127.0.0.1:7890 -s   https://www.cloudflare.com/cdn-cgi/trace   | grep -E '^(ip|loc|colo|warp)='
-
-curl -x socks5h://127.0.0.1:7890 -s   https://speed.cloudflare.com/meta | jq .
-```
-
-Запишите результат.
-
-### Выбрать H2
-
-Имя H2 зависит от сгенерированного порта, например:
-
-```text
-WARP-MASQUE-H2-TCP-443
-```
-
-Переключение:
-
-```bash
-curl -s -X PUT   -H 'Content-Type: application/json'   -d '{"name":"WARP-MASQUE-H2-TCP-443"}'   http://127.0.0.1:9090/proxies/GLOBAL
-```
-
-И снова те же две проверки:
-
-```bash
-curl -x socks5h://127.0.0.1:7890 -s   https://www.cloudflare.com/cdn-cgi/trace   | grep -E '^(ip|loc|colo|warp)='
-
-curl -x socks5h://127.0.0.1:7890 -s   https://speed.cloudflare.com/meta | jq .
-```
-
-Так получается честное сравнение H3 vs H2 на одном VPS.
-
----
-
-## 13. Проверка проблемы с Gemini
-
-Сам факт «Gemini ругается на H2, но не на H3» ещё не доказывает причину. Сначала для обоих
-маршрутов надо записать одинаковый набор данных:
-
-```text
-transport
-имя proxy в Mihomo
-endpoint из config.yaml
-Cloudflare trace: ip / loc / colo / warp
-speed.cloudflare.com/meta
-ifconfig.co
-результат Gemini
-время проверки
-```
-
-Быстрый HTTP-smoke test:
-
-```bash
-curl -x socks5h://127.0.0.1:7890 -sS -L   -o /dev/null   -w 'HTTP=%{http_code} FINAL=%{url_effective}\n'   https://gemini.google.com/
-```
-
-Это **не заменяет проверку Gemini в браузере**: приложение зависит от JavaScript, cookies и
-Google account state. Но HTTP status/redirect полезно сохранить рядом с сетевой диагностикой.
-
-### Как интерпретировать сравнение
-
-Если H2 и H3 дают **разные** `ip`, `loc`, `colo` или Cloudflare meta, сначала надо
-расследовать различие выхода/маршрута/геолокации.
-
-Если сетевые признаки совпадают, но Gemini стабильно ведёт себя по-разному, это уже основание
-искать различие выше простого GeoIP — например в конкретном пути/транспорте или репутации
-соединения. Это гипотеза для следующей проверки, а не доказательство причины.
-
-Не делайте вывод «H2 плохой» по одному тесту: повторите H3 → H2 → H3 и сравните результаты.
-
-### Gemini validation workflow
-
-Проверка «работает ли Gemini через этот маршрут» — это четыре шага, а не только запрос
-к GeoIP-базе:
-
-```text
-1. endpoint: какой endpoint/transport выбран в Mihomo сейчас (раздел 10);
-2. tunnel: поднимается ли туннель и передаёт ли данные (curl через :7890, health-check);
-3. exit/colo: /cdn-cgi/trace + speed.cloudflare.com/meta — ip / loc / colo / warp (+ NODE);
-4. Gemini: реальное поведение в браузере под своим account state.
-```
-
-Полевое наблюдение (SE2, 2026-09-24, детали в live-наблюдениях ниже): при одинаковом
-`ip=104.28.225.221`, `loc=SE`, `warp=on` рабочий вариант давал `colo=FRA`, проблемный —
-`colo=ARN`. Отсюда **field observation, не гарантия**: для Gemini-sensitive задач на этих
-VPS `FRA` — желательный colo, `ARN` — нежелательный; пока фактический colo нежелателен,
-практический ответ — подбор endpoint с `-exclude-node ARN` (раздел 15). Состав
-«желательных/нежелательных» colo сам подвержен дрифту — перепроверяйте на своём маршруте.
-Сводка политик по всем окружениям (VPS vs дача GSM vs дача провод) — в
-[WARPSCOUT-KEENETIC.md](WARPSCOUT-KEENETIC.md); политики разных окружений не смешивать.
-
----
-
-## 14. Проверить endpoint WARPSCOUT без Mihomo
-
-Это полезно, чтобы разделить:
-
-```text
-WARPSCOUT / Cloudflare endpoint
-            vs
-наш config / Mihomo / selector
-```
-
-Сначала получите endpoint:
-
-```bash
-warpscout scan -p masque-h2 -masque-sni 4pda.to -best
-```
-
-Затем поднимите временный SOCKS непосредственно через него:
-
-```bash
-warpscout socks -e IP:PORT -p masque-h2 -masque-sni 4pda.to
-```
-
-WARPSCOUT слушает локально `socks5h://127.0.0.1:1080`.
-
-В другом SSH-сеансе:
-
-```bash
-curl -x socks5h://127.0.0.1:1080 -s   https://www.cloudflare.com/cdn-cgi/trace   | grep -E '^(ip|loc|colo|warp)='
-```
-
-Для H3 аналогично:
-
-```bash
-warpscout scan -p masque -masque-sni 4pda.to -best
-warpscout socks -e IP:PORT -p masque -masque-sni 4pda.to
-```
-
-Команда `warpscout socks` предназначена upstream'ом именно для диагностики, а не как
-постоянный production proxy.
-
----
-
-## Live-наблюдения 2026-09-23
-
-Эти результаты — диагностические точки, а не универсальные нормы Cloudflare.
-
-### SE2
-
-- WG scan: 70/70 рабочих; лучшие маршруты шли через `ARN` с примерно 1 ms TUN ping и 0% loss.
-- Лучший отдельный WG endpoint в одном из прогонов: `188.114.97.165:2408`, `NODE=ARN`, `SEEN AS=SE`.
-- MASQUE H3 с `SNI=4pda.to`: 2/14 рабочих.
-- MASQUE H2 с тем же SNI: 70/70 рабочих.
-- Реальный клиент при переключении WARP WG / MASQUE H2 / MASQUE H3 в тот момент получил
-  одинаковый Cloudflare exit: `104.28.225.221`, `loc=SE`, `colo=FRA`, `warp=on`.
-- Gemini в момент проверки работал во всех трёх режимах, поэтому транспортную причину
-  предыдущего сбоя установить не удалось. Такой тест надо повторять именно во время сбоя.
-
-### EE / Ubuntu 24.04
-
-До установки WARPSCOUT production Mihomo уже дал полезное независимое наблюдение:
-`WARP-MASQUE-QUIC` логировал `H3_REQUEST_CANCELLED`/closed network connection,
-`Fastest_MASQUE` неоднократно активировал health-check и в момент аудита выбрал H2.
-
-Затем на этом же VPS был зарегистрирован свежий WARPSCOUT 0.16.0 account и выполнены
-сканы из сети самого сервера:
-
-- WG: **68/70 working**, 1 torn down; все наблюдаемые ноды `ARN`, `SEEN AS=EE`,
-  TUN ping около 7-8 ms;
-- `warpscout scan -p wg -P -best` в одном прогоне выбрал
-  `8.34.146.127:2408`, TUN ping 7 ms, loss 0%;
-- MASQUE H3 с `SNI=4pda.to`: **8/14 working**, 2 torn down, `ARN / EE`,
-  TUN ping около 7-8 ms;
-- MASQUE H2 с тем же SNI: **56/70 working**, 3 torn down, `ARN / EE`,
-  TUN ping около 7 ms.
-
-В этом конкретном прогоне H2 снова оказался доступнее H3, но уже не был «идеальным»:
-80% рабочих против примерно 57% у H3; WG был самым доступным (~97%). Это заметно мягче
-SE2, где H3 был 2/14, а H2 70/70. Значит, практический вывод пока такой: разница H2/H3
-зависит от конкретного VPS/маршрута и момента времени, хотя на обоих проверенных VPS H2
-показал более высокий working ratio.
-
-Не смешивайте уровни доказательств: WARPSCOUT измеряет отдельный тестовый WARP account
-и набор endpoint'ов; production Mihomo измеряет текущую пользовательскую конфигурацию.
-Совпадение направления результатов усиливает наблюдение, но не превращает его в доказательство
-универсальной неисправности H3.
-
-
-### SE2 — воспроизведение Gemini 2026-09-24
-
-Во время повторного теста удалось воспроизвести различие, которое днём ранее поймать не удалось.
-
-При одном и том же видимом WARP exit-IP `104.28.225.221` и `loc=SE` поведение Gemini
-менялось вместе с Cloudflare path / colo:
-
-- MASQUE H2 — Gemini работал;
-- MASQUE H3 — Gemini работал, Cloudflare trace показывал `colo=FRA`;
-- обычный WARP/WG — Gemini не работал, Cloudflare trace показывал `colo=ARN`.
-
-Для H3 и обычного WARP при этом совпадали как минимум:
-
-```text
-ip=104.28.225.221
-loc=SE
-warp=on
-```
-
-но отличался `colo`: рабочий вариант давал `FRA`, проблемный — `ARN`.
-
-Это не доказывает, что сам по себе `ARN` «ломает Gemini», но показывает важную вещь:
-проблема в этом наблюдении не сводилась к одному только внешнему IP или стране GeoIP.
-Cloudflare path / edge selection оказался значимой диагностической переменной.
-
-Практический обход для обычного WARP/WG — исключить проблемный node при подборе endpoint:
-
-```bash
-warpscout scan -p wg -P \
-  -exclude-node ARN \
-  -best
-```
-
-После выбора другого WARP endpoint/node Gemini снова заработал.
-
-Для контрольного сравнения без каких-либо node-фильтров используйте обычный поиск лучшего
-WG endpoint:
-
-```bash
-warpscout scan -p wg -P -best
-```
-
-Важно: `-exclude-node` применим к WG/AWG-поиску. Для MASQUE H2/H3 выбор Cloudflare node
-не управляется перебором endpoint'ов тем же способом, поэтому этот фильтр не является
-универсальным способом «переключить colo» для MASQUE.
-
-### Moscow VPS — MASQUE caveat (Sep–Oct 2026)
-
-Отдельное наблюдение на московском VPS: MASQUE QUIC (H3) не передал данные ни на одном
-endpoint — несколько полных прогонов завершались upstream-сообщением
-`no MASQUE endpoint passed data - this network blocks it, try -p awg`; H2-сессии на
-большинстве endpoint'ов обрывались mid-stream. Это наблюдение конкретной сети и момента,
-а не доказательство «MASQUE сломан глобально»: на SE-VPS в тот же период H3 работал
-(пусть и с низкой долей рабочих endpoint'ов), H2 — с подходящим SNI; на дачных
-Keenetic-профилях картина была совсем другой
-([WARPSCOUT-KEENETIC.md](WARPSCOUT-KEENETIC.md)). Общий вывод полевых наблюдений
-Sep–Oct 2026: **в наших ISP/маршрутных сценариях WG/AWG обычно доступнее MASQUE** —
-но это наблюдение, а не абсолют: на других uplink'ах MASQUE может быть единственным
-рабочим транспортом.
-
-
----
-
-
-## 15. Обязательный acceptance-тест нового VPS: Cloudflare node / colo
-
-Для нового VPS недостаточно проверить только ping, bandwidth и доступность WARP endpoint'ов.
-До ввода сервера в постоянную эксплуатацию обязательно зафиксируйте, к какому Cloudflare
-node / colo реально приходит трафик.
-
-Cloudflare использует Anycast: один и тот же IP объявляется из множества дата-центров, а
-конкретный путь определяется BGP/peering-маршрутом провайдера, текущей доступностью и
-traffic-engineering Cloudflare. Поэтому физически близкий дата-центр не гарантирован, а
-смена конкретного WARP endpoint IP/порта может вообще не изменить node.
-
-Минимальный acceptance-набор:
-
-```bash
-# 1. Лучший WG без фильтров
-warpscout scan -p wg -P -best
-
-# 2. Полный WG scan: какие nodes вообще доступны
-warpscout scan -p wg -P
-
-# 3. Проверка, существует ли альтернатива проблемному node
-warpscout scan -p wg -P \
-  -exclude-node ARN \
-  -best
-
-# 4. MASQUE H3
-warpscout scan -p masque -P \
-  -masque-sni 4pda.to \
-  -best
-
-# 5. MASQUE H2
-warpscout scan -p masque-h2 -P \
-  -masque-sni 4pda.to \
-  -best
-
-# 6. Реальный production-выход через Mihomo
-curl -x socks5h://127.0.0.1:7890 -s \
-  https://www.cloudflare.com/cdn-cgi/trace \
-  | grep -E '^(ip|loc|colo|warp)='
-```
-
-Записывайте как минимум:
-
-```text
-VPS/provider/location
-public VPS IP
-transport: WG / MASQUE H3 / MASQUE H2
-endpoint
-SEEN AS
-NODE / NODE LOCATION
-Cloudflare trace: ip / loc / colo / warp
-Gemini: OK / FAIL
-timestamp
-```
-
-### Практическое правило
-
-Если все WG endpoint'ы сходятся в один node и `-exclude-node <NODE>` отвечает
-`every endpoint was excluded`, не надо бесконечно перебирать IP/порты: в текущем
-маршруте VPS альтернативного Cloudflare node не видно.
-
-В таком случае возможны только внешние изменения маршрута: другой VPS/провайдер/ASN/локация,
-изменение peering/BGP у провайдера или изменение traffic-engineering Cloudflare. Иногда
-маршрут может поменяться сам со временем, поэтому node нельзя считать вечным свойством VPS,
-но при покупке/приёмке нового сервера его нужно считать важной характеристикой текущего
-сетевого пути.
-
-Отдельно проверяйте WG, H3 и H2: transport'ы могут попасть в один и тот же node, а могут
-повести себя по-разному. Один хороший WG endpoint ещё не доказывает, что H2/H3 будут иметь
-тот же Cloudflare path.
-
-### Подтверждённый routing drift: FRA → ARN, 2026-09-30
-
-На ранее проверенной сети VPS, где до этого удавалось получать `FRA`, 2026-09-30 повторная
-проверка показала, что `FRA` перестал находиться, а доступные WG/AWG-маршруты сходятся в `ARN`.
-Контрольный прогон на `Saymer2` дал:
-
-```text
-warpscout scan -p wg -P -node FRA
-→ no endpoint landed on node FRA
-
-warpscout scan -p wg -P -node FRA -n 20
-→ no endpoint landed on node FRA
-
-warpscout scan -p awg -P -exclude-node ARN -gen-i1 quic
-→ every endpoint was excluded by node ARN
-```
-
-По сообщению хостера, Cloudflare к этому моменту также перестал выдавать его сети `FRA`.
-Это согласуется с измерениями WARPSCOUT, но само сообщение хостера фиксируется как отдельный
-источник наблюдения, а не как замена собственным тестам.
-
-Практический вывод: ранее подтверждённый `FRA` **не является постоянным свойством VPS**.
-Без смены конфигурации, IP-адреса или самого сервера текущий сетевой путь может измениться так,
-что прежний node исчезнет из доступной выборки. Поэтому Cloudflare node надо проверять не только
-при покупке/приёмке VPS, но и периодически в эксплуатации, а также при внезапном изменении
-поведения сервисов вроде Gemini.
-
-Для быстрой повторной проверки целевого `FRA` и отсутствия альтернативы `ARN`:
-
-```bash
-warpscout scan -p wg -P -node FRA -n 20
-warpscout scan -p awg -P -exclude-node ARN -gen-i1 quic
-```
-
-Если первый тест снова не находит `FRA`, а второй отвечает
-`every endpoint was excluded by node ARN`, дальнейший перебор обычных endpoint IP/портов
-не следует считать способом «вернуть FRA»: сначала ждите изменения внешней маршрутизации
-или проверяйте другой VPS/провайдера/ASN/локацию.
-
-`no endpoint landed on node FRA` — **не ошибка программы**: скан честно сообщает, что ни
-один проверенный endpoint не попал в запрошенный node. Что можно сделать:
-
-1. повторить скан позже — дрифт двусторонний, маршрут может вернуться сам;
-2. сменить протокол: `-p awg` вместо `-p wg` (и наоборот);
-3. расширить выборку: `-n 20` на прогон или `-f` (полный перебор подсети, заметно дольше);
-4. смягчить фильтр: убрать `-node`/`-exclude-country`, сделать обычный `-best` и смотреть
-   фактический NODE в полном выводе;
-5. проверить внешние изменения: смена peering у провайдера, новый публичный IP/маршрут,
-   другой VPS/ASN/локация.
-
-### Rescan triggers: когда перепроверять node/colo
-
-Node/colo перепроверяют не только при приёмке VPS, но и в эксплуатации:
-
-- изменилось поведение сервисов (Gemini стал недоступен или ругаться);
-- фактический colo сменился в `/cdn-cgi/trace` или `speed.cloudflare.com/meta`;
-- заметно упала скорость или вырос loss без локальных причин;
-- сменился провайдер/ASN/публичный IP у VPS;
-- прошло много времени с последней проверки: полевые наблюдения Sep–Oct 2026 показывают
-  смену node за дни без каких-либо изменений конфигурации.
-
-Штатный обходной путь без смены серверной архитектуры — `dialer-proxy` Mihomo (секция «dialer-proxy»
-в [MIHOMO.md](MIHOMO.md)): WARP остаётся outbound текущего Mihomo, но его туннельное UDP-соединение
-устанавливается через промежуточный VPS другой сети. Полевой чек-лист:
-
-```text
-1. На SE-VPS: Mihomo с WARP (.conf, MTU 1200-1280) + dialer-proxy на proxy до DK/другой сети.
-2. curl -x socks5h://127.0.0.1:7890 https://www.cloudflare.com/cdn-cgi/trace  → baseline (ожид. ARN).
-3. Переключить узел в dialer-группе (дашборд/API) на DK-VPS → повторить trace.
-4. Зафиксировать ip/loc/colo/warp/NODE для: WARP direct vs WARP через dialer.
-5. Цель: direct → ARN, dialer via другой сети → FRA (или иная нода).
-```
-
-Автоматизирует эту методику harness `tools/warp-dialer-fieldtest/` (sweep узлов, switchtest, MTU-лестница, JSON/CSV-отчёты); инструкция и ловушка PIN — его README.
-
-Field-test конфиг для provider-варианта (Geodema как промежуточная сеть; BUILDER сам создаёт группу `WARP-DIALER` с `use:`, если в поле «URL-подписки для dialer-группы» указан тот же URL подписки, а WARP загружен .conf с MTU 1200–1280):
-
-```yaml
-proxy-groups:
-  - name: WARP-DIALER
-    type: select
-    use:
-      - account.geodema.org
-proxies:
-  - name: WARP
-    type: wireguard
-    # ...identity из .conf...
-    mtu: 1280
-    dialer-proxy: WARP-DIALER
-```
-
-Протокол сравнения (все три состояния, подряд, без смены машины):
-
-```text
-A. WARP direct (поле dialer пусто):            curl -x socks5h://127.0.0.1:7890 https://www.cloudflare.com/cdn-cgi/trace
-B. WARP + dialer на Geodema (узел по умолчанию): та же команда после Build с заполненным полем
-C. В MetaCubeXD вручную перебирать узлы в WARP-DIALER (только те, что живут как UDP relay),
-   после каждого выбора повторять trace и speed.cloudflare.com/meta
-Фиксировать: ip / loc / colo / warp / NODE для A, B, C; ожидание: A → ARN (текущий дрифт),
-B/C → colo меняется вместе с сетью выбранного узла; warp=on во всех состояниях.
-Узлы подписки, не передающие UDP, дадут таймаут WARP-хендшейка — такие узлы исключать из выбора.
-```
-
-Дополнительный сценарий — **WARP-over-WARP** (второй independent WARP-профиль как транзит): в Builder загрузите оба .conf (разные ключи/endpoint/tunnel IP), в поле dialer укажите имя внутреннего профиля (например `WARP-INNER`) — внешний получит `dialer-proxy: WARP-INNER`. Цепочки через группы/провайдеры также валидны; генератор и валидатор отклоняют только маршруты, замыкающиеся на исходный outbound. Сравнить trace: WARP direct / WARP-over-WARP / provider-backed WARP.
-
-
-## 16. Быстрый чек-лист для каждого VPS
-
-```bash
-cd ~/warpscout-data
-
-# 0. Прямой VPS baseline
-curl -4s https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|loc|colo|warp)='
-
-# 1. WARP / WireGuard
-warpscout scan -p wg -P -best
-
-# 2. MASQUE H3
-warpscout scan -p masque -masque-sni 4pda.to -best
-warpscout scan -p masque -masque-sni 4pda.to -conf - -conf-type mihomo
-
-# 3. MASQUE H2
-warpscout scan -p masque-h2 -masque-sni 4pda.to -best
-warpscout scan -p masque-h2 -masque-sni 4pda.to -conf - -conf-type mihomo
-
-# 4. Что выбрано сейчас в Mihomo
-curl -s http://127.0.0.1:9090/proxies/GLOBAL | jq '{now, all}'
-
-# 5. Фактический выход через Mihomo
-curl -x socks5h://127.0.0.1:7890 -s   https://www.cloudflare.com/cdn-cgi/trace   | grep -E '^(ip|loc|colo|warp)='
-```
-
-С таким набором уже можно сравнивать разные VPS между собой и отдельно H2/H3 на одном сервере,
-не восстанавливая команды по памяти.
-
-## См. также
-
-- [WARPSCOUT на Keenetic / Entware](WARPSCOUT-KEENETIC.md) — полевые кейсы дачных роутеров и сводная таблица политик по окружениям
-- [WARPSCOUT на Windows](WARPSCOUT-WINDOWS.md)
-- [WARPSCOUT upstream README_RU](https://github.com/vernette/warpscout/blob/master/README_RU.md)
-- [Как работает WARPSCOUT](https://github.com/vernette/warpscout/blob/master/docs/ru/how-it-works.md)
-- [WARPSCOUT: MASQUE](https://github.com/vernette/warpscout/blob/master/docs/ru/masque.md)
-- [WARPSCOUT: SOCKS5 для диагностики](https://github.com/vernette/warpscout/blob/master/docs/ru/socks.md)
-- [Cloudflare: /cdn-cgi/ endpoint](https://developers.cloudflare.com/fundamentals/reference/cdn-cgi-endpoint/)
+- [Архив оригинальной VPS-статьи и полевых испытаний (сентябрь–октябрь 2026)](research/WARPSCOUT-VPS-FIELD-NOTES-2026-09-10.md) — подробные сканы SE/EE/RU, диагностика Gemini, Mihomo controller, dialer-proxy и зафиксированный routing drift. Это **исследования**, не обязательные шаги установки.
+- [WARPSCOUT на Keenetic](WARPSCOUT-KEENETIC.md) — другой сценарий, где из-за фильтрации WAN основным является **AWG**, а географические исключения используются по конкретной задаче.
+- [Официальный WARPSCOUT README_RU](https://github.com/vernette/warpscout/blob/master/README_RU.md), [MASQUE](https://github.com/vernette/warpscout/blob/master/docs/ru/masque.md), [конфиги и фильтры](https://github.com/vernette/warpscout/blob/master/docs/ru/configs.md).
