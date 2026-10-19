@@ -5,8 +5,8 @@
 //
 // Evidence model (CONSTITUTION.md): this harness produces RUNTIME-PROVEN facts
 // for TCP/HTTP health semantics on the exact binary under test; UDP and manual
-// select overrides are explicitly OUT OF SCOPE (documented as boundaries, not
-// silently claimed).
+// select overrides were out of scope before #279; session 4 adds a real
+// controller-driven manual GLOBAL test in mode:rule, with independent TCP mocks.
 //
 // Topology (session 1, url-test tiers):
 //   ROOT (fallback) -> T1 (url-test [T1A, T1B]) -> T2 (fallback [T2A, T2B]) -> T3 (url-test [T3A])
@@ -265,6 +265,72 @@ for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>{clearTimeout(L
         evidence.scenarios.E3_refreshStatus = put.status || put.error;
         await until(async () => (await traffic(s)) === 'T2B', 'E3: traffic still via T2B after refresh');
         assert.equal(await rootNow(s), 'T2', 'E3: provider tier remains selected after refresh');
+      });
+    } finally { await stopSession(s); }
+  }
+
+  // ============ SESSION 4 (#279): manual GLOBAL + auto tiers in mode:rule ============
+  {
+    // All mock endpoints remain local; ensure earlier failure scenarios do
+    // not leak their alive-state into this independent session.
+    for (const m of [t1a, t1b, t2a, t2b]) m.setAlive(true);
+    const groups = [
+      group('T1', 'url-test', ['T1A', 'T1B']),
+      group('T2', 'fallback', ['T2A', 'T2B']),
+      group('ROOT', 'fallback', ['T1', 'T2']),
+      { name: 'GLOBAL', type: 'select', proxies: ['ROOT', 'T2A', 'REJECT'] }
+    ];
+    const s = await session(groups, 's4-manual-global-rule', {
+      mode: 'rule', rules: ['MATCH,GLOBAL']
+    }, [t1a, t1b, t2a, t2b].map(m => m.proxy));
+    const selectedNow = async () => (await s.get('/proxies/GLOBAL')).now;
+    const selectGlobal = async name => {
+      const response = await fetch(`http://127.0.0.1:${s.control}/proxies/GLOBAL`, {
+        method: 'PUT',
+        headers: { Authorization: 'Bearer local-test', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+        signal: AbortSignal.timeout(3000)
+      });
+      assert.equal(response.ok, true, 'GLOBAL PUT ' + name + ' controller status ' + response.status);
+      await until(async () => (await selectedNow()) === name, 'GLOBAL selected ' + name);
+    };
+    try {
+      await until(() => s.get('/version'), 'controller startup s4');
+      await wrap(s, 'G1-auto-through-GLOBAL', async () => {
+        await until(async () => ['T1A', 'T1B'].includes(await traffic(s)), 'G1: auto root -> tier 1');
+        assert.equal(await selectedNow(), 'ROOT', 'GLOBAL starts in auto tier mode');
+      });
+      await wrap(s, 'G2-manual-overrides-root', async () => {
+        await selectGlobal('T2A');
+        await until(async () => (await traffic(s)) === 'T2A', 'G2: manually selected T2A');
+      });
+      await wrap(s, 'G3-return-to-auto', async () => {
+        await selectGlobal('ROOT');
+        await until(async () => ['T1A', 'T1B'].includes(await traffic(s)), 'G3: return from manual to tier 1');
+      });
+      await wrap(s, 'G4-tier1-total-failure', async () => {
+        t1a.setAlive(false); t1b.setAlive(false);
+        await until(async () => ['T2A', 'T2B'].includes(await traffic(s)), 'G4: auto failover -> tier 2');
+        assert.equal(await selectedNow(), 'ROOT', 'GLOBAL stays in auto mode while ROOT fails over');
+        assert.equal(await rootNow(s), 'T2', 'ROOT selects tier 2 after failure');
+      });
+      await wrap(s, 'G5-tier1-failback', async () => {
+        t1a.setAlive(true); t1b.setAlive(true);
+        await until(async () => ['T1A', 'T1B'].includes(await traffic(s)), 'G5: auto failback -> tier 1');
+        assert.equal(await rootNow(s), 'T1', 'ROOT returns to tier 1');
+      });
+      await wrap(s, 'G6-manual-after-failback', async () => {
+        await selectGlobal('T2A');
+        await until(async () => (await traffic(s)) === 'T2A', 'G6: manual override still works after failback');
+      });
+      await wrap(s, 'G7-explicit-reject', async () => {
+        await selectGlobal('REJECT');
+        const before = [t1a, t1b, t2a, t2b].map(m => m.requests);
+        let responseBody = '';
+        try { responseBody = await traffic(s); } catch (_) { responseBody = '[rejected]'; }
+        assert.ok(!['T1A', 'T1B', 'T2A', 'T2B'].includes(responseBody), 'REJECT must not return mock outbound response');
+        assert.deepEqual([t1a, t1b, t2a, t2b].map(m => m.requests), before, 'REJECT must not contact any proxy leaf');
+        await selectGlobal('ROOT');
       });
     } finally { await stopSession(s); }
   }

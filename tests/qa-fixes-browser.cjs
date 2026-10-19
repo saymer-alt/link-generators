@@ -68,8 +68,8 @@ function writeConf(name, privateKey) {
   const combos = [
     { dpr: false, tiered: false, expect: 'MATCH,GLOBAL' },
     { dpr: true, tiered: false, expect: 'MATCH,GLOBAL' },
-    { dpr: false, tiered: true, expect: 'MATCH,🪜 TIERED-AUTO' },
-    { dpr: true, tiered: true, expect: 'MATCH,🪜 TIERED-AUTO' }
+    { dpr: false, tiered: true, expect: 'MATCH,GLOBAL' },
+    { dpr: true, tiered: true, expect: 'MATCH,GLOBAL' }
   ];
   for (const c of combos) {
     await setup();
