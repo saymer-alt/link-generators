@@ -42,7 +42,6 @@ const portable = () => ({
     ]
   }
 });
-const clone = v => JSON.parse(JSON.stringify(v));
 const parse = p => api.rbParseProjectText(JSON.stringify(p));
 let checks = 0;
 function valid(p, version, status) {
@@ -81,7 +80,7 @@ noSubs.identities.entries = [noSubs.identities.entries[0]];
 valid(noSubs, 2, 'PORTABLE_V2_VALIDATED_ONLY');
 
 invalid('missing identities', p => {delete p.identities;}, /identities.*required/);
-invalid('partial historic v2 has no map', p => {delete p.identities;}, /identities.*required/);
+invalid('partial v2 has no identity registry', p => {delete p.identities; p.sources.subscriptionSources[0].sourceId = 'extra';}, /identities.*required/);
 invalid('missing subscriptionSources', p => {delete p.sources.subscriptionSources;}, /subscriptionSources.*required/);
 invalid('arrays wrong type', p => {p.identities.entries = {};}, /arrays required/);
 invalid('duplicate sourceId', p => {p.sources.subscriptionSources[1].sourceId = 'src-1';}, /sourceId must be unique/);
@@ -109,8 +108,8 @@ checks++;
 const future = base(); future.schemaVersion = 99;
 assert.equal(parse(future).ok, false, 'future schema must fail');
 checks++;
-const suspicious = JSON.stringify(portable()).replace('"id-primary"', '"__proto__"');
-assert.equal(api.rbParseProjectText(suspicious).ok, false, 'unsafe object keys/refs must fail');
+const suspicious = JSON.stringify(portable()).replace('"identities":{', '"identities":{"__proto__":{},');
+assert.match(api.rbParseProjectText(suspicious).error, /недопустимый ключ/, 'unsafe object keys must fail');
 checks++;
 assert.equal(api.rbParseProjectText(' '.repeat(4 * 1024 * 1024 + 1)).ok, false, 'bounded project size');
 checks++;
