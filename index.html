@@ -4441,8 +4441,9 @@ function fetchServerList() {
     catch (_) { showToast('❌ v2: неверный режим или несогласованные URL/HWID. Запросы не отправлены.', true); return; }
     // Legacy runtimes ignore unknown option names. Without a confirmed strict
     // capability they can falsely report success via anonymous CORS GET.
-    if (api.fetchSubscription.supportsStrictDeviceHeaders !== true) {
-      showToast('❌ v2 Preview: нужен web4core с защитой HWID (strict device headers). Запросы не отправлены.', true);
+    if (api.fetchSubscription.supportsStrictDeviceHeaders !== true ||
+        api.fetchSubscription.supportsStrictOriginPolicy !== true) {
+      showToast('❌ v2 Preview: нужен web4core с проверкой HWID и origin-policy Worker. Запросы не отправлены.', true);
       return;
     }
     // #307 trust boundary: the existing web4core browser fetch may retry
@@ -4452,7 +4453,7 @@ function fetchServerList() {
     if (!confirm('Получить список серверов для переносимого проекта v2?\n\n' +
         'Подпискам будут переданы назначенные HWID и модель устройства. При ошибке CORS ' +
         'запрос может пройти через наш Cloudflare Worker с URL подписки и HWID; ' +
-        'HTTP-редиректы могут вести на другой домен. Убедитесь, что доверяете источникам.\n\n' +
+        'Редиректы на другой origin для HWID блокируются; при старой версии Worker запрос будет отклонён. Проверяйте источники.\n\n' +
         'Отмена НЕ отправляет запросы. Build сам подписки не загружает.')) {
       showToast('Предпросмотр v2 отменён. Подписки и HWID не отправлялись.');
       return;
