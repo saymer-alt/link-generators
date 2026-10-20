@@ -4439,6 +4439,18 @@ function fetchServerList() {
   if (rbPortableProjectState) {
     try { portablePlan = rbPortablePlanForCurrent(); }
     catch (_) { showToast('❌ v2: неверный режим или несогласованные URL/HWID. Запросы не отправлены.', true); return; }
+    // #307 trust boundary: the existing web4core browser fetch may retry
+    // through our first-party CORS Worker (POST sends URL + device headers),
+    // and HTTP redirects can target another origin. This is opt-in only;
+    // cancellation must occur before any fetch or loading-state mutation.
+    if (!confirm('Получить список серверов для переносимого проекта v2?\\n\\n' +
+        'Подпискам будут переданы назначенные HWID и модель устройства. При ошибке CORS ' +
+        'запрос может пройти через наш Cloudflare Worker с URL подписки и HWID; ' +
+        'HTTP-редиректы могут вести на другой домен. Убедитесь, что доверяете источникам.\\n\\n' +
+        'Отмена НЕ отправляет запросы. Build сам подписки не загружает.')) {
+      showToast('Предпросмотр v2 отменён. Подписки и HWID не отправлялись.');
+      return;
+    }
   }
   subscriptionPreviewSeq++;
   const previewSeq = subscriptionPreviewSeq;
