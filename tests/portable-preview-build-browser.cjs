@@ -129,7 +129,8 @@ async function run() {
         const overrides=req.options.providerOverrides;
         for(const p of Object.values(doc['proxy-providers']||{})){
           const match=overrides.find(x=>x.sourceUrl===p.url);
-          if(match)p.header['x-hwid']=[match.hwid];
+          if(match && match.hwid === null) delete p.header;
+          else if(match)p.header['x-hwid']=[match.hwid];
         }
         window.__lastV2Request={input:req.input,hwids:overrides.map(x=>x.hwid)};
         return {...out,data:jsyaml.dump(doc,{lineWidth:-1})};
@@ -151,6 +152,41 @@ async function run() {
   assert.deepEqual(built.urls,urls);
   assert.deepEqual(built.opts,[h1,H2,H2]);
   assert.equal(built.verified,true);
+
+  // Explicitly ungated (Gist/public) source must have NO identity headers,
+  // even though paid providers B/C keep EXACTLY their saved H2.
+  await page.locator('#deviceIdentityDetails summary').isVisible(); // panel already opened
+  await page.locator('#rbPortableSources select').first().selectOption('__none__');
+  const noHwidPlan=await page.evaluate(()=>rbPortablePlanForCurrent());
+  assert.deepEqual(noHwidPlan.providerOverrides.map(x=>x.hwid),[null,H2,H2]);
+  await page.evaluate(()=>fetchServerList());
+  await page.waitForFunction(()=>serverListState===SERVER_LIST_STATE.SUCCESS);
+  const lastPreview=await page.evaluate(()=>window.__fakeSubscriptionHeaders.slice(-3));
+  assert.deepEqual(lastPreview.map(x=>x.hwid),[undefined,H2,H2]);
+  assert.deepEqual(lastPreview[0].headers,[]);
+  assert.equal(lastPreview[0].strict,false);
+  assert.equal(lastPreview[1].strict,true);
+  assert.equal(lastPreview[2].strict,true);
+  await page.evaluate(()=>{ void buildMihomo(); });
+  await page.waitForFunction(()=>document.getElementById('mihomoOutput').value.includes('proxy-providers'));
+  const noHwidYAML=await page.evaluate(()=>{
+    const txt=document.getElementById('mihomoOutput').value;
+    const p=Object.values(jsyaml.load(txt)['proxy-providers']||{});
+    return {ok:rbPortableOutputHasExactHwids(txt,rbPortablePlanForCurrent()),
+      headers:p.map(x=>x.header?.['x-hwid']?.[0]??null),
+      missing:!Object.hasOwn(p[0],'header')};
+  });
+  assert.equal(noHwidYAML.ok,true);
+  assert.equal(noHwidYAML.missing,true);
+  assert.deepEqual(noHwidYAML.headers,[null,H2,H2]);
+  assert.deepEqual(requests,[],'no public/Gist subscription network probes');
+
+  // Restore commercial identity A for the generic negative test below.
+  const primaryId=await page.locator('#rbPortableSources select').nth(1).evaluate(el=>
+    [...el.options].find(o=>o.textContent?.startsWith('Основной')).value);
+  await page.locator('#rbPortableSources select').first().selectOption(primaryId);
+  await page.evaluate(()=>{ void buildMihomo(); });
+  await page.waitForFunction(()=>document.getElementById('mihomoOutput').value.includes('proxy-providers'));
   // Synthetic fixture only. Candidate CI checks it against real Mihomo
   // before any promotion; no real URLs, keys or service credentials.
   if (process.env.MIHOMO_CANDIDATE_CONFIG) {
