@@ -49,7 +49,7 @@ async function run() {
     };
   });
   await page.evaluate(()=>fetchServerList());
-  await page.waitForFunction(()=>serverListState==='SUCCESS');
+  await page.waitForFunction(()=>serverListState===SERVER_LIST_STATE.SUCCESS);
   const preview=await page.evaluate(()=>window.__fakeSubscriptionHeaders);
   assert.deepEqual(preview.map(x=>x.url),urls);
   assert.deepEqual(preview.map(x=>x.hwid),[h1,H2,H2]);
