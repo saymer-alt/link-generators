@@ -57,6 +57,7 @@ async function run() {
       return 'vless://00000000-0000-4000-8000-000000000001@192.0.2.10:443?type=tcp#synthetic-node';
     };
     web4core.fetchSubscription.supportsStrictDeviceHeaders = true;
+    web4core.fetchSubscription.supportsStrictOriginPolicy = true;
   });
   // #307 consent gate: user dismissal MUST be a network no-op, including
   // no POST to a fallback worker. No HWIDs/URLs in disclosure text.
@@ -70,7 +71,7 @@ async function run() {
   assert.ok(previewConfirmations.length >= 2);
   for (const dialog of previewConfirmations) {
     assert.match(dialog,/Cloudflare Worker/);
-    assert.match(dialog,/редирект/);
+    assert.match(dialog,/origin/);
     assert.ok(!dialog.includes(h1) && !dialog.includes(H2) && !urls.some(url=>dialog.includes(url)));
   }
   const preview=await page.evaluate(()=>window.__fakeSubscriptionHeaders);
