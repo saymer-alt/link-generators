@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   candidate-runtime:
-    if: github.head_ref == 'feat/project-v2-preview-build-bridge-20261020'
+    if: github.head_ref == 'feat/project-v2-preview-build-bridge-20261020' || github.head_ref == 'feat/optional-provider-hwid-20261020'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
