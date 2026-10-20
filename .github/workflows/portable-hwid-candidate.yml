@@ -81,7 +81,7 @@ jobs:
           EXPECT_V2_ENGINE: '1'
         run: |
           set -euo pipefail
-          node tests/portable-preview-build-browser.cjs
+          timeout 150s node tests/portable-preview-build-browser.cjs
           test -s "$MIHOMO_CANDIDATE_CONFIG"
 
       - name: Parse synthetic output with pinned Mihomo 1.19.31 and 1.19.32
