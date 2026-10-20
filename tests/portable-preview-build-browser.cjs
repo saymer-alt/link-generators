@@ -2,6 +2,7 @@
 // #280 Preview↔Build HWID parity. All URLs and identities synthetic; no real
 // subscriptions, real network requests, credentials or customer YAML.
 const assert=require('node:assert/strict');
+const fs=require('node:fs');
 const path=require('node:path');
 const {pathToFileURL}=require('node:url');
 const {chromium}=require('playwright');
@@ -123,6 +124,12 @@ async function run() {
   assert.deepEqual(built.urls,urls);
   assert.deepEqual(built.opts,[h1,H2,H2]);
   assert.equal(built.verified,true);
+  // Synthetic fixture only. Candidate CI checks it against real Mihomo
+  // before any promotion; no real URLs, keys or service credentials.
+  if (process.env.MIHOMO_CANDIDATE_CONFIG) {
+    const yaml=await page.locator('#mihomoOutput').inputValue();
+    fs.writeFileSync(process.env.MIHOMO_CANDIDATE_CONFIG,yaml);
+  }
 
   // Bad runtime output is NEVER allowed to overwrite YAML as a fresh Build.
   await page.evaluate(()=>{
