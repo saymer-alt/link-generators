@@ -54,6 +54,13 @@ assert.equal(engine.ok,true);
 assert.equal(engine.options.deviceHwid,H1);
 assert.deepEqual(engine.options.providerOverrides.map(x=>x.hwid),[H1,H2,H2]);
 assert.deepEqual(engine.options.providerOverrides.map(x=>x.sourceUrl),U);
+const ungated=success(api.rbPortableAssign(three,'src-1',null),'explicit Gist without HWID');
+assert.equal(ungated.identities.providerBindings[0].identityId,null);
+assert.deepEqual(api.rbPortableEngineOptions(ungated).options.providerOverrides.map(x=>x.hwid),[null,H2,H2]);
+assert.deepEqual(api.rbParseProjectText(snapshot(ungated)).project,ungated,'Gist opt-out round-trip');
+assert.equal(api.rbPortableEngineOptions(three).options.providerOverrides[0].hwid,H1,
+  'original paid-provider mapping not mutated');
+
 assert.equal(snapshot(v2),snapshot(success(api.rbPortableFromLegacy(original,first),'repeat deterministic')),'v1 conversion deterministic');
 assert.deepEqual(api.rbPortableEngineOptions(three),api.rbPortableEngineOptions(three),'stable rebuild');
 
