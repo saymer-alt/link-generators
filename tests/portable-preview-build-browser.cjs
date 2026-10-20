@@ -51,10 +51,12 @@ async function run() {
     window.__fakeSubscriptionHeaders=[];
     web4core.fetchSubscription=async (url,opts)=>{
       window.__fakeSubscriptionHeaders.push({
-        url,hwid:opts.headers['x-hwid'],headers:Object.keys(opts.headers).sort()
+        url,hwid:opts.headers['x-hwid'],headers:Object.keys(opts.headers).sort(),
+        strict:opts.requireDeviceHeaders===true
       });
       return 'vless://00000000-0000-4000-8000-000000000001@192.0.2.10:443?type=tcp#synthetic-node';
     };
+    web4core.fetchSubscription.supportsStrictDeviceHeaders = true;
   });
   // #307 consent gate: user dismissal MUST be a network no-op, including
   // no POST to a fallback worker. No HWIDs/URLs in disclosure text.
@@ -74,7 +76,10 @@ async function run() {
   const preview=await page.evaluate(()=>window.__fakeSubscriptionHeaders);
   assert.deepEqual(preview.map(x=>x.url),urls);
   assert.deepEqual(preview.map(x=>x.hwid),[h1,H2,H2]);
-  for(const p of preview)assert.deepEqual(p.headers,['x-device-model','x-hwid']);
+  for(const p of preview) {
+    assert.deepEqual(p.headers,['x-device-model','x-hwid']);
+    assert.equal(p.strict,true,'v2 source explicitly requires identity-aware fetch');
+  }
   assert.deepEqual(requests,[],'no actual subscription network requests');
   // Local device registry must not change.
   assert.equal(await page.evaluate(()=>getActiveDeviceIdentity().hwid),h1);
