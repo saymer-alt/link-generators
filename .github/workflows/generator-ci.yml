@@ -373,6 +373,9 @@ jobs:
       - name: Per-subscription identity UI and cross-browser reuse (#280)
         run: node tests/portable-identity-ui-browser.cjs
 
+      - name: Per-provider Preview and guarded Build parity (#280)
+        run: node tests/portable-preview-build-browser.cjs
+
       - name: YAML Reverse Build browser regression (OWNER-REVERSE-01)
         run: node tests/reverse-yaml-browser.cjs
 
