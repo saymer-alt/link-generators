@@ -4443,10 +4443,10 @@ function fetchServerList() {
     // through our first-party CORS Worker (POST sends URL + device headers),
     // and HTTP redirects can target another origin. This is opt-in only;
     // cancellation must occur before any fetch or loading-state mutation.
-    if (!confirm('Получить список серверов для переносимого проекта v2?\\n\\n' +
+    if (!confirm('Получить список серверов для переносимого проекта v2?\n\n' +
         'Подпискам будут переданы назначенные HWID и модель устройства. При ошибке CORS ' +
         'запрос может пройти через наш Cloudflare Worker с URL подписки и HWID; ' +
-        'HTTP-редиректы могут вести на другой домен. Убедитесь, что доверяете источникам.\\n\\n' +
+        'HTTP-редиректы могут вести на другой домен. Убедитесь, что доверяете источникам.\n\n' +
         'Отмена НЕ отправляет запросы. Build сам подписки не загружает.')) {
       showToast('Предпросмотр v2 отменён. Подписки и HWID не отправлялись.');
       return;
