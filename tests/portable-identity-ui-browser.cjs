@@ -120,7 +120,7 @@ async function main(){
 
   // Cross-browser explicit Gist opt-out: export from browser B and import
   // into browser A without adding any HWID to the ungated provider.
-  await b.locator('#rbPortableSources select').first().selectOption('__none__');
+  await b.locator('#rbPortableSources select').nth(1).selectOption('__none__');
   assert.equal((await b.evaluate(()=>rbCollectProject())).identities.providerBindings[0].identityId,null);
   const [dGist]=await Promise.all([
     b.waitForEvent('download'),b.locator('button[onclick="rbSaveProject()"]').click()
@@ -133,8 +133,8 @@ async function main(){
   await a.waitForFunction(()=>rbCollectProject().identities?.providerBindings?.[0]?.identityId===null);
   const imported=await a.evaluate(()=>rbPortableEngineOptions(rbCollectProject()));
   assert.equal(imported.ok,true);
-  assert.equal(imported.options.providerOverrides[0].hwid,null);
-  assert.equal(imported.options.providerOverrides[1].hwid!==null,true);
+  assert.equal(imported.options.providerOverrides[1].hwid,null);
+  assert.equal(imported.options.providerOverrides[0].hwid!==null,true);
   assert.equal(await b.evaluate(()=>localStorage.getItem(DEVICE_IDENTITY_STORAGE_KEY)),registryB);
   count++;
 
