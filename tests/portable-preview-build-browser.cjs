@@ -89,7 +89,7 @@ async function run() {
     // The tracked v1.11.2 runtime must fail closed; synthetic adapter below
     // is ONLY a consumer contract unit test, not evidence for engine readiness.
     assert.equal(await page.evaluate(()=>rbPortableRuntimeCanBuild(web4core)),false);
-    await page.evaluate(()=>buildMihomo());
+    await page.evaluate(()=>{ void buildMihomo(); });
     assert.match(await page.locator('#toast').textContent(),/web4core.*HWID/);
     assert.equal(await page.locator('#mihomoOutput').inputValue(),'');
     await page.evaluate(()=>{
@@ -110,7 +110,7 @@ async function run() {
     });
     assert.equal(await page.evaluate(()=>rbPortableRuntimeCanBuild(web4core)),true);
   }
-  await page.evaluate(()=>buildMihomo());
+  await page.evaluate(()=>{ void buildMihomo(); });
   await page.waitForFunction(()=>document.getElementById('mihomoOutput').value.includes('proxy-providers'));
   const built=await page.evaluate(()=>{
     const text=document.getElementById('mihomoOutput').value;
@@ -146,7 +146,7 @@ async function run() {
     document.getElementById('mihomoOutput').value='';
   });
   // Feature probe may fail with this wrapper or exact final parity should fail.
-  await page.evaluate(()=>buildMihomo());
+  await page.evaluate(()=>{ void buildMihomo(); });
   assert.equal(await page.locator('#mihomoOutput').inputValue(),'');
   assert.match(await page.locator('#toast').textContent(),/v2 Build|веб4кор|web4core|HWID/i);
   assert.deepEqual(requests,[]);
@@ -156,4 +156,4 @@ async function run() {
   await browser.close();
   console.log('PASS portable-preview-build-browser: exact per-source preview, stale fail-closed, runtime probe, YAML parity, negative output');
 }
-run().catch(e=>{console.error(e);process.exitCode=1;});
+run().catch(e=>{console.error(e);process.exit(1);});
