@@ -4118,12 +4118,12 @@ function isSubscriptionEmptyBodyError(reason) {
 // сознательно не ограничен и не смешивается с этим путём.
 let SUBSCRIPTION_PREVIEW_BUDGET_MS = 60000;
 
-function fetchSubscriptionWithBudget(api, url, headers, deadline) {
+function fetchSubscriptionWithBudget(api, url, headers, deadline, strictDeviceHeaders = false) {
   const remaining = deadline - Date.now();
   if (remaining <= 0) {
     return Promise.reject(new Error('превышен общий бюджет preview (' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — сократите число подписок или повторите позже'));
   }
-  const fetchPromise = api.fetchSubscription(url, { headers });
+  const fetchPromise = api.fetchSubscription(url, { headers, ...(strictDeviceHeaders ? { requireDeviceHeaders: true } : {}) });
   let budgetTimer;
   const budgetPromise = new Promise((_, reject) => {
     budgetTimer = setTimeout(() => {
@@ -4159,8 +4159,8 @@ function fetchSubscriptionWithBudget(api, url, headers, deadline) {
     const headers = subscriptionPreviewHeaders(entry.url, portablePlan);
     try {
       const body = await (deadline
-        ? fetchSubscriptionWithBudget(api, entry.url, headers, deadline)
-        : api.fetchSubscription(entry.url, { headers }));
+        ? fetchSubscriptionWithBudget(api, entry.url, headers, deadline, !!portablePlan)
+        : api.fetchSubscription(entry.url, { headers, ...(portablePlan ? { requireDeviceHeaders: true } : {}) }));
       const links = String(body || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if (!links.length) throw new Error('подписка не вернула поддерживаемых proxy-ссылок');
       // #158 (честный preview): маркер preview-partial от runtime — часть payload
@@ -4439,6 +4439,12 @@ function fetchServerList() {
   if (rbPortableProjectState) {
     try { portablePlan = rbPortablePlanForCurrent(); }
     catch (_) { showToast('❌ v2: неверный режим или несогласованные URL/HWID. Запросы не отправлены.', true); return; }
+    // Legacy runtimes ignore unknown option names. Without a confirmed strict
+    // capability they can falsely report success via anonymous CORS GET.
+    if (api.fetchSubscription.supportsStrictDeviceHeaders !== true) {
+      showToast('❌ v2 Preview: нужен web4core с защитой HWID (strict device headers). Запросы не отправлены.', true);
+      return;
+    }
     // #307 trust boundary: the existing web4core browser fetch may retry
     // through our first-party CORS Worker (POST sends URL + device headers),
     // and HTTP redirects can target another origin. This is opt-in only;
