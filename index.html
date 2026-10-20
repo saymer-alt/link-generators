@@ -528,7 +528,7 @@
                   <button type="button" class="btn btn-gray" id="rbPortableRandomBtn">➕ Новый случайный HWID</button>
                   <button type="button" class="btn btn-gray" id="rbPortableImportHwidBtn">📥 Импортировать введённый HWID</button>
                 </div>
-                <div class="hint" style="margin-top:6px">Новый HWID может занять дополнительный слот устройства у поставщика подписки. Исходные HWID нельзя посмотреть здесь; для резервного копирования экспортируйте проект v2 как конфиденциальный файл. Build и получение подписок останутся заблокированы до следующего этапа интеграции.</div>
+                <div class="hint" style="margin-top:6px">Новый HWID может занять дополнительный слот устройства у поставщика подписки. Исходные HWID нельзя посмотреть здесь; для резервного копирования экспортируйте проект v2 как конфиденциальный файл. Preview использует выбранные HWID. Build требует совместимый движок.</div>
               </div>
             </div>
             <div class="hint" style="margin-top:6px">Локальное имя нужно только для удобства и не меняет <code>x-device-model</code>. «Сменить ID» создаёт новый случайный HWID только по явной команде и может быть воспринят сервисом подписки как новое устройство. Удаление удаляет запись только из этого браузера: уже созданные конфиги и записи на стороне сервиса не меняются. Сам HWID нигде не отображается и в диагностику не попадает.</div>
@@ -4185,7 +4185,13 @@ function fetchSubscriptionWithBudget(api, url, headers, deadline) {
       }
       if (!expand) output.push(entry.line);
     } catch (e) {
-      const reason = String(e && e.message ? e.message : e).replace(/https?:\/\/\S+/gi, '[URL hidden]');
+      const actualReason = String(e && e.message ? e.message : e);
+      // Browser transport failures may include sensitive request headers.
+      const reason = portablePlan
+        ? (isSubscriptionEmptyBodyError(actualReason) ? 'Empty response'
+          : /Clash YAML subscription is not supported here/i.test(actualReason)
+            ? 'Clash YAML subscription is not supported here' : 'ошибка запроса (значения скрыты)')
+        : actualReason.replace(/https?:\/\/\S+/gi, '[URL hidden]');
       if (/Clash YAML subscription is not supported here/i.test(reason)) {
         // #158 (R2): не маскируем под generic network/error — формат назван прямо.
         summary.subscriptionsFailed++;
@@ -11416,7 +11422,7 @@ function rbRenderPortableMode() {
   const active = !!rbPortableProjectState;
   const notice = document.getElementById('rbPortableModeNotice');
   if (notice) notice.textContent = active
-    ? 'Проект v2: переносимые HWID внутри проекта; Build и browser-preview пока заблокированы до подключения движка. Локальный реестр не изменён.'
+    ? 'Проект v2: Preview использует HWID каждой подписки. Build требует проверенной поддержки индивидуальных HWID в web4core; иначе сборка заблокирована.'
     : 'Проект v1: HWID хранится только в браузере и не переносится в файл проекта.';
   const on = document.getElementById('rbPortableActivateBtn');
   if (on) on.disabled = active;
@@ -11432,7 +11438,7 @@ function rbActivatePortableProject() {
   if (!confirm('Создать переносимый проект v2 из текущих настроек?\n\n' +
       'В экспортируемом файле будет сохранён реальный HWID устройства, URL/токены подписок и, если есть, приватные ключи WG/AWG. ' +
       'Файл храните как секрет. В браузерный реестр новые HWID НЕ добавляются. ' +
-      'Build и browser-preview для v2 пока недоступны до интеграции движка.')) return;
+      'Preview использует выбранные HWID, а Build требует проверенный совместимый web4core.')) return;
   rbPortableProjectState = rbPortableContextFromProject(converted.project);
   mihomoValidationSeq++;
   setMihomoValidationState('NOT_BUILT');
@@ -11785,7 +11791,7 @@ async function rbLoadProject(file) {
     ? '⚠ В файле нет переносимого HWID: будет использована текущая идентичность этого браузера. На другом компьютере сервис подписки может считать её новым устройством.\n' : '';
   const portableNotice = parsed.identityStatus === 'PORTABLE_V2_VALIDATED_ONLY'
     ? '⚠ Файл v2 содержит сохранённые HWID. Они останутся только внутри проекта и НЕ заменят локальный реестр браузера. ' +
-      'До включения поддержки в движке Build и получение browser-preview для v2 будут заблокированы.\n' : '';
+      'Preview использует сохранённые HWID. Build требует проверенный совместимый движок.\n' : '';
   const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + legacyIdentityNotice + portableNotice + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
   if (!confirm(preview)) {
     return showToast('Загрузка проекта отменена.');
@@ -11797,7 +11803,7 @@ async function rbLoadProject(file) {
   if (undoBtn) undoBtn.style.display = '';
   const subs = project.sources.mainInput.split('\n').filter(x => x.trim()).length;
   showToast(project.schemaVersion === 2
-    ? '✅ Переносимый проект v2 загружен. HWID сохранены; Build/preview пока недоступны.'
+    ? '✅ Проект v2 загружен. Preview использует сохранённые HWID; Build проверяет движок.'
     : '✅ Проект загружен: ' + project.wgProfiles.length + ' WG/AWG, ' + subs + ' строк источников. Нажмите ⚡ Build Config.');
 }
 
