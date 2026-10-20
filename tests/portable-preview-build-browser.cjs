@@ -15,7 +15,15 @@ async function run() {
   const page=await context.newPage();
   const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
-  page.on('dialog',d=>d.accept());
+  let cancelNextPreview = false;
+  const previewConfirmations = [];
+  page.on('dialog',d=>{
+    if (d.type()==='confirm' && d.message().includes('Получить список серверов для переносимого проекта v2')) {
+      previewConfirmations.push(d.message());
+      if (cancelNextPreview) { cancelNextPreview=false; void d.dismiss(); return; }
+    }
+    void d.accept();
+  });
   const requests=[];
   page.on('request',r=>{if(urls.some(x=>r.url().startsWith(x)))requests.push(r.url());});
   if(process.env.JS_YAML_PATH) await page.route('https://cdn.jsdelivr.net/**',r=>r.fulfill({path:process.env.JS_YAML_PATH,contentType:'text/javascript'}));
@@ -48,8 +56,21 @@ async function run() {
       return 'vless://00000000-0000-4000-8000-000000000001@192.0.2.10:443?type=tcp#synthetic-node';
     };
   });
+  // #307 consent gate: user dismissal MUST be a network no-op, including
+  // no POST to a fallback worker. No HWIDs/URLs in disclosure text.
+  cancelNextPreview = true;
+  await page.evaluate(()=>fetchServerList());
+  assert.equal(await page.evaluate(()=>window.__fakeSubscriptionHeaders.length),0);
+  assert.match(await page.locator('#toast').textContent(),/отменён/);
+  assert.deepEqual(requests,[]);
   await page.evaluate(()=>fetchServerList());
   await page.waitForFunction(()=>serverListState===SERVER_LIST_STATE.SUCCESS);
+  assert.ok(previewConfirmations.length >= 2);
+  for (const dialog of previewConfirmations) {
+    assert.match(dialog,/Cloudflare Worker/);
+    assert.match(dialog,/редирект/);
+    assert.ok(!dialog.includes(h1) && !dialog.includes(H2) && !urls.some(url=>dialog.includes(url)));
+  }
   const preview=await page.evaluate(()=>window.__fakeSubscriptionHeaders);
   assert.deepEqual(preview.map(x=>x.url),urls);
   assert.deepEqual(preview.map(x=>x.hwid),[h1,H2,H2]);
