@@ -69,32 +69,46 @@ async function run() {
   assert.equal((await page.evaluate(()=>window.__fakeSubscriptionHeaders)).length,3);
   await page.check('#cfgSubMode');
 
-  // The currently vendored old runtime cannot emit per-provider headers;
-  // a local synthetic capability probe must detect that before real Build.
-  assert.equal(await page.evaluate(()=>rbPortableRuntimeCanBuild(web4core)),false);
-  await page.evaluate(()=>buildMihomo());
-  assert.match(await page.locator('#toast').textContent(),/web4core.*HWID/);
-  assert.equal(await page.locator('#mihomoOutput').inputValue(),'');
-
-  // Synthetic candidate-runtime adapter: model the exact contract implemented
-  // in web4core PR #21. It is NOT a substitute for future candidate-bundle CI.
-  await page.evaluate(()=>{
-    const base=web4core.buildFromRequest;
-    window.__lastV2Request=null;
-    web4core.buildFromRequest=(req)=>{
-      const out=base(req);
-      if(!req.options?.providerOverrides)return out;
-      const doc=jsyaml.load(out.data);
-      const overrides=req.options.providerOverrides;
-      for(const p of Object.values(doc['proxy-providers']||{})){
-        const match=overrides.find(x=>x.sourceUrl===p.url);
-        if(match)p.header['x-hwid']=[match.hwid];
-      }
-      window.__lastV2Request={input:req.input,hwids:overrides.map(x=>x.hwid)};
-      return {...out,data:jsyaml.dump(doc,{lineWidth:-1})};
-    };
-  });
-  assert.equal(await page.evaluate(()=>rbPortableRuntimeCanBuild(web4core)),true);
+  const actualCandidateRuntime = process.env.EXPECT_V2_ENGINE === '1';
+  if (actualCandidateRuntime) {
+    // PR #21 candidate is compiled via read-only CI and copied only into
+    // ephemeral workspace: this is the real source-engine end-to-end path.
+    assert.equal(await page.evaluate(()=>rbPortableRuntimeCanBuild(web4core)),true,
+      'actual candidate engine must prove its own header contract');
+    await page.evaluate(()=>{
+      const base=web4core.buildFromRequest;
+      window.__lastV2Request=null;
+      web4core.buildFromRequest=(req)=>{
+        if(req.options?.providerOverrides) window.__lastV2Request={
+          input:req.input,hwids:req.options.providerOverrides.map(x=>x.hwid)};
+        return base(req);
+      };
+    });
+  } else {
+    // The tracked v1.11.2 runtime must fail closed; synthetic adapter below
+    // is ONLY a consumer contract unit test, not evidence for engine readiness.
+    assert.equal(await page.evaluate(()=>rbPortableRuntimeCanBuild(web4core)),false);
+    await page.evaluate(()=>buildMihomo());
+    assert.match(await page.locator('#toast').textContent(),/web4core.*HWID/);
+    assert.equal(await page.locator('#mihomoOutput').inputValue(),'');
+    await page.evaluate(()=>{
+      const base=web4core.buildFromRequest;
+      window.__lastV2Request=null;
+      web4core.buildFromRequest=(req)=>{
+        const out=base(req);
+        if(!req.options?.providerOverrides)return out;
+        const doc=jsyaml.load(out.data);
+        const overrides=req.options.providerOverrides;
+        for(const p of Object.values(doc['proxy-providers']||{})){
+          const match=overrides.find(x=>x.sourceUrl===p.url);
+          if(match)p.header['x-hwid']=[match.hwid];
+        }
+        window.__lastV2Request={input:req.input,hwids:overrides.map(x=>x.hwid)};
+        return {...out,data:jsyaml.dump(doc,{lineWidth:-1})};
+      };
+    });
+    assert.equal(await page.evaluate(()=>rbPortableRuntimeCanBuild(web4core)),true);
+  }
   await page.evaluate(()=>buildMihomo());
   await page.waitForFunction(()=>document.getElementById('mihomoOutput').value.includes('proxy-providers'));
   const built=await page.evaluate(()=>{
