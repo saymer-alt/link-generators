@@ -118,6 +118,26 @@ async function main(){
   assert.equal(roundtrip.actualOrder,true);
   count++;
 
+  // Cross-browser explicit Gist opt-out: export from browser B and import
+  // into browser A without adding any HWID to the ungated provider.
+  await b.locator('#rbPortableSources select').first().selectOption('__none__');
+  assert.equal((await b.evaluate(()=>rbCollectProject())).identities.providerBindings[0].identityId,null);
+  const [dGist]=await Promise.all([
+    b.waitForEvent('download'),b.locator('button[onclick="rbSaveProject()"]').click()
+  ]);
+  const gistFile=path.join(tmp,'no-hwid-gist.lgproject.json');
+  await dGist.saveAs(gistFile);
+  const gist=JSON.parse(fs.readFileSync(gistFile,'utf8'));
+  assert.equal(gist.identities.providerBindings[0].identityId,null);
+  await a.locator('#rbProjectFile').setInputFiles(gistFile);
+  await a.waitForFunction(()=>rbCollectProject().identities?.providerBindings?.[0]?.identityId===null);
+  const imported=await a.evaluate(()=>rbPortableEngineOptions(rbCollectProject()));
+  assert.equal(imported.ok,true);
+  assert.equal(imported.options.providerOverrides[0].hwid,null);
+  assert.equal(imported.options.providerOverrides[1].hwid!==null,true);
+  assert.equal(await b.evaluate(()=>localStorage.getItem(DEVICE_IDENTITY_STORAGE_KEY)),registryB);
+  count++;
+
   await b.locator('#rbUndoBtn').click();
   assert.equal((await b.evaluate(()=>rbCollectProject())).schemaVersion,1);
   assert.equal(await b.evaluate(()=>localStorage.getItem(DEVICE_IDENTITY_STORAGE_KEY)),registryB);
