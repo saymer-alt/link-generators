@@ -342,6 +342,7 @@ warpscout scan -p masque -P -jt 4 -masque-sni cdn.jsdelivr.net -o masque-h3-repo
 ### Полезные материалы
 
 - [Архив наших полевых испытаний сентября–октября 2026](research/WARPSCOUT-KEENETIC-FIELD-NOTES-2026-09.md).
+- [Полевой кейс 21.10.2026: три WARP на одном Keenetic (172.16.0.2/.3/.4) и каскад .4 → .3](research/WARPSCOUT-KEENETIC-FIELD-NOTES-2026-09.md#15-полевой-эксперимент-три-warp-на-одном-keenetic-titan-4210-2026-10-21) — отдельный эксперимент, без гарантии смены GeoIP.
 - [WARPSCOUT: исходный README на русском](https://github.com/vernette/warpscout/blob/master/README_RU.md).
 - [WARPSCOUT: конфиги и фильтры](https://github.com/vernette/warpscout/blob/master/docs/en/configs.md).
 - [WARPSCOUT на VPS](WARPSCOUT-VPS.md) и [Windows](WARPSCOUT-WINDOWS.md).
