@@ -314,7 +314,20 @@ async function listedCount(page) {
   const substringMatches = await page.evaluate(() => serverListExclusionBreakdown(['Main-01', 'Main-01 extra', 'Main-02']));
   assert.equal(substringMatches.total, 2, 'буквальный regex-фрагмент Main-01 отфильтрует и Main-01 extra');
   assert.equal(substringMatches.selected, 2, 'сводка показывает все реально совпавшие имена, не только отмеченное');
-  ok('Max field UX: смысл галочек, поиск, почти пустой провайдер, sources, unique имена');
+  const bulk = await page.evaluate(() => {
+    const prev = subscriptionSelection;
+    const names = Array.from({length: 1500}, (_, i) => 'node-' + String(i).padStart(5, '0'));
+    const t0 = performance.now();
+    try {
+      subscriptionSelection = new Set(names);
+      const counts = serverListExclusionBreakdown(names);
+      return { ...counts, durationMs: performance.now() - t0 };
+    } finally { subscriptionSelection = prev; }
+  });
+  assert.equal(bulk.total, 1500, 'bulk: все имена посчитаны корректно');
+  assert.equal(bulk.selected, 1500, 'bulk: один объединённый regex учитывает все галочки');
+  assert.ok(bulk.durationMs < 4000, 'bulk count не блокирует UI: ' + bulk.durationMs + ' ms');
+  ok('Max field UX: смысл галочек, поиск, bulk 1500, почти пустой провайдер, unique имена');
 
   // === 11. UX Architecture 2.0: device/filter grouped with subscriptions ===
   const pos = await page.evaluate(() => {
