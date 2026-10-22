@@ -299,6 +299,9 @@ async function listedCount(page) {
   assert.match(await upperStats(page), /исключается: 10.*останется: 0/, 'все имена исключены');
   assert.match(await page.locator('#subListExclusionWarning').innerText(), /Исключены все имена/, 'видимое предупреждение');
   assert.match(await page.locator('#subListExclusionBreakdown').innerText(), /Исключено галочками: 10.*ручным фильтром: 0/, 'сводка по источникам');
+  await page.locator('#subscriptionPreviewNames .sub-list-item', { hasText: 'Alt-01' }).locator('input').uncheck();
+  assert.match(await upperStats(page), /исключается: 9.*останется: 1/);
+  assert.match(await page.locator('#subListExclusionWarning').innerText(), /почти все известные имена/, '9/10: явный WARN');
   await page.locator('#subListNone').click();
   assert.equal(await page.locator('#subListExclusionWarning').isVisible(), false, 'снятие галочек убирает предупреждение');
   await page.locator('#subscriptionPreviewNames .sub-list-item', { hasText: 'Main-01' }).locator('input').check();
