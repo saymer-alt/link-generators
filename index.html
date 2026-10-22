@@ -7009,12 +7009,89 @@ function ptNetworkDiagnostics(spec, model, opts) {
 // bounded-разбор — pure-функции (без DOM). Контракт формата:
 // docs/research/PORTABLE-BUILDER-PROJECT.md. Сбор/применение состояния
 // Builder (DOM) живёт в RB-UI, здесь только данные.
+// Current Builder export/Reverse remain v1 until project-scoped identity UI is ready.
 const RB_PROJECT_SCHEMA_VERSION = 1;
+const RB_PROJECT_READ_SCHEMA_VERSION = 2;
 const RB_PROJECT_MAX_BYTES = 4 * 1024 * 1024;
 const RB_PROFILES = new Set(['router', 'vps-local', 'vps-gateway']);
 const RB_DASHBOARDS = new Set(['metacubexd', 'yacd', 'zashboard', 'custom']);
 const RB_STRATEGIES = new Set(['url-test', 'fallback', 'load-balance']);
 
+
+// 1.12 / #280 — read-only portable identity v2 contract. v1 export and
+// live Build/Preview keep using the existing single browser-local HWID.
+// Never include URL, HWID, sourceId or labels in a validation diagnostic.
+const RB_PORTABLE_MAX = 512;
+function rbValidatePortableIdentities(p) {
+  const errors = [];
+  const record = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  const keysOnly = (v, allowed, name) => {
+    if (Object.keys(v).some(k => !allowed.includes(k))) errors.push(name + ': unknown field');
+  };
+  const idOk = v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(v);
+  const s = p.sources, ident = p.identities;
+  if (!record(s) || !record(ident)) return ['v2: sources and identities objects required'];
+  keysOnly(s, ['subMode', 'mainInput', 'fallbackInput', 'autoWhitelist', 'subscriptionSources'], 'sources');
+  keysOnly(ident, ['defaultId', 'entries', 'providerBindings'], 'identities');
+  if (!Array.isArray(s.subscriptionSources) || !Array.isArray(ident.entries) || !Array.isArray(ident.providerBindings))
+    return ['v2: subscriptionSources, entries and providerBindings arrays required'];
+  if (s.subscriptionSources.length > RB_PORTABLE_MAX || ident.entries.length > RB_PORTABLE_MAX ||
+      ident.providerBindings.length > RB_PORTABLE_MAX) return ['v2: identity/source count exceeds limit'];
+  if (!idOk(ident.defaultId)) errors.push('identities.defaultId: invalid id');
+  const ids = new Set(), used = new Set();
+  for (const entry of ident.entries) {
+    if (!record(entry)) { errors.push('identities.entries[]: invalid entry'); continue; }
+    keysOnly(entry, ['id', 'label', 'hwid'], 'identities.entries[]');
+    if (!idOk(entry.id) || ids.has(entry.id)) errors.push('identities.entries[]: id must be unique');
+    else ids.add(entry.id);
+    if (typeof entry.label !== 'string' || !entry.label.trim() || entry.label.length > 80)
+      errors.push('identities.entries[]: invalid label');
+    if (typeof entry.hwid !== 'string' || !/^[A-Za-z0-9=-]{10,64}$/.test(entry.hwid))
+      errors.push('identities.entries[]: invalid HWID');
+  }
+  if (!ids.has(ident.defaultId)) errors.push('identities.defaultId: not found');
+  else used.add(ident.defaultId);
+
+  // In Sub Mode, HTTP(S) URLs without URL-embedded credentials are provider
+  // subscriptions. Mirrors splitSubscriptionInputForPreview without DOM or fetch.
+  const urls = [];
+  if (s.subMode === true && typeof s.mainInput === 'string') {
+    for (const raw of s.mainInput.split(/\r?\n/)) {
+      const trimmed = raw.trim();
+      if (!/^https?:\/\//i.test(trimmed)) continue;
+      try {
+        const u = new URL(trimmed);
+        if (!u.username && !u.password && (u.protocol === 'http:' || u.protocol === 'https:')) urls.push(trimmed);
+      } catch (_) {}
+    }
+  }
+  if (new Set(urls).size !== urls.length) errors.push('sources.mainInput: duplicate provider URL requires explicit disambiguation');
+  if (s.subscriptionSources.length !== urls.length) errors.push('sources.subscriptionSources: subscription count mismatch');
+  const sourceIds = new Set();
+  for (let i = 0; i < s.subscriptionSources.length; i++) {
+    const entry = s.subscriptionSources[i];
+    if (!record(entry)) { errors.push('sources.subscriptionSources[]: invalid entry'); continue; }
+    keysOnly(entry, ['sourceId', 'url'], 'sources.subscriptionSources[]');
+    if (!idOk(entry.sourceId) || sourceIds.has(entry.sourceId))
+      errors.push('sources.subscriptionSources[]: sourceId must be unique');
+    else sourceIds.add(entry.sourceId);
+    if (typeof entry.url !== 'string' || entry.url !== urls[i])
+      errors.push('sources.subscriptionSources[]: URL/order mismatch');
+  }
+  if (ident.providerBindings.length !== sourceIds.size) errors.push('identities.providerBindings: count mismatch');
+  const bound = new Set();
+  for (const binding of ident.providerBindings) {
+    if (!record(binding)) { errors.push('identities.providerBindings[]: invalid entry'); continue; }
+    keysOnly(binding, ['sourceId', 'identityId'], 'identities.providerBindings[]');
+    if (!sourceIds.has(binding.sourceId) || bound.has(binding.sourceId))
+      errors.push('identities.providerBindings[]: missing/duplicate source reference');
+    else bound.add(binding.sourceId);
+    if (!ids.has(binding.identityId)) errors.push('identities.providerBindings[]: unknown identity');
+    else used.add(binding.identityId);
+  }
+  if (used.size !== ids.size) errors.push('identities.entries: unused identity');
+  return errors;
+}
 
 function rbValidateProject(p) {
   const errors = [];
@@ -7022,9 +7099,12 @@ function rbValidateProject(p) {
   if (typeof p.schemaVersion !== 'number' || !Number.isInteger(p.schemaVersion) || p.schemaVersion < 1) {
     errors.push('schemaVersion: positive integer expected');
   }
-  if (p.schemaVersion > RB_PROJECT_SCHEMA_VERSION) {
-    errors.push('файл создан более новой версией генератора (schemaVersion ' + p.schemaVersion + ' > ' + RB_PROJECT_SCHEMA_VERSION + ')');
+  if (p.schemaVersion > RB_PROJECT_READ_SCHEMA_VERSION) {
+    errors.push('файл создан более новой версией генератора (schemaVersion ' + p.schemaVersion + ' > ' + RB_PROJECT_READ_SCHEMA_VERSION + ')');
   }
+  if (p.schemaVersion === 1 && (Object.hasOwn(p, 'identities') || Object.hasOwn(p.sources || {}, 'subscriptionSources')))
+    errors.push('v1: portable identities require schemaVersion 2');
+  if (p.schemaVersion === 2) errors.push(...rbValidatePortableIdentities(p));
   const sources = p.sources;
   if (!sources || typeof sources !== 'object') errors.push('sources: object expected');
   else {
@@ -7110,7 +7190,11 @@ function rbValidateProject(p) {
 // на историческую неявную группу; сами ссылки/beans/passthrough не меняем.
 // Промежуточный v2 из этого PR имел ту же структуру: читаем и сохраняем v1.
 function rbMigrateProject(p) {
-  if (p && p.schemaVersion === 2) return { ok: true, project: { ...p, schemaVersion: 1 } };
+  // Old experimental v2 had NO identity payload, and must still round-trip
+  // through v1. A proper/partial portable v2 must never lose identity data.
+  if (p && p.schemaVersion === 2 &&
+      !Object.hasOwn(p, 'identities') && !Object.hasOwn(p.sources || {}, 'subscriptionSources'))
+    return { ok: true, project: { ...p, schemaVersion: 1 } };
   const d = p && p.dialer;
   const active = d && ['members', 'providers'].some(k => typeof d[k] === 'string' && d[k].trim());
   // В Build имя берётся из mode/target; исходный bean может хранить старое,
@@ -7150,7 +7234,10 @@ function rbParseProjectText(text) {
   if (!migrated.ok) return { ok: false, error: migrated.error };
   const errors = rbValidateProject(migrated.project);
   if (errors.length) return { ok: false, error: 'структура проекта: ' + errors[0] + (errors.length > 1 ? ' (и ещё ' + (errors.length - 1) + ')' : '') };
-  return { ok: true, project: migrated.project };
+  return {
+    ok: true, project: migrated.project,
+    identityStatus: migrated.project.schemaVersion === 2 ? 'PORTABLE_V2_VALIDATED_ONLY' : 'LEGACY_IDENTITY_MISSING'
+  };
 }
 // === REVERSE BUILD CORE — RB-CORE-END ===
 
@@ -11136,6 +11223,9 @@ function rbCollectProject() {
 function rbApplyProject(project) {
   const copy = rbParseProjectText(JSON.stringify(project));
   if (!copy.ok) throw new Error('Проект не применён: ' + copy.error);
+  // Read-only parser accepts v2, but restoring it would discard HWIDs until
+  // the transactional project identity context/Preview/Build integration lands.
+  if (copy.project.schemaVersion === 2) throw new Error('Проект v2 проверен, но перенос HWID пока не включён; Builder не изменён.');
   const o = copy.project.options;
   if (copy.project.sources.autoWhitelist && o.profile !== 'router') throw new Error('Проект не применён: автоматические белые списки доступны только в профиле роутера.');
   const conflicts = awlConflicts(copy.project.sources.autoWhitelist, copy.project.tiered.enabled, o.perProxyMaster || o.perProxyTun || o.perProxySocks);
@@ -11262,10 +11352,14 @@ async function rbLoadProject(file) {
   if (epoch !== builderProjectEpoch) return;
   const parsed = rbParseProjectText(text);
   if (!parsed.ok) return showToast('❌ Проект: ' + parsed.error, true);
+  if (parsed.identityStatus === 'PORTABLE_V2_VALIDATED_ONLY')
+    return showToast('❌ Формат v2 проверен, но безопасный импорт HWID ещё не включён. Builder не изменён.', true);
   const project = parsed.project;
   if (beforeRead !== rbProjectFingerprint(rbCollectProject())) return showToast('Builder изменился во время чтения файла. Загрузите проект повторно.', true);
   const counts = rbProjectCounts(project);
-  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
+  const legacyIdentityNotice = parsed.identityStatus === 'LEGACY_IDENTITY_MISSING'
+    ? '⚠ В файле нет переносимого HWID: будет использована текущая идентичность этого браузера. На другом компьютере сервис подписки может считать её новым устройством.\n' : '';
+  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + legacyIdentityNotice + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
   if (!confirm(preview)) {
     return showToast('Загрузка проекта отменена.');
   }
