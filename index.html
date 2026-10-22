@@ -513,7 +513,7 @@
 <div id="excludeFilterRow" style="margin-top:10px">
         <div class="hint" id="serverListOffHint" style="display:none">Список серверов нужен только для просмотра узлов и удобного выбора исключений. По умолчанию подписка браузером не запрашивается.</div>
         <div id="serverListPanel" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)">
-          <div class="hint" style="margin-bottom:8px"><strong>🚫 Серверы для исключения из подписки.</strong> Галочка <strong>ЗАПРЕЩАЕТ</strong> выбранное имя узла, а не разрешает его. Чтобы оставить сервер — не отмечайте его. Выбор по галочкам точный: «Германия» не исключит отдельно названный «Hysteria 2 | Германия».</div>
+          <div class="hint" style="margin-bottom:8px"><strong>🚫 Серверы для исключения из подписки.</strong> Галочка <strong>ЗАПРЕЩАЕТ</strong> выбранное имя узла, а не разрешает его. Чтобы оставить сервер — не отмечайте его. Отмеченное имя становится буквальным фрагментом регулярного выражения: оно может совпасть и внутри более длинного имени. Например, «🇩🇪 ⚡ Германия» не совпадёт с «🇩🇪 Hysteria 2 | Германия», а короткий фрагмент «Германия» — совпадёт с обоими.</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button type="button" class="btn btn-gray" id="subListFetchBtn">📋 Получить список</button>
             <span id="subListStats" class="hint" style="margin:0">Список ещё не получен.</span>
@@ -4183,9 +4183,12 @@ function serverListExclusionBreakdown(uniqueNames) {
     try { manualRx = new RegExp(body, flags); } catch (_) { manualRx = null; }
   }
   const names = new Set(uniqueNames || []);
+  // Галочки эмитятся как экранированные REGEXP-подстроки, не как ^name$.
+  // Поэтому сводка обязана учитывать побочные совпадения с более длинными именами.
+  const selectedPatterns = Array.from(subscriptionSelection, name => new RegExp(escapeRegExpText(name), flags));
   let total = 0, selected = 0, manual = 0, overlap = 0;
   for (const name of names) {
-    const checked = subscriptionSelection.has(name);
+    const checked = selectedPatterns.some(pattern => pattern.test(name));
     const matched = Boolean(manualRx && manualRx.test(name));
     if (checked) selected++;
     if (matched) manual++;
@@ -4255,7 +4258,7 @@ function updateServerListStats() {
   const breakdown = document.getElementById('subListExclusionBreakdown');
   if (breakdown) breakdown.textContent = 'Исключено галочками: ' + counts.selected +
     ' · ручным фильтром: ' + counts.manual + ' · совпадений: ' + counts.overlap +
-    '. Числа относятся к уникальным именам; ручной фильтр не сбрасывается снятием галочек.';
+    '. Это совпадения уникальных имён по regex-подстроке; ручной фильтр не сбрасывается снятием галочек.';
   const warning = document.getElementById('subListExclusionWarning');
   if (warning) {
     const all = unique > 0 && remaining === 0;
