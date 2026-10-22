@@ -306,7 +306,7 @@ async function listedCount(page) {
   assert.equal(await page.locator('#subListExclusionWarning').isVisible(), false, 'снятие галочек убирает предупреждение');
   await page.locator('#subscriptionPreviewNames .sub-list-item', { hasText: 'Main-01' }).locator('input').check();
   const duplicatePreview = await page.evaluate(() => {
-    renderSubscriptionPreview({ subscriptions: 1, subscriptionsSucceeded: 1, found: 3, names: ['Main-01', 'Main-01', 'Main-02'] });
+    renderSubscriptionPreview({ subscriptions: 1, subscriptionsSucceeded: 1, found: 3, names: ['Main-01', 'Main-01', 'Main-02'], warnings: [] });
     return document.getElementById('subscriptionPreviewStats').textContent;
   });
   assert.match(duplicatePreview, /найдено узлов: 3/, 'количество физических узлов не теряется');
