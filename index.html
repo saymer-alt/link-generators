@@ -513,6 +513,7 @@
 <div id="excludeFilterRow" style="margin-top:10px">
         <div class="hint" id="serverListOffHint" style="display:none">Список серверов нужен только для просмотра узлов и удобного выбора исключений. По умолчанию подписка браузером не запрашивается.</div>
         <div id="serverListPanel" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)">
+          <div class="hint" style="margin-bottom:8px"><strong>🚫 Серверы для исключения из подписки.</strong> Галочка <strong>ЗАПРЕЩАЕТ</strong> выбранное имя узла, а не разрешает его. Чтобы оставить сервер — не отмечайте его. Выбор по галочкам точный: «Германия» не исключит отдельно названный «Hysteria 2 | Германия».</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button type="button" class="btn btn-gray" id="subListFetchBtn">📋 Получить список</button>
             <span id="subListStats" class="hint" style="margin:0">Список ещё не получен.</span>
@@ -553,11 +554,13 @@
           </details>
           <div id="subListControls" style="display:none;margin-top:6px">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <input type="text" id="subListSearch" placeholder="поиск по имени…" style="flex:1;min-width:160px;padding:4px 8px">
-              <button type="button" class="btn btn-gray" id="subListAll" style="padding:2px 10px">Выбрать все</button>
-              <button type="button" class="btn btn-gray" id="subListNone" style="padding:2px 10px">Снять все</button>
+              <input type="text" id="subListSearch" placeholder="поиск по имени…" aria-label="Поиск серверов для исключения" style="flex:1;min-width:160px;padding:4px 8px">
+              <button type="button" class="btn btn-gray" id="subListAll" style="padding:2px 10px" title="Исключить все имена, видимые с учётом поиска">Исключить все показанные</button>
+              <button type="button" class="btn btn-gray" id="subListNone" style="padding:2px 10px" title="Снять галочки со всех имён, не меняя ручной Exclude Filter">Снять все галочки</button>
             </div>
             <div id="subscriptionPreviewNames" class="resizable-node-list" style="height:220px;margin-top:5px"></div>
+            <div id="subListExclusionBreakdown" class="hint" style="margin-top:6px" aria-live="polite"></div>
+            <div id="subListExclusionWarning" class="hint" style="display:none;color:var(--warn);margin-top:6px" role="status" aria-live="polite"></div>
           </div>
         </div>
         <div id="subscriptionPreviewBox" class="hint" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)" aria-live="polite">
@@ -568,10 +571,10 @@
             <div id="subscriptionPreviewNamesLegacy" class="resizable-node-list" style="height:220px;margin-top:5px;white-space:pre-wrap;font-family:monospace"></div>
           </details>
         </div>
-        <div class="hint" id="subSelectionNote" style="display:none;color:var(--warn)">Выбранные для исключения серверы продолжают действовать (объединяются с ручным фильтром через ИЛИ). Очистить — кнопкой «Снять все» в списке серверов.</div>
+        <div class="hint" id="subSelectionNote" style="display:none;color:var(--warn)">Галочки продолжают исключать серверы даже при скрытом списке. Чтобы снять их, откройте список и нажмите «Снять все галочки». Ручной Exclude Filter работает отдельно и не очищается этой кнопкой.</div>
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
         <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
-        <div class="hint">Фильтр по фактическим именам узлов. При включённых URL-подписках передаётся Mihomo как <code>exclude-filter</code>; при выключенных применяется браузером к развёрнутым узлам до сборки YAML. Например, <code>(?i)ru|russia|россия</code>. Применяется ко всем подпискам. Пусто — фильтрации нет.</div>
+        <div class="hint">Ручное регулярное выражение по именам узлов. Оно <strong>добавляется</strong> к исключениям галочками, а не заменяет их. Например, <code>(?i)германия|germany</code> может исключить несколько немецких узлов с разными именами; проверьте счётчик «останется». При включённых URL-подписках передаётся Mihomo как <code>exclude-filter</code>; при выключенных применяется браузером до сборки YAML. Применяется ко всем подпискам. Пусто — ручного фильтра нет.</div>
       </div>
 </div>
 </div>
@@ -4173,17 +4176,27 @@ function compileCombinedExcludeFilter(combinedFilter) {
   return new RegExp(body, flags);
 }
 
-function serverListCountExcluded(uniqueNames) {
+function serverListExclusionBreakdown(uniqueNames) {
   const { flags, body } = splitManualExcludeFilter(document.getElementById('excludeFilterInput').value);
   let manualRx = null;
   if (body) {
     try { manualRx = new RegExp(body, flags); } catch (_) { manualRx = null; }
   }
-  let excluded = 0;
-  for (const name of uniqueNames) {
-    if (subscriptionSelection.has(name) || (manualRx && manualRx.test(name))) excluded++;
+  const names = new Set(uniqueNames || []);
+  let total = 0, selected = 0, manual = 0, overlap = 0;
+  for (const name of names) {
+    const checked = subscriptionSelection.has(name);
+    const matched = Boolean(manualRx && manualRx.test(name));
+    if (checked) selected++;
+    if (matched) manual++;
+    if (checked && matched) overlap++;
+    if (checked || matched) total++;
   }
-  return excluded;
+  return { total, selected, manual, overlap, unique: names.size };
+}
+
+function serverListCountExcluded(uniqueNames) {
+  return serverListExclusionBreakdown(uniqueNames).total;
 }
 
 function renderServerList() {
@@ -4198,6 +4211,7 @@ function renderServerList() {
     const box = document.createElement('input');
     box.type = 'checkbox';
     box.className = 'sub-list-check';
+    box.setAttribute('aria-label', 'Исключить сервер: ' + name);
     box.dataset.name = name;
     box.checked = subscriptionSelection.has(name);
     box.addEventListener('change', () => {
@@ -4231,13 +4245,28 @@ function renderServerList() {
 }
 
 function updateServerListStats() {
-  const unique = subscriptionListNames.length;
-  const excluded = serverListCountExcluded(subscriptionListNames);
-  const remaining = Math.max(0, unique - excluded);
+  const counts = serverListExclusionBreakdown(subscriptionListNames);
+  const unique = counts.unique;
+  const remaining = Math.max(0, unique - counts.total);
   const bits = ['Уникальных имён: ' + unique];
   if (subscriptionListNodes && subscriptionListNodes !== unique) bits.unshift('Узлов: ' + subscriptionListNodes);
-  bits.push('исключается: ' + excluded, 'останется: ' + remaining);
+  bits.push('исключается: ' + counts.total, 'останется: ' + remaining);
   document.getElementById('subListStats').textContent = bits.join(' · ');
+  const breakdown = document.getElementById('subListExclusionBreakdown');
+  if (breakdown) breakdown.textContent = 'Исключено галочками: ' + counts.selected +
+    ' · ручным фильтром: ' + counts.manual + ' · совпадений: ' + counts.overlap +
+    '. Числа относятся к уникальным именам; ручной фильтр не сбрасывается снятием галочек.';
+  const warning = document.getElementById('subListExclusionWarning');
+  if (warning) {
+    const all = unique > 0 && remaining === 0;
+    const almostAll = unique >= 10 && counts.total / unique >= 0.9;
+    warning.textContent = all
+      ? '⚠ Исключены все имена в доступном списке. Проверьте галочки и ручной фильтр перед Build; preview может быть неполным.'
+      : almostAll
+        ? '⚠ Исключены почти все известные имена (' + counts.total + '/' + unique + '). Проверьте, что галочки не перепутаны с разрешением серверов.'
+        : '';
+    warning.style.display = warning.textContent ? '' : 'none';
+  }
 }
 
 function updateSubSelectionNote() {
@@ -4706,18 +4735,19 @@ function renderSubscriptionPreview(summary) {
   // UNKNOWN ≠ 0: при непрочитанных подписках количество узлов неизвестно,
   // доказанный ноль — только когда все подписки успешно прочитаны и пусты.
   if (succeeded === total) {
+    const unique = new Set(summary.names || []).size;
     const excluded = serverListCountExcluded(summary.names);
-    const remaining = Math.max(0, summary.found - excluded);
+    const remaining = Math.max(0, unique - excluded);
     statsEl.textContent = 'Подписок: ' + total + ' · preview: ' + succeeded + '/' + total +
       ' · найдено узлов: ' + summary.found +
-      ' · после фильтра: ' + remaining + ' · исключено: ' + excluded;
+      ' · после фильтра: ' + remaining + ' уник. имён · исключено: ' + excluded + ' уник. имён';
   } else if (succeeded === 0) {
     statsEl.textContent = 'Подписок: ' + total + ' · preview: 0/' + total + ' · количество узлов: неизвестно';
   } else {
     const excluded = serverListCountExcluded(summary.names);
     statsEl.textContent = 'Подписок: ' + total + ' · preview: ' + succeeded + '/' + total +
       ' · найдено в доступных подписках: ' + summary.found +
-      ' · исключено (доступные): ' + excluded + ' · общий итог неизвестен';
+      ' · исключено (доступные): ' + excluded + ' уник. имён · общий итог неизвестен';
   }
   const warning = document.getElementById('subscriptionPreviewWarning');
   warning.textContent = summary.warnings.join(' ');
