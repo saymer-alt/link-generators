@@ -506,6 +506,11 @@
             <div style="margin-top:8px">
               <button type="button" class="btn btn-gray" id="btnDeviceIdentityNew">➕ ID для другого устройства</button>
             </div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn btn-gray" id="rbPortableActivateBtn">🔐 Подготовить переносимый проект v2</button>
+              <button type="button" class="btn btn-gray" id="rbPortableReturnBtn" hidden>Вернуться к локальному HWID (v1)</button>
+            </div>
+            <div id="rbPortableModeNotice" class="hint" role="status" aria-live="polite" style="margin-top:6px">Текущий проект v1: HWID хранится только в браузере и не переносится в файл проекта.</div>
             <div class="hint" style="margin-top:6px">Локальное имя нужно только для удобства и не меняет <code>x-device-model</code>. «Сменить ID» создаёт новый случайный HWID только по явной команде и может быть воспринят сервисом подписки как новое устройство. Удаление удаляет запись только из этого браузера: уже созданные конфиги и записи на стороне сервиса не меняются. Сам HWID нигде не отображается и в диагностику не попадает.</div>
           </div>
         </details>
@@ -3941,6 +3946,7 @@ function deleteActiveDeviceIdentity() {
 }
 
 function subscriptionPreviewHeaders() {
+  if (rbPortableProjectState) throw new Error('Project v2: browser-preview недоступен до подключения HWID для каждого провайдера.');
   // Allowlist контракта fetchSubscription: ровно два заголовка с доказанной
   // необходимостью (x-hwid — HWID-gate Geodema/Remnawave, x-device-model —
   // подпись устройства). Больше ничего не отправляем.
@@ -7009,12 +7015,89 @@ function ptNetworkDiagnostics(spec, model, opts) {
 // bounded-разбор — pure-функции (без DOM). Контракт формата:
 // docs/research/PORTABLE-BUILDER-PROJECT.md. Сбор/применение состояния
 // Builder (DOM) живёт в RB-UI, здесь только данные.
+// Current Builder export/Reverse remain v1 until project-scoped identity UI is ready.
 const RB_PROJECT_SCHEMA_VERSION = 1;
+const RB_PROJECT_READ_SCHEMA_VERSION = 2;
 const RB_PROJECT_MAX_BYTES = 4 * 1024 * 1024;
 const RB_PROFILES = new Set(['router', 'vps-local', 'vps-gateway']);
 const RB_DASHBOARDS = new Set(['metacubexd', 'yacd', 'zashboard', 'custom']);
 const RB_STRATEGIES = new Set(['url-test', 'fallback', 'load-balance']);
 
+
+// 1.12 / #280 — read-only portable identity v2 contract. v1 export and
+// live Build/Preview keep using the existing single browser-local HWID.
+// Never include URL, HWID, sourceId or labels in a validation diagnostic.
+const RB_PORTABLE_MAX = 512;
+function rbValidatePortableIdentities(p) {
+  const errors = [];
+  const record = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  const keysOnly = (v, allowed, name) => {
+    if (Object.keys(v).some(k => !allowed.includes(k))) errors.push(name + ': unknown field');
+  };
+  const idOk = v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(v);
+  const s = p.sources, ident = p.identities;
+  if (!record(s) || !record(ident)) return ['v2: sources and identities objects required'];
+  keysOnly(s, ['subMode', 'mainInput', 'fallbackInput', 'autoWhitelist', 'subscriptionSources'], 'sources');
+  keysOnly(ident, ['defaultId', 'entries', 'providerBindings'], 'identities');
+  if (!Array.isArray(s.subscriptionSources) || !Array.isArray(ident.entries) || !Array.isArray(ident.providerBindings))
+    return ['v2: subscriptionSources, entries and providerBindings arrays required'];
+  if (s.subscriptionSources.length > RB_PORTABLE_MAX || ident.entries.length > RB_PORTABLE_MAX ||
+      ident.providerBindings.length > RB_PORTABLE_MAX) return ['v2: identity/source count exceeds limit'];
+  if (!idOk(ident.defaultId)) errors.push('identities.defaultId: invalid id');
+  const ids = new Set(), used = new Set();
+  for (const entry of ident.entries) {
+    if (!record(entry)) { errors.push('identities.entries[]: invalid entry'); continue; }
+    keysOnly(entry, ['id', 'label', 'hwid'], 'identities.entries[]');
+    if (!idOk(entry.id) || ids.has(entry.id)) errors.push('identities.entries[]: id must be unique');
+    else ids.add(entry.id);
+    if (typeof entry.label !== 'string' || !entry.label.trim() || entry.label.length > 80)
+      errors.push('identities.entries[]: invalid label');
+    if (typeof entry.hwid !== 'string' || !/^[A-Za-z0-9=-]{10,64}$/.test(entry.hwid))
+      errors.push('identities.entries[]: invalid HWID');
+  }
+  if (!ids.has(ident.defaultId)) errors.push('identities.defaultId: not found');
+  else used.add(ident.defaultId);
+
+  // In Sub Mode, HTTP(S) URLs without URL-embedded credentials are provider
+  // subscriptions. Mirrors splitSubscriptionInputForPreview without DOM or fetch.
+  const urls = [];
+  if (s.subMode === true && typeof s.mainInput === 'string') {
+    for (const raw of s.mainInput.split(/\r?\n/)) {
+      const trimmed = raw.trim();
+      if (!/^https?:\/\//i.test(trimmed)) continue;
+      try {
+        const u = new URL(trimmed);
+        if (!u.username && !u.password && (u.protocol === 'http:' || u.protocol === 'https:')) urls.push(trimmed);
+      } catch (_) {}
+    }
+  }
+  if (new Set(urls).size !== urls.length) errors.push('sources.mainInput: duplicate provider URL requires explicit disambiguation');
+  if (s.subscriptionSources.length !== urls.length) errors.push('sources.subscriptionSources: subscription count mismatch');
+  const sourceIds = new Set();
+  for (let i = 0; i < s.subscriptionSources.length; i++) {
+    const entry = s.subscriptionSources[i];
+    if (!record(entry)) { errors.push('sources.subscriptionSources[]: invalid entry'); continue; }
+    keysOnly(entry, ['sourceId', 'url'], 'sources.subscriptionSources[]');
+    if (!idOk(entry.sourceId) || sourceIds.has(entry.sourceId))
+      errors.push('sources.subscriptionSources[]: sourceId must be unique');
+    else sourceIds.add(entry.sourceId);
+    if (typeof entry.url !== 'string' || entry.url !== urls[i])
+      errors.push('sources.subscriptionSources[]: URL/order mismatch');
+  }
+  if (ident.providerBindings.length !== sourceIds.size) errors.push('identities.providerBindings: count mismatch');
+  const bound = new Set();
+  for (const binding of ident.providerBindings) {
+    if (!record(binding)) { errors.push('identities.providerBindings[]: invalid entry'); continue; }
+    keysOnly(binding, ['sourceId', 'identityId'], 'identities.providerBindings[]');
+    if (!sourceIds.has(binding.sourceId) || bound.has(binding.sourceId))
+      errors.push('identities.providerBindings[]: missing/duplicate source reference');
+    else bound.add(binding.sourceId);
+    if (!ids.has(binding.identityId)) errors.push('identities.providerBindings[]: unknown identity');
+    else used.add(binding.identityId);
+  }
+  if (used.size !== ids.size) errors.push('identities.entries: unused identity');
+  return errors;
+}
 
 function rbValidateProject(p) {
   const errors = [];
@@ -7022,9 +7105,12 @@ function rbValidateProject(p) {
   if (typeof p.schemaVersion !== 'number' || !Number.isInteger(p.schemaVersion) || p.schemaVersion < 1) {
     errors.push('schemaVersion: positive integer expected');
   }
-  if (p.schemaVersion > RB_PROJECT_SCHEMA_VERSION) {
-    errors.push('файл создан более новой версией генератора (schemaVersion ' + p.schemaVersion + ' > ' + RB_PROJECT_SCHEMA_VERSION + ')');
+  if (p.schemaVersion > RB_PROJECT_READ_SCHEMA_VERSION) {
+    errors.push('файл создан более новой версией генератора (schemaVersion ' + p.schemaVersion + ' > ' + RB_PROJECT_READ_SCHEMA_VERSION + ')');
   }
+  if (p.schemaVersion === 1 && (Object.hasOwn(p, 'identities') || Object.hasOwn(p.sources || {}, 'subscriptionSources')))
+    errors.push('v1: portable identities require schemaVersion 2');
+  if (p.schemaVersion === 2) errors.push(...rbValidatePortableIdentities(p));
   const sources = p.sources;
   if (!sources || typeof sources !== 'object') errors.push('sources: object expected');
   else {
@@ -7110,7 +7196,11 @@ function rbValidateProject(p) {
 // на историческую неявную группу; сами ссылки/beans/passthrough не меняем.
 // Промежуточный v2 из этого PR имел ту же структуру: читаем и сохраняем v1.
 function rbMigrateProject(p) {
-  if (p && p.schemaVersion === 2) return { ok: true, project: { ...p, schemaVersion: 1 } };
+  // Old experimental v2 had NO identity payload, and must still round-trip
+  // through v1. A proper/partial portable v2 must never lose identity data.
+  if (p && p.schemaVersion === 2 &&
+      !Object.hasOwn(p, 'identities') && !Object.hasOwn(p.sources || {}, 'subscriptionSources'))
+    return { ok: true, project: { ...p, schemaVersion: 1 } };
   const d = p && p.dialer;
   const active = d && ['members', 'providers'].some(k => typeof d[k] === 'string' && d[k].trim());
   // В Build имя берётся из mode/target; исходный bean может хранить старое,
@@ -7150,8 +7240,137 @@ function rbParseProjectText(text) {
   if (!migrated.ok) return { ok: false, error: migrated.error };
   const errors = rbValidateProject(migrated.project);
   if (errors.length) return { ok: false, error: 'структура проекта: ' + errors[0] + (errors.length > 1 ? ' (и ещё ' + (errors.length - 1) + ')' : '') };
-  return { ok: true, project: migrated.project };
+  return {
+    ok: true, project: migrated.project,
+    identityStatus: migrated.project.schemaVersion === 2 ? 'PORTABLE_V2_VALIDATED_ONLY' : 'LEGACY_IDENTITY_MISSING'
+  };
 }
+// #280 — pure project-scoped identity lifecycle. No DOM/localStorage, preview,
+// Build, imports, or browser-global device state changes occur in these helpers.
+// A project becomes portable ONLY on an explicit conversion with an existing HWID.
+function rbPortableFail(reason) {
+  return { ok: false, error: 'portable identities: ' + reason };
+}
+
+function rbPortableGetSubscriptionUrls(raw, subMode) {
+  const urls = [];
+  if (subMode !== true || typeof raw !== 'string') return urls;
+  for (const line of raw.split(/\r?\n/)) {
+    const value = line.trim();
+    if (!/^https?:\/\//i.test(value)) continue;
+    try {
+      const u = new URL(value);
+      if (!u.username && !u.password && (u.protocol === 'https:' || u.protocol === 'http:')) urls.push(value);
+    } catch (_) {}
+  }
+  return urls;
+}
+
+function rbPortableParse(project, version) {
+  let result;
+  try { result = rbParseProjectText(JSON.stringify(project)); }
+  catch (_) { return rbPortableFail('project cannot be serialized'); }
+  if (!result.ok) return rbPortableFail('invalid project');
+  if (result.project.schemaVersion !== version) return rbPortableFail('unsupported schema');
+  return result;
+}
+
+// An explicitly selected device identity is copied from the browser registry;
+// other local identities never enter the project. No HWID is generated here.
+function rbPortableFromLegacy(project, chosen) {
+  const initial = rbPortableParse(project, 1);
+  if (!initial.ok) return initial;
+  if (!chosen || typeof chosen !== 'object' || Array.isArray(chosen) ||
+      Object.keys(chosen).some(k => !['id', 'label', 'hwid', 'createdAt'].includes(k)) ||
+      typeof chosen.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(chosen.id) ||
+      typeof chosen.label !== 'string' || !chosen.label.trim() || chosen.label.length > 80 ||
+      !/^[A-Za-z0-9=-]{10,64}$/.test(chosen.hwid || ''))
+    return rbPortableFail('explicit valid identity required');
+  const p = initial.project;
+  const urls = rbPortableGetSubscriptionUrls(p.sources.mainInput, p.sources.subMode);
+  if (urls.length > RB_PORTABLE_MAX || new Set(urls).size !== urls.length)
+    return rbPortableFail('too many or duplicate provider sources');
+  const next = JSON.parse(JSON.stringify(p));
+  next.schemaVersion = 2;
+  next.sources.subscriptionSources = urls.map((url, i) => ({ sourceId: 'src-' + (i + 1), url }));
+  next.identities = {
+    defaultId: chosen.id,
+    entries: [{ id: chosen.id, label: chosen.label, hwid: chosen.hwid }],
+    providerBindings: next.sources.subscriptionSources.map(s => ({ sourceId: s.sourceId, identityId: chosen.id }))
+  };
+  return rbPortableParse(next, 2);
+}
+
+// A pure reorder: stable opaque source IDs and their identity references move
+// with exact unique URLs. New/deleted/duplicate URLs are not guessed/mapped.
+function rbPortableReorder(project, newMainInput) {
+  const current = rbPortableParse(project, 2);
+  if (!current.ok) return current;
+  if (typeof newMainInput !== 'string') return rbPortableFail('input text expected');
+  const previous = current.project;
+  const urls = rbPortableGetSubscriptionUrls(newMainInput, previous.sources.subMode);
+  const from = new Map(previous.sources.subscriptionSources.map(s => [s.url, s]));
+  if (urls.length !== from.size || new Set(urls).size !== urls.length ||
+      urls.some(url => !from.has(url))) return rbPortableFail('subscription mapping changed; manual binding required');
+  const next = JSON.parse(JSON.stringify(previous));
+  next.sources.mainInput = newMainInput;
+  next.sources.subscriptionSources = urls.map(url => ({ ...from.get(url) }));
+  return rbPortableParse(next, 2);
+}
+
+// Assign an already present identity. An orphaned identity is rejected rather
+// than silently dropped; an explicit remove/replace UX can be added later.
+function rbPortableAssign(project, sourceId, identityId) {
+  const current = rbPortableParse(project, 2);
+  if (!current.ok) return current;
+  const next = JSON.parse(JSON.stringify(current.project));
+  const binding = next.identities.providerBindings.find(b => b.sourceId === sourceId);
+  if (!binding || !next.identities.entries.some(e => e.id === identityId))
+    return rbPortableFail('unknown source or identity');
+  binding.identityId = identityId;
+  return rbPortableParse(next, 2);
+}
+
+// Introduce a second identity and bind one provider atomically. Existing HWIDs
+// stay exact; no raw IDs, URLs, labels or HWIDs appear in returned errors.
+function rbPortableAddAndAssign(project, sourceId, chosen) {
+  const current = rbPortableParse(project, 2);
+  if (!current.ok) return current;
+  if (!chosen || typeof chosen !== 'object' || Array.isArray(chosen) ||
+      Object.keys(chosen).some(k => !['id', 'label', 'hwid'].includes(k)) ||
+      typeof chosen.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(chosen.id) ||
+      typeof chosen.label !== 'string' || !chosen.label.trim() || chosen.label.length > 80 ||
+      typeof chosen.hwid !== 'string' || !/^[A-Za-z0-9=-]{10,64}$/.test(chosen.hwid) ||
+      current.project.identities.entries.some(e => e.id === chosen.id))
+    return rbPortableFail('new unique identity required');
+  const next = JSON.parse(JSON.stringify(current.project));
+  const binding = next.identities.providerBindings.find(b => b.sourceId === sourceId);
+  if (!binding) return rbPortableFail('unknown source');
+  next.identities.entries.push({id: chosen.id, label: chosen.label, hwid: chosen.hwid});
+  binding.identityId = chosen.id;
+  return rbPortableParse(next, 2);
+}
+
+// Future Builder bridge: generates engine contract by VALIDATED source order,
+// never by UI line index alone. This result contains secrets: only pass to the
+// engine in-memory; never log it or render it.
+function rbPortableEngineOptions(project) {
+  const current = rbPortableParse(project, 2);
+  if (!current.ok) return current;
+  const p = current.project;
+  const lookup = new Map(p.identities.entries.map(e => [e.id, e.hwid]));
+  const targets = new Map(p.identities.providerBindings.map(b => [b.sourceId, b.identityId]));
+  return {
+    ok: true,
+    options: {
+      deviceHwid: lookup.get(p.identities.defaultId),
+      providerOverrides: p.sources.subscriptionSources.map(s => ({
+        sourceUrl: s.url, hwid: lookup.get(targets.get(s.sourceId))
+      }))
+    }
+  };
+}
+
 // === REVERSE BUILD CORE — RB-CORE-END ===
 
 // === REVERSE BUILD YAML ENGINE (OWNER-REVERSE-01, PR C) — RBY-CORE-START ===
@@ -10765,6 +10984,11 @@ async function buildMihomo() {
   const attemptEpoch = builderProjectEpoch;
   builderBuildError = false; builderBuildAttempts++; renderBuilderActionStatus();
   try {
+  if (rbPortableProjectState) {
+    mihomoValidationSeq++;
+    setMihomoValidationState('NOT_BUILT');
+    return buildFailure('Проект v2: Build временно заблокирован до интеграции HWID в движок (локальный HWID браузера НЕ подставляется).', true);
+  }
   if (wgUploadPending) {
     mihomoValidationSeq++;
     resetCompatSummary();
@@ -11078,7 +11302,61 @@ function copyText(text) {
 // bounded (rbParseProjectText) с подтверждением и undo; ни localStorage,
 // ни сети, ни секретов в логах/статусах.
 let rbUndoProjectState = null;
+// Project-scoped identity mapping is intentionally in RAM only and never
+// imported into link-generators.device-identities.v1/localStorage.
+let rbPortableProjectState = null;
+function rbPortableContextFromProject(project) {
+  if (project.schemaVersion !== 2) return null;
+  return {
+    subscriptionSources: JSON.parse(JSON.stringify(project.sources.subscriptionSources)),
+    identities: JSON.parse(JSON.stringify(project.identities))
+  };
+}
+function rbRenderPortableMode() {
+  const active = !!rbPortableProjectState;
+  const notice = document.getElementById('rbPortableModeNotice');
+  if (notice) notice.textContent = active
+    ? 'Проект v2: переносимые HWID внутри проекта; Build и browser-preview пока заблокированы до подключения движка. Локальный реестр не изменён.'
+    : 'Проект v1: HWID хранится только в браузере и не переносится в файл проекта.';
+  const on = document.getElementById('rbPortableActivateBtn');
+  if (on) on.disabled = active;
+  const off = document.getElementById('rbPortableReturnBtn');
+  if (off) off.hidden = !active;
+}
+// The explicit conversion does not generate an identity or alter localStorage.
+function rbActivatePortableProject() {
+  if (rbPortableProjectState) return showToast('Проект уже использует переносимый формат v2.');
+  const converted = rbPortableFromLegacy(rbCollectProject(), getActiveDeviceIdentity());
+  if (!converted.ok) return showToast('❌ v2: ' + converted.error, true);
+  if (!confirm('Создать переносимый проект v2 из текущих настроек?\n\n' +
+      'В экспортируемом файле будет сохранён реальный HWID устройства, URL/токены подписок и, если есть, приватные ключи WG/AWG. ' +
+      'Файл храните как секрет. В браузерный реестр новые HWID НЕ добавляются. ' +
+      'Build и browser-preview для v2 пока недоступны до интеграции движка.')) return;
+  rbPortableProjectState = rbPortableContextFromProject(converted.project);
+  mihomoValidationSeq++;
+  setMihomoValidationState('NOT_BUILT');
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
+  showToast('Переносимый проект v2 подготовлен. Используйте «💾 Сохранить проект».');
+}
+function rbReturnToLegacyProject() {
+  if (!rbPortableProjectState) return;
+  if (!confirm('Вернуться к проекту v1?\n\n' +
+    'Переносимые HWID и назначения подписок будут УДАЛЕНЫ из текущего рабочего проекта. ' +
+    'Build/preview снова будут использовать активный локальный HWID этого браузера, который может отличаться. ' +
+    'Сначала сохраните v2, если хотите его оставить.')) return;
+  rbPortableProjectState = null;
+  mihomoValidationSeq++;
+  setMihomoValidationState('NOT_BUILT');
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
+  showToast('Проект возвращён к v1; дальнейшие сборки используют локальный HWID.');
+}
 
+document.getElementById('rbPortableActivateBtn').addEventListener('click', rbActivatePortableProject);
+document.getElementById('rbPortableReturnBtn').addEventListener('click', rbReturnToLegacyProject);
 function rbReadPolicyCardsRaw() {
   return Array.from(document.querySelectorAll('#policyCards .policy-card')).map(card => {
     const t = sel => { const el = card.querySelector(sel); return el ? el.value : ''; };
@@ -11091,7 +11369,7 @@ function rbReadPolicyCardsRaw() {
 function rbCollectProject() {
   const opt = id => { const el = document.getElementById(id); return el ? el.value : ''; };
   const chk = id => { const el = document.getElementById(id); return !!(el && el.checked); };
-  return {
+  const project = {
     schemaVersion: RB_PROJECT_SCHEMA_VERSION,
     meta: {
       app: 'link-generators',
@@ -11128,6 +11406,12 @@ function rbCollectProject() {
     tiered: { enabled: chk('cfgTieredFailover'), cards: (window.__tierCardsState || []).map(t => ({ name: t.name, strategy: t.strategy, members: (t.members || []).slice() })) },
     passthrough: rbPassthrough ? JSON.parse(JSON.stringify(rbPassthrough)) : null
   };
+  if (rbPortableProjectState) {
+    project.schemaVersion = 2;
+    project.sources.subscriptionSources = JSON.parse(JSON.stringify(rbPortableProjectState.subscriptionSources));
+    project.identities = JSON.parse(JSON.stringify(rbPortableProjectState.identities));
+  }
+  return project;
 }
 
 // Проект → Builder. Значения присваиваются напрямую, зависимый UI
@@ -11173,6 +11457,10 @@ function rbApplyProject(project) {
   mihomoValidationSeq++;
   setMihomoValidationState('NOT_BUILT');
   rbPassthrough = copy.project.passthrough || null;
+  rbPortableProjectState = rbPortableContextFromProject(copy.project);
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
 }
 let rbPassthrough = null;
 function rbWriteProject(project) {
@@ -11240,6 +11528,11 @@ function rbWriteProject(project) {
 function rbSaveProject() {
   if (currentAwlConflicts().length || (document.getElementById('cfgAutoWhitelist').checked && document.getElementById('cfgProfile').value !== 'router')) { showToast('Разрешите конфликт белых списков перед сохранением проекта.', true); return; }
   const project = rbCollectProject();
+  const checked = rbParseProjectText(JSON.stringify(project));
+  if (!checked.ok) return showToast('❌ Файл не сохранён: ' + checked.error, true);
+  if (project.schemaVersion === 2 && !confirm('Экспортировать переносимый проект v2?\n\n' +
+      'Файл будет содержать ТОЧНЫЕ HWID, URL/токены подписок и WG/AWG ключи, если они добавлены. ' +
+      'Это чувствительные данные: не публикуйте файл и не пересылайте посторонним.')) return;
   const json = JSON.stringify(project, null, 2);
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + 'Z';
   const blob = new Blob([json], { type: 'application/json' });
@@ -11250,7 +11543,9 @@ function rbSaveProject() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  showToast('💾 Проект сохранён. В файле приватные ключи WG/AWG и токены подписок — никому его не передавайте.');
+  showToast(project.schemaVersion === 2
+    ? '💾 Переносимый проект v2 с HWID сохранён. Никому не передавайте файл.'
+    : '💾 Проект сохранён. В файле приватные ключи WG/AWG и токены подписок — никому его не передавайте.');
 }
 
 async function rbLoadProject(file) {
@@ -11265,7 +11560,12 @@ async function rbLoadProject(file) {
   const project = parsed.project;
   if (beforeRead !== rbProjectFingerprint(rbCollectProject())) return showToast('Builder изменился во время чтения файла. Загрузите проект повторно.', true);
   const counts = rbProjectCounts(project);
-  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
+  const legacyIdentityNotice = parsed.identityStatus === 'LEGACY_IDENTITY_MISSING'
+    ? '⚠ В файле нет переносимого HWID: будет использована текущая идентичность этого браузера. На другом компьютере сервис подписки может считать её новым устройством.\n' : '';
+  const portableNotice = parsed.identityStatus === 'PORTABLE_V2_VALIDATED_ONLY'
+    ? '⚠ Файл v2 содержит сохранённые HWID. Они останутся только внутри проекта и НЕ заменят локальный реестр браузера. ' +
+      'До включения поддержки в движке Build и получение browser-preview для v2 будут заблокированы.\n' : '';
+  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + legacyIdentityNotice + portableNotice + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
   if (!confirm(preview)) {
     return showToast('Загрузка проекта отменена.');
   }
@@ -11275,7 +11575,9 @@ async function rbLoadProject(file) {
   const undoBtn = document.getElementById('rbUndoBtn');
   if (undoBtn) undoBtn.style.display = '';
   const subs = project.sources.mainInput.split('\n').filter(x => x.trim()).length;
-  showToast('✅ Проект загружен: ' + project.wgProfiles.length + ' WG/AWG, ' + subs + ' строк источников. Нажмите ⚡ Build Config.');
+  showToast(project.schemaVersion === 2
+    ? '✅ Переносимый проект v2 загружен. HWID сохранены; Build/preview пока недоступны.'
+    : '✅ Проект загружен: ' + project.wgProfiles.length + ' WG/AWG, ' + subs + ' строк источников. Нажмите ⚡ Build Config.');
 }
 
 function rbUndoRestore() {
