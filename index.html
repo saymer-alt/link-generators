@@ -4185,10 +4185,14 @@ function serverListExclusionBreakdown(uniqueNames) {
   const names = new Set(uniqueNames || []);
   // Галочки эмитятся как экранированные REGEXP-подстроки, не как ^name$.
   // Поэтому сводка обязана учитывать побочные совпадения с более длинными именами.
-  const selectedPatterns = Array.from(subscriptionSelection, name => new RegExp(escapeRegExpText(name), flags));
+  // Одна объединённая регулярка вместо O(names × selections) отдельных test().
+  // Сохраняется прежняя literal-substring семантика выбранных имён.
+  const selectedRx = subscriptionSelection.size
+    ? new RegExp(Array.from(subscriptionSelection, name => '(?:' + escapeRegExpText(name) + ')').join('|'), flags)
+    : null;
   let total = 0, selected = 0, manual = 0, overlap = 0;
   for (const name of names) {
-    const checked = selectedPatterns.some(pattern => pattern.test(name));
+    const checked = Boolean(selectedRx && selectedRx.test(name));
     const matched = Boolean(manualRx && manualRx.test(name));
     if (checked) selected++;
     if (matched) manual++;
