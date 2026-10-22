@@ -284,6 +284,32 @@ async function listedCount(page) {
   assert.match(await upperStats(page), /исключается: 0/);
   ok('live-сводки: 0/1/3/union/Снять все/правка фильтра — обе сводки согласованы');
 
+  // Полевой кейс Max (2026-10-22): галочка означает ИСКЛЮЧИТЬ,
+  // а «Исключить все показанные» действует только на найденные поиском имена.
+  assert.match(await page.locator('#serverListPanel').innerText(), /Галочка[\s\S]*ЗАПРЕЩАЕТ/, 'назначение галочки видно в самой панели');
+  assert.equal(await page.locator('#subListAll').innerText(), 'Исключить все показанные');
+  assert.equal(await page.locator('#subListNone').innerText(), 'Снять все галочки');
+  assert.match(await page.locator('.sub-list-check').first().getAttribute('aria-label'), /^Исключить сервер:/);
+  await page.locator('#subListSearch').fill('Main-0');
+  await page.locator('#subListAll').click();
+  assert.match(await upperStats(page), /исключается: 5.*останется: 5/, 'поиск: исключается только видимый набор');
+  assert.equal(await page.locator('#subListExclusionWarning').isVisible(), false, 'половина узлов — не ложная тревога');
+  await page.locator('#subListSearch').fill('');
+  await page.locator('#subListAll').click();
+  assert.match(await upperStats(page), /исключается: 10.*останется: 0/, 'все имена исключены');
+  assert.match(await page.locator('#subListExclusionWarning').innerText(), /Исключены все имена/, 'видимое предупреждение');
+  assert.match(await page.locator('#subListExclusionBreakdown').innerText(), /Исключено галочками: 10.*ручным фильтром: 0/, 'сводка по источникам');
+  await page.locator('#subListNone').click();
+  assert.equal(await page.locator('#subListExclusionWarning').isVisible(), false, 'снятие галочек убирает предупреждение');
+  await page.locator('#subscriptionPreviewNames .sub-list-item', { hasText: 'Main-01' }).locator('input').check();
+  const duplicatePreview = await page.evaluate(() => {
+    renderSubscriptionPreview({ subscriptions: 1, subscriptionsSucceeded: 1, found: 3, names: ['Main-01', 'Main-01', 'Main-02'] });
+    return document.getElementById('subscriptionPreviewStats').textContent;
+  });
+  assert.match(duplicatePreview, /найдено узлов: 3/, 'количество физических узлов не теряется');
+  assert.match(duplicatePreview, /после фильтра: 1 уник\. имён.*исключено: 1 уник\. имён/, 'после фильтра считаются уникальные имена, без двойного счёта');
+  ok('Max field UX: смысл галочек, поиск, почти пустой провайдер, sources, unique имена');
+
   // === 11. UX Architecture 2.0: device/filter grouped with subscriptions ===
   const pos = await page.evaluate(() => {
     const t = id => document.getElementById(id).getBoundingClientRect().top;
