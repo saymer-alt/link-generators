@@ -311,6 +311,9 @@ async function listedCount(page) {
   });
   assert.match(duplicatePreview, /найдено узлов: 3/, 'количество физических узлов не теряется');
   assert.match(duplicatePreview, /после фильтра: 1 уник\. имён.*исключено: 1 уник\. имён/, 'после фильтра считаются уникальные имена, без двойного счёта');
+  const substringMatches = await page.evaluate(() => serverListExclusionBreakdown(['Main-01', 'Main-01 extra', 'Main-02']));
+  assert.equal(substringMatches.total, 2, 'буквальный regex-фрагмент Main-01 отфильтрует и Main-01 extra');
+  assert.equal(substringMatches.selected, 2, 'сводка показывает все реально совпавшие имена, не только отмеченное');
   ok('Max field UX: смысл галочек, поиск, почти пустой провайдер, sources, unique имена');
 
   // === 11. UX Architecture 2.0: device/filter grouped with subscriptions ===
