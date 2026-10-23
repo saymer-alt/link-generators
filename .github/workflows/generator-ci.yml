@@ -125,6 +125,12 @@ jobs:
       - name: Consumer runtime regression
         run: node tests/runtime.cjs web4core.runtime.js
 
+      - name: Portable project v2 read-only identity contract (#280)
+        run: node tests/project-identities-v2.cjs
+
+      - name: Portable identity conversion and stable mapping (#280)
+        run: node tests/project-portable-lifecycle.cjs
+
       - name: Domain Policy Routing regression
         run: node tests/policy-routing.cjs
 
@@ -360,6 +366,15 @@ jobs:
         run: node tests/dns-routing-browser.cjs
       - name: Project roundtrip browser regression (OWNER-REVERSE-01)
         run: node tests/project-roundtrip-browser.cjs
+
+      - name: Portable v2 project browser lifecycle (#280)
+        run: node tests/portable-project-browser.cjs
+
+      - name: Per-subscription identity UI and cross-browser reuse (#280)
+        run: node tests/portable-identity-ui-browser.cjs
+
+      - name: Per-provider Preview and guarded Build parity (#280)
+        run: node tests/portable-preview-build-browser.cjs
 
       - name: YAML Reverse Build browser regression (OWNER-REVERSE-01)
         run: node tests/reverse-yaml-browser.cjs
