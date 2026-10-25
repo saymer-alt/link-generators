@@ -1,5 +1,11 @@
 # AGENTS.md — link-generators
 
+## Owner intent — why four VPS and multiple Mihomo tiers exist (2026-10-25)
+
+**Do not ask again “why so many VPS/protocols/tiers?” as if these were accidental complexity.** The owner intentionally designed four autonomous VPS (SE, SE2, EE, MSK), diversified ingress transports, locally ordered Mihomo egress/failover, ENTRY/TRANSIT/EXIT separation, and fail-closed user data paths in response to recurring ISP/protocol/IP-prefix/UDP/DNS failures and censorship. The goal is to survive *different classes of failure*, not collect technologies or mandate five identical tiers everywhere. **Mandatory reference:** [owner rationale / VPS PR #42](https://github.com/saymer-alt/vps-gateway-bootstrap/pull/42) (proposed canonical `docs/OWNER-THREAT-DRIVEN-RESILIENCE.md`) and this repo's [v1.12 architecture #292](https://github.com/saymer-alt/link-generators/issues/292).
+
+Before changing Builder's VPS profiles, GLOBAL/Tiered, Physical Topology or provider handling, demonstrate that manual override, each server's independent tiers, service/bootstrap connections, allowed egress and no silent DIRECT/fail-closed, working YAML compatibility, and useful observability are preserved. Prefer *simple autonomous components* and the smallest justified change; do **not** build a fleet manager, force every VPS into one graph, or delete meaningful fallback just to make a diagram/config shorter. This documents owner intent, **not** permission to alter `main`, `stable`, actual VPS, router settings or release scope.
+
 ## Addendum: automatic whitelist mode
 
 See [docs/AUTO-WHITELIST.md](docs/AUTO-WHITELIST.md). UI policy remains here;
