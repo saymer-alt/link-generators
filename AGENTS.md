@@ -4,6 +4,12 @@
 
 Before adding a new subsystem, UI, installer/uninstaller, controller, watcher, multi-stage recovery mechanism, or expensive CI path, apply the [common saymer-alt simplicity rule](https://github.com/saymer-alt/saymer-alt/pull/7): compare (A) the existing/manual workflow, (B) the smallest safe solution, and (C) extended architecture. Choose A/B by default; C needs evidence of need, a maintenance/test-cost estimate and explicit owner approval. If supporting logic grows into its own platform or repeated full E2E runs add no new evidence, STOP expanding and report alternatives. Preserve existing safety invariants, user data, foreign resources and working behavior; this does not authorize refactoring stable code or changing production. [KAS uninstall #225](https://github.com/saymer-alt/keenetic-auto-setup/issues/225) is an **anti-pattern retrospective**, not a template to copy.
 
+## Owner intent — why four VPS and multiple Mihomo tiers exist (2026-10-25)
+
+**Do not ask again “why so many VPS/protocols/tiers?” as if these were accidental complexity.** The owner intentionally designed four autonomous VPS (SE, SE2, EE, MSK), diversified ingress transports, locally ordered Mihomo egress/failover, ENTRY/TRANSIT/EXIT separation, and fail-closed user data paths in response to recurring ISP/protocol/IP-prefix/UDP/DNS failures and censorship. The goal is to survive *different classes of failure*, not collect technologies or mandate five identical tiers everywhere. **Mandatory reference:** [owner rationale / VPS PR #42](https://github.com/saymer-alt/vps-gateway-bootstrap/pull/42) (proposed canonical `docs/OWNER-THREAT-DRIVEN-RESILIENCE.md`) and this repo's [v1.12 architecture #292](https://github.com/saymer-alt/link-generators/issues/292).
+
+Before changing Builder's VPS profiles, GLOBAL/Tiered, Physical Topology or provider handling, demonstrate that manual override, each server's independent tiers, service/bootstrap connections, allowed egress and no silent DIRECT/fail-closed, working YAML compatibility, and useful observability are preserved. Prefer *simple autonomous components* and the smallest justified change; do **not** build a fleet manager, force every VPS into one graph, or delete meaningful fallback just to make a diagram/config shorter. This documents owner intent, **not** permission to alter `main`, `stable`, actual VPS, router settings or release scope.
+
 ## Addendum: automatic whitelist mode
 
 See [docs/AUTO-WHITELIST.md](docs/AUTO-WHITELIST.md). UI policy remains here;
