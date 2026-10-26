@@ -4002,6 +4002,8 @@ function renderProviderNameEditors(textareaId, containerId) {
   const area = document.getElementById(textareaId), box = document.getElementById(containerId);
   if (!area || !box) return;
   box.replaceChildren();
+  // No providers are emitted when Sub Mode is OFF (links expand to static proxies).
+  if (!document.getElementById('cfgSubMode').checked) return;
   const items = providerNameEditorItems(area.value);
   for (let ordinal = 0; ordinal < items.length; ordinal++) {
     const entry = items[ordinal];
@@ -4047,6 +4049,7 @@ function updateProviderNameEditors() {
 }
 document.getElementById('mihomoInput').addEventListener('input', updateProviderNameEditors);
 document.getElementById('whitelistInput').addEventListener('input', updateProviderNameEditors);
+document.getElementById('cfgSubMode').addEventListener('change', updateProviderNameEditors);
 updateProviderNameEditors();
 
 function compileSubscriptionExcludeFilter(raw) {
