@@ -38,6 +38,11 @@
   .gen-version-badge{display:inline-block;padding:1px 10px;border:1px solid rgba(0,0,0,.28);border-radius:10px;
      background:rgba(255,255,255,.92);color:#123a8c;font-size:.72rem;font-weight:bold;letter-spacing:.4px;
      white-space:nowrap;user-select:none;text-shadow:none}
+  .device-identity-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0;padding:6px 14px;border-bottom:1px solid var(--border);background:var(--face)}
+  .device-identity-bar label{margin:0;font-weight:bold}
+  .device-identity-bar select{flex:0 1 auto;min-width:160px;max-width:100%}
+  .device-identity-hwid{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;color:#555;word-break:break-all;min-width:0}
+  .device-identity-actions{display:flex;gap:6px;flex-wrap:wrap}
   .tabs{display:flex;gap:3px;padding:6px 10px 0;border-bottom:1px solid var(--border);background:var(--face)}
   .tab{flex:0 0 auto;padding:7px 16px 6px;cursor:pointer;border:1px solid var(--border);border-bottom:none;border-radius:4px 4px 0 0;
        background:linear-gradient(180deg,#f6f4ea,var(--face-dark));color:#333;font-size:.92rem;font-weight:bold;font-family:inherit}
@@ -302,6 +307,19 @@
 <div class="container">
   <h1 style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>🔗 WARP & Mihomo Unified</span><span id="genVersionBadge" class="gen-version-badge" role="note"></span></h1>
 
+  <!-- #326: текущая логическая идентичность подписки (Mihomo Builder) — видна до вкладок.
+       Один канонический реестр (#156/#163); расширенный менеджер остаётся в #deviceIdentityDetails.
+       Портативные per-provider HWID (проект v2, #280) в будущем расширят эту полосу контекстом проекта. -->
+  <div id="deviceIdentityBar" class="device-identity-bar">
+    <label for="headerDeviceIdentitySelect">🔑 Идентичность подписки (Mihomo Builder):</label>
+    <select id="headerDeviceIdentitySelect" aria-label="Текущее логическое устройство для Mihomo Builder" title="Preview и все proxy-providers конфига используют HWID выбранной идентичности"></select>
+    <span id="headerDeviceHwidMask" class="device-identity-hwid"></span>
+    <span class="device-identity-actions">
+      <button type="button" class="btn btn-gray" id="btnHeaderDeviceHwidReveal" aria-pressed="false">👁 Показать HWID</button>
+      <button type="button" class="btn btn-gray" id="btnHeaderDeviceHwidCopy">📋 Копировать HWID</button>
+      <button type="button" class="btn btn-gray" id="btnHeaderDeviceNew">➕ Другое устройство</button>
+    </span>
+  </div>
   <div class="tabs">
     <button class="tab" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
     <button class="tab active" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
@@ -477,9 +495,13 @@
 <label for="mihomoInput">Основные серверы и подписки</label>
 <div class="hint" id="subModeInputHint">Обычные proxy-ссылки и HTTP(S) URL-подписки можно смешивать в обоих режимах настройки «Использовать URL-подписки». WG/AWG добавляются отдельно файлами в разделе ниже. <a href="#cfgSubMode" id="subModeJump" onclick="event.preventDefault();builderJump('cfgSubMode')">Перейти к настройке URL-подписок ↓</a> Включено — подписки обновляет Mihomo; выключено — при Build браузер читает их один раз и встраивает узлы.</div>
 <a href="#realityModernInput" id="realityModernJump">Совместимость VLESS / REALITY с X25519MLKEM768</a><textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки, созданные во вкладке «⚡ WARP MASQUE Links»"></textarea>
+<div id="providerNameRows" aria-label="Имена основных подписок"></div>
+<div class="hint" id="providerNameHint">🏷️ Название подписки в MetaCubeXD (необязательно): добавьте строку <code># provider-name: Geodema</code> непосредственно перед URL подписки. Для второй — <code># provider-name: WL</code> перед её URL. Без этой строки название по-прежнему берётся из домена URL. Строка сохраняется вместе с проектом, не изменяет адрес или HWID подписки. Пока не извлекаем название из HTTP-заголовков: это потребовало бы отдельного сетевого запроса.</div>
 <div id="whitelistPanel" style="display:none">
         <label for="whitelistInput">Резервные серверы и подписки</label>
         <textarea id="whitelistInput" placeholder="vless://...&#10;https://sub.url/..."></textarea>
+        <div id="providerNameReserveRows" aria-label="Имена резервных подписок"></div>
+        <div class="hint">Для подписки из резерва также можно указать <code># provider-name: Reserve</code> отдельной строкой перед её URL.</div>
         <div class="hint">Верхний набор — основной, этот — резерв. GLOBAL сначала использует обычные выходы, затем БС. Обе стороны обязательны. Ссылки можно смешивать с подписками при включённом режиме «URL-подписки». Плановая проверка доступности — каждые 300 секунд; при неудачных подключениях (2 за 60 секунд) проверка запускается сразу. Переключение и возврат на основной — не мгновенные. WG-файлы входят в основной набор.</div>
       </div>
 <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Для HTTP(S) подписки режим ниже определяет результат: включён — динамический <code>proxy-provider</code>; выключен — подписка один раз читается браузером и её текущие узлы встраиваются как обычные <code>proxies:</code>.</div>
@@ -506,6 +528,31 @@
             <div style="margin-top:8px">
               <button type="button" class="btn btn-gray" id="btnDeviceIdentityNew">➕ ID для другого устройства</button>
             </div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn btn-gray" id="rbPortableActivateBtn">🔐 Подготовить переносимый проект v2</button>
+              <button type="button" class="btn btn-gray" id="rbPortableReturnBtn" hidden>Вернуться к локальному HWID (v1)</button>
+            </div>
+            <div id="rbPortableModeNotice" class="hint" role="status" aria-live="polite" style="margin-top:6px">Текущий проект v1: HWID хранится только в браузере и не переносится в файл проекта.</div>
+            <div id="rbPortablePanel" hidden style="margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:12px">
+              <strong>🔗 HWID каждой подписки (проект v2)</strong>
+              <div class="hint" style="margin:6px 0">По умолчанию все подписки наследуют основной HWID. Для Gist/открытых подписок выберите «Без HWID». Коммерческой подписке назначьте один постоянный HWID; новый случайный HWID может занять слот устройства. URL и HWID здесь не показываются. Изменения остаются только внутри проекта.</div>
+              <div id="rbPortableMappingStatus" class="hint" role="status" aria-live="polite"></div>
+              <button type="button" id="rbPortableReorderBtn" class="btn btn-gray" hidden>↕ Сопоставить новый порядок URL</button>
+              <div id="rbPortableSources" style="margin:8px 0"></div>
+              <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+                <label for="rbPortableNewSource">Для какой подписки создать идентичность:</label>
+                <select id="rbPortableNewSource" aria-label="Подписка для нового HWID"></select>
+                <label for="rbPortableNewLabel">Понятное имя новой идентичности:</label>
+                <input id="rbPortableNewLabel" type="text" maxlength="80" autocomplete="off" placeholder="например, Provider B">
+                <label for="rbPortableNewHwid">Имеющийся HWID (только для импорта; значение скрыто):</label>
+                <input id="rbPortableNewHwid" type="password" minlength="10" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Не вводите для случайного HWID">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                  <button type="button" class="btn btn-gray" id="rbPortableRandomBtn">➕ Новый случайный HWID</button>
+                  <button type="button" class="btn btn-gray" id="rbPortableImportHwidBtn">📥 Импортировать введённый HWID</button>
+                </div>
+                <div class="hint" style="margin-top:6px">Новый HWID может занять дополнительный слот устройства у поставщика подписки (часто лимит 1–3; зависит от тарифа). Случайный HWID создаётся только по нажатию кнопки, не на каждый запрос. Количество одновременных устройств не всегда равно числу разрешённых зарегистрированных HWID. Исходные HWID нельзя посмотреть здесь; для резервного копирования экспортируйте проект v2 как конфиденциальный файл. Preview использует выбранные HWID. Build требует совместимый движок.</div>
+              </div>
+            </div>
             <div class="hint" style="margin-top:6px">Локальное имя нужно только для удобства и не меняет <code>x-device-model</code>. «Сменить ID» создаёт новый случайный HWID только по явной команде и может быть воспринят сервисом подписки как новое устройство. Удаление удаляет запись только из этого браузера: уже созданные конфиги и записи на стороне сервиса не меняются. Сам HWID нигде не отображается и в диагностику не попадает.</div>
           </div>
         </details>
@@ -516,6 +563,7 @@
           <div class="hint" style="margin-bottom:8px"><strong>🚫 Серверы для исключения из подписки.</strong> Галочка <strong>ЗАПРЕЩАЕТ</strong> выбранное имя узла, а не разрешает его. Чтобы оставить сервер — не отмечайте его. Отмеченное имя становится буквальным фрагментом регулярного выражения: оно может совпасть и внутри более длинного имени. Например, «🇩🇪 ⚡ Германия» не совпадёт с «🇩🇪 Hysteria 2 | Германия», а короткий фрагмент «Германия» — совпадёт с обоими.</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button type="button" class="btn btn-gray" id="subListFetchBtn">📋 Получить список</button>
+            <button type="button" class="btn btn-gray" id="subListSkipBtn" style="display:none" title="Остановить текущий запрос списка (сеть обрывается сразу)">⏹ Пропустить</button>
             <span id="subListStats" class="hint" style="margin:0">Список ещё не получен.</span>
           </div>
           <div id="subListStatus" class="hint" style="display:none;margin-top:4px" aria-live="polite"></div>
@@ -537,7 +585,14 @@
               </div>
               <div class="hint">Если адрес не указан, используется 192.168.1.1:9090. Запрос выполняется только по нажатию кнопки.</div>
               <div class="hint" id="rtPresetHint">Выберите готовый адрес или введите свой: host:port либо http(s)://host:port[/prefix]. Выбор адреса не отправляет запрос. Отправку API secret на новый адрес нужно подтвердить отдельно.</div>
-              <div class="hint">Адрес и secret не сохраняются (только память вкладки, до перезагрузки страницы). Запрос идёт из браузера напрямую в контроллер — через проектный воркер он не передаётся никогда. Если браузер не пускает (CORS / разрешение локальной сети / listen-адрес) — используйте «Вставить JSON» или «Загрузить .json» ниже: откройте <code>http://&lt;контроллер&gt;/providers/proxies</code> в соседней вкладке и скопируйте ответ.</div>
+              <div class="hint">Адрес и secret не сохраняются (только память вкладки, до перезагрузки страницы). Запрос идёт из браузера напрямую в контроллер — через проектный воркер он не передаётся никогда.</div>
+              <div id="rtManualBox" style="margin-top:6px;border:1px dashed var(--border);padding:8px;background:rgba(255,255,255,.45)">
+                <div class="hint" style="margin:0"><strong>Если браузер не пускает прямой запрос</strong> (CORS / Mixed Content HTTPS→HTTP / разрешение локальной сети / listen-адрес) — ручной путь без DevTools:</div>
+                <div class="tier-add-row" style="margin-top:6px">
+                  <button type="button" class="btn btn-gray" id="rtOpenJsonBtn">🌐 Открыть JSON Mihomo</button>
+                </div>
+                <div class="hint" id="rtManualSteps" style="margin-top:6px">① Откроется вкладка с JSON списка узлов (<code>/providers/proxies</code>). ② Выделите весь текст (Ctrl+A) и скопируйте (Ctrl+C); на телефоне — удерживайте текст → «Выделить всё» → «Копировать». ③ Вернитесь и нажмите «📋 Вставить JSON» ниже: список распознается, узлы можно отмечать галочками для Exclude Filter. API secret в адрес вкладки не вставляется и не нужен.</div>
+              </div>
               <div class="tier-add-row">
                 <button type="button" class="btn btn-gray" id="rtPasteBtn">📋 Вставить JSON</button>
                 <button type="button" class="btn btn-gray" id="rtUploadBtn">📄 Загрузить .json</button>
@@ -871,7 +926,8 @@
               </select>
               <div class="hint">Environment-dependent значения Mihomo. Для обычного использования не требуются: достаточно MIPS (по умолчанию) или gVisor.</div>
               <div class="hint">Пока system / mixed не выбран, продолжает действовать MIPS или gVisor по настройке выше. Включение расширенного выбора само по себе стек не меняет.</div>
-              <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline; MIPS проверен на VPS, но в наших замерах был хуже по download. system/mixed оставлены для экспериментов и не рекомендуются для VPS; если выбраны, генератор сохраняет выбранный stack и не подменяет его молча.</div>
+              <div class="hint">VPS Gateway: gVisor — рекомендуемый baseline. MIPS доступен на Mihomo ≥ 1.19.31 (производительность зависит от сервера). system/mixed — экспериментальные варианты; выбранный стек генератор молча не меняет.</div>
+              <div id="vpsTunStackWarning" class="hint" role="note" style="display:none;margin-top:8px;color:var(--warn-text, #855100)"></div>
             </div>
             <div class="hint">MIPS — это TUN/IP stack, а не MIPS-архитектура процессора. По умолчанию выбран MIPS; при его отключении используется gVisor, если вручную не выбран system/mixed. MIPS влияет только на TUN-трафик (обычный TUN и «TUN на каждый прокси»); при выключенном TUN выбор MIPS не влияет на YAML. Требуется Mihomo >= 1.19.31.</div>
           </div>
@@ -1042,7 +1098,7 @@
 // channel — metadata конкретной сборки, НЕ определение git-ветки в рантайме:
 // development build = X.Y.Z-dev / main; release promotion (main → stable) отдельно
 // переводит её на X.Y.Z / stable. UI (бейдж) читает только эти значения.
-const GENERATOR_META = Object.freeze({ version: '1.11.3', channel: 'stable' });
+const GENERATOR_META = Object.freeze({ version: '1.12.0', channel: 'stable' });
 (function renderGeneratorMeta() {
   const el = document.getElementById('genVersionBadge');
   if (el) {
@@ -3069,9 +3125,10 @@ function validateMihomoYaml(yaml) {
       }
     });
     // DPR-контракт: последнее правило — дефолт в GLOBAL-достижимую группу.
-    // QA-01: новый Tiered сохраняет MATCH,GLOBAL для ручного выбора в
-    // mode: rule. Legacy MATCH,TIERED-AUTO принимается для импортированных
-    // YAML при существующем root, но Builder больше его не генерирует.
+    // QA-01: новый Tiered сохраняет MATCH,GLOBAL, чтобы ручной GLOBAL
+    // реально участвовал в mode: rule. Старый MATCH,TIERED-AUTO допускаем
+    // только для импортированных/legacy YAML с существующей root-группой:
+    // этот путь обходит ручной GLOBAL и не должен генерироваться Builder.
     if (ruleProviderNames.size) {
       const lastRule = doc.rules[doc.rules.length - 1];
       const tieredRootExists = (Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []).some(g => g && g.name === '🪜 TIERED-AUTO');
@@ -3595,6 +3652,14 @@ function applyProfileUiState(target) {
   const hint = document.getElementById('profileHint');
   const snap = profileSnapshots[target];
   hint.textContent = PROFILE_HINTS[target] || '';
+  // VPS stack: наблюдение на одном сервере, не универсальная блокировка протокола.
+  const stackWarning = document.getElementById('vpsTunStackWarning');
+  const stackWarnings = {
+    'vps-local': '⚠️ VPS SOCKS: TUN отключён этим профилем. MIPS/gVisor/system/mixed не используются в генерируемом YAML. Для TUN нужен другой профиль.',
+    'vps-gateway': '⚠️ VPS Gateway: на одном тестовом VPS с активным UFW system/mixed не прошли сетевую проверку; при system отказывал TCP через TUN, хотя UDP работал. Причина не установлена. Начинайте с gVisor; MIPS — альтернатива при Mihomo ≥ 1.19.31. system/mixed выбирайте только после самостоятельной проверки TCP, UDP и DNS.'
+  };
+  stackWarning.textContent = stackWarnings[target] || '';
+  stackWarning.style.display = target === 'router' ? 'none' : '';
   // VPS-профили: БС и Per-Proxy недоступны по контракту (router-only).
   // Отключение делается здесь, а не только в Build — но Build и не доверяет DOM.
   const vps = target !== 'router';
@@ -3833,17 +3898,93 @@ function renderDeviceIdentitySelect() {
     del.disabled = reg.devices.length <= 1;
     del.title = reg.devices.length <= 1 ? 'Нельзя удалить единственную идентичность' : 'Удалить выбранную локальную идентичность';
   }
+  renderDeviceIdentityHeader();
+}
+
+// #326: шапка страницы — текущая идентичность видна до вкладок. Полный HWID
+// появляется ТОЛЬКО по явному «Показать HWID» (обновлённый privacy-контракт
+// #326 разрешает явное локальное отображение; автоматическое разглашение —
+// по-прежнему запрещено: URL, toast, диагностика, логи). Один и тот же
+// реестр/состояние, что и в #deviceIdentityDetails — второй модели нет.
+let headerDeviceHwidRevealed = false;
+function renderDeviceIdentityHeader() {
+  const sel = document.getElementById('headerDeviceIdentitySelect');
+  const mask = document.getElementById('headerDeviceHwidMask');
+  if (!sel && !mask) return;
+  const bar = document.getElementById('deviceIdentityBar');
+  const reg = loadDeviceIdentityRegistry();
+  const active = reg.devices.find(d => d.id === reg.activeId) || reg.devices[0];
+  // Коррекция #326/#280: активный portable project v2 использует
+  // rbPortableProjectState (переносимые HWID, индивидуальные привязки,
+  // источники без HWID) — browser-local идентичность на Preview/Build v2
+  // НЕ влияет. Шапка обязана это показывать, иначе пользователь считает,
+  // что смена устройства меняет HWID проекта v2.
+  const v2 = !!rbPortableProjectState;
+  if (bar) bar.dataset.mode = v2 ? 'v2' : 'v1';
+  if (sel) {
+    sel.textContent = '';
+    for (const d of reg.devices) {
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.label || 'Устройство';
+      sel.appendChild(opt);
+    }
+    sel.value = active.id;
+    sel.title = v2
+      ? 'Проект v2: подписки используют переносимые HWID проекта. Смена локального устройства НЕ меняет назначения проекта.'
+      : 'Preview и все proxy-providers конфига используют HWID выбранной идентичности';
+  }
+  if (mask) {
+    if (v2) {
+      // Только символические счётчики: никаких raw HWID/URL/меток (контракт
+      // #280). M — число РАЗЛИЧНЫХ переносимых HWID, фактически назначенных
+      // подпискам; K — источники с явным «без HWID» (identityId: null).
+      const bindings = (rbPortableProjectState.identities.providerBindings || []);
+      const entries = (rbPortableProjectState.identities.entries || []);
+      const noHwid = bindings.filter(b => b.identityId === null).length;
+      const usedHwids = new Set();
+      for (const b of bindings) {
+        if (b.identityId === null) continue;
+        const entry = entries.find(e => e.id === b.identityId);
+        if (entry && typeof entry.hwid === 'string') usedHwids.add(entry.hwid);
+      }
+      headerDeviceHwidRevealed = false; // локальный reveal неактуален в v2-контексте
+      mask.textContent = 'Проект v2 · подписок: ' + rbPortableProjectState.subscriptionSources.length +
+        ' · переносимых HWID: ' + usedHwids.size +
+        ' · без HWID: ' + noHwid +
+        ' · локальное устройство не используется сборкой';
+    } else {
+      // Маскированный хвост 6 символов — устойчивый fingerprint, не сам HWID.
+      mask.textContent = headerDeviceHwidRevealed
+        ? 'HWID: ' + active.hwid
+        : 'HWID: ••••••••' + String(active.hwid).slice(-6);
+    }
+  }
+  const reveal = document.getElementById('btnHeaderDeviceHwidReveal');
+  const copy = document.getElementById('btnHeaderDeviceHwidCopy');
+  // Reveal/copy раскрывают ЛОКАЛЬНЫЙ HWID; в проекте v2 он не участвует
+  // в Preview/Build — скрываем, чтобы не создавать ложную связь.
+  const localActions = document.querySelectorAll('.device-identity-actions');
+  for (const box of localActions) box.style.display = v2 ? 'none' : '';
+  if (reveal) {
+    reveal.textContent = headerDeviceHwidRevealed ? '🙈 Скрыть HWID' : '👁 Показать HWID';
+    reveal.setAttribute('aria-pressed', String(headerDeviceHwidRevealed));
+  }
 }
 
 function invalidatePreviewForDeviceIdentityChange() {
   if (typeof subscriptionPreviewSeq !== 'undefined') subscriptionPreviewSeq++;
   if (typeof invalidateServerListFetch === 'function') invalidateServerListFetch();
+  // Шапка (#326) находится вне #tab-mihomo: делегированный слушатель вкладки
+  // не увидит смену идентичности — обновляем STALE-статус явно.
+  if (typeof refreshBuildStaleness === 'function') refreshBuildStaleness();
 }
 
 function setActiveDeviceIdentity(id) {
   const reg = loadDeviceIdentityRegistry();
   if (!reg.devices.some(d => d.id === id) || reg.activeId === id) return;
   reg.activeId = id;
+  headerDeviceHwidRevealed = false; // смена устройства — полный HWID снова скрыт (#326)
   persistDeviceIdentityRegistry();
   renderDeviceIdentitySelect();
   invalidatePreviewForDeviceIdentityChange();
@@ -3870,6 +4011,7 @@ function createNewDeviceIdentity() {
   reg.devices.push(device);
   reg.activeId = device.id;
   persistDeviceIdentityRegistry();
+  headerDeviceHwidRevealed = false;
   renderDeviceIdentitySelect();
   invalidatePreviewForDeviceIdentityChange();
   showToast('Создан ID для другого устройства: «' + device.label + '». Обычная пересборка текущего роутера нового ID не требует.');
@@ -3904,6 +4046,7 @@ function regenerateActiveDeviceIdentity() {
   if (!confirmed) return;
   device.hwid = deviceIdentityRandomHex32();
   persistDeviceIdentityRegistry();
+  headerDeviceHwidRevealed = false;
   renderDeviceIdentitySelect();
   invalidatePreviewForDeviceIdentityChange();
   showToast('ID для «' + (device.label || 'Устройство') + '» заменён. Следующие preview-запросы и сборки используют новый HWID.');
@@ -3928,12 +4071,78 @@ function deleteActiveDeviceIdentity() {
   reg.devices.splice(index, 1);
   reg.activeId = fallback.id;
   persistDeviceIdentityRegistry();
+  headerDeviceHwidRevealed = false;
   renderDeviceIdentitySelect();
   invalidatePreviewForDeviceIdentityChange();
   showToast('Локальная идентичность «' + (device.label || 'Устройство') + '» удалена. Активна «' + (getActiveDeviceIdentity().label || 'Устройство') + '».');
 }
 
-function subscriptionPreviewHeaders() {
+
+// V2 identity plan: only after full project validation; no global/local fallback.
+// URL order is checked against the editor before any network request or Build.
+function rbPortablePlanForCurrent() {
+  if (!rbPortableProjectState) return null;
+  const p = rbCollectProject();
+  if (p.schemaVersion !== 2 || p.sources.subMode !== true || p.sources.autoWhitelist)
+    throw new Error('v2 requires Sub Mode ON without fallback');
+  const result = rbPortableEngineOptions(p);
+  if (!result.ok) throw new Error('v2 mapping invalid');
+  if (result.options.providerOverrides.length !== rbPortableGetSubscriptionUrls(p.sources.mainInput, true).length)
+    throw new Error('v2 URL count invalid');
+  return result.options;
+}
+// Feature proof on SYNTHETIC-only URLs/HWIDs, never on the user's credentials.
+// Legacy runtimes ignore providerOverrides; proving the emitted headers catches it.
+function rbPortableRuntimeCanBuild(api) {
+  if (!api || typeof api.buildFromRequest !== 'function' || !globalThis.jsyaml) return false;
+  try {
+    const h1 = '11111111111111111111111111111111';
+    const h2 = '22222222222222222222222222222222';
+    const u1 = 'https://portable-a.example.invalid/fixture';
+    const u2 = 'https://portable-b.example.invalid/fixture';
+    const u3 = 'https://portable-gist.example.invalid/fixture';
+    const out = api.buildFromRequest({
+      core: 'mihomo', input: u1 + '\n' + u2 + '\n' + u3,
+      options: { addSocks: true, mihomoSubscriptionMode: true, deviceHwid: h1,
+        providerOverrides: [{sourceUrl:u1,hwid:h1},{sourceUrl:u2,hwid:h2},{sourceUrl:u3,hwid:null}] }
+    });
+    const doc = globalThis.jsyaml.load(out.data);
+    const providers = Object.values(doc?.['proxy-providers'] || {});
+    const matched = (u,h) => providers.some(p => p.url === u
+      && Array.isArray(p.header?.['x-hwid']) && p.header['x-hwid'].length === 1
+      && p.header['x-hwid'][0] === h);
+    return providers.length === 3 && matched(u1,h1) && matched(u2,h2)
+      && providers.some(p => p.url === u3 && p.header === undefined);
+  } catch (_) { return false; }
+}
+// Refuse a completed YAML whose exact provider URLs have the wrong identity.
+function rbPortableOutputHasExactHwids(yaml, plan) {
+  try {
+    const doc = globalThis.jsyaml.load(yaml);
+    const providers = Object.values(doc?.['proxy-providers'] || {});
+    const mappings = plan.providerOverrides;
+    if (providers.length !== mappings.length) return false;
+    return mappings.every(binding => {
+      const matches = providers.filter(p => p && p.url === binding.sourceUrl);
+      if (matches.length !== 1) return false;
+      // Public/Gist sources must not receive x-hwid OR x-device-model.
+      if (binding.hwid === null) return matches[0].header === undefined;
+      const got = matches[0]?.header?.['x-hwid'];
+      return Array.isArray(got) && got.length === 1 && got[0] === binding.hwid;
+    });
+  } catch (_) { return false; }
+}
+
+function subscriptionPreviewHeaders(url, portablePlan) {
+  let hwid;
+  if (rbPortableProjectState) {
+    if (!portablePlan || !Array.isArray(portablePlan.providerOverrides))
+      throw new Error('v2 preview identity mapping missing');
+    const matches = portablePlan.providerOverrides.filter(e => e.sourceUrl === url);
+    if (matches.length !== 1 || (matches[0].hwid !== null && !matches[0].hwid))
+      throw new Error('v2 source identity missing');
+    hwid = matches[0].hwid;
+  } else hwid = getActiveDeviceIdentity().hwid;
   // Allowlist контракта fetchSubscription: ровно два заголовка с доказанной
   // необходимостью (x-hwid — HWID-gate Geodema/Remnawave, x-device-model —
   // подпись устройства). Больше ничего не отправляем.
@@ -3941,9 +4150,11 @@ function subscriptionPreviewHeaders() {
   // именно его видит панель подписки; иначе подпись web-генератора.
   // HWID: идентичность активного логического устройства (#156) — та же,
   // что уходит во все proxy-providers конфига (options.deviceHwid).
+  // Never send device headers to explicitly ungated public/Gist providers.
+  if (hwid === null) return {};
   const userModel = (document.getElementById('deviceModelInput').value || '').trim();
   return {
-    'x-hwid': getActiveDeviceIdentity().hwid,
+    'x-hwid': hwid,
     'x-device-model': userModel || SUBSCRIPTION_PREVIEW_DEVICE_MODEL
   };
 }
@@ -3962,6 +4173,81 @@ function splitSubscriptionInputForPreview(raw) {
     }
   });
 }
+
+// Editable provider labels live as adjacent # provider-name directives in the
+// existing textarea. No new project/storage schema and no extra subscription
+// fetch; URL (and therefore x-hwid) is untouched.
+function providerNameEditorItems(raw) {
+  const lines = String(raw || '').split(/\r?\n/);
+  const entries = splitSubscriptionInputForPreview(raw);
+  const out = [];
+  for (let i = 0; i < entries.length; i++) {
+    if (!entries[i].subscription) continue;
+    let nameLine = -1, name = '';
+    for (let j = i - 1; j >= 0; j--) {
+      const t = lines[j].trim();
+      const m = t.match(/^#\s*provider-name\s*:\s*(.*)$/i);
+      if (m) { nameLine = j; name = m[1].trim(); break; }
+      if (t && !t.startsWith('#')) break;
+    }
+    out.push({ lineIndex: i, nameLine, name, hostname: new URL(entries[i].url).hostname });
+  }
+  return out;
+}
+
+function renderProviderNameEditors(textareaId, containerId) {
+  const area = document.getElementById(textareaId), box = document.getElementById(containerId);
+  if (!area || !box) return;
+  box.replaceChildren();
+  // No providers are emitted when Sub Mode is OFF (links expand to static proxies).
+  if (!document.getElementById('cfgSubMode').checked) return;
+  const items = providerNameEditorItems(area.value);
+  for (let ordinal = 0; ordinal < items.length; ordinal++) {
+    const entry = items[ordinal];
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:4px 0';
+    const label = document.createElement('label');
+    label.textContent = '🏷️ Подписка №' + (ordinal + 1) + ' (' + entry.hostname + ')';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.setAttribute('aria-label', 'Название подписки №' + (ordinal + 1));
+    input.maxLength = 64; // Engine verifies 1..48 Unicode code points.
+    input.placeholder = 'Авто: ' + entry.hostname;
+    input.value = entry.name;
+    input.style.cssText = 'flex:1;min-width:150px;max-width:320px';
+    input.addEventListener('change', () => {
+      const current = providerNameEditorItems(area.value)[ordinal];
+      if (!current || current.hostname !== entry.hostname) {
+        renderProviderNameEditors(textareaId, containerId); return;
+      }
+      const name = input.value.trim();
+      if (name && (!/^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,47}$/u.test(name) ||
+          ['__proto__', 'constructor', 'prototype'].includes(name.toLowerCase()))) {
+        showToast('Имя подписки: 1–48 символов, буквы, цифры, пробел, точка, _ или -', true);
+        return;
+      }
+      const lines = area.value.split(/\r?\n/);
+      if (current.nameLine >= 0) {
+        if (name) lines[current.nameLine] = '# provider-name: ' + name;
+        else lines.splice(current.nameLine, 1);
+      } else if (name) {
+        lines.splice(current.lineIndex, 0, '# provider-name: ' + name);
+      }
+      area.value = lines.join('\n');
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    row.append(label, input);
+    box.appendChild(row);
+  }
+}
+function updateProviderNameEditors() {
+  renderProviderNameEditors('mihomoInput', 'providerNameRows');
+  renderProviderNameEditors('whitelistInput', 'providerNameReserveRows');
+}
+document.getElementById('mihomoInput').addEventListener('input', updateProviderNameEditors);
+document.getElementById('whitelistInput').addEventListener('input', updateProviderNameEditors);
+document.getElementById('cfgSubMode').addEventListener('change', updateProviderNameEditors);
+updateProviderNameEditors();
 
 function compileSubscriptionExcludeFilter(raw) {
   const value = String(raw || '').trim();
@@ -4027,15 +4313,26 @@ function isSubscriptionEmptyBodyError(reason) {
 // сознательно не ограничен и не смешивается с этим путём.
 let SUBSCRIPTION_PREVIEW_BUDGET_MS = 60000;
 
-function fetchSubscriptionWithBudget(api, url, headers, deadline) {
+// #322: видимая отмена — caller передаёт AbortSignal; после отмены/бюджета
+// сетевые попытки прекращаются (runtime поддерживает signal, web4core#27),
+// а не продолжаются в фоне до собственного таймаута.
+function fetchSubscriptionWithBudget(api, url, headers, deadline, strictDeviceHeaders = false, abortCtl = null) {
   const remaining = deadline - Date.now();
   if (remaining <= 0) {
     return Promise.reject(new Error('превышен общий бюджет preview (' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — сократите число подписок или повторите позже'));
   }
-  const fetchPromise = api.fetchSubscription(url, { headers });
+  const fetchPromise = api.fetchSubscription(url, {
+    headers,
+    ...(strictDeviceHeaders ? { requireDeviceHeaders: true } : {}),
+    // #322: после отмены/бюджета сеть останавливается честно (runtime
+    // AbortSignal-поддержка, web4core#27), а не доигрывает в фоне.
+    ...(abortCtl ? { signal: abortCtl.signal } : {})
+  });
   let budgetTimer;
   const budgetPromise = new Promise((_, reject) => {
     budgetTimer = setTimeout(() => {
+      // Бюджет исчерпан: не просто бросаем гонку — останавливаем сеть.
+      if (abortCtl && !abortCtl.signal.aborted) abortCtl.abort();
       reject(new Error('превышен общий бюджет preview (' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — запрос остановлен'));
     }, remaining);
   });
@@ -4048,7 +4345,10 @@ function fetchSubscriptionWithBudget(api, url, headers, deadline) {
   const expand = !!(options && options.expand);
   const filterRegex = options && options.filterRegex ? options.filterRegex : null;
   const deadline = options && options.budgetDeadline ? options.budgetDeadline : null;
+  const abortCtl = options && options.abortCtl ? options.abortCtl : null;
   const entries = splitSubscriptionInputForPreview(raw);
+  const portablePlan = options && options.portablePlan;
+  const previewSeq = options && options.previewSeq;
   const output = [];
   const summary = emptySubscriptionPreviewSummary();
   let ordinal = 0;
@@ -4059,10 +4359,16 @@ function fetchSubscriptionWithBudget(api, url, headers, deadline) {
     }
     ordinal++;
     summary.subscriptions++;
+    // Stop before next fetch when a mapping or project changes in-flight.
+    if (portablePlan && (previewSeq !== subscriptionPreviewSeq ||
+      JSON.stringify(rbPortablePlanForCurrent()) !== JSON.stringify(portablePlan)))
+      throw new Error('v2 preview state changed');
+    const headers = subscriptionPreviewHeaders(entry.url, portablePlan);
     try {
+      const strictDeviceHeaders = !!portablePlan && !!headers['x-hwid'];
       const body = await (deadline
-        ? fetchSubscriptionWithBudget(api, entry.url, subscriptionPreviewHeaders(), deadline)
-        : api.fetchSubscription(entry.url, { headers: subscriptionPreviewHeaders() }));
+        ? fetchSubscriptionWithBudget(api, entry.url, headers, deadline, strictDeviceHeaders, abortCtl)
+        : api.fetchSubscription(entry.url, { headers, ...(strictDeviceHeaders ? { requireDeviceHeaders: true } : {}), ...(abortCtl ? { signal: abortCtl.signal } : {}) }));
       const links = String(body || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if (!links.length) throw new Error('подписка не вернула поддерживаемых proxy-ссылок');
       // #158 (честный preview): маркер preview-partial от runtime — часть payload
@@ -4087,7 +4393,13 @@ function fetchSubscriptionWithBudget(api, url, headers, deadline) {
       }
       if (!expand) output.push(entry.line);
     } catch (e) {
-      const reason = String(e && e.message ? e.message : e).replace(/https?:\/\/\S+/gi, '[URL hidden]');
+      const actualReason = String(e && e.message ? e.message : e);
+      // Browser transport failures may include sensitive request headers.
+      const reason = portablePlan
+        ? (isSubscriptionEmptyBodyError(actualReason) ? 'Empty response'
+          : /Clash YAML subscription is not supported here/i.test(actualReason)
+            ? 'Clash YAML subscription is not supported here' : 'ошибка запроса (значения скрыты)')
+        : actualReason.replace(/https?:\/\/\S+/gi, '[URL hidden]');
       if (/Clash YAML subscription is not supported here/i.test(reason)) {
         // #158 (R2): не маскируем под generic network/error — формат назван прямо.
         summary.subscriptionsFailed++;
@@ -4131,6 +4443,8 @@ let subscriptionSelection = new Set();     // выбранные для искл
 // ВСЕГДА завершают loading-state — кнопка никогда не остаётся в «Загрузка…»
 // без активного запроса, stale-результат никогда не пишет данные.
 const SERVER_LIST_STATE = { IDLE: 'idle', LOADING: 'loading', STALE: 'stale', SUCCESS: 'success', PARTIAL: 'partial', FAILED: 'failed' };
+// #322: владелец текущей операции получения списка — для честной отмены сети.
+let serverListAbortCtl = null;
 let serverListState = SERVER_LIST_STATE.IDLE;
 let serverListLoadSeq = 0;                 // seq запроса, владеющего кнопкой
 let lastPreviewSummary = null;             // последняя применённая сводка (live-пересчёт)
@@ -4341,6 +4655,10 @@ function resetServerListButton() {
 // STALE. Автоматический повторный запрос не выполняется (no hidden refetch).
 function invalidateServerListFetch() {
   if (serverListState === SERVER_LIST_STATE.LOADING) {
+    // #322: инвалидация вводом — тоже отмена: сеть останавливается сразу.
+    if (serverListAbortCtl) { try { serverListAbortCtl.abort(); } catch (_) {} }
+    const skip = document.getElementById('subListSkipBtn');
+    if (skip) skip.style.display = 'none';
     resetServerListButton();
     serverListState = SERVER_LIST_STATE.STALE;
     setSubListStatus('Список устарел — нажмите «Обновить список».');
@@ -4364,22 +4682,55 @@ function fetchServerList() {
     showToast('В поле ввода нет URL-подписок — список серверов брать неоткуда. Добавьте HTTP(S) подписку или выключите «Показать серверы подписки».', true);
     return;
   }
+  let portablePlan = null;
+  if (rbPortableProjectState) {
+    try { portablePlan = rbPortablePlanForCurrent(); }
+    catch (_) { showToast('❌ v2: неверный режим или несогласованные URL/HWID. Запросы не отправлены.', true); return; }
+    // Legacy runtimes ignore unknown option names. Without a confirmed strict
+    // capability they can falsely report success via anonymous CORS GET.
+    if (portablePlan.providerOverrides.some(x => x.hwid !== null) &&
+        (api.fetchSubscription.supportsStrictDeviceHeaders !== true ||
+         api.fetchSubscription.supportsStrictOriginPolicy !== true)) {
+      showToast('❌ v2 Preview: нужен web4core с проверкой HWID и origin-policy Worker. Запросы не отправлены.', true);
+      return;
+    }
+    // #307 trust boundary: the existing web4core browser fetch may retry
+    // through our first-party CORS Worker (POST sends URL + device headers),
+    // and HTTP redirects can target another origin. This is opt-in only;
+    // cancellation must occur before any fetch or loading-state mutation.
+    if (!confirm('Получить список серверов для переносимого проекта v2?\n\n' +
+        'HWID передаются только подпискам с выбранной идентичностью. Для «Без HWID» заголовки устройства не отправляются. При ошибке CORS ' +
+        'URL любой подписки может пройти через наш Cloudflare Worker; HWID передаётся ему только для подписок с выбранной идентичностью. ' +
+        'Редиректы на другой origin для HWID блокируются; при старой версии Worker запрос будет отклонён. Проверяйте источники.\n\n' +
+        'Отмена НЕ отправляет запросы. Build сам подписки не загружает.')) {
+      showToast('Предпросмотр v2 отменён. Подписки и HWID не отправлялись.');
+      return;
+    }
+  }
   subscriptionPreviewSeq++;
   const previewSeq = subscriptionPreviewSeq;
   serverListLoadSeq = previewSeq;
   serverListState = SERVER_LIST_STATE.LOADING;
   btn.textContent = 'Загрузка…';
+  // #322: видимая отмена — операция останавливается по кнопке «Пропустить»
+  // или при изменении ввода; сеть обрывается через AbortController, а не
+  // продолжает скрытые попытки до собственного таймаута.
+  if (serverListAbortCtl) { try { serverListAbortCtl.abort(); } catch (_) {} }
+  serverListAbortCtl = new AbortController();
+  const abortCtl = serverListAbortCtl;
+  const skipBtn = document.getElementById('subListSkipBtn');
+  if (skipBtn) skipBtn.style.display = '';
   setSubListStatus('');
   // Общий бюджет на ВСЮ операцию (обе подписки, все попытки), а не на
   // отдельную попытку — см. SUBSCRIPTION_PREVIEW_BUDGET_MS.
   const deadline = Date.now() + SUBSCRIPTION_PREVIEW_BUDGET_MS;
   const task = (async () => {
     const summary = emptySubscriptionPreviewSummary();
-    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: false, filterRegex: null, budgetDeadline: deadline });
+    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: false, filterRegex: null, budgetDeadline: deadline, portablePlan, previewSeq, abortCtl });
     if (previewSeq !== subscriptionPreviewSeq) return;
     mergeSubscriptionPreviewSummary(summary, mainInspected.summary);
     if (whitelistRaw !== null) {
-      const fallbackInspected = await inspectSubscriptionInput(api, whitelistRaw, { expand: false, filterRegex: null, budgetDeadline: deadline });
+      const fallbackInspected = await inspectSubscriptionInput(api, whitelistRaw, { expand: false, filterRegex: null, budgetDeadline: deadline, portablePlan, previewSeq, abortCtl });
       if (previewSeq !== subscriptionPreviewSeq) return;
       mergeSubscriptionPreviewSummary(summary, fallbackInspected.summary);
     }
@@ -4389,11 +4740,25 @@ function fetchServerList() {
       : (summary.subscriptionsSucceeded > 0 ? SERVER_LIST_STATE.PARTIAL : SERVER_LIST_STATE.FAILED);
     applyServerListFromSummary(summary);
     renderSubscriptionPreview(summary);
+    const opAborted = abortCtl.signal.aborted;
     setSubListStatus(serverListState === SERVER_LIST_STATE.PARTIAL
       ? 'Часть подписок недоступна — итог по узлам неполный.'
-      : (serverListState === SERVER_LIST_STATE.FAILED ? 'Получить список не удалось — нажмите «Обновить список» для повтора.' : ''));
+      : (serverListState === SERVER_LIST_STATE.FAILED
+        ? (opAborted
+          ? 'Получение списка остановлено (отмена или бюджет ' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — количество узлов неизвестно. Повторите «Обновить список», продолжите без preview или возьмите имена из работающего Mihomo: «📡 Импорт узлов» → «🌐 Открыть JSON Mihomo».'
+          : 'Получить список не удалось — нажмите «Обновить список» для повтора. Имена можно взять из работающего Mihomo: раскройте «📡 Импорт узлов из работающего Mihomo» → «🌐 Открыть JSON Mihomo» → скопируйте JSON → «📋 Вставить JSON».')
+        : ''));
   })();
-  task.catch(() => {}).finally(() => {
+  task.catch((e) => {
+    if (previewSeq !== subscriptionPreviewSeq) return;
+    const aborted = abortCtl.signal.aborted || (e && e.name === 'AbortError');
+    serverListState = SERVER_LIST_STATE.FAILED;
+    setSubListStatus(aborted
+      ? 'Получение списка остановлено (отмена или бюджет) — количество узлов неизвестно. Повторите «Обновить список» или продолжите без preview: сборка provider YAML работает и без списка.'
+      : 'Не удалось проверить привязки подписок. Запросы остановлены; значения скрыты.');
+  }).finally(() => {
+    const skip = document.getElementById('subListSkipBtn');
+    if (skip && previewSeq === serverListLoadSeq) skip.style.display = 'none';
     // Кнопку в idle возвращает только владелец загрузки: его операция
     // завершилась и не была инвалидирована (инвалидация уже вернула кнопку).
     if (previewSeq === serverListLoadSeq) resetServerListButton();
@@ -4411,6 +4776,17 @@ function initServerList() {
     updateServerListVisibility();
   });
   btn.addEventListener('click', fetchServerList);
+  // #322: явная отмена — seq инвалидирует результаты, AbortController
+  // обрывает сеть (включая fallback-цепочку), статус честно сообщает,
+  // что количество узлов неизвестно. Автоматических повторов нет.
+  document.getElementById('subListSkipBtn').addEventListener('click', () => {
+    subscriptionPreviewSeq++;
+    if (serverListAbortCtl) { try { serverListAbortCtl.abort(); } catch (_) {} }
+    serverListState = SERVER_LIST_STATE.FAILED;
+    document.getElementById('subListSkipBtn').style.display = 'none';
+    resetServerListButton();
+    setSubListStatus('Получение списка прервано — количество узлов неизвестно. Можно повторить «Обновить список» или продолжить без preview: сборка provider YAML работает и без списка.');
+  });
   document.getElementById('subListSearch').addEventListener('input', renderServerList);
   document.getElementById('subListAll').addEventListener('click', () => {
     // «Выбрать все» действует на видимый (отфильтрованный поиском) набор
@@ -4569,6 +4945,12 @@ function normalizeRuntimeController(input) {
   return u.origin + (path === '/ui' ? '' : path);
 }
 
+// Адрес вкладки с JSON списка узлов (#322): тот же normalize, что у fetch,
+// плюс путь API. Без secret и query; открывается только по явному клику.
+function buildRuntimeJsonUrl(raw) {
+  return normalizeRuntimeController(raw) + '/providers/proxies';
+}
+
 let rtImportSeq = 0, rtImportAbort = null;
 let rtSecretApprovedEndpoint = null;
 let resetRuntimeImportPreferences = () => { rtSecretApprovedEndpoint = null; };
@@ -4609,8 +4991,8 @@ async function fetchRuntimeProviders() {
     if (seq !== rtImportSeq) return;
     if (!resp.ok) {
       // HTTP-ответ — можно утверждать точно.
-      const label = resp.status === 401 ? 'HTTP 401: секрет не принят (auth failed)'
-        : resp.status === 403 ? 'HTTP 403: доступ запрещён (forbidden)'
+      const label = resp.status === 401 ? 'HTTP 401: секрет не принят (auth failed). Контроллер закрыт API secret: введите его в поле выше и повторите запрос; в адрес вкладки JSON его вставлять не нужно.'
+        : resp.status === 403 ? 'HTTP 403: доступ запрещён (forbidden). Если контроллер закрыт API secret — введите его в поле выше и повторите; в адрес вкладки JSON secret не вставляется.'
         : resp.status === 404 ? 'HTTP 404: API /providers/proxies не найден. Проверьте адрес и API-префикс.'
         : 'HTTP ' + resp.status;
       say('❌ ' + label);
@@ -4624,7 +5006,7 @@ async function fetchRuntimeProviders() {
     if (controller.signal.aborted) { say('❌ Время ожидания Mihomo controller истекло. Повторите запрос или загрузите JSON локально.'); return; }
     // Generic TypeError браузера не раскрывает причину: не выдумываем
     // «CORS_DENIED»/«LOCAL_NETWORK_PERMISSION_DENIED» без доказательств.
-    say('❌ Сетевой отказ: причина не установлена. Проверьте адрес/listen, CORS, разрешение локальной сети и mixed content (HTTPS-страница → HTTP-controller). Подробности: F12 → Console (или Ctrl+Shift+J). Безопасный ручной путь: «Вставить JSON»/«Загрузить .json» из GET /providers/proxies; secret никуда через прокси не передаётся.');
+    say('❌ Сетевой отказ: причина не установлена — браузер или сеть блокируют прямой запрос (возможны CORS, Mixed Content HTTPS→HTTP, разрешение локальной сети, недоступность listen-адреса). Без DevTools: нажмите «🌐 Открыть JSON Mihomo» ниже, скопируйте JSON во вкладке и нажмите «Вставить JSON». Подробности: F12 → Console (или Ctrl+Shift+J). Secret через прокси не передаётся.');
   } finally {
     clearTimeout(deadline);
     if (rtImportAbort === controller) rtImportAbort = null;
@@ -4702,6 +5084,17 @@ function initRuntimeImport() {
     if (preset.value === 'custom') input.focus();
   });
   fetchBtn.addEventListener('click', fetchRuntimeProviders);
+  document.getElementById('rtOpenJsonBtn').addEventListener('click', () => {
+    const status = document.getElementById('rtStatus');
+    const say = (text) => { status.textContent = text; status.style.display = text ? '' : 'none'; };
+    let url;
+    try { url = buildRuntimeJsonUrl(document.getElementById('rtControllerInput').value); }
+    catch (e) { say('❌ ' + e.message); return; }
+    // Только явный клик → top-level открытие новой вкладки; secret и query
+    // в URL не добавляются (контракт #159/#322).
+    window.open(url, '_blank', 'noopener');
+    say('Открыта вкладка с JSON списка узлов: выделите всё (Ctrl+A), скопируйте (Ctrl+C) и нажмите «Вставить JSON». На телефоне: удерживайте текст → «Выделить всё» → «Копировать».');
+  });
   document.getElementById('rtPasteBtn').addEventListener('click', async () => {
     cancelRuntimeImport();
     const seq = rtImportSeq;
@@ -7036,12 +7429,92 @@ function ptNetworkDiagnostics(spec, model, opts) {
 // bounded-разбор — pure-функции (без DOM). Контракт формата:
 // docs/research/PORTABLE-BUILDER-PROJECT.md. Сбор/применение состояния
 // Builder (DOM) живёт в RB-UI, здесь только данные.
+// Current Builder export/Reverse remain v1 until project-scoped identity UI is ready.
 const RB_PROJECT_SCHEMA_VERSION = 1;
+const RB_PROJECT_READ_SCHEMA_VERSION = 2;
 const RB_PROJECT_MAX_BYTES = 4 * 1024 * 1024;
 const RB_PROFILES = new Set(['router', 'vps-local', 'vps-gateway']);
 const RB_DASHBOARDS = new Set(['metacubexd', 'yacd', 'zashboard', 'custom']);
 const RB_STRATEGIES = new Set(['url-test', 'fallback', 'load-balance']);
 
+
+// 1.12 / #280 — read-only portable identity v2 contract. v1 export and
+// live Build/Preview keep using the existing single browser-local HWID.
+// Never include URL, HWID, sourceId or labels in a validation diagnostic.
+const RB_PORTABLE_MAX = 512;
+function rbValidatePortableIdentities(p) {
+  const errors = [];
+  const record = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  const keysOnly = (v, allowed, name) => {
+    if (Object.keys(v).some(k => !allowed.includes(k))) errors.push(name + ': unknown field');
+  };
+  const idOk = v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(v);
+  const s = p.sources, ident = p.identities;
+  if (!record(s) || !record(ident)) return ['v2: sources and identities objects required'];
+  keysOnly(s, ['subMode', 'mainInput', 'fallbackInput', 'autoWhitelist', 'subscriptionSources'], 'sources');
+  keysOnly(ident, ['defaultId', 'entries', 'providerBindings'], 'identities');
+  if (!Array.isArray(s.subscriptionSources) || !Array.isArray(ident.entries) || !Array.isArray(ident.providerBindings))
+    return ['v2: subscriptionSources, entries and providerBindings arrays required'];
+  if (s.subscriptionSources.length > RB_PORTABLE_MAX || ident.entries.length > RB_PORTABLE_MAX ||
+      ident.providerBindings.length > RB_PORTABLE_MAX) return ['v2: identity/source count exceeds limit'];
+  if (!idOk(ident.defaultId)) errors.push('identities.defaultId: invalid id');
+  const ids = new Set(), used = new Set();
+  for (const entry of ident.entries) {
+    if (!record(entry)) { errors.push('identities.entries[]: invalid entry'); continue; }
+    keysOnly(entry, ['id', 'label', 'hwid'], 'identities.entries[]');
+    if (!idOk(entry.id) || ids.has(entry.id)) errors.push('identities.entries[]: id must be unique');
+    else ids.add(entry.id);
+    if (typeof entry.label !== 'string' || !entry.label.trim() || entry.label.length > 80)
+      errors.push('identities.entries[]: invalid label');
+    if (typeof entry.hwid !== 'string' || !/^[A-Za-z0-9=-]{10,64}$/.test(entry.hwid))
+      errors.push('identities.entries[]: invalid HWID');
+  }
+  if (!ids.has(ident.defaultId)) errors.push('identities.defaultId: not found');
+  else used.add(ident.defaultId);
+
+  // In Sub Mode, HTTP(S) URLs without URL-embedded credentials are provider
+  // subscriptions. Mirrors splitSubscriptionInputForPreview without DOM or fetch.
+  const urls = [];
+  if (s.subMode === true && typeof s.mainInput === 'string') {
+    for (const raw of s.mainInput.split(/\r?\n/)) {
+      const trimmed = raw.trim();
+      if (!/^https?:\/\//i.test(trimmed)) continue;
+      try {
+        const u = new URL(trimmed);
+        if (!u.username && !u.password && (u.protocol === 'http:' || u.protocol === 'https:')) urls.push(trimmed);
+      } catch (_) {}
+    }
+  }
+  if (new Set(urls).size !== urls.length) errors.push('sources.mainInput: duplicate provider URL requires explicit disambiguation');
+  if (s.subscriptionSources.length !== urls.length) errors.push('sources.subscriptionSources: subscription count mismatch');
+  const sourceIds = new Set();
+  for (let i = 0; i < s.subscriptionSources.length; i++) {
+    const entry = s.subscriptionSources[i];
+    if (!record(entry)) { errors.push('sources.subscriptionSources[]: invalid entry'); continue; }
+    keysOnly(entry, ['sourceId', 'url'], 'sources.subscriptionSources[]');
+    if (!idOk(entry.sourceId) || sourceIds.has(entry.sourceId))
+      errors.push('sources.subscriptionSources[]: sourceId must be unique');
+    else sourceIds.add(entry.sourceId);
+    if (typeof entry.url !== 'string' || entry.url !== urls[i])
+      errors.push('sources.subscriptionSources[]: URL/order mismatch');
+  }
+  if (ident.providerBindings.length !== sourceIds.size) errors.push('identities.providerBindings: count mismatch');
+  const bound = new Set();
+  for (const binding of ident.providerBindings) {
+    if (!record(binding)) { errors.push('identities.providerBindings[]: invalid entry'); continue; }
+    keysOnly(binding, ['sourceId', 'identityId'], 'identities.providerBindings[]');
+    if (!sourceIds.has(binding.sourceId) || bound.has(binding.sourceId))
+      errors.push('identities.providerBindings[]: missing/duplicate source reference');
+    else bound.add(binding.sourceId);
+    // null means explicit non-gated subscription (Gist/public HTTP source).
+    // Inherited/default HWID bindings remain unchanged.
+    if (binding.identityId !== null && !ids.has(binding.identityId))
+      errors.push('identities.providerBindings[]: unknown identity');
+    else if (binding.identityId !== null) used.add(binding.identityId);
+  }
+  if (used.size !== ids.size) errors.push('identities.entries: unused identity');
+  return errors;
+}
 
 function rbValidateProject(p) {
   const errors = [];
@@ -7049,9 +7522,12 @@ function rbValidateProject(p) {
   if (typeof p.schemaVersion !== 'number' || !Number.isInteger(p.schemaVersion) || p.schemaVersion < 1) {
     errors.push('schemaVersion: positive integer expected');
   }
-  if (p.schemaVersion > RB_PROJECT_SCHEMA_VERSION) {
-    errors.push('файл создан более новой версией генератора (schemaVersion ' + p.schemaVersion + ' > ' + RB_PROJECT_SCHEMA_VERSION + ')');
+  if (p.schemaVersion > RB_PROJECT_READ_SCHEMA_VERSION) {
+    errors.push('файл создан более новой версией генератора (schemaVersion ' + p.schemaVersion + ' > ' + RB_PROJECT_READ_SCHEMA_VERSION + ')');
   }
+  if (p.schemaVersion === 1 && (Object.hasOwn(p, 'identities') || Object.hasOwn(p.sources || {}, 'subscriptionSources')))
+    errors.push('v1: portable identities require schemaVersion 2');
+  if (p.schemaVersion === 2) errors.push(...rbValidatePortableIdentities(p));
   const sources = p.sources;
   if (!sources || typeof sources !== 'object') errors.push('sources: object expected');
   else {
@@ -7137,7 +7613,11 @@ function rbValidateProject(p) {
 // на историческую неявную группу; сами ссылки/beans/passthrough не меняем.
 // Промежуточный v2 из этого PR имел ту же структуру: читаем и сохраняем v1.
 function rbMigrateProject(p) {
-  if (p && p.schemaVersion === 2) return { ok: true, project: { ...p, schemaVersion: 1 } };
+  // Old experimental v2 had NO identity payload, and must still round-trip
+  // through v1. A proper/partial portable v2 must never lose identity data.
+  if (p && p.schemaVersion === 2 &&
+      !Object.hasOwn(p, 'identities') && !Object.hasOwn(p.sources || {}, 'subscriptionSources'))
+    return { ok: true, project: { ...p, schemaVersion: 1 } };
   const d = p && p.dialer;
   const active = d && ['members', 'providers'].some(k => typeof d[k] === 'string' && d[k].trim());
   // В Build имя берётся из mode/target; исходный bean может хранить старое,
@@ -7177,8 +7657,137 @@ function rbParseProjectText(text) {
   if (!migrated.ok) return { ok: false, error: migrated.error };
   const errors = rbValidateProject(migrated.project);
   if (errors.length) return { ok: false, error: 'структура проекта: ' + errors[0] + (errors.length > 1 ? ' (и ещё ' + (errors.length - 1) + ')' : '') };
-  return { ok: true, project: migrated.project };
+  return {
+    ok: true, project: migrated.project,
+    identityStatus: migrated.project.schemaVersion === 2 ? 'PORTABLE_V2_VALIDATED_ONLY' : 'LEGACY_IDENTITY_MISSING'
+  };
 }
+// #280 — pure project-scoped identity lifecycle. No DOM/localStorage, preview,
+// Build, imports, or browser-global device state changes occur in these helpers.
+// A project becomes portable ONLY on an explicit conversion with an existing HWID.
+function rbPortableFail(reason) {
+  return { ok: false, error: 'portable identities: ' + reason };
+}
+
+function rbPortableGetSubscriptionUrls(raw, subMode) {
+  const urls = [];
+  if (subMode !== true || typeof raw !== 'string') return urls;
+  for (const line of raw.split(/\r?\n/)) {
+    const value = line.trim();
+    if (!/^https?:\/\//i.test(value)) continue;
+    try {
+      const u = new URL(value);
+      if (!u.username && !u.password && (u.protocol === 'https:' || u.protocol === 'http:')) urls.push(value);
+    } catch (_) {}
+  }
+  return urls;
+}
+
+function rbPortableParse(project, version) {
+  let result;
+  try { result = rbParseProjectText(JSON.stringify(project)); }
+  catch (_) { return rbPortableFail('project cannot be serialized'); }
+  if (!result.ok) return rbPortableFail('invalid project');
+  if (result.project.schemaVersion !== version) return rbPortableFail('unsupported schema');
+  return result;
+}
+
+// An explicitly selected device identity is copied from the browser registry;
+// other local identities never enter the project. No HWID is generated here.
+function rbPortableFromLegacy(project, chosen) {
+  const initial = rbPortableParse(project, 1);
+  if (!initial.ok) return initial;
+  if (!chosen || typeof chosen !== 'object' || Array.isArray(chosen) ||
+      Object.keys(chosen).some(k => !['id', 'label', 'hwid', 'createdAt'].includes(k)) ||
+      typeof chosen.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(chosen.id) ||
+      typeof chosen.label !== 'string' || !chosen.label.trim() || chosen.label.length > 80 ||
+      !/^[A-Za-z0-9=-]{10,64}$/.test(chosen.hwid || ''))
+    return rbPortableFail('explicit valid identity required');
+  const p = initial.project;
+  const urls = rbPortableGetSubscriptionUrls(p.sources.mainInput, p.sources.subMode);
+  if (urls.length > RB_PORTABLE_MAX || new Set(urls).size !== urls.length)
+    return rbPortableFail('too many or duplicate provider sources');
+  const next = JSON.parse(JSON.stringify(p));
+  next.schemaVersion = 2;
+  next.sources.subscriptionSources = urls.map((url, i) => ({ sourceId: 'src-' + (i + 1), url }));
+  next.identities = {
+    defaultId: chosen.id,
+    entries: [{ id: chosen.id, label: chosen.label, hwid: chosen.hwid }],
+    providerBindings: next.sources.subscriptionSources.map(s => ({ sourceId: s.sourceId, identityId: chosen.id }))
+  };
+  return rbPortableParse(next, 2);
+}
+
+// A pure reorder: stable opaque source IDs and their identity references move
+// with exact unique URLs. New/deleted/duplicate URLs are not guessed/mapped.
+function rbPortableReorder(project, newMainInput) {
+  const current = rbPortableParse(project, 2);
+  if (!current.ok) return current;
+  if (typeof newMainInput !== 'string') return rbPortableFail('input text expected');
+  const previous = current.project;
+  const urls = rbPortableGetSubscriptionUrls(newMainInput, previous.sources.subMode);
+  const from = new Map(previous.sources.subscriptionSources.map(s => [s.url, s]));
+  if (urls.length !== from.size || new Set(urls).size !== urls.length ||
+      urls.some(url => !from.has(url))) return rbPortableFail('subscription mapping changed; manual binding required');
+  const next = JSON.parse(JSON.stringify(previous));
+  next.sources.mainInput = newMainInput;
+  next.sources.subscriptionSources = urls.map(url => ({ ...from.get(url) }));
+  return rbPortableParse(next, 2);
+}
+
+// Assign an already present identity. An orphaned identity is rejected rather
+// than silently dropped; an explicit remove/replace UX can be added later.
+function rbPortableAssign(project, sourceId, identityId) {
+  const current = rbPortableParse(project, 2);
+  if (!current.ok) return current;
+  const next = JSON.parse(JSON.stringify(current.project));
+  const binding = next.identities.providerBindings.find(b => b.sourceId === sourceId);
+  if (!binding || (identityId !== null && !next.identities.entries.some(e => e.id === identityId)))
+    return rbPortableFail('unknown source or identity');
+  binding.identityId = identityId;
+  return rbPortableParse(next, 2);
+}
+
+// Introduce a second identity and bind one provider atomically. Existing HWIDs
+// stay exact; no raw IDs, URLs, labels or HWIDs appear in returned errors.
+function rbPortableAddAndAssign(project, sourceId, chosen) {
+  const current = rbPortableParse(project, 2);
+  if (!current.ok) return current;
+  if (!chosen || typeof chosen !== 'object' || Array.isArray(chosen) ||
+      Object.keys(chosen).some(k => !['id', 'label', 'hwid'].includes(k)) ||
+      typeof chosen.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(chosen.id) ||
+      typeof chosen.label !== 'string' || !chosen.label.trim() || chosen.label.length > 80 ||
+      typeof chosen.hwid !== 'string' || !/^[A-Za-z0-9=-]{10,64}$/.test(chosen.hwid) ||
+      current.project.identities.entries.some(e => e.id === chosen.id))
+    return rbPortableFail('new unique identity required');
+  const next = JSON.parse(JSON.stringify(current.project));
+  const binding = next.identities.providerBindings.find(b => b.sourceId === sourceId);
+  if (!binding) return rbPortableFail('unknown source');
+  next.identities.entries.push({id: chosen.id, label: chosen.label, hwid: chosen.hwid});
+  binding.identityId = chosen.id;
+  return rbPortableParse(next, 2);
+}
+
+// Future Builder bridge: generates engine contract by VALIDATED source order,
+// never by UI line index alone. This result contains secrets: only pass to the
+// engine in-memory; never log it or render it.
+function rbPortableEngineOptions(project) {
+  const current = rbPortableParse(project, 2);
+  if (!current.ok) return current;
+  const p = current.project;
+  const lookup = new Map(p.identities.entries.map(e => [e.id, e.hwid]));
+  const targets = new Map(p.identities.providerBindings.map(b => [b.sourceId, b.identityId]));
+  return {
+    ok: true,
+    options: {
+      deviceHwid: lookup.get(p.identities.defaultId),
+      providerOverrides: p.sources.subscriptionSources.map(s => ({
+        sourceUrl: s.url, hwid: targets.get(s.sourceId) === null ? null : lookup.get(targets.get(s.sourceId))
+      }))
+    }
+  };
+}
+
 // === REVERSE BUILD CORE — RB-CORE-END ===
 
 // === REVERSE BUILD YAML ENGINE (OWNER-REVERSE-01, PR C) — RBY-CORE-START ===
@@ -8418,8 +9027,8 @@ function buildTieredGroups(tiers, existingNames) {
 }
 
 // Post-build патч: doc → +tier groups, GLOBAL получает root первым участником.
-// MATCH,GLOBAL остаётся последним правилом для ручного выбора в mode: rule.
-// При выключенном Tiered YAML не изменяется (ALL PARITY).
+// MATCH,GLOBAL сохраняется: ручной селектор GLOBAL управляет route в mode: rule.
+// Только при включённой настройке; выключена — yaml без изменений (ALL PARITY).
 function applyTieredFailover(yaml, tiersOverride) {
   if (!tieredEnabled() && !tiersOverride) return yaml;
   if (document.getElementById('cfgAutoWhitelist').checked) throw Error('Автоматические белые списки несовместимы с приоритетными группами серверов. Выберите один режим.');
@@ -8438,7 +9047,7 @@ function applyTieredFailover(yaml, tiersOverride) {
   const global = doc['proxy-groups'].find(g => g.name === 'GLOBAL');
   if (!global || !Array.isArray(global.proxies)) throw Error('Приоритетные группы серверов: группа GLOBAL не найдена в сборке');
   global.proxies.unshift(rootName);
-  // #279: rewiring MATCH directly to root bypasses manual GLOBAL in rule mode.
+  // Do not rewrite MATCH to root: that bypasses manual GLOBAL in rule mode (#279).
   const summary = 'Приоритетные группы серверов: ' + tierGroupCount(tiers.length) + ', строгий порядок → ' +
     tiers.map(t => t.name.trim() + ' [' + tierStrategyLabel(t.strategy) + '; участников: ' + t.members.length + ']').join(' → ');
   const traceEl = document.getElementById('tieredTrace');
@@ -8667,6 +9276,11 @@ function buildStateFingerprint() {
     if (el.type === 'file') return; // содержимое файлов отражено в wgProfiles
     parts.push((el.id || el.name || el.className) + '=' + (el.type === 'checkbox' ? String(el.checked) : el.value));
   });
+  // #326: активная идентичность подписки — build-релевантный факт (deviceHwid
+  // в YAML и preview-заголовках). «Сменить ID» меняет HWID без смены value
+  // селектора — без этого факта честный STALE не показывался. Значение живёт
+  // только в памяти вкладки для сравнения, нигде не рендерится и не сериализуется.
+  try { parts.push('deviceIdentityHwid=' + getActiveDeviceIdentity().hwid); } catch (_) {}
   parts.push('wgProfiles=' + wgProfiles.map(p => [p.filename, p.mode, p.target].join(':')).join('|'));
   const cards = document.querySelectorAll('#policyCards .policy-card');
   const cardParts = Array.from(cards).map(card => {
@@ -10792,6 +11406,14 @@ async function buildMihomo() {
   const attemptEpoch = builderProjectEpoch;
   builderBuildError = false; builderBuildAttempts++; renderBuilderActionStatus();
   try {
+  // Builder enables portable mode only after a local synthetic engine proof.
+  let portableBuildPlan = null;
+  if (rbPortableProjectState) {
+    try { portableBuildPlan = rbPortablePlanForCurrent(); }
+    catch (_) { return buildFailure('❌ Проект v2: неверный режим или привязки HWID. Сборка отменена.', true); }
+    if (!rbPortableRuntimeCanBuild(globalThis.web4core))
+      return buildFailure('❌ Проект v2: нужен web4core с проверенной поддержкой разных HWID (PR web4core #21). Build не выполнен.', true);
+  }
   if (wgUploadPending) {
     mihomoValidationSeq++;
     resetCompatSummary();
@@ -10992,7 +11614,8 @@ async function buildMihomo() {
         mihomoSubscriptionMode: subMode,
         excludeFilter: (subMode && combinedExclude.filter) ? combinedExclude.filter : undefined,
         deviceModel: subMode ? document.getElementById('deviceModelInput').value : undefined,
-        deviceHwid: subMode ? getActiveDeviceIdentity().hwid : undefined,
+        deviceHwid: subMode ? (portableBuildPlan ? portableBuildPlan.deviceHwid : getActiveDeviceIdentity().hwid) : undefined,
+        ...(portableBuildPlan ? { providerOverrides: portableBuildPlan.providerOverrides } : {}),
         webUiDashboard: webUiEnabled ? webUiChoice : undefined,
         webUiCustomUrl: webUiEnabled && webUiChoice === 'custom' ? webUiCustomUrl : undefined,
         mihomoPerProxyTun: perProxyTun,
@@ -11042,6 +11665,8 @@ async function buildMihomo() {
     }
 
     if (buildSeq !== mihomoValidationSeq) return false;
+    if (portableBuildPlan && !rbPortableOutputHasExactHwids(yaml, portableBuildPlan))
+      throw new Error('v2: generated YAML has wrong provider identity');
     document.getElementById('mihomoOutput').value = yaml;
     updateRoutingDiagnostics(yaml);
     markBuildFresh();
@@ -11068,7 +11693,7 @@ async function buildMihomo() {
         /Provide one or more HTTP\(S\) URLs/i.test(message)) {
       message = 'Режим «URL-подписки» включён, но URL подписки не найден. Если вы вставили обычные proxy-ссылки — выключите «Использовать URL-подписки».';
     }
-    buildFailure('❌ ' + message);
+    buildFailure(portableBuildPlan ? '❌ v2 Build: ошибка проверки генерации HWID, содержимое скрыто.' : '❌ ' + message);
   }
   } finally { if (attemptEpoch === builderProjectEpoch) { builderBuildAttempts--; renderBuilderActionStatus(); } }
 }
@@ -11105,7 +11730,189 @@ function copyText(text) {
 // bounded (rbParseProjectText) с подтверждением и undo; ни localStorage,
 // ни сети, ни секретов в логах/статусах.
 let rbUndoProjectState = null;
+// Project-scoped identity mapping is intentionally in RAM only and never
+// imported into link-generators.device-identities.v1/localStorage.
+let rbPortableProjectState = null;
+function rbPortableContextFromProject(project) {
+  if (project.schemaVersion !== 2) return null;
+  return {
+    subscriptionSources: JSON.parse(JSON.stringify(project.sources.subscriptionSources)),
+    identities: JSON.parse(JSON.stringify(project.identities))
+  };
+}
+function rbRenderPortableMode() {
+  // Шапка отражает фактический режим (v1 локальный / v2 переносимый) —
+  // единственная точка синхронизации для всех переходов v1↔v2.
+  if (typeof renderDeviceIdentityHeader === 'function') renderDeviceIdentityHeader();
+  const active = !!rbPortableProjectState;
+  const notice = document.getElementById('rbPortableModeNotice');
+  if (notice) notice.textContent = active
+    ? 'Проект v2: Preview использует HWID каждой подписки. Build требует проверенной поддержки индивидуальных HWID в web4core; иначе сборка заблокирована.'
+    : 'Проект v1: HWID хранится только в браузере и не переносится в файл проекта.';
+  const on = document.getElementById('rbPortableActivateBtn');
+  if (on) on.disabled = active;
+  const off = document.getElementById('rbPortableReturnBtn');
+  if (off) off.hidden = !active;
+  rbRenderPortableMappings();
+}
+// The explicit conversion does not generate an identity or alter localStorage.
+function rbActivatePortableProject() {
+  if (rbPortableProjectState) return showToast('Проект уже использует переносимый формат v2.');
+  const converted = rbPortableFromLegacy(rbCollectProject(), getActiveDeviceIdentity());
+  if (!converted.ok) return showToast('❌ v2: ' + converted.error, true);
+  if (!confirm('Создать переносимый проект v2 из текущих настроек?\n\n' +
+      'В экспортируемом файле будет сохранён реальный HWID устройства, URL/токены подписок и, если есть, приватные ключи WG/AWG. ' +
+      'Файл храните как секрет. В браузерный реестр новые HWID НЕ добавляются. ' +
+      'Preview использует выбранные HWID, а Build требует проверенный совместимый web4core.')) return;
+  rbPortableProjectState = rbPortableContextFromProject(converted.project);
+  mihomoValidationSeq++;
+  setMihomoValidationState('NOT_BUILT');
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
+  showToast('Переносимый проект v2 подготовлен. Используйте «💾 Сохранить проект».');
+}
+function rbReturnToLegacyProject() {
+  if (!rbPortableProjectState) return;
+  if (!confirm('Вернуться к проекту v1?\n\n' +
+    'Переносимые HWID и назначения подписок будут УДАЛЕНЫ из текущего рабочего проекта. ' +
+    'Build/preview снова будут использовать активный локальный HWID этого браузера, который может отличаться. ' +
+    'Сначала сохраните v2, если хотите его оставить.')) return;
+  rbPortableProjectState = null;
+  mihomoValidationSeq++;
+  setMihomoValidationState('NOT_BUILT');
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
+  showToast('Проект возвращён к v1; дальнейшие сборки используют локальный HWID.');
+}
 
+
+// #280 — only symbolic identity labels in UI: do not print subscription URL,
+// actual HWID or local registry records. All mutations use validated pure v2
+// operations; the browser registry is never imported/mutated.
+function rbPortableCommitMutation(result) {
+  if (!result || !result.ok || result.project.schemaVersion !== 2) {
+    showToast('❌ Назначение HWID не сохранено: проверьте существующие привязки и формат проекта.', true);
+    return false;
+  }
+  rbPortableProjectState = rbPortableContextFromProject(result.project);
+  mihomoValidationSeq++;
+  setMihomoValidationState('NOT_BUILT');
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
+  return true;
+}
+function rbPortableSelectOption(label, value) {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  return option;
+}
+function rbRenderPortableMappings() {
+  const panel = document.getElementById('rbPortablePanel');
+  if (!panel) return;
+  panel.hidden = !rbPortableProjectState;
+  if (!rbPortableProjectState) return;
+  const project = rbCollectProject();
+  const validated = rbPortableParse(project, 2);
+  const valid = validated.ok;
+  const status = document.getElementById('rbPortableMappingStatus');
+  status.textContent = valid
+    ? 'Привязки согласованы. Сохраните проект, чтобы перенести HWID на другой компьютер.'
+    : '⚠ Изменились URL или порядок подписок. HWID не переназначены автоматически. Если изменён только порядок, нажмите «Сопоставить новый порядок URL».';
+  const reorder = document.getElementById('rbPortableReorderBtn');
+  reorder.hidden = valid;
+  const rows = document.getElementById('rbPortableSources');
+  rows.replaceChildren();
+  const src = document.getElementById('rbPortableNewSource');
+  const selected = src.value;
+  src.replaceChildren();
+  const ids = rbPortableProjectState.identities;
+  const bound = new Map(ids.providerBindings.map(v => [v.sourceId, v.identityId]));
+  const used = new Set();
+  rbPortableProjectState.subscriptionSources.forEach((source, index) => {
+    // A displayed index is informational only; sourceId is the stable key.
+    const name = 'Подписка ' + (index + 1);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0';
+    const label = document.createElement('label');
+    label.textContent = name + ' — HWID:';
+    const select = document.createElement('select');
+    select.className = 'rb-portable-bind';
+    select.dataset.sourceId = source.sourceId;
+    select.setAttribute('aria-label', 'HWID для ' + name);
+    select.appendChild(rbPortableSelectOption('Без HWID — Gist / открытая подписка', '__none__'));
+    for (const id of ids.entries) {
+      const desc = (id.id === ids.defaultId ? 'Основной · ' : '') + id.label;
+      select.appendChild(rbPortableSelectOption(desc, id.id));
+    }
+    select.value = bound.get(source.sourceId) === null ? '__none__' : (bound.get(source.sourceId) || '');
+    select.disabled = !valid;
+    row.append(label, select);
+    rows.appendChild(row);
+    src.appendChild(rbPortableSelectOption(name, source.sourceId));
+    used.add(source.sourceId);
+  });
+  src.value = used.has(selected) ? selected : (rbPortableProjectState.subscriptionSources[0]?.sourceId || '');
+  for (const id of ['rbPortableRandomBtn', 'rbPortableImportHwidBtn', 'rbPortableNewSource']) {
+    document.getElementById(id).disabled = !valid || used.size === 0;
+  }
+}
+function rbPortableReorderCurrentSources() {
+  if (!rbPortableProjectState) return;
+  const project = rbCollectProject();
+  const result = rbPortableReorder({
+    ...project,
+    sources: {
+      ...project.sources,
+      mainInput: rbPortableProjectState.subscriptionSources.map(s => s.url).join('\n')
+    }
+  }, project.sources.mainInput);
+  if (rbPortableCommitMutation(result)) showToast('Порядок подписок сопоставлен по точному URL без замены HWID.');
+}
+function rbPortableBindSource(sourceId, identityId) {
+  if (!rbPortableProjectState) return;
+  const none = identityId === '__none__';
+  const result = rbPortableAssign(rbCollectProject(), sourceId, none ? null : identityId);
+  if (rbPortableCommitMutation(result))
+    showToast(none ? 'Подписка настроена без HWID; коммерческие привязки сохранены.'
+      : 'HWID выбранной подписки обновлён. Остальные привязки сохранены.');
+}
+function rbPortableCreateIdentity(manual) {
+  const source = document.getElementById('rbPortableNewSource').value;
+  const input = document.getElementById('rbPortableNewHwid');
+  const labelInput = document.getElementById('rbPortableNewLabel');
+  const label = labelInput.value.trim();
+  const hwid = manual ? input.value.trim() : deviceIdentityRandomHex32();
+  // Clear any entered secret before all success/failure notifications.
+  input.value = '';
+  if (!rbPortableProjectState || !source) return;
+  if (!label || label.length > 80 || !isValidDeviceHwid(hwid)) {
+    return showToast('❌ Укажите короткое имя и корректный HWID (10–64 символа, A–Z/a–z/0–9/=/-). Значение скрыто.', true);
+  }
+  const project = rbCollectProject();
+  const id = 'ident-' + deviceIdentityRandomHex32().slice(0,16);
+  const result = rbPortableAddAndAssign(project, source, { id, label, hwid });
+  if (rbPortableCommitMutation(result)) {
+    labelInput.value = '';
+    showToast('Новая проектная идентичность назначена выбранной подписке. HWID не отображается.');
+  }
+}
+document.getElementById('rbPortableReorderBtn').addEventListener('click', rbPortableReorderCurrentSources);
+document.getElementById('rbPortableSources').addEventListener('change', e => {
+  if (!e.target.matches('select.rb-portable-bind')) return;
+  rbPortableBindSource(e.target.dataset.sourceId, e.target.value);
+});
+document.getElementById('rbPortableRandomBtn').addEventListener('click', () => rbPortableCreateIdentity(false));
+document.getElementById('rbPortableImportHwidBtn').addEventListener('click', () => rbPortableCreateIdentity(true));
+document.getElementById('mihomoInput').addEventListener('input', () => {
+  if (rbPortableProjectState) rbRenderPortableMappings();
+});
+
+document.getElementById('rbPortableActivateBtn').addEventListener('click', rbActivatePortableProject);
+document.getElementById('rbPortableReturnBtn').addEventListener('click', rbReturnToLegacyProject);
 function rbReadPolicyCardsRaw() {
   return Array.from(document.querySelectorAll('#policyCards .policy-card')).map(card => {
     const t = sel => { const el = card.querySelector(sel); return el ? el.value : ''; };
@@ -11118,7 +11925,7 @@ function rbReadPolicyCardsRaw() {
 function rbCollectProject() {
   const opt = id => { const el = document.getElementById(id); return el ? el.value : ''; };
   const chk = id => { const el = document.getElementById(id); return !!(el && el.checked); };
-  return {
+  const project = {
     schemaVersion: RB_PROJECT_SCHEMA_VERSION,
     meta: {
       app: 'link-generators',
@@ -11155,6 +11962,12 @@ function rbCollectProject() {
     tiered: { enabled: chk('cfgTieredFailover'), cards: (window.__tierCardsState || []).map(t => ({ name: t.name, strategy: t.strategy, members: (t.members || []).slice() })) },
     passthrough: rbPassthrough ? JSON.parse(JSON.stringify(rbPassthrough)) : null
   };
+  if (rbPortableProjectState) {
+    project.schemaVersion = 2;
+    project.sources.subscriptionSources = JSON.parse(JSON.stringify(rbPortableProjectState.subscriptionSources));
+    project.identities = JSON.parse(JSON.stringify(rbPortableProjectState.identities));
+  }
+  return project;
 }
 
 // Проект → Builder. Значения присваиваются напрямую, зависимый UI
@@ -11200,6 +12013,10 @@ function rbApplyProject(project) {
   mihomoValidationSeq++;
   setMihomoValidationState('NOT_BUILT');
   rbPassthrough = copy.project.passthrough || null;
+  rbPortableProjectState = rbPortableContextFromProject(copy.project);
+  if (typeof invalidatePreviewForDeviceIdentityChange === 'function') invalidatePreviewForDeviceIdentityChange();
+  rbRenderPortableMode();
+  refreshBuildStaleness();
 }
 let rbPassthrough = null;
 function rbWriteProject(project) {
@@ -11212,6 +12029,7 @@ function rbWriteProject(project) {
   applyProfileUiState(o.profile);
   setOpt('mihomoInput', s.mainInput);
   setOpt('whitelistInput', s.fallbackInput);
+  updateProviderNameEditors();
   setChk('cfgSubMode', s.subMode);
   setChk('cfgAutoWhitelist', s.autoWhitelist);
   // WG-профили: полная замена (подтверждение — в rbLoadProject).
@@ -11267,6 +12085,11 @@ function rbWriteProject(project) {
 function rbSaveProject() {
   if (currentAwlConflicts().length || (document.getElementById('cfgAutoWhitelist').checked && document.getElementById('cfgProfile').value !== 'router')) { showToast('Разрешите конфликт белых списков перед сохранением проекта.', true); return; }
   const project = rbCollectProject();
+  const checked = rbParseProjectText(JSON.stringify(project));
+  if (!checked.ok) return showToast('❌ Файл не сохранён: ' + checked.error, true);
+  if (project.schemaVersion === 2 && !confirm('Экспортировать переносимый проект v2?\n\n' +
+      'Файл будет содержать ТОЧНЫЕ HWID, URL/токены подписок и WG/AWG ключи, если они добавлены. ' +
+      'Это чувствительные данные: не публикуйте файл и не пересылайте посторонним.')) return;
   const json = JSON.stringify(project, null, 2);
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + 'Z';
   const blob = new Blob([json], { type: 'application/json' });
@@ -11277,7 +12100,9 @@ function rbSaveProject() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  showToast('💾 Проект сохранён. В файле приватные ключи WG/AWG и токены подписок — никому его не передавайте.');
+  showToast(project.schemaVersion === 2
+    ? '💾 Переносимый проект v2 с HWID сохранён. Никому не передавайте файл.'
+    : '💾 Проект сохранён. В файле приватные ключи WG/AWG и токены подписок — никому его не передавайте.');
 }
 
 async function rbLoadProject(file) {
@@ -11292,7 +12117,12 @@ async function rbLoadProject(file) {
   const project = parsed.project;
   if (beforeRead !== rbProjectFingerprint(rbCollectProject())) return showToast('Builder изменился во время чтения файла. Загрузите проект повторно.', true);
   const counts = rbProjectCounts(project);
-  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
+  const legacyIdentityNotice = parsed.identityStatus === 'LEGACY_IDENTITY_MISSING'
+    ? '⚠ В файле нет переносимого HWID: будет использована текущая идентичность этого браузера. На другом компьютере сервис подписки может считать её новым устройством.\n' : '';
+  const portableNotice = parsed.identityStatus === 'PORTABLE_V2_VALIDATED_ONLY'
+    ? '⚠ Файл v2 содержит сохранённые HWID. Они останутся только внутри проекта и НЕ заменят локальный реестр браузера. ' +
+      'Preview использует сохранённые HWID. Build требует проверенный совместимый движок.\n' : '';
+  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + legacyIdentityNotice + portableNotice + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
   if (!confirm(preview)) {
     return showToast('Загрузка проекта отменена.');
   }
@@ -11302,7 +12132,9 @@ async function rbLoadProject(file) {
   const undoBtn = document.getElementById('rbUndoBtn');
   if (undoBtn) undoBtn.style.display = '';
   const subs = project.sources.mainInput.split('\n').filter(x => x.trim()).length;
-  showToast('✅ Проект загружен: ' + project.wgProfiles.length + ' WG/AWG, ' + subs + ' строк источников. Нажмите ⚡ Build Config.');
+  showToast(project.schemaVersion === 2
+    ? '✅ Проект v2 загружен. Preview использует сохранённые HWID; Build проверяет движок.'
+    : '✅ Проект загружен: ' + project.wgProfiles.length + ' WG/AWG, ' + subs + ' строк источников. Нажмите ⚡ Build Config.');
 }
 
 function rbUndoRestore() {
@@ -11564,6 +12396,28 @@ document.getElementById('btnDeviceIdentityNew').addEventListener('click', create
 document.getElementById('btnDeviceIdentityRename').addEventListener('click', renameActiveDeviceIdentity);
 document.getElementById('btnDeviceIdentityRegenerate').addEventListener('click', regenerateActiveDeviceIdentity);
 document.getElementById('btnDeviceIdentityDelete').addEventListener('click', deleteActiveDeviceIdentity);
+// Шапка (#326): те же операции, что и в расширенном менеджере — второй модели нет.
+document.getElementById('headerDeviceIdentitySelect').addEventListener('change', (e) => {
+  const wasHwid = getActiveDeviceIdentity().hwid;
+  setActiveDeviceIdentity(e.target.value);
+  // Коррекция: в проекте v2 смена браузерного устройства НЕ меняет HWID
+  // подписок — запрещаем ошибочное впечатление явно.
+  if (rbPortableProjectState && getActiveDeviceIdentity().hwid !== wasHwid) {
+    showToast('Выбрано другое локальное устройство. Проект v2 продолжает использовать переносимые HWID подписок — назначения не изменены. Вернуться к локальному HWID можно кнопкой «Вернуться к локальному HWID (v1)».');
+  }
+});
+document.getElementById('btnHeaderDeviceHwidReveal').addEventListener('click', () => {
+  headerDeviceHwidRevealed = !headerDeviceHwidRevealed;
+  renderDeviceIdentityHeader();
+  if (headerDeviceHwidRevealed) showToast('HWID показан только локально: в URL, журнал и диагностику он не попадает.');
+});
+document.getElementById('btnHeaderDeviceHwidCopy').addEventListener('click', () => {
+  const hwid = getActiveDeviceIdentity().hwid;
+  const done = () => showToast('HWID текущего устройства скопирован в буфер обмена.');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(hwid).then(done).catch(() => fallbackCopy(hwid, done));
+  else fallbackCopy(hwid, done);
+});
+document.getElementById('btnHeaderDeviceNew').addEventListener('click', createNewDeviceIdentity);
 updateSubModeHint();
 updateWebUiVisibility();
 updateMihomoOptionStates();

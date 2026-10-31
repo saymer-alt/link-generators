@@ -130,6 +130,7 @@ async function listedCount(page) {
   assert.match(s, /количество узлов: неизвестно/, 'UNKNOWN семантика: ' + s);
   assert.ok(!/найдено узлов: 0/.test(s), 'UNKNOWN не должен выглядеть как доказанный 0: ' + s);
   assert.match(await statusText(page), /Получить список не удалось/);
+  assert.match(await statusText(page), /Открыть JSON Mihomo/, 'FAILED-статус указывает на ручной runtime fallback (#322)');
   const w3 = await warningText(page);
   assert.match(w3, /Не удалось получить preview подписки #1/, 'warning #1');
   assert.match(w3, /Не удалось получить preview подписки #2/, 'warning #2');
@@ -405,6 +406,45 @@ async function listedCount(page) {
   assert.ok(!store.dump.includes('token-a') && !store.dump.includes('token-b') && !store.dump.includes('token-c'), 'токены подписок не сохраняются');
   assert.ok(!store.dump.includes('Node-0') && !store.dump.includes('Main-0') && !store.dump.includes('Alt-0'), 'имена узлов не сохраняются в localStorage');
   ok('privacy: localStorage чист (только identity-хранилище, не данные)');
+
+  // === 9. #322: видимая отмена «⏹ Пропустить» обрывает сеть честно ===
+  await setup();
+  let hangHits = 0, altHits = 0;
+  await page.route(SUB1, r => { hangHits++; }); // никогда не отвечает
+  await page.route(SUB2, r => { altHits++; r.fulfill({ status: 200, headers: CORS, body: links(3, 'Alt') }); });
+  await page.locator('#subListFetchBtn').click();
+  await page.waitForFunction(() => document.getElementById('subListSkipBtn').style.display !== 'none', null, { timeout: 5000 });
+  assert.equal(await btnLabel(page), 'Загрузка…');
+  await page.locator('#subListSkipBtn').click();
+  assert.match(await statusText(page), /прервано/, 'статус: ' + await statusText(page));
+  assert.match(await statusText(page), /количество узлов неизвестно/);
+  assert.ok(!/0 серверов/.test(await statusText(page)) && !/найдено узлов: 0/.test(await statsText(page)), 'FAILED ≠ доказанный ноль');
+  assert.equal(await page.evaluate(() => document.getElementById('subListSkipBtn').style.display), 'none', 'skip скрыт после отмены');
+  assert.equal(await btnLabel(page), '📋 Обновить список', 'кнопка вернулась в idle');
+  await page.waitForTimeout(700);
+  assert.equal(altHits, 0, 'после отмены новые запросы (в т.ч. ко второй подписке) не стартуют');
+  assert.equal(hangHits, 1, 'единственная начатая попытка, повторов нет');
+  await page.unroute(SUB1); await page.unroute(SUB2);
+  ok('skip: сеть обрывается, статус честный, повторов нет, кнопки восстановлены');
+
+  // === 10. #322: исчерпание бюджета тоже останавливает сеть (AbortController) ===
+  await setup();
+  let hangHits2 = 0;
+  await page.route(SUB1, r => { hangHits2++; }); // висит
+  await page.route(SUB2, r => r.fulfill({ status: 200, headers: CORS, body: links(3, 'Alt') }));
+  await page.evaluate(() => { SUBSCRIPTION_PREVIEW_BUDGET_MS = 1500; });
+  await page.locator('#subListFetchBtn').click();
+  await page.waitForFunction(() => /бюджет/.test(document.getElementById('subListStatus').textContent || ''), null, { timeout: 10000 });
+  const budgetStatus = await statusText(page);
+  assert.match(budgetStatus, /количество узлов неизвестно/);
+  assert.ok(!/найдено узлов: 0/.test(await statsText(page)));
+  await page.waitForTimeout(700);
+  const hitsAfterBudget = hangHits2 + altHits2();
+  function altHits2() { return 0; } // SUB2 ещё не начиналась: SUB1 висела первой
+  assert.equal(hangHits2, 1, 'без бесконечных fallback-попыток после бюджета');
+  await page.evaluate(() => { SUBSCRIPTION_PREVIEW_BUDGET_MS = 60000; });
+  await page.unroute(SUB1); await page.unroute(SUB2);
+  ok('бюджет: abort останавливает цепочку, статус честный, budget восстановлен');
 
   assert.deepEqual(errors, [], 'no page errors');
   cases += 1;

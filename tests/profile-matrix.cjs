@@ -33,6 +33,12 @@ const root = path.resolve(__dirname, '..');
     perHint: document.getElementById('perProxyRouterHint').style.display !== 'none',
     lan: document.getElementById('cfgLan').checked,
     lanDisabled: document.getElementById('cfgLan').disabled,
+    tun: document.getElementById('cfgTun').checked,
+    tunDisabled: document.getElementById('cfgTun').disabled,
+    mipsDisabled: document.getElementById('cfgTunMips').disabled,
+    stackAdvancedDisabled: document.getElementById('cfgTunStackAdvanced').disabled,
+    vpsStackWarning: document.getElementById('vpsTunStackWarning')?.textContent || '',
+    vpsStackWarningVisible: !!document.getElementById('vpsTunStackWarning') && getComputedStyle(document.getElementById('vpsTunStackWarning')).display !== 'none',
     effective: effectiveProfile,
   }));
   const build = async () => {
@@ -53,6 +59,8 @@ const root = path.resolve(__dirname, '..');
   assert.equal(m.lanDisabled, false, 'router: Allow LAN не disabled');
   ok('ROUTER: БС и Per-Proxy доступны, Allow LAN доступен');
 
+  // VPS stack warning не должен показываться в router-профиле.
+  assert.equal(m.vpsStackWarningVisible, false, 'ROUTER: VPS warning скрыт');
   // Sub Mode default ON проверяется на чистой странице ниже (transitions-блок).
 
   await page.selectOption('#cfgProfile', 'vps-local');
@@ -66,6 +74,12 @@ const root = path.resolve(__dirname, '..');
   assert.equal(m.lan, false, 'vps-local: Allow LAN выключен');
   assert.equal(m.lanDisabled, true, 'vps-local: Allow LAN недоступен');
   assert.equal(m.profile, 'vps-local', 'профиль не подменён');
+  assert.equal(m.tun, false, 'VPS-LOCAL: TUN OFF');
+  assert.equal(m.tunDisabled, true, 'VPS-LOCAL: TUN выключен и заблокирован');
+  assert.equal(m.mipsDisabled, true, 'VPS-LOCAL: MIPS недоступен');
+  assert.equal(m.stackAdvancedDisabled, true, 'VPS-LOCAL: advanced stack недоступен');
+  assert.equal(m.vpsStackWarningVisible, true, 'VPS-LOCAL: контекстный TUN warning виден');
+  assert.match(m.vpsStackWarning, /TUN отключён.*не используются/, 'VPS-LOCAL: warning честно описывает отсутствие TUN');
   ok('VPS-LOCAL: БС/Per-Proxy/Allow LAN выключены и недоступны, профиль сохранён');
 
   await page.selectOption('#cfgProfile', 'vps-gateway');
@@ -74,6 +88,12 @@ const root = path.resolve(__dirname, '..');
   assert.equal(m.masterDisabled, true, 'vps-gateway: Per-Proxy недоступен');
   assert.equal(m.lan, false, 'vps-gateway: Allow LAN выключен');
   assert.equal(m.lanDisabled, true, 'vps-gateway: Allow LAN недоступен');
+  assert.equal(m.tun, true, 'VPS-GATEWAY: TUN ON');
+  assert.equal(m.stackAdvancedDisabled, false, 'VPS-GATEWAY: experimental stack доступен');
+  assert.equal(m.vpsStackWarningVisible, true, 'VPS-GATEWAY: network warning виден');
+  assert.match(m.vpsStackWarning, /одном тестовом VPS.*UFW/, 'VPS-GATEWAY: источник наблюдения ограничен одной средой');
+  assert.match(m.vpsStackWarning, /system\/mixed.*Причина не установлена/, 'VPS-GATEWAY: названы режимы и неопределённость');
+  assert.match(m.vpsStackWarning, /gVisor.*MIPS/, 'VPS-GATEWAY: практические альтернативы');
   ok('VPS-GATEWAY: БС/Per-Proxy выключены и недоступны, Allow LAN OFF+disabled');
 
   // === Sub Mode default ON для всех профилей (на чистой странице) ===

@@ -3380,7 +3380,16 @@
     const cleaned = raw.replace(/^www\./, "").replace(/[^a-z0-9._-]+/g, "-").replace(/[._-]{2,}/g, "-").replace(/^[._-]+|[._-]+$/g, "");
     return cleaned.slice(0, 48);
   }
-  function computeProviderName(url, index, total, used) {
+  function computeProviderName(url, index, total, used, customName = null) {
+    if (customName !== null && customName !== void 0) {
+      const name2 = String(customName).trim();
+      if (!/^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,47}$/u.test(name2) || ["__proto__", "constructor", "prototype"].includes(name2.toLowerCase())) {
+        throw new Error("Invalid provider-name: use 1-48 letters, digits, spaces, dot, underscore or hyphen");
+      }
+      if (used.has(name2)) throw new Error("Duplicate provider-name: " + name2);
+      used.add(name2);
+      return name2;
+    }
     let base = "";
     try {
       const u = new URL(String(url || "").trim());
@@ -4248,16 +4257,35 @@
     const providerNames = [];
     const usedProviderNames = /* @__PURE__ */ new Set();
     const deviceHwid = typeof opts?.deviceHwid === "string" && /^[A-Za-z0-9=-]{10,64}$/.test(opts.deviceHwid.trim()) ? opts.deviceHwid.trim() : "";
+    const providerOverrides = opts?.providerOverrides;
+    if (providerOverrides !== void 0) {
+      if (!Array.isArray(providerOverrides) || providerOverrides.length !== subscriptionUrls.length) {
+        throw new Error("providerOverrides: one aligned entry per subscription is required (values hidden)");
+      }
+      if (new Set(subscriptionUrls).size !== subscriptionUrls.length) {
+        throw new Error("providerOverrides: duplicate subscription URLs need explicit disambiguation (values hidden)");
+      }
+      providerOverrides.forEach((entry, index) => {
+        if (entry === null) {
+          if (!deviceHwid) throw new Error("providerOverrides: inherited HWID is missing (values hidden)");
+          return;
+        }
+        if (!entry || typeof entry !== "object" || Array.isArray(entry) || Object.keys(entry).some((key) => key !== "sourceUrl" && key !== "hwid") || entry.sourceUrl !== subscriptionUrls[index] || entry.hwid !== null && (typeof entry.hwid !== "string" || !/^[A-Za-z0-9=-]{10,64}$/.test(entry.hwid))) {
+          throw new Error("providerOverrides: invalid source/identity mapping at position " + (index + 1) + " (values hidden)");
+        }
+      });
+    }
     subscriptionUrls.forEach((url, index) => {
-      const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames);
+      const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames, Array.isArray(opts?.providerNames) ? opts.providerNames[index] : null);
       const deviceModel = typeof opts?.deviceModel === "string" ? opts.deviceModel.trim() : "";
+      const omitDeviceIdentity = providerOverrides?.[index] !== null && providerOverrides?.[index]?.hwid === null;
       providers[providerName] = {
         type: "http",
         proxy: "DIRECT",
-        header: {
-          "x-hwid": [deviceHwid || generateSecretHex32()],
+        ...!omitDeviceIdentity ? { header: {
+          "x-hwid": [providerOverrides?.[index]?.hwid || deviceHwid || generateSecretHex32()],
           ...deviceModel ? { "x-device-model": [deviceModel] } : {}
-        },
+        } } : {},
         url,
         interval: SUB_REFRESH_INTERVAL,
         __comments: {
@@ -4433,7 +4461,7 @@
     const providerTargets = [];
     const probe = { url: getUrlTest(opts), interval: PROXY_FETCH_INTERVAL, lazy: false };
     for (const [name, side] of [["PRIMARY", primary], ["FALLBACK", fallback]]) {
-      const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter, modernHosts: opts?.modernHosts, deviceModel: opts?.deviceModel, deviceHwid: opts?.deviceHwid }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
+      const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter, modernHosts: opts?.modernHosts, deviceModel: opts?.deviceModel, deviceHwid: opts?.deviceHwid, providerNames: side.providerNames }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
       const names = [];
       const renameMap = /* @__PURE__ */ new Map();
       const sideProxies = [];
@@ -5084,12 +5112,45 @@
     const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
     const allowedRequestHeaders = /* @__PURE__ */ new Set(["x-hwid", "x-device-model"]);
     const requestHeaders = {};
+    const requireDeviceHeaders = options && options.requireDeviceHeaders === true;
+    const policyPath = "/.well-known/subscription-policy-v1";
+    const policyHeader = "X-Saymer-Device-Header-Policy";
+    const policyVersion = "strict-same-origin-v1";
+    const originalOrigin = requireDeviceHeaders ? new URL(url).origin : "";
     if (options && options.headers && typeof options.headers === "object") {
       for (const [rawName, rawValue] of Object.entries(options.headers)) {
         const name = String(rawName || "").trim().toLowerCase();
         if (!allowedRequestHeaders.has(name) || rawValue === void 0 || rawValue === null) continue;
         const value = String(rawValue).trim();
         if (value) requestHeaders[name] = value;
+      }
+    }
+    if (requireDeviceHeaders && !requestHeaders["x-hwid"]) {
+      throw new Error("Strict subscription preview requires x-hwid (value hidden)");
+    }
+    const externalSignal = options && options.signal && typeof options.signal.addEventListener === "function" ? options.signal : null;
+    const makeAbortError = () => typeof DOMException === "function" ? new DOMException("Subscription fetch aborted by caller", "AbortError") : Object.assign(new Error("Subscription fetch aborted by caller"), { name: "AbortError" });
+    function throwIfCallerAborted() {
+      if (externalSignal && externalSignal.aborted) throw makeAbortError();
+    }
+    async function hasStrictWorkerPolicy(makeUrl, target) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
+      try {
+        const origin = new URL(makeUrl(target)).origin;
+        const response = await fetch(origin + policyPath, {
+          method: "GET",
+          redirect: "error",
+          credentials: "omit",
+          cache: "no-store",
+          headers: { "Accept": "text/plain" },
+          signal: controller.signal
+        });
+        return response.ok && response.status === 200 && response.headers.get(policyHeader) === policyVersion;
+      } catch (_) {
+        return false;
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
     function hasRealSubscriptionLinks(text) {
@@ -5101,8 +5162,11 @@
       });
     }
     async function tryFetch(u, attempt) {
+      throwIfCallerAborted();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
+      const onCallerAbort = () => controller.abort();
+      if (externalSignal) externalSignal.addEventListener("abort", onCallerAbort, { once: true });
       try {
         const headers = new Headers(FETCH_INIT && FETCH_INIT.headers ? FETCH_INIT.headers : {});
         if (!headers.has("Accept")) headers.set("Accept", "text/plain, */*");
@@ -5115,8 +5179,14 @@
           }
         }
         const init = Object.assign({}, FETCH_INIT, { headers, signal: controller.signal });
+        if (requireDeviceHeaders) {
+          init.redirect = "manual";
+        }
         if (attempt && attempt.init) Object.assign(init, attempt.init);
         const resp = await fetch(u, init);
+        if (requireDeviceHeaders && attempt?.requirePolicyProof && resp.headers.get(policyHeader) !== policyVersion) {
+          return { error: new Error("Strict Worker policy proof unavailable") };
+        }
         if (!resp.ok) {
           const reason = resp.statusText || httpReason(resp.status) || "";
           const label = "HTTP " + resp.status + (reason ? " " + reason : "");
@@ -5128,6 +5198,7 @@
         return { error: e };
       } finally {
         clearTimeout(timeoutId);
+        if (externalSignal) externalSignal.removeEventListener("abort", onCallerAbort);
       }
     }
     function classifyError(err) {
@@ -5139,6 +5210,9 @@
         if (code === 403) return "403 Forbidden (upstream blocked subscription fetch; retry usually helps)";
         if (code === 429) return "429 Too Many Requests (rate-limited; retry later)";
         return String(code) + (reason ? " " + reason : "");
+      }
+      if (err && err.name === "AbortError" && msg.includes("Subscription fetch aborted by caller")) {
+        return "cancelled by caller";
       }
       if (msg.includes("aborted") || msg.includes("abort") || msg.includes("timeout")) {
         return "Request timeout (15s)";
@@ -5153,6 +5227,17 @@
     }
     async function fetchWithFallback(u, depth) {
       if (depth > MAX_SUB_REDIRECTS) throw new Error("Too many redirects");
+      if (requireDeviceHeaders) {
+        let current;
+        try {
+          current = new URL(u);
+        } catch (_) {
+          throw new Error("Strict subscription source URL invalid");
+        }
+        if (current.protocol !== "https:" && current.protocol !== "http:" || current.origin !== originalOrigin)
+          throw new Error("Strict subscription origin changed");
+      }
+      throwIfCallerAborted();
       const handleResponse = async (text) => {
         if (!text || typeof text !== "string") return null;
         let probe = text;
@@ -5203,11 +5288,16 @@
       if (direct.error) {
         if (/^HTTP\s+(403|429|5\d\d)/.test(String(direct.error.message || ""))) {
           await sleep(350);
+          throwIfCallerAborted();
           const retry = await tryFetch(u);
           const retryResolved = await consumeFetchResult(retry);
           if (retryResolved) return retryResolved;
         }
         for (const makeUrl of PUBLIC_CORS_FALLBACKS) {
+          if (requireDeviceHeaders && !await hasStrictWorkerPolicy(makeUrl, u)) {
+            lastFallbackError = new Error("Strict Worker origin policy unavailable");
+            continue;
+          }
           const maxRetries = Math.max(0, Number(SUB_FALLBACK_RETRIES || 0));
           const fallbackAttempts = [];
           if (Object.keys(requestHeaders).length) {
@@ -5217,14 +5307,22 @@
                 init: {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ url: target, headers: requestHeaders })
-                }
+                  body: JSON.stringify({
+                    url: target,
+                    headers: requestHeaders,
+                    ...requireDeviceHeaders ? { strictDeviceHeaders: true } : {}
+                  })
+                },
+                ...requireDeviceHeaders ? { requirePolicyProof: true } : {}
               })
             });
           }
-          fallbackAttempts.push({ kind: "get", attemptFor: () => ({ deviceHeaders: false }) });
+          if (!requireDeviceHeaders) {
+            fallbackAttempts.push({ kind: "get", attemptFor: () => ({ deviceHeaders: false }) });
+          }
           for (const attempt of fallbackAttempts) {
             for (let retry = 0; retry <= maxRetries; retry++) {
+              throwIfCallerAborted();
               const result = await tryFetch(makeUrl(u), attempt.attemptFor(u));
               const resolved = await consumeFetchResult(result);
               if (resolved) return resolved;
@@ -5232,11 +5330,13 @@
               if (attempt.kind === "post" && result.error && /^HTTP\s+4(0[05])\b/.test(String(result.error.message || ""))) break;
               if (result.error && retry < maxRetries) {
                 await sleep(500);
+                throwIfCallerAborted();
               }
             }
           }
         }
       }
+      throwIfCallerAborted();
       const directLabel = classifyError(direct.error);
       const fallbackLabel = lastFallbackError ? classifyError(lastFallbackError) : null;
       throw new Error(fallbackLabel && fallbackLabel !== directLabel ? "Direct: " + directLabel + "; Fallback: " + fallbackLabel : directLabel);
@@ -5245,7 +5345,7 @@
     if (!body) throw new Error("Empty response");
     {
       const cand = body.split(/\n/).map((s) => s.trim()).filter(Boolean);
-      if (cand.length === 1 && isHttpUrl(cand[0]) && !looksLikeLinksList(cand[0])) {
+      if (cand.length === 1 && isHttpUrl(cand[0]) && (requireDeviceHeaders || !looksLikeLinksList(cand[0]))) {
         body = await fetchWithFallback(cand[0], 1);
       }
     }
@@ -5267,6 +5367,8 @@
     }
     return filtered.join("\n");
   }
+  fetchSubscription.supportsStrictDeviceHeaders = true;
+  fetchSubscription.supportsStrictOriginPolicy = true;
 
   // src/build.js
   function assertCoreSupports(beans, core, label, options) {
@@ -5287,22 +5389,40 @@
   function splitMihomoSubscriptionInput(raw) {
     const lines = splitLines(raw);
     const subUrls = [];
+    const providerNames = [];
     const proxyLines = [];
+    let nextProviderName = null;
     for (const line of lines) {
+      const directive = line.match(/^#\s*provider-name\s*:\s*(.*)$/i);
+      if (directive) {
+        if (nextProviderName !== null) throw new Error("Multiple provider-name directives before a subscription URL");
+        if (!directive[1].trim()) throw new Error("Empty provider-name directive");
+        nextProviderName = directive[1].trim();
+        continue;
+      }
       if (line.startsWith("#")) continue;
       if (/^https?:\/\//i.test(line)) {
+        let isSubscription = false;
         try {
           const u = new URL(line);
-          const hasCreds = !!(u.username || u.password);
-          (hasCreds ? proxyLines : subUrls).push(line);
+          isSubscription = !(u.username || u.password);
         } catch {
+        }
+        if (isSubscription) {
+          subUrls.push(line);
+          providerNames.push(nextProviderName);
+          nextProviderName = null;
+        } else {
+          if (nextProviderName !== null) throw new Error("provider-name must precede a subscription URL without credentials");
           proxyLines.push(line);
         }
       } else {
+        if (nextProviderName !== null) throw new Error("provider-name must precede a subscription URL");
         proxyLines.push(line);
       }
     }
-    return { subUrls, proxyText: proxyLines.join("\n") };
+    if (nextProviderName !== null) throw new Error("provider-name without a following subscription URL");
+    return { subUrls, providerNames, proxyText: proxyLines.join("\n") };
   }
   var WEB_UI_DASHBOARD_URLS = {
     yacd: "https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip",
@@ -5418,6 +5538,9 @@
     options.domainPolicy = normalizeDomainPolicy(options.mihomoDomainPolicy);
     if (!core) throw new Error("Missing core");
     if (core !== "singbox" && core !== "xray" && core !== "mihomo") throw new Error("Invalid core: " + core);
+    if (options.providerOverrides !== void 0 && !(core === "mihomo" && options.mihomoSubscriptionMode && req.fallbackInput === void 0)) {
+      throw new Error("providerOverrides: supported only for Mihomo Sub Mode without primary/fallback (values hidden)");
+    }
     if (core === "singbox") {
       if (options.addTun === void 0) options.addTun = false;
       if (options.addSocks === void 0) options.addSocks = true;
@@ -5434,13 +5557,13 @@
       if (!options.addTun && !options.addSocks) throw new Error("Mihomo: enable at least one inbound (TUN or SOCKS5)");
       if (options.mihomoPerProxyTun || options.perProxyPort) throw new Error("Mihomo primary/fallback groups do not support per-proxy listeners");
       const parseSide = (text, profiles, label) => {
-        const { subUrls, proxyText } = splitMihomoSubscriptionInput(text);
+        const { subUrls, providerNames, proxyText } = splitMihomoSubscriptionInput(text);
         if (subUrls.length && !options.mihomoSubscriptionMode) throw new Error("Enable Sub Mode for subscription URLs (" + label + ")");
         const beans2 = [...proxyText.trim() ? buildBeansFromInput(proxyText) : [], ...profiles];
         beans2.forEach(validateBean);
         assertCoreSupports(beans2, core, "Mihomo", options);
         if (!beans2.length && !subUrls.length) throw new Error("Mihomo: " + label + " input is empty");
-        return { beans: beans2, subUrls };
+        return { beans: beans2, subUrls, providerNames };
       };
       const modernHosts2 = options.modernHosts;
       const primarySide = parseSide(input, wgBeans, "primary");
@@ -5538,7 +5661,7 @@
     applyRealityModernHosts(allBeans, modernHosts);
     const subMode = !!options.mihomoSubscriptionMode;
     if (subMode) {
-      const { subUrls, proxyText } = splitMihomoSubscriptionInput(input);
+      const { subUrls, providerNames, proxyText } = splitMihomoSubscriptionInput(input);
       if (!subUrls.length) {
         throw new Error("Provide one or more HTTP(S) URLs for Mihomo subscription (one per line)");
       }
@@ -5548,7 +5671,7 @@
       extraBeans.forEach(validateBean);
       assertCoreSupports(extraBeans, core, "Mihomo", options);
       applyRealityModernHosts(extraBeans, modernHosts);
-      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter, modernHosts, deviceModel: options.deviceModel, deviceHwid: options.deviceHwid, domainPolicy: options.domainPolicy });
+      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter, providerNames, modernHosts, deviceModel: options.deviceModel, deviceHwid: options.deviceHwid, providerOverrides: options.providerOverrides, domainPolicy: options.domainPolicy });
       const yaml2 = buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, cfg2.listeners, {
         addSocks,
         webUI,

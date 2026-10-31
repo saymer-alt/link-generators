@@ -168,10 +168,18 @@ async function runScenario(browser, root, candRoot, name, actions, checkContract
     if (name === 'tiered-on') {
       const oldMatch = 'MATCH,🪜 TIERED-AUTO';
       const newMatch = 'MATCH,GLOBAL';
-      assert.equal(a.split(oldMatch).length - 1, 1, 'tiered-on base must contain exactly one old MATCH root');
+      const oldBaseCount = a.split(oldMatch).length - 1;
+      const newBaseCount = a.split(newMatch).length - 1;
+      // On PRs, base can contain the old contract; after merge, main is its own
+      // merge-base and already contains the new contract. Both must remain strict.
+      assert.ok(
+        (oldBaseCount === 1 && newBaseCount === 0) ||
+        (oldBaseCount === 0 && newBaseCount === 1),
+        'tiered-on base must contain exactly one old or new MATCH root'
+      );
       assert.equal(b.split(newMatch).length - 1, 1, 'tiered-on candidate must contain exactly one manual MATCH,GLOBAL');
       assert.ok(!b.includes(oldMatch), 'tiered-on candidate must not bypass GLOBAL');
-      expected = a.replace(oldMatch, newMatch);
+      expected = oldBaseCount === 1 ? a.replace(oldMatch, newMatch) : a;
     }
     const same = expected === b;
     if (!same) fail++;
