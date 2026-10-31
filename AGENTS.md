@@ -371,8 +371,15 @@ Subscription inspection privacy/identity contract (binding):
   identity; a page reload keeps it; renaming Device Model never changes it. A
   different logical device from the same browser gets a different identity only
   through the explicit «➕ Новое устройство» button (registry of devices, switchable
-  via `#deviceIdentitySelect`). The HWID value itself is never rendered in the UI,
-  toasts, trace or diagnostics. Storage: `localStorage['link-generators.device-identities.v1']`
+  via `#deviceIdentitySelect` and, since #326, the always-visible header bar
+  `#deviceIdentityBar` above the tabs). Full-HWID disclosure (#326): explicit
+  local reveal/copy by the user is allowed («👁 Показать HWID» / «📋 Копировать
+  HWID» in the header bar; masked `••••••••<last6>` otherwise; reveal resets on
+  device switch); automatic disclosure remains forbidden — the value never
+  appears in toasts, URL, trace or diagnostics, and the build-fingerprint use
+  (`deviceIdentityHwid=` part of `buildStateFingerprint()`, so «Сменить ID»
+  honestly marks a previous build STALE) lives in tab memory only and is never
+  rendered or serialized. Storage: `localStorage['link-generators.device-identities.v1']`
   (memory-only fallback) — the ONLY new persistent value; migration: the legacy
   `link-generators.subscription-preview-hwid.v1` value becomes the first device's
   identity, the legacy key is never written anymore and is not deleted.
