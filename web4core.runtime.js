@@ -3380,7 +3380,16 @@
     const cleaned = raw.replace(/^www\./, "").replace(/[^a-z0-9._-]+/g, "-").replace(/[._-]{2,}/g, "-").replace(/^[._-]+|[._-]+$/g, "");
     return cleaned.slice(0, 48);
   }
-  function computeProviderName(url, index, total, used) {
+  function computeProviderName(url, index, total, used, customName = null) {
+    if (customName !== null && customName !== void 0) {
+      const name2 = String(customName).trim();
+      if (!/^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,47}$/u.test(name2) || ["__proto__", "constructor", "prototype"].includes(name2.toLowerCase())) {
+        throw new Error("Invalid provider-name: use 1-48 letters, digits, spaces, dot, underscore or hyphen");
+      }
+      if (used.has(name2)) throw new Error("Duplicate provider-name: " + name2);
+      used.add(name2);
+      return name2;
+    }
     let base = "";
     try {
       const u = new URL(String(url || "").trim());
@@ -4267,7 +4276,7 @@
       });
     }
     subscriptionUrls.forEach((url, index) => {
-      const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames);
+      const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames, Array.isArray(opts?.providerNames) ? opts.providerNames[index] : null);
       const deviceModel = typeof opts?.deviceModel === "string" ? opts.deviceModel.trim() : "";
       const omitDeviceIdentity = providerOverrides?.[index] !== null && providerOverrides?.[index]?.hwid === null;
       providers[providerName] = {
@@ -4452,7 +4461,7 @@
     const providerTargets = [];
     const probe = { url: getUrlTest(opts), interval: PROXY_FETCH_INTERVAL, lazy: false };
     for (const [name, side] of [["PRIMARY", primary], ["FALLBACK", fallback]]) {
-      const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter, modernHosts: opts?.modernHosts, deviceModel: opts?.deviceModel, deviceHwid: opts?.deviceHwid }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
+      const built = side.subUrls.length ? buildMihomoSubscriptionConfig(side.subUrls, side.beans, { urlTest: opts?.urlTest, excludeFilter: opts?.excludeFilter, modernHosts: opts?.modernHosts, deviceModel: opts?.deviceModel, deviceHwid: opts?.deviceHwid, providerNames: side.providerNames }) : buildMihomoConfig(side.beans, { urlTest: opts?.urlTest });
       const names = [];
       const renameMap = /* @__PURE__ */ new Map();
       const sideProxies = [];
@@ -5380,22 +5389,40 @@
   function splitMihomoSubscriptionInput(raw) {
     const lines = splitLines(raw);
     const subUrls = [];
+    const providerNames = [];
     const proxyLines = [];
+    let nextProviderName = null;
     for (const line of lines) {
+      const directive = line.match(/^#\s*provider-name\s*:\s*(.*)$/i);
+      if (directive) {
+        if (nextProviderName !== null) throw new Error("Multiple provider-name directives before a subscription URL");
+        if (!directive[1].trim()) throw new Error("Empty provider-name directive");
+        nextProviderName = directive[1].trim();
+        continue;
+      }
       if (line.startsWith("#")) continue;
       if (/^https?:\/\//i.test(line)) {
+        let isSubscription = false;
         try {
           const u = new URL(line);
-          const hasCreds = !!(u.username || u.password);
-          (hasCreds ? proxyLines : subUrls).push(line);
+          isSubscription = !(u.username || u.password);
         } catch {
+        }
+        if (isSubscription) {
+          subUrls.push(line);
+          providerNames.push(nextProviderName);
+          nextProviderName = null;
+        } else {
+          if (nextProviderName !== null) throw new Error("provider-name must precede a subscription URL without credentials");
           proxyLines.push(line);
         }
       } else {
+        if (nextProviderName !== null) throw new Error("provider-name must precede a subscription URL");
         proxyLines.push(line);
       }
     }
-    return { subUrls, proxyText: proxyLines.join("\n") };
+    if (nextProviderName !== null) throw new Error("provider-name without a following subscription URL");
+    return { subUrls, providerNames, proxyText: proxyLines.join("\n") };
   }
   var WEB_UI_DASHBOARD_URLS = {
     yacd: "https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip",
@@ -5530,13 +5557,13 @@
       if (!options.addTun && !options.addSocks) throw new Error("Mihomo: enable at least one inbound (TUN or SOCKS5)");
       if (options.mihomoPerProxyTun || options.perProxyPort) throw new Error("Mihomo primary/fallback groups do not support per-proxy listeners");
       const parseSide = (text, profiles, label) => {
-        const { subUrls, proxyText } = splitMihomoSubscriptionInput(text);
+        const { subUrls, providerNames, proxyText } = splitMihomoSubscriptionInput(text);
         if (subUrls.length && !options.mihomoSubscriptionMode) throw new Error("Enable Sub Mode for subscription URLs (" + label + ")");
         const beans2 = [...proxyText.trim() ? buildBeansFromInput(proxyText) : [], ...profiles];
         beans2.forEach(validateBean);
         assertCoreSupports(beans2, core, "Mihomo", options);
         if (!beans2.length && !subUrls.length) throw new Error("Mihomo: " + label + " input is empty");
-        return { beans: beans2, subUrls };
+        return { beans: beans2, subUrls, providerNames };
       };
       const modernHosts2 = options.modernHosts;
       const primarySide = parseSide(input, wgBeans, "primary");
@@ -5634,7 +5661,7 @@
     applyRealityModernHosts(allBeans, modernHosts);
     const subMode = !!options.mihomoSubscriptionMode;
     if (subMode) {
-      const { subUrls, proxyText } = splitMihomoSubscriptionInput(input);
+      const { subUrls, providerNames, proxyText } = splitMihomoSubscriptionInput(input);
       if (!subUrls.length) {
         throw new Error("Provide one or more HTTP(S) URLs for Mihomo subscription (one per line)");
       }
@@ -5644,7 +5671,7 @@
       extraBeans.forEach(validateBean);
       assertCoreSupports(extraBeans, core, "Mihomo", options);
       applyRealityModernHosts(extraBeans, modernHosts);
-      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter, modernHosts, deviceModel: options.deviceModel, deviceHwid: options.deviceHwid, providerOverrides: options.providerOverrides, domainPolicy: options.domainPolicy });
+      const cfg2 = buildMihomoSubscriptionConfig(subUrls, extraBeans, { addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest, excludeFilter: options.excludeFilter, providerNames, modernHosts, deviceModel: options.deviceModel, deviceHwid: options.deviceHwid, providerOverrides: options.providerOverrides, domainPolicy: options.domainPolicy });
       const yaml2 = buildMihomoYaml(cfg2.proxies, cfg2.groups, cfg2.providers, cfg2.rules, cfg2.listeners, {
         addSocks,
         webUI,
