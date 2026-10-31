@@ -128,6 +128,9 @@ jobs:
       - name: Portable project v2 read-only identity contract (#280)
         run: node tests/project-identities-v2.cjs
 
+      - name: Portable identity conversion and stable mapping (#280)
+        run: node tests/project-portable-lifecycle.cjs
+
       - name: Domain Policy Routing regression
         run: node tests/policy-routing.cjs
 
