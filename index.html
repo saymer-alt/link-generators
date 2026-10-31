@@ -11694,14 +11694,10 @@ async function rbLoadProject(file) {
   const counts = rbProjectCounts(project);
   const legacyIdentityNotice = parsed.identityStatus === 'LEGACY_IDENTITY_MISSING'
     ? '⚠ В файле нет переносимого HWID: будет использована текущая идентичность этого браузера. На другом компьютере сервис подписки может считать её новым устройством.\n' : '';
-<<<<<<< HEAD
   const portableNotice = parsed.identityStatus === 'PORTABLE_V2_VALIDATED_ONLY'
     ? '⚠ Файл v2 содержит сохранённые HWID. Они останутся только внутри проекта и НЕ заменят локальный реестр браузера. ' +
       'До включения поддержки в движке Build и получение browser-preview для v2 будут заблокированы.\n' : '';
   const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + legacyIdentityNotice + portableNotice + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
-=======
-  const preview = 'Предпросмотр проекта: подписок ' + counts.subs + ', прямых ссылок ' + counts.direct + ', UNKNOWN ' + counts.unknown + ', WG/AWG ' + counts.wg + '.\n' + legacyIdentityNotice + rbCompareWithCurrent(project) + '\n' + (project.passthrough ? 'Passthrough сохранится в проекте, но НЕ попадёт в новый Build.\n' : '') + 'Подтвердить восстановление? Отмена не изменяет Builder; после применения доступен Undo.';
->>>>>>> origin/main
   if (!confirm(preview)) {
     return showToast('Загрузка проекта отменена.');
   }
