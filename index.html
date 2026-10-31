@@ -38,6 +38,11 @@
   .gen-version-badge{display:inline-block;padding:1px 10px;border:1px solid rgba(0,0,0,.28);border-radius:10px;
      background:rgba(255,255,255,.92);color:#123a8c;font-size:.72rem;font-weight:bold;letter-spacing:.4px;
      white-space:nowrap;user-select:none;text-shadow:none}
+  .device-identity-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0;padding:6px 14px;border-bottom:1px solid var(--border);background:var(--face)}
+  .device-identity-bar label{margin:0;font-weight:bold}
+  .device-identity-bar select{flex:0 1 auto;min-width:160px;max-width:100%}
+  .device-identity-hwid{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;color:#555;word-break:break-all;min-width:0}
+  .device-identity-actions{display:flex;gap:6px;flex-wrap:wrap}
   .tabs{display:flex;gap:3px;padding:6px 10px 0;border-bottom:1px solid var(--border);background:var(--face)}
   .tab{flex:0 0 auto;padding:7px 16px 6px;cursor:pointer;border:1px solid var(--border);border-bottom:none;border-radius:4px 4px 0 0;
        background:linear-gradient(180deg,#f6f4ea,var(--face-dark));color:#333;font-size:.92rem;font-weight:bold;font-family:inherit}
@@ -302,6 +307,19 @@
 <div class="container">
   <h1 style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>🔗 WARP & Mihomo Unified</span><span id="genVersionBadge" class="gen-version-badge" role="note"></span></h1>
 
+  <!-- #326: текущая логическая идентичность подписки (Mihomo Builder) — видна до вкладок.
+       Один канонический реестр (#156/#163); расширенный менеджер остаётся в #deviceIdentityDetails.
+       Портативные per-provider HWID (проект v2, #280) в будущем расширят эту полосу контекстом проекта. -->
+  <div id="deviceIdentityBar" class="device-identity-bar">
+    <label for="headerDeviceIdentitySelect">🔑 Идентичность подписки (Mihomo Builder):</label>
+    <select id="headerDeviceIdentitySelect" aria-label="Текущее логическое устройство для Mihomo Builder" title="Preview и все proxy-providers конфига используют HWID выбранной идентичности"></select>
+    <span id="headerDeviceHwidMask" class="device-identity-hwid"></span>
+    <span class="device-identity-actions">
+      <button type="button" class="btn btn-gray" id="btnHeaderDeviceHwidReveal" aria-pressed="false">👁 Показать HWID</button>
+      <button type="button" class="btn btn-gray" id="btnHeaderDeviceHwidCopy">📋 Копировать HWID</button>
+      <button type="button" class="btn btn-gray" id="btnHeaderDeviceNew">➕ Другое устройство</button>
+    </span>
+  </div>
   <div class="tabs">
     <button class="tab" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
     <button class="tab active" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
@@ -3850,17 +3868,57 @@ function renderDeviceIdentitySelect() {
     del.disabled = reg.devices.length <= 1;
     del.title = reg.devices.length <= 1 ? 'Нельзя удалить единственную идентичность' : 'Удалить выбранную локальную идентичность';
   }
+  renderDeviceIdentityHeader();
+}
+
+// #326: шапка страницы — текущая идентичность видна до вкладок. Полный HWID
+// появляется ТОЛЬКО по явному «Показать HWID» (обновлённый privacy-контракт
+// #326 разрешает явное локальное отображение; автоматическое разглашение —
+// по-прежнему запрещено: URL, toast, диагностика, логи). Один и тот же
+// реестр/состояние, что и в #deviceIdentityDetails — второй модели нет.
+let headerDeviceHwidRevealed = false;
+function renderDeviceIdentityHeader() {
+  const sel = document.getElementById('headerDeviceIdentitySelect');
+  const mask = document.getElementById('headerDeviceHwidMask');
+  if (!sel && !mask) return;
+  const reg = loadDeviceIdentityRegistry();
+  const active = reg.devices.find(d => d.id === reg.activeId) || reg.devices[0];
+  if (sel) {
+    sel.textContent = '';
+    for (const d of reg.devices) {
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.label || 'Устройство';
+      sel.appendChild(opt);
+    }
+    sel.value = active.id;
+  }
+  if (mask) {
+    // Маскированный хвост 6 символов — устойчивый fingerprint, не сам HWID.
+    mask.textContent = headerDeviceHwidRevealed
+      ? 'HWID: ' + active.hwid
+      : 'HWID: ••••••••' + String(active.hwid).slice(-6);
+  }
+  const reveal = document.getElementById('btnHeaderDeviceHwidReveal');
+  if (reveal) {
+    reveal.textContent = headerDeviceHwidRevealed ? '🙈 Скрыть HWID' : '👁 Показать HWID';
+    reveal.setAttribute('aria-pressed', String(headerDeviceHwidRevealed));
+  }
 }
 
 function invalidatePreviewForDeviceIdentityChange() {
   if (typeof subscriptionPreviewSeq !== 'undefined') subscriptionPreviewSeq++;
   if (typeof invalidateServerListFetch === 'function') invalidateServerListFetch();
+  // Шапка (#326) находится вне #tab-mihomo: делегированный слушатель вкладки
+  // не увидит смену идентичности — обновляем STALE-статус явно.
+  if (typeof refreshBuildStaleness === 'function') refreshBuildStaleness();
 }
 
 function setActiveDeviceIdentity(id) {
   const reg = loadDeviceIdentityRegistry();
   if (!reg.devices.some(d => d.id === id) || reg.activeId === id) return;
   reg.activeId = id;
+  headerDeviceHwidRevealed = false; // смена устройства — полный HWID снова скрыт (#326)
   persistDeviceIdentityRegistry();
   renderDeviceIdentitySelect();
   invalidatePreviewForDeviceIdentityChange();
@@ -3887,6 +3945,7 @@ function createNewDeviceIdentity() {
   reg.devices.push(device);
   reg.activeId = device.id;
   persistDeviceIdentityRegistry();
+  headerDeviceHwidRevealed = false;
   renderDeviceIdentitySelect();
   invalidatePreviewForDeviceIdentityChange();
   showToast('Создан ID для другого устройства: «' + device.label + '». Обычная пересборка текущего роутера нового ID не требует.');
@@ -3921,6 +3980,7 @@ function regenerateActiveDeviceIdentity() {
   if (!confirmed) return;
   device.hwid = deviceIdentityRandomHex32();
   persistDeviceIdentityRegistry();
+  headerDeviceHwidRevealed = false;
   renderDeviceIdentitySelect();
   invalidatePreviewForDeviceIdentityChange();
   showToast('ID для «' + (device.label || 'Устройство') + '» заменён. Следующие preview-запросы и сборки используют новый HWID.');
@@ -3945,6 +4005,7 @@ function deleteActiveDeviceIdentity() {
   reg.devices.splice(index, 1);
   reg.activeId = fallback.id;
   persistDeviceIdentityRegistry();
+  headerDeviceHwidRevealed = false;
   renderDeviceIdentitySelect();
   invalidatePreviewForDeviceIdentityChange();
   showToast('Локальная идентичность «' + (device.label || 'Устройство') + '» удалена. Активна «' + (getActiveDeviceIdentity().label || 'Устройство') + '».');
@@ -8701,6 +8762,11 @@ function buildStateFingerprint() {
     if (el.type === 'file') return; // содержимое файлов отражено в wgProfiles
     parts.push((el.id || el.name || el.className) + '=' + (el.type === 'checkbox' ? String(el.checked) : el.value));
   });
+  // #326: активная идентичность подписки — build-релевантный факт (deviceHwid
+  // в YAML и preview-заголовках). «Сменить ID» меняет HWID без смены value
+  // селектора — без этого факта честный STALE не показывался. Значение живёт
+  // только в памяти вкладки для сравнения, нигде не рендерится и не сериализуется.
+  try { parts.push('deviceIdentityHwid=' + getActiveDeviceIdentity().hwid); } catch (_) {}
   parts.push('wgProfiles=' + wgProfiles.map(p => [p.filename, p.mode, p.target].join(':')).join('|'));
   const cards = document.querySelectorAll('#policyCards .policy-card');
   const cardParts = Array.from(cards).map(card => {
@@ -11598,6 +11664,22 @@ document.getElementById('btnDeviceIdentityNew').addEventListener('click', create
 document.getElementById('btnDeviceIdentityRename').addEventListener('click', renameActiveDeviceIdentity);
 document.getElementById('btnDeviceIdentityRegenerate').addEventListener('click', regenerateActiveDeviceIdentity);
 document.getElementById('btnDeviceIdentityDelete').addEventListener('click', deleteActiveDeviceIdentity);
+// Шапка (#326): те же операции, что и в расширенном менеджере — второй модели нет.
+document.getElementById('headerDeviceIdentitySelect').addEventListener('change', (e) => {
+  setActiveDeviceIdentity(e.target.value);
+});
+document.getElementById('btnHeaderDeviceHwidReveal').addEventListener('click', () => {
+  headerDeviceHwidRevealed = !headerDeviceHwidRevealed;
+  renderDeviceIdentityHeader();
+  if (headerDeviceHwidRevealed) showToast('HWID показан только локально: в URL, журнал и диагностику он не попадает.');
+});
+document.getElementById('btnHeaderDeviceHwidCopy').addEventListener('click', () => {
+  const hwid = getActiveDeviceIdentity().hwid;
+  const done = () => showToast('HWID текущего устройства скопирован в буфер обмена.');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(hwid).then(done).catch(() => fallbackCopy(hwid, done));
+  else fallbackCopy(hwid, done);
+});
+document.getElementById('btnHeaderDeviceNew').addEventListener('click', createNewDeviceIdentity);
 updateSubModeHint();
 updateWebUiVisibility();
 updateMihomoOptionStates();
