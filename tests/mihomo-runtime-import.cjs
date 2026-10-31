@@ -107,6 +107,24 @@ async function rtStatus(page) {
   assert.deepEqual(norm, ['http://10.0.0.2:9090', 'http://10.0.0.2:9090', 'https://ctrl.example.net:9090/base', 'ERR-scheme', 'http://192.168.1.1:9090', 'ERR-noport'], 'нормализация: ' + JSON.stringify(norm));
   ok('controller URL: host:port → http://, trailing /, path сохранение, пустой → default, схема/без-порта отклонены');
 
+  // === 4b. buildRuntimeJsonUrl (#322): base, /ui/#/overview, query, префикс; credentials запрещены ===
+  const jsonUrls = await page.evaluate(() => {
+    const out = [];
+    for (const input of ['10.0.0.2:9090', 'http://10.0.0.2:9090/ui/#/overview', 'http://10.0.0.2:9090/?x=1', 'https://ctrl.example.net:9090/base/']) {
+      try { out.push(buildRuntimeJsonUrl(input)); } catch (e) { out.push('ERR'); }
+    }
+    try { buildRuntimeJsonUrl('http://user:pass@10.0.0.2:9090'); } catch (e) { out.push('ERR-cred'); }
+    return out;
+  });
+  assert.deepEqual(jsonUrls, [
+    'http://10.0.0.2:9090/providers/proxies',
+    'http://10.0.0.2:9090/providers/proxies',
+    'http://10.0.0.2:9090/providers/proxies',
+    'https://ctrl.example.net:9090/base/providers/proxies',
+    'ERR-cred'
+  ], 'buildRuntimeJsonUrl: ' + JSON.stringify(jsonUrls));
+  ok('buildRuntimeJsonUrl: /ui/#/overview и query отброшены, префикс сохранён, credentials запрещены');
+
   // === 5. Нет запроса до клика ===
   let hits = 0;
   await page.route('**/providers/proxies**', r => { hits++; r.fulfill({ status: 200, contentType: 'application/json', body: RUNTIME_JSON }); });
@@ -118,31 +136,56 @@ async function rtStatus(page) {
   assert.equal(hits, 0, 'ввод не порождает запросов (no auto-scan)');
   ok('нет запроса до явного клика');
 
-  // === 6. 401 → точная диагностика; secret в сообщении не светится ===
+  // === 6. 401 → точная диагностика + роль API secret; secret в сообщении не светится ===
   await page.route('**/providers/proxies**', r => r.fulfill({ status: 401, body: 'unauthorized' }));
   await page.locator('#rtFetchBtn').click();
   await page.waitForTimeout(300);
   assert.match(await rtStatus(page), /HTTP 401: секрет не принят/);
+  assert.match(await rtStatus(page), /введите его в поле выше/, '401 поясняет роль API secret');
   assert.ok(!(await rtStatus(page)).includes('topsecret'), 'secret не в диагностике');
-  ok('401: точная auth-диагностика, secret не светится');
+  ok('401: точная auth-диагностика + роль secret, secret не светится');
 
-  // === 7. 403 → forbidden ===
+  // === 7. 403 → forbidden + подсказка про secret ===
   await page.route('**/providers/proxies**', r => r.fulfill({ status: 403, body: 'forbidden' }));
   await page.locator('#rtFetchBtn').click();
   await page.waitForTimeout(300);
   assert.match(await rtStatus(page), /HTTP 403: доступ запрещён/);
-  ok('403: forbidden-диагностика');
+  assert.match(await rtStatus(page), /secret не вставляется/, '403: secret не предлагается в адрес вкладки');
+  ok('403: forbidden-диагностика + secret-подсказка');
 
-  // === 8. Generic network failure → честная формулировка без выдуманных причин ===
+  // === 8. Generic network failure → честная формулировка + видимый ручной путь (#322) ===
   await page.route('**/providers/proxies**', r => r.abort());
   await page.locator('#rtFetchBtn').click();
   await page.waitForTimeout(300);
   const genericMsg = await rtStatus(page);
   assert.match(genericMsg, /Сетевой отказ: причина не установлена/);
   assert.ok(!genericMsg.includes('CORS_DENIED') && !genericMsg.includes('PERMISSION_DENIED'), 'не выдумывать причины: ' + genericMsg);
-  assert.match(genericMsg, /адрес\/listen, CORS, разрешение локальной сети/);
+  assert.match(genericMsg, /Открыть JSON Mihomo/, 'указатель на кнопку ручного пути');
   assert.match(genericMsg, /Вставить JSON/);
   ok('generic network failure: checklist-формулировка, без ложных CORS/permission claims');
+
+  // === 8b. Кнопка «Открыть JSON Mihomo» (#322): явный клик → новая вкладка с
+  // /providers/proxies; secret/query в URL не попадают; мусорный адрес отклонён. ===
+  await page.context().route(/^http:\/\/192\.0\.2\.1:9090\/providers\/proxies$/, r => r.fulfill({ status: 200, contentType: 'application/json', body: RUNTIME_JSON }));
+  await page.locator('#rtControllerInput').fill('192.0.2.1:9090'); // TEST-NET-1: вне контекста заглушки недоступен
+  const [jsonTab] = await Promise.all([page.waitForEvent('popup'), page.locator('#rtOpenJsonBtn').click()]);
+  await jsonTab.waitForURL(/^http:\/\/192\.0\.2\.1:9090\/providers\/proxies$/, { timeout: 5000 });
+  assert.equal(jsonTab.url(), 'http://192.0.2.1:9090/providers/proxies', 'URL вкладки: ' + jsonTab.url());
+  assert.ok(!jsonTab.url().includes('topsecret'), 'secret не в URL вкладки');
+  const tabBody = await jsonTab.locator('body').textContent({ timeout: 5000 });
+  assert.ok(tabBody.includes('AEZA'), 'вкладка показывает JSON списка узлов');
+  await jsonTab.close();
+  assert.match(await rtStatus(page), /Вставить JSON/, 'после открытия — краткие шаги копирования');
+  await page.context().unroute(/^http:\/\/192\.0\.2\.1:9090\/providers\/proxies$/);
+  let popupOpened = false;
+  page.once('popup', () => { popupOpened = true; });
+  await page.locator('#rtControllerInput').fill('not-an-address');
+  await page.locator('#rtOpenJsonBtn').click();
+  await page.waitForTimeout(200);
+  assert.match(await rtStatus(page), /Адрес контроллера/, 'мусорный адрес → явная ошибка');
+  assert.equal(popupOpened, false, 'при ошибке адреса вкладка не открывается');
+  await page.locator('#rtControllerInput').fill(CONTROLLER);
+  ok('Открыть JSON Mihomo: URL из UI, вкладка с JSON, secret не в URL, мусорный адрес отклонён');
 
   // === 9. Direct fetch success → union список, runtime-only помечен, секрета нет в DOM ===
   await page.route('**/providers/proxies**', r => r.fulfill({ status: 200, contentType: 'application/json', body: RUNTIME_JSON }));
