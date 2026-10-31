@@ -97,7 +97,11 @@ async function run() {
   assert.equal((await page.evaluate(()=>window.__fakeSubscriptionHeaders)).length,3);
   await page.check('#cfgSubMode');
 
-  const actualCandidateRuntime = process.env.EXPECT_V2_ENGINE === '1';
+  // Engine-presence is detected by the runtime capability probe itself:
+  // with web4core#24 shipped in the tracked runtime the REAL end-to-end path
+  // runs; with older runtimes the fail-closed consumer contract is verified.
+  // (Historically this was toggled by EXPECT_V2_ENGINE=1 for the candidate CI.)
+  const actualCandidateRuntime = await page.evaluate(() => rbPortableRuntimeCanBuild(web4core));
   if (actualCandidateRuntime) {
     // PR #21 candidate is compiled via read-only CI and copied only into
     // ephemeral workspace: this is the real source-engine end-to-end path.

@@ -82,8 +82,17 @@ const collect = page => page.evaluate(() => {
     catch(e) {return /mapping missing|identity missing/.test(e.message)?'BLOCKED':'WRONG';}
   }),'BLOCKED','preview must not substitute local HWID');
   await b.locator('button[onclick="buildMihomo()"]').click();
-  await b.waitForFunction(()=>(document.getElementById('toast').textContent||'').includes('нужен web4core'));
-  assert.equal(await b.locator('#mihomoOutput').inputValue(),'','no YAML from incorrect local HWID');
+  // Engine merged (web4core#24, runtime 62aa2cc): the v2 Build bridge now
+  // SUCCEEDS. Final #280 acceptance: every provider of the converted project
+  // carries the exported portable identity, not browser B's local HWID.
+  await b.waitForFunction(()=>MIHOMO_VALIDATION_STATE.state==='VALID',null,{timeout:20000});
+  const v2Build = await b.evaluate(()=>globalThis.jsyaml.load(document.getElementById('mihomoOutput').value));
+  const v2Providers = Object.values(v2Build['proxy-providers']||{});
+  assert.equal(v2Providers.length,3,'three subscription providers built');
+  for (const pr of v2Providers) {
+    assert.equal(pr.header['x-hwid'][0], localA, 'provider uses the exported portable HWID, not the local one');
+  }
+  assert.equal(await b.evaluate(()=>getActiveDeviceIdentity().hwid), localB, 'local registry untouched by v2 Build');
   assert.equal(probeCount,0,'import/Build must never issue network subscription requests');
   const [d2]=await Promise.all([b.waitForEvent('download'),b.locator('button[onclick="rbSaveProject()"]').click()]);
   const file2=path.join(tmp,'portable-b.lgproject.json');await d2.saveAs(file2);

@@ -11809,9 +11809,6 @@ function rbCollectProject() {
 function rbApplyProject(project) {
   const copy = rbParseProjectText(JSON.stringify(project));
   if (!copy.ok) throw new Error('Проект не применён: ' + copy.error);
-  // Read-only parser accepts v2, but restoring it would discard HWIDs until
-  // the transactional project identity context/Preview/Build integration lands.
-  if (copy.project.schemaVersion === 2) throw new Error('Проект v2 проверен, но перенос HWID пока не включён; Builder не изменён.');
   const o = copy.project.options;
   if (copy.project.sources.autoWhitelist && o.profile !== 'router') throw new Error('Проект не применён: автоматические белые списки доступны только в профиле роутера.');
   const conflicts = awlConflicts(copy.project.sources.autoWhitelist, copy.project.tiered.enabled, o.perProxyMaster || o.perProxyTun || o.perProxySocks);
@@ -11949,8 +11946,6 @@ async function rbLoadProject(file) {
   if (epoch !== builderProjectEpoch) return;
   const parsed = rbParseProjectText(text);
   if (!parsed.ok) return showToast('❌ Проект: ' + parsed.error, true);
-  if (parsed.identityStatus === 'PORTABLE_V2_VALIDATED_ONLY')
-    return showToast('❌ Формат v2 проверен, но безопасный импорт HWID ещё не включён. Builder не изменён.', true);
   const project = parsed.project;
   if (beforeRead !== rbProjectFingerprint(rbCollectProject())) return showToast('Builder изменился во время чтения файла. Загрузите проект повторно.', true);
   const counts = rbProjectCounts(project);
