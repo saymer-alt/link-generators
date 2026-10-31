@@ -495,9 +495,13 @@
 <label for="mihomoInput">Основные серверы и подписки</label>
 <div class="hint" id="subModeInputHint">Обычные proxy-ссылки и HTTP(S) URL-подписки можно смешивать в обоих режимах настройки «Использовать URL-подписки». WG/AWG добавляются отдельно файлами в разделе ниже. <a href="#cfgSubMode" id="subModeJump" onclick="event.preventDefault();builderJump('cfgSubMode')">Перейти к настройке URL-подписок ↓</a> Включено — подписки обновляет Mihomo; выключено — при Build браузер читает их один раз и встраивает узлы.</div>
 <a href="#realityModernInput" id="realityModernJump">Совместимость VLESS / REALITY с X25519MLKEM768</a><textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки, созданные во вкладке «⚡ WARP MASQUE Links»"></textarea>
+<div id="providerNameRows" aria-label="Имена основных подписок"></div>
+<div class="hint" id="providerNameHint">🏷️ Название подписки в MetaCubeXD (необязательно): добавьте строку <code># provider-name: Geodema</code> непосредственно перед URL подписки. Для второй — <code># provider-name: WL</code> перед её URL. Без этой строки название по-прежнему берётся из домена URL. Строка сохраняется вместе с проектом, не изменяет адрес или HWID подписки. Пока не извлекаем название из HTTP-заголовков: это потребовало бы отдельного сетевого запроса.</div>
 <div id="whitelistPanel" style="display:none">
         <label for="whitelistInput">Резервные серверы и подписки</label>
         <textarea id="whitelistInput" placeholder="vless://...&#10;https://sub.url/..."></textarea>
+        <div id="providerNameReserveRows" aria-label="Имена резервных подписок"></div>
+        <div class="hint">Для подписки из резерва также можно указать <code># provider-name: Reserve</code> отдельной строкой перед её URL.</div>
         <div class="hint">Верхний набор — основной, этот — резерв. GLOBAL сначала использует обычные выходы, затем БС. Обе стороны обязательны. Ссылки можно смешивать с подписками при включённом режиме «URL-подписки». Плановая проверка доступности — каждые 300 секунд; при неудачных подключениях (2 за 60 секунд) проверка запускается сразу. Переключение и возврат на основной — не мгновенные. WG-файлы входят в основной набор.</div>
       </div>
 <div class="hint">Обычные proxy-ссылки (<code>vless://</code>, <code>trojan://</code>, <code>ss://</code> и т.п.) можно вставлять напрямую. Для HTTP(S) подписки режим ниже определяет результат: включён — динамический <code>proxy-provider</code>; выключен — подписка один раз читается браузером и её текущие узлы встраиваются как обычные <code>proxies:</code>.</div>
@@ -4132,6 +4136,81 @@ function splitSubscriptionInputForPreview(raw) {
     }
   });
 }
+
+// Editable provider labels live as adjacent # provider-name directives in the
+// existing textarea. No new project/storage schema and no extra subscription
+// fetch; URL (and therefore x-hwid) is untouched.
+function providerNameEditorItems(raw) {
+  const lines = String(raw || '').split(/\r?\n/);
+  const entries = splitSubscriptionInputForPreview(raw);
+  const out = [];
+  for (let i = 0; i < entries.length; i++) {
+    if (!entries[i].subscription) continue;
+    let nameLine = -1, name = '';
+    for (let j = i - 1; j >= 0; j--) {
+      const t = lines[j].trim();
+      const m = t.match(/^#\s*provider-name\s*:\s*(.*)$/i);
+      if (m) { nameLine = j; name = m[1].trim(); break; }
+      if (t && !t.startsWith('#')) break;
+    }
+    out.push({ lineIndex: i, nameLine, name, hostname: new URL(entries[i].url).hostname });
+  }
+  return out;
+}
+
+function renderProviderNameEditors(textareaId, containerId) {
+  const area = document.getElementById(textareaId), box = document.getElementById(containerId);
+  if (!area || !box) return;
+  box.replaceChildren();
+  // No providers are emitted when Sub Mode is OFF (links expand to static proxies).
+  if (!document.getElementById('cfgSubMode').checked) return;
+  const items = providerNameEditorItems(area.value);
+  for (let ordinal = 0; ordinal < items.length; ordinal++) {
+    const entry = items[ordinal];
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:4px 0';
+    const label = document.createElement('label');
+    label.textContent = '🏷️ Подписка №' + (ordinal + 1) + ' (' + entry.hostname + ')';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.setAttribute('aria-label', 'Название подписки №' + (ordinal + 1));
+    input.maxLength = 64; // Engine verifies 1..48 Unicode code points.
+    input.placeholder = 'Авто: ' + entry.hostname;
+    input.value = entry.name;
+    input.style.cssText = 'flex:1;min-width:150px;max-width:320px';
+    input.addEventListener('change', () => {
+      const current = providerNameEditorItems(area.value)[ordinal];
+      if (!current || current.hostname !== entry.hostname) {
+        renderProviderNameEditors(textareaId, containerId); return;
+      }
+      const name = input.value.trim();
+      if (name && (!/^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,47}$/u.test(name) ||
+          ['__proto__', 'constructor', 'prototype'].includes(name.toLowerCase()))) {
+        showToast('Имя подписки: 1–48 символов, буквы, цифры, пробел, точка, _ или -', true);
+        return;
+      }
+      const lines = area.value.split(/\r?\n/);
+      if (current.nameLine >= 0) {
+        if (name) lines[current.nameLine] = '# provider-name: ' + name;
+        else lines.splice(current.nameLine, 1);
+      } else if (name) {
+        lines.splice(current.lineIndex, 0, '# provider-name: ' + name);
+      }
+      area.value = lines.join('\n');
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    row.append(label, input);
+    box.appendChild(row);
+  }
+}
+function updateProviderNameEditors() {
+  renderProviderNameEditors('mihomoInput', 'providerNameRows');
+  renderProviderNameEditors('whitelistInput', 'providerNameReserveRows');
+}
+document.getElementById('mihomoInput').addEventListener('input', updateProviderNameEditors);
+document.getElementById('whitelistInput').addEventListener('input', updateProviderNameEditors);
+document.getElementById('cfgSubMode').addEventListener('change', updateProviderNameEditors);
+updateProviderNameEditors();
 
 function compileSubscriptionExcludeFilter(raw) {
   const value = String(raw || '').trim();
@@ -11862,6 +11941,7 @@ function rbWriteProject(project) {
   applyProfileUiState(o.profile);
   setOpt('mihomoInput', s.mainInput);
   setOpt('whitelistInput', s.fallbackInput);
+  updateProviderNameEditors();
   setChk('cfgSubMode', s.subMode);
   setChk('cfgAutoWhitelist', s.autoWhitelist);
   // WG-профили: полная замена (подтверждение — в rbLoadProject).
