@@ -79,10 +79,10 @@ const collect = page => page.evaluate(() => {
   assert.equal(await b.evaluate(()=>localStorage.getItem(DEVICE_IDENTITY_STORAGE_KEY)),registryB);
   assert.equal(await b.evaluate(()=>{
     try {subscriptionPreviewHeaders();return 'WRONG';}
-    catch(e) {return /недоступен/.test(e.message)?'BLOCKED':'WRONG';}
+    catch(e) {return /mapping missing|identity missing/.test(e.message)?'BLOCKED':'WRONG';}
   }),'BLOCKED','preview must not substitute local HWID');
   await b.locator('button[onclick="buildMihomo()"]').click();
-  await b.waitForFunction(()=>(document.getElementById('toast').textContent||'').includes('Build временно заблокирован'));
+  await b.waitForFunction(()=>(document.getElementById('toast').textContent||'').includes('нужен web4core'));
   assert.equal(await b.locator('#mihomoOutput').inputValue(),'','no YAML from incorrect local HWID');
   assert.equal(probeCount,0,'import/Build must never issue network subscription requests');
   const [d2]=await Promise.all([b.waitForEvent('download'),b.locator('button[onclick="rbSaveProject()"]').click()]);

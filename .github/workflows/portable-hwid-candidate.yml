@@ -1,0 +1,115 @@
+name: Portable HWID Candidate Integration (read-only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - index.html
+      - tests/portable-preview-build-browser.cjs
+      - .github/workflows/portable-hwid-candidate.yml
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-runtime:
+    if: github.head_ref == 'feat/project-v2-preview-build-bridge-20261020'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout consumer PR (no write credentials)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout exact web4core#21 candidate SHA
+        uses: actions/checkout@v4
+        with:
+          repository: saymer-alt/web4core
+          ref: f1c30bfa423a347b93ac716b0ee782b19ec7e773
+          path: candidate-source
+          persist-credentials: false
+
+      - name: Pin exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git -C candidate-source rev-parse HEAD)"
+          test "$actual" = "f1c30bfa423a347b93ac716b0ee782b19ec7e773"
+          echo "candidate-source=$actual"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build and test candidate engine (read-only)
+        working-directory: candidate-source
+        run: |
+          set -euo pipefail
+          npm ci --no-fund --no-audit
+          npm run build:web:runtime
+          node --check src/web4core.runtime.js
+          npm run test:provider-hwid
+          node --test tools/tests/subscription-strict-device-headers.test.mjs tools/tests/subscription-origin-policy.test.mjs
+          test -s src/web4core.runtime.js
+          sha256sum src/web4core.runtime.js
+
+      - name: Validate runtime and copy into temporary checkout only
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tests/runtime.cjs candidate-source/src/web4core.runtime.js
+          cp candidate-source/src/web4core.runtime.js web4core.runtime.js
+          node --check web4core.runtime.js
+          # Never commit/push runtime; it is ephemeral test material only.
+          git diff --name-only | grep -qx 'web4core.runtime.js'
+          test "$(git diff --name-only | wc -l)" -eq 1
+
+      - name: Install isolated browser test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          deps="$RUNNER_TEMP/candidate-browser-deps"
+          mkdir -p "$deps"
+          npm install --prefix "$deps" --no-save --no-package-lock playwright@1.55.0 js-yaml@4.1.0
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+          echo "JS_YAML_PATH=$deps/node_modules/js-yaml/dist/js-yaml.min.js" >> "$GITHUB_ENV"
+          echo "BROWSER_CHANNEL=chromium" >> "$GITHUB_ENV"
+          echo "MIHOMO_CANDIDATE_CONFIG=$RUNNER_TEMP/portable-v2-synthetic.yaml" >> "$GITHUB_ENV"
+          "$deps/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Actual PR #21 engine — browser Preview/Build parity
+        env:
+          EXPECT_V2_ENGINE: '1'
+        run: |
+          set -euo pipefail
+          timeout 150s node tests/portable-preview-build-browser.cjs
+          test -s "$MIHOMO_CANDIDATE_CONFIG"
+
+      - name: Parse synthetic output with pinned Mihomo 1.19.31 and 1.19.32
+        shell: bash
+        run: |
+          set -euo pipefail
+          for entry in \
+            "1.19.31:04cf9f09671704f839ddbee2e93069dc831a4123a75281e725d1d96ab9ac1afc" \
+            "1.19.32:ba3ce607747a07f948fc35780e108a4a7c7f552a38b9bd4d115f313ebcb89c20"
+          do
+            version="$(printf '%s' "$entry" | cut -d: -f1)"
+            digest="$(printf '%s' "$entry" | cut -d: -f2)"
+            archive="$RUNNER_TEMP/mihomo-$version.gz"
+            binary="$RUNNER_TEMP/mihomo-$version"
+            url="https://github.com/MetaCubeX/mihomo/releases/download/v$version/mihomo-linux-amd64-compatible-v$version.gz"
+            curl -fL --retry 3 --retry-delay 2 "$url" -o "$archive"
+            echo "$digest  $archive" | sha256sum -c -
+            gzip -dc "$archive" > "$binary"
+            chmod +x "$binary"
+            "$binary" -v
+            "$binary" -t -f "$MIHOMO_CANDIDATE_CONFIG"
+          done
+
+      - name: No tracked source or runtime written back
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only)"
+          test "$changed" = "web4core.runtime.js"
+          echo "Candidate runtime was only copied to the temporary CI checkout."
