@@ -537,7 +537,14 @@
               </div>
               <div class="hint">Если адрес не указан, используется 192.168.1.1:9090. Запрос выполняется только по нажатию кнопки.</div>
               <div class="hint" id="rtPresetHint">Выберите готовый адрес или введите свой: host:port либо http(s)://host:port[/prefix]. Выбор адреса не отправляет запрос. Отправку API secret на новый адрес нужно подтвердить отдельно.</div>
-              <div class="hint">Адрес и secret не сохраняются (только память вкладки, до перезагрузки страницы). Запрос идёт из браузера напрямую в контроллер — через проектный воркер он не передаётся никогда. Если браузер не пускает (CORS / разрешение локальной сети / listen-адрес) — используйте «Вставить JSON» или «Загрузить .json» ниже: откройте <code>http://&lt;контроллер&gt;/providers/proxies</code> в соседней вкладке и скопируйте ответ.</div>
+              <div class="hint">Адрес и secret не сохраняются (только память вкладки, до перезагрузки страницы). Запрос идёт из браузера напрямую в контроллер — через проектный воркер он не передаётся никогда.</div>
+              <div id="rtManualBox" style="margin-top:6px;border:1px dashed var(--border);padding:8px;background:rgba(255,255,255,.45)">
+                <div class="hint" style="margin:0"><strong>Если браузер не пускает прямой запрос</strong> (CORS / Mixed Content HTTPS→HTTP / разрешение локальной сети / listen-адрес) — ручной путь без DevTools:</div>
+                <div class="tier-add-row" style="margin-top:6px">
+                  <button type="button" class="btn btn-gray" id="rtOpenJsonBtn">🌐 Открыть JSON Mihomo</button>
+                </div>
+                <div class="hint" id="rtManualSteps" style="margin-top:6px">① Откроется вкладка с JSON списка узлов (<code>/providers/proxies</code>). ② Выделите весь текст (Ctrl+A) и скопируйте (Ctrl+C); на телефоне — удерживайте текст → «Выделить всё» → «Копировать». ③ Вернитесь и нажмите «📋 Вставить JSON» ниже: список распознается, узлы можно отмечать галочками для Exclude Filter. API secret в адрес вкладки не вставляется и не нужен.</div>
+              </div>
               <div class="tier-add-row">
                 <button type="button" class="btn btn-gray" id="rtPasteBtn">📋 Вставить JSON</button>
                 <button type="button" class="btn btn-gray" id="rtUploadBtn">📄 Загрузить .json</button>
@@ -4401,7 +4408,7 @@ function fetchServerList() {
     renderSubscriptionPreview(summary);
     setSubListStatus(serverListState === SERVER_LIST_STATE.PARTIAL
       ? 'Часть подписок недоступна — итог по узлам неполный.'
-      : (serverListState === SERVER_LIST_STATE.FAILED ? 'Получить список не удалось — нажмите «Обновить список» для повтора.' : ''));
+      : (serverListState === SERVER_LIST_STATE.FAILED ? 'Получить список не удалось — нажмите «Обновить список» для повтора. Имена можно взять из работающего Mihomo: раскройте «📡 Импорт узлов из работающего Mihomo» → «🌐 Открыть JSON Mihomo» → скопируйте JSON → «📋 Вставить JSON».' : ''));
   })();
   task.catch(() => {}).finally(() => {
     // Кнопку в idle возвращает только владелец загрузки: его операция
@@ -4579,6 +4586,12 @@ function normalizeRuntimeController(input) {
   return u.origin + (path === '/ui' ? '' : path);
 }
 
+// Адрес вкладки с JSON списка узлов (#322): тот же normalize, что у fetch,
+// плюс путь API. Без secret и query; открывается только по явному клику.
+function buildRuntimeJsonUrl(raw) {
+  return normalizeRuntimeController(raw) + '/providers/proxies';
+}
+
 let rtImportSeq = 0, rtImportAbort = null;
 let rtSecretApprovedEndpoint = null;
 let resetRuntimeImportPreferences = () => { rtSecretApprovedEndpoint = null; };
@@ -4619,8 +4632,8 @@ async function fetchRuntimeProviders() {
     if (seq !== rtImportSeq) return;
     if (!resp.ok) {
       // HTTP-ответ — можно утверждать точно.
-      const label = resp.status === 401 ? 'HTTP 401: секрет не принят (auth failed)'
-        : resp.status === 403 ? 'HTTP 403: доступ запрещён (forbidden)'
+      const label = resp.status === 401 ? 'HTTP 401: секрет не принят (auth failed). Контроллер закрыт API secret: введите его в поле выше и повторите запрос; в адрес вкладки JSON его вставлять не нужно.'
+        : resp.status === 403 ? 'HTTP 403: доступ запрещён (forbidden). Если контроллер закрыт API secret — введите его в поле выше и повторите; в адрес вкладки JSON secret не вставляется.'
         : resp.status === 404 ? 'HTTP 404: API /providers/proxies не найден. Проверьте адрес и API-префикс.'
         : 'HTTP ' + resp.status;
       say('❌ ' + label);
@@ -4634,7 +4647,7 @@ async function fetchRuntimeProviders() {
     if (controller.signal.aborted) { say('❌ Время ожидания Mihomo controller истекло. Повторите запрос или загрузите JSON локально.'); return; }
     // Generic TypeError браузера не раскрывает причину: не выдумываем
     // «CORS_DENIED»/«LOCAL_NETWORK_PERMISSION_DENIED» без доказательств.
-    say('❌ Сетевой отказ: причина не установлена. Проверьте адрес/listen, CORS, разрешение локальной сети и mixed content (HTTPS-страница → HTTP-controller). Подробности: F12 → Console (или Ctrl+Shift+J). Безопасный ручной путь: «Вставить JSON»/«Загрузить .json» из GET /providers/proxies; secret никуда через прокси не передаётся.');
+    say('❌ Сетевой отказ: причина не установлена — браузер или сеть блокируют прямой запрос (возможны CORS, Mixed Content HTTPS→HTTP, разрешение локальной сети, недоступность listen-адреса). Без DevTools: нажмите «🌐 Открыть JSON Mihomo» ниже, скопируйте JSON во вкладке и нажмите «Вставить JSON». Подробности: F12 → Console (или Ctrl+Shift+J). Secret через прокси не передаётся.');
   } finally {
     clearTimeout(deadline);
     if (rtImportAbort === controller) rtImportAbort = null;
@@ -4712,6 +4725,17 @@ function initRuntimeImport() {
     if (preset.value === 'custom') input.focus();
   });
   fetchBtn.addEventListener('click', fetchRuntimeProviders);
+  document.getElementById('rtOpenJsonBtn').addEventListener('click', () => {
+    const status = document.getElementById('rtStatus');
+    const say = (text) => { status.textContent = text; status.style.display = text ? '' : 'none'; };
+    let url;
+    try { url = buildRuntimeJsonUrl(document.getElementById('rtControllerInput').value); }
+    catch (e) { say('❌ ' + e.message); return; }
+    // Только явный клик → top-level открытие новой вкладки; secret и query
+    // в URL не добавляются (контракт #159/#322).
+    window.open(url, '_blank', 'noopener');
+    say('Открыта вкладка с JSON списка узлов: выделите всё (Ctrl+A), скопируйте (Ctrl+C) и нажмите «Вставить JSON». На телефоне: удерживайте текст → «Выделить всё» → «Копировать».');
+  });
   document.getElementById('rtPasteBtn').addEventListener('click', async () => {
     cancelRuntimeImport();
     const seq = rtImportSeq;

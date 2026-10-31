@@ -130,6 +130,7 @@ async function listedCount(page) {
   assert.match(s, /количество узлов: неизвестно/, 'UNKNOWN семантика: ' + s);
   assert.ok(!/найдено узлов: 0/.test(s), 'UNKNOWN не должен выглядеть как доказанный 0: ' + s);
   assert.match(await statusText(page), /Получить список не удалось/);
+  assert.match(await statusText(page), /Открыть JSON Mihomo/, 'FAILED-статус указывает на ручной runtime fallback (#322)');
   const w3 = await warningText(page);
   assert.match(w3, /Не удалось получить preview подписки #1/, 'warning #1');
   assert.match(w3, /Не удалось получить preview подписки #2/, 'warning #2');

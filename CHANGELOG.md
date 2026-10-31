@@ -27,6 +27,7 @@
 
 ### Fixed
 
+- **Runtime import fallback (#322):** при сетевом отказе прямого запроса к Mihomo controller видимый блок «Если браузер не пускает прямой запрос» с кнопкой «🌐 Открыть JSON Mihomo» (top-level открытие `/providers/proxies` в новой вкладке по явному клику, без secret/query) и тремя шагами копирования, включая мобильную подсказку. Статусы ошибок (401/403/404/generic) поясняют роль API secret и указывают на ручной путь без DevTools; FAILED-статус preview ссылается на runtime fallback. Парсер и Exclude Filter не изменены.
 - **UX-51:** Copy/Download/Studio работают только для актуального VALID YAML; защитный fingerprint/validation guard сохранён, disabled click не запускает скрытый Build.
 - В Studio provider download target входит в reference/rename model; dangling targets диагностируются, удаление используемой цели блокируется до явного переназначения.
 - Reverse сохраняет поддерживаемые gateway/profile/DNS OFF/TUN OFF настройки и DPR-имена; отсутствующие и циклические WG/AWG targets не принимаются молча (#215/#218/#220/#221).
