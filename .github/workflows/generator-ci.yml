@@ -125,6 +125,9 @@ jobs:
       - name: Consumer runtime regression
         run: node tests/runtime.cjs web4core.runtime.js
 
+      - name: Portable project v2 read-only identity contract (#280)
+        run: node tests/project-identities-v2.cjs
+
       - name: Domain Policy Routing regression
         run: node tests/policy-routing.cjs
 
