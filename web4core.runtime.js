@@ -3545,10 +3545,13 @@
       const slug = domainPolicySlug(name, index, usedSlugs);
       ruleProviders[slug] = { type: "inline", behavior: "classical", format: "yaml", payload };
       const rawTarget = String(policy?.target || "").trim().toUpperCase();
-      if (rawTarget !== "" && rawTarget !== "SELECT" && rawTarget !== "GLOBAL" && rawTarget !== "DIRECT" && rawTarget !== "REJECT") {
-        throw new Error(`Mihomo: domain policy target must be SELECT, GLOBAL, DIRECT or REJECT: "${rawTarget}"`);
+      if (rawTarget === "DIRECT") {
+        throw new Error(`Mihomo: domain policy "${name}" target DIRECT is forbidden (no-DIRECT egress invariant, link-generators #284) \u2014 use SELECT, GLOBAL or REJECT`);
       }
-      const ruleTarget = rawTarget === "GLOBAL" || rawTarget === "DIRECT" || rawTarget === "REJECT" ? rawTarget : "SELECT";
+      if (rawTarget !== "" && rawTarget !== "SELECT" && rawTarget !== "GLOBAL" && rawTarget !== "REJECT") {
+        throw new Error(`Mihomo: domain policy target must be SELECT, GLOBAL or REJECT: "${rawTarget}"`);
+      }
+      const ruleTarget = rawTarget === "GLOBAL" || rawTarget === "REJECT" ? rawTarget : "SELECT";
       if (ruleTarget === "SELECT") {
         rules.push(`RULE-SET,${slug},${name}`);
       } else {
@@ -3572,7 +3575,9 @@
             // ⚡ Fastest is referenced only when it is actually emitted
             // (a single-static config emits no Fastest group; referencing
             // it would produce a dangling group target).
-            proxies: [`${name}-AUTO`, ...existingGroups.has(FASTEST_GROUP_NAME) ? [FASTEST_GROUP_NAME] : [], GLOBAL_GROUP_NAME, "DIRECT"]
+            // The trailing member is the fail-closed escape slot: REJECT,
+            // never DIRECT (no-DIRECT egress invariant, link-generators #284).
+            proxies: [`${name}-AUTO`, ...existingGroups.has(FASTEST_GROUP_NAME) ? [FASTEST_GROUP_NAME] : [], GLOBAL_GROUP_NAME, "REJECT"]
           });
           existingGroups.add(`${name}-AUTO`);
         } else if (ctx.mode === "static") {
@@ -3580,13 +3585,14 @@
             name,
             type: "select",
             // ⚡ Fastest is referenced only when it is actually emitted (see above).
-            proxies: [...existingGroups.has(FASTEST_GROUP_NAME) ? [FASTEST_GROUP_NAME] : [], GLOBAL_GROUP_NAME, "DIRECT"]
+            // Trailing escape slot = REJECT (no-DIRECT egress invariant, #284).
+            proxies: [...existingGroups.has(FASTEST_GROUP_NAME) ? [FASTEST_GROUP_NAME] : [], GLOBAL_GROUP_NAME, "REJECT"]
           });
         } else {
           groups.push({
             name,
             type: "select",
-            proxies: [GLOBAL_GROUP_NAME, "DIRECT"]
+            proxies: [GLOBAL_GROUP_NAME, "REJECT"]
           });
         }
         existingGroups.add(name);
@@ -4253,6 +4259,13 @@
       const deviceModel = typeof opts?.deviceModel === "string" ? opts.deviceModel.trim() : "";
       providers[providerName] = {
         type: "http",
+        // Service/transport plane (no-DIRECT #284 revised): the explicit
+        // direct dial is the provider bootstrap transport — mihomo routes
+        // provider fetches through the config rule chain when `proxy` is
+        // absent (verified on v1.19.31: empty provider-backed GLOBAL ⇒
+        // immediate EOF, cold-start deadlock; explicit DIRECT dial loads
+        // normally). Download-only: never referenced by user-traffic
+        // groups or rules.
         proxy: "DIRECT",
         header: {
           "x-hwid": [deviceHwid || generateSecretHex32()],
@@ -5395,12 +5408,13 @@
       if (!bean.stream.fp) bean.stream.fp = "chrome";
     }
   }
-  var DOMAIN_POLICY_TARGETS = /* @__PURE__ */ new Set(["SELECT", "GLOBAL", "DIRECT", "REJECT"]);
+  var DOMAIN_POLICY_TARGETS = /* @__PURE__ */ new Set(["SELECT", "GLOBAL", "REJECT"]);
   function normalizePolicyTarget(value) {
     const t = String(value === void 0 || value === null ? "" : value).trim().toUpperCase();
     if (!t) return "SELECT";
+    if (t === "DIRECT") throw new Error("Mihomo: domain policy target DIRECT is forbidden (no-DIRECT egress invariant, link-generators #284) - use SELECT, GLOBAL or REJECT");
     if (DOMAIN_POLICY_TARGETS.has(t)) return t;
-    throw new Error('Mihomo: domain policy target must be SELECT, GLOBAL, DIRECT or REJECT: "' + value + '"');
+    throw new Error('Mihomo: domain policy target must be SELECT, GLOBAL or REJECT: "' + value + '"');
   }
   function normalizeDomainPolicy(raw) {
     if (raw === void 0 || raw === null || raw === "") return [];

@@ -677,7 +677,7 @@
               <option value="microsoft">🪟 Microsoft</option>
               <option value="apple">🍎 Apple</option>
               <option value="social">💬 Social Networks</option>
-              <option value="direct">⬇️ Direct (свои домены мимо прокси)</option>
+              <option value="reject">🚫 Reject (свои домены под блокировку)</option>
               <option value="proxy">🚀 Proxy (свои домены через прокси)</option>
             </select>
           </span>
@@ -3257,6 +3257,28 @@ function validateMihomoYaml(yaml) {
   }
 
 
+  // --- No-DIRECT egress policy (#284, revised): семантическая проверка user data plane ---
+  // Запрещён DIRECT как ЦЕЛЬ пользовательской маршрутизации: участник
+  // proxy-groups или таргет правила. Служебные ключи (proxy: DIRECT у
+  // провайдеров, dialer-proxy) проверкой не затрагиваются — это service plane.
+  // Проверка структурная (по разобранному документу), не лексическая.
+  if (Array.isArray(doc['proxy-groups'])) {
+    doc['proxy-groups'].forEach((g) => {
+      if (!g || typeof g !== 'object') return;
+      if (Array.isArray(g.proxies) && g.proxies.includes('DIRECT')) {
+        err((typeof g.name === 'string' && g.name) || 'proxy-groups', 'direct-egress', 'DIRECT',
+          'группа содержит DIRECT как участника — пользовательский прямой выход запрещён политикой no-DIRECT (#284). Финальный участник групп — REJECT.');
+      }
+    });
+  }
+  if (Array.isArray(doc.rules)) {
+    doc.rules.forEach((r, i) => {
+      const m = typeof r === 'string' ? r.trim().match(/^[^,]+(?:,[^,]*)?,\s*DIRECT\s*$/i) : null;
+      if (m) err('rules[' + i + ']', 'direct-egress', String(r).slice(0, 60),
+        'правило ведёт пользовательский трафик напрямую в DIRECT — запрещено политикой no-DIRECT (#284). Используйте GLOBAL / SELECT / REJECT.');
+    });
+  }
+
   return { status: errors.length ? 'INVALID' : 'VALID', errors, warnings };
 }
 
@@ -4911,7 +4933,9 @@ const POLICY_PRESETS = {
   microsoft: { name: 'MICROSOFT', domains: 'microsoft.com\nmicrosoftonline.com\noffice.com\noffice365.com\nwindowsupdate.com\nlive.com\nxbox.com' },
   apple: { name: 'APPLE', domains: 'apple.com\nicloud.com\nmzstatic.com\nme.com' },
   social: { name: 'SOCIAL', domains: 'facebook.com\ninstagram.com\nx.com\ntwitter.com\nreddit.com\ntiktok.com' },
-  direct: { name: 'DIRECT-LIST', domains: '# домены, которые пойдут мимо прокси (DIRECT)\nexample.com', target: 'DIRECT' },
+  // Прямой выход (DIRECT) запрещён политикой no-DIRECT (#284): прежний шаблон
+  // «DIRECT-LIST» заменён на блокирующий REJECT-список.
+  reject: { name: 'REJECT-LIST', domains: '# домены, которые будут заблокированы (REJECT)\nexample.com', target: 'REJECT' },
   // Симметричный «через прокси» сценарий. Target GLOBAL — ближайший строгий
   // «через прокси»: во всех режимах GLOBAL не содержит DIRECT (static — листья+REJECT;
   // subscription — листья+use-подписки+REJECT; AW — PRIMARY/FALLBACK) и вручную
@@ -4948,14 +4972,19 @@ function policyCardDom(card, index) {
   targetLabel.textContent = 'Куда направлять:';
   const targetSel = document.createElement('select');
   targetSel.className = 'policy-target';
-  for (const [value, text] of [['SELECT', '🎛 Своя SELECT-группа (переключается в Mihomo)'], ['GLOBAL', '🌐 GLOBAL'], ['DIRECT', '⬇ DIRECT'], ['REJECT', '🚫 REJECT']]) {
+  // No-DIRECT (#284): DIRECT больше не предлагается как цель. Для legacy-карточек
+  // с target DIRECT опция оставлена только для честного отображения состояния —
+  // Build с такой картой блокируется до явного обновления таргета.
+  const targetOptions = [['SELECT', '🎛 Своя SELECT-группа (переключается в Mihomo)'], ['GLOBAL', '🌐 GLOBAL'], ['REJECT', '🚫 REJECT']];
+  if (card.target === 'DIRECT') targetOptions.unshift(['DIRECT', '⬇ DIRECT — запрещено (no-DIRECT #284), выберите другую цель']);
+  for (const [value, text] of targetOptions) {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = text;
     targetSel.appendChild(opt);
   }
   targetSel.value = card.target === 'GLOBAL' || card.target === 'DIRECT' || card.target === 'REJECT' ? card.target : 'SELECT';
-  targetLabel.appendChild(makeCtxHelp('Создаёт отдельную proxy-group с именем категории. После запуска Mihomo маршрут этой категории можно переключать между доступными выходами без пересборки конфига. GLOBAL/DIRECT/REJECT ведут RULE-SET напрямую на цель; семантика таргетов не менялась.', 'Куда направлять'));
+  targetLabel.appendChild(makeCtxHelp('Создаёт отдельную proxy-group с именем категории. После запуска Mihomo маршрут этой категории можно переключать между доступными выходами без пересборки конфига. GLOBAL/REJECT ведут RULE-SET напрямую на цель; прямой выход (DIRECT) запрещён политикой no-DIRECT (#284) — у SELECT-групп последним участником теперь REJECT.', 'Куда направлять'));
   const targetWrap = document.createElement('div');
   targetWrap.className = 'policy-target-wrap';
   targetSel.setAttribute('aria-label', 'Куда направлять политику');
@@ -5183,7 +5212,6 @@ function renderMagiTricklePreview() {
     for (const [value, text] of [
       ['GLOBAL', 'Через GLOBAL'],
       ['SELECT', 'Создать отдельную переключаемую SELECT-группу для каждой импортируемой категории'],
-      ['DIRECT', 'Напрямую — DIRECT'],
       ['REJECT', 'Блокировать — REJECT'],
       ['skip', '⏭ Пропустить'],
     ]) {
@@ -5198,7 +5226,7 @@ function renderMagiTricklePreview() {
     mapBox.appendChild(row);
   }
   const note=document.createElement('p'); note.className='hint';
-  note.textContent='SELECT создаёт независимую переключаемую группу для каждой категории. Объединение категорий в одну группу не поддерживается. При AWL разрешены только GLOBAL и DIRECT.';
+  note.textContent='SELECT создаёт независимую переключаемую группу для каждой категории. Объединение категорий в одну группу не поддерживается. При AWL разрешены только GLOBAL и REJECT. Прямой выход (DIRECT) запрещён политикой no-DIRECT (#284).';
   mapBox.appendChild(note);
   mtPending.selectNames ||= {};
   const names = new Set(document.getElementById('mtReplacePolicies').checked ? [] : Array.from(document.querySelectorAll('#policyCards .policy-name')).map(e=>e.value.trim()));
@@ -5223,7 +5251,7 @@ function applyMagiTrickleImport() {
   const plannedNames = new Set(replace ? [] : Array.from(document.querySelectorAll('#policyCards .policy-name')).map(el=>el.value.trim()));
   for(const [i,g] of mtPending.groups.entries()) {
     const map=mapping[String(g.interface||'').trim()]; if(!mtIsEnabled(g.enable)||!map||map==='skip') continue;
-    if(document.getElementById('cfgAutoWhitelist').checked && !['GLOBAL','DIRECT'].includes(map)) return showToast('AWL: выберите GLOBAL или DIRECT; SELECT и REJECT недоступны.',true);
+    if(document.getElementById('cfgAutoWhitelist').checked && !['GLOBAL','REJECT'].includes(map)) return showToast('AWL: выберите GLOBAL или REJECT; SELECT недоступен. Прямой выход (DIRECT) запрещён политикой no-DIRECT (#284).',true);
     if(map==='SELECT') {
       const name=String(mtPending.selectNames?.[i] ?? g.name ?? '').trim();
       if(!name || plannedNames.has(name) || ['GLOBAL','DIRECT','REJECT','PASS','REJECT-DROP','COMPATIBLE','⚡ Fastest'].includes(name) || dialerTargetsCache.some(t=>t.kind!=='provider'&&t.value===name)) return showToast('Укажите непустые уникальные имена SELECT-групп без конфликта с существующими политиками и системными группами.',true);
@@ -5338,9 +5366,10 @@ function updatePolicyRoutingVisibility() {
   document.getElementById('policyRoutingPanel').style.display = on ? 'block' : 'none';
   document.getElementById('policyRoutingOffHint').style.display = on ? 'none' : '';
   const hints = [];
-  if (bsOn) hints.push('Режим белых списков: категории указывают на GLOBAL (плоский fallback PRIMARY→FALLBACK) или DIRECT; AUTO-группы категорий не создаются.');
-  else if (subMode) hints.push('URL-подписки: каждая категория получает AUTO url-test-группу над общим provider (use:) и select [AUTO, ⚡ Fastest, GLOBAL, DIRECT].');
-  else hints.push('Без URL-подписок: категории — select [⚡ Fastest, GLOBAL, DIRECT]; AUTO-группы возможны только над подписками.');
+  if (bsOn) hints.push('Режим белых списков: категории указывают на GLOBAL (плоский fallback PRIMARY→FALLBACK) или REJECT; AUTO-группы категорий не создаются.');
+  else if (subMode) hints.push('URL-подписки: каждая категория получает AUTO url-test-группу над общим provider (use:) и select [AUTO, ⚡ Fastest, GLOBAL, REJECT].');
+  else hints.push('Без URL-подписок: категории — select [⚡ Fastest, GLOBAL, REJECT]; AUTO-группы возможны только над подписками.');
+  hints.push('Политика no-DIRECT (#284): прямой выход запрещён во всех режимах — финальный участник групп REJECT, таргет DIRECT недоступен.');
   if (master) hints.push('⚠ Режим «на каждый прокси» несовместим с политиками — при сборке политики будут проигнорированы.');
   document.getElementById('policyRoutingHint').textContent = hints.join(' ');
 }
@@ -6615,11 +6644,10 @@ function ptNodeArtifactYaml(nodeLabel, role, inbound, outbound, credentials) {
     }
     L.push('rules:');
     L.push('  - MATCH,pt-out');
-  } else {
-    L.push('# исходящее ребро не реализовано этим артефактом (см. contract.md)');
-    L.push('rules:');
-    L.push('  - MATCH,DIRECT');
   }
+  // Артефакт без исходящего ребра не генерируется (PT-GEN-DIRECT-BAN):
+  // прежний fallback `MATCH,DIRECT` направлял весь пользовательский трафик
+  // напрямую с публичного IP VPS — запрещено политикой no-DIRECT (#284).
   return L.join('\n') + '\n';
 }
 // Главная функция: spec (raw) → артефакты. Цепочка валидируется ptAnalyzeTopology.
@@ -6670,16 +6698,25 @@ function ptGenerateArtifacts(spec, credentials) {
       }
       if (outbound.endpointRef && !PT_REF_PATTERN.test(outbound.endpointRef)) nodeBlockers.push({ code: 'PT-GEN-REFERENCE', message: 'endpoint reference исходящей ссылки имеет неподдерживаемый формат' });
       if (outbound.credentialRef && !PT_REF_PATTERN.test(outbound.credentialRef)) nodeBlockers.push({ code: 'PT-GEN-REFERENCE', message: 'credential reference исходящей ссылки имеет неподдерживаемый формат' });
+    } else if (idx === nodes.length - 1) {
+      // No-DIRECT egress policy (#284): exit-узел без исходящего ребра — это
+      // РЕАЛЬНЫЙ пользовательский трафик, уходящий напрямую с публичного IP
+      // VPS (не service plane). Артефакт config.yaml не генерируется;
+      // безопасная альтернатива: финальный overlay (final-overlay) или явный
+      // исходящий транспорт до узла.
+      nodeBlockers.push({ code: 'PT-GEN-DIRECT-BAN', message: 'у последнего узла нет исходящего ребра: такой артефакт направлял бы весь пользовательский трафик напрямую с публичного IP VPS (MATCH,DIRECT) — это запрещено политикой no-DIRECT (#284). Добавьте финальный overlay (final-overlay) или явный исходящий транспорт до узла' });
     }
     const needsCred =
       (inbound && inbound.kind && ptOwnTransport(inbound.kind) && ptOwnTransport(inbound.kind).needsPassword && (!inbound.credentialRef || !credentials || typeof credentials[inbound.credentialRef] !== 'string' || !credentials[inbound.credentialRef])) ||
       (outbound && outSupported && ptOwnTransport(outbound.kind) && ptOwnTransport(outbound.kind).needsPassword && (!outbound.credentialRef || !credentials || typeof credentials[outbound.credentialRef] !== 'string' || !credentials[outbound.credentialRef]));
     const files = {};
-    const external = nodeBlockers.some(b => ['PT-GEN-CONTRACT', 'PT-GEN-TRANSPORT', 'PT-GEN-REFERENCE'].includes(b.code));
+    const external = nodeBlockers.some(b => ['PT-GEN-CONTRACT', 'PT-GEN-TRANSPORT', 'PT-GEN-REFERENCE', 'PT-GEN-DIRECT-BAN'].includes(b.code));
     const status = external ? 'EXTERNAL_CONTRACT_REQUIRED' : (nodeBlockers.length || needsCred ? 'PLACEHOLDERS_REQUIRED' : 'READY');
     // конфиг генерируется ТОЛЬКО при полном первоклассном контракте (вход+выход).
     // Неподдерживаемый исходящий транспорт = контракт без конфига: fallback в
-    // DIRECT де-анонимизировал бы цепочку, поэтому «честный DIRECT» не эмитим.
+    // DIRECT де-анонимизировал бы цепочку — поэтому exit-узел без исходящего
+    // ребра не генерирует config.yaml (PT-GEN-DIRECT-BAN, no-DIRECT #284:
+    // пользовательский трафик не должен уходить напрямую с VPS).
     if (nodeBlockers.length === 0) {
       files['config.yaml'] = ptNodeArtifactYaml(
         node.label, node.role,
@@ -10843,6 +10880,22 @@ async function buildMihomo() {
   const api = globalThis.web4core;
   if (!api?.buildFromRequest) return buildFailure('❌ web4core.runtime не загружен!', true);
   const subMode = document.getElementById('cfgSubMode').checked;
+  // === No-DIRECT egress policy (#284, owner decision revised 2026-10-18) ===
+  // DIRECT запрещён как пользовательский выход/таргет (user data plane):
+  // движок отклоняет DPR-таргет DIRECT, категории-группы заканчиваются REJECT,
+  // UI не предлагает DIRECT. Служебный транспорт (proxy-providers с
+  // `proxy: DIRECT`, dialer-proxy, PT exit-артефакты) — service plane,
+  // работает как раньше; Sub Mode ON (динамические подписки) сохранён.
+  // Legacy-карточки политик с явным DIRECT таргетом: читаются, но Build
+  // блокируется до явного обновления (молчаливая смена маршрутов запрещена).
+  const directPolicyCards = Array.from(document.querySelectorAll('#policyCards .policy-card'))
+    .map((card, i) => ({ i: i + 1, name: card.querySelector('.policy-name') ? card.querySelector('.policy-name').value.trim() : '', target: card.querySelector('.policy-target') ? card.querySelector('.policy-target').value : '' }))
+    .filter(c => c.target === 'DIRECT');
+  if (directPolicyCards.length) {
+    mihomoValidationSeq++;
+    setMihomoValidationState('NOT_BUILT');
+    return buildFailure('❌ No-DIRECT (#284): явный DIRECT как пользовательский выход запрещён — карты политик с таргетом DIRECT: ' + directPolicyCards.map(c => '«' + (c.name || '#' + c.i) + '»').join(', ') + '. Обновите таргеты явно (GLOBAL / REJECT / SELECT) и пересоберите.', true);
+  }
   const excludeFilterRaw = document.getElementById('excludeFilterInput').value.trim();
   // Итоговый Exclude Filter = ручное выражение ИЛИ выбранные в списке серверов
   // (exact match), объединённые через ИЛИ. Одна и та же строка применяется в
@@ -10949,7 +11002,7 @@ async function buildMihomo() {
   // который будет сгенерирован прямо сейчас.
   const registryNow = dialedProfiles.length ? computeDialerTargetsSync() : [];
   const knownTargets = new Set(registryNow.map(t => t.value));
-  knownTargets.add('DIRECT'); // валидное значение dialer-proxy в mihomo
+  knownTargets.add('DIRECT'); // dialer-таргет = service plane (handshake напрямую), не пользовательский egress
   const danglingTargets = dialedProfiles.filter(p => p.target.trim() && !knownTargets.has(p.target.trim()));
   if (danglingTargets.length) {
     const p = danglingTargets[0];

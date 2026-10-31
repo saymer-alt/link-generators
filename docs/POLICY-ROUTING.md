@@ -49,7 +49,7 @@ proxy-groups:
     empty-fallback: REJECT
   - name: NAME             # select над AUTO
     type: select
-    proxies: [NAME-AUTO, ⚡ Fastest, GLOBAL, DIRECT]
+    proxies: [NAME-AUTO, ⚡ Fastest, GLOBAL, REJECT]   # финальный слот = REJECT (no-DIRECT #284)
 
 rules:
   - "RULE-SET,policy-<slug>,NAME"   # по одной на политику, в порядке карточек
@@ -64,13 +64,14 @@ rules:
 |---|---|---|
 | `🎛 Своя SELECT-группа (переключается в Mihomo)` (по умолчанию) | `RULE-SET,policy-<slug>,NAME` | создаётся (см. таблицу режимов ниже) |
 | `🌐 GLOBAL` | `RULE-SET,policy-<slug>,GLOBAL` | не создаётся |
-| `⬇ DIRECT` | `RULE-SET,policy-<slug>,DIRECT` | не создаётся |
 | `🚫 REJECT` | `RULE-SET,policy-<slug>,REJECT` | не создаётся |
 
-Фиксированные таргеты (`GLOBAL`/`DIRECT`/`REJECT`) ведут правило напрямую к цели:
+Фиксированные таргеты (`GLOBAL`/`REJECT`) ведут правило напрямую к цели:
 домены политики направляются мимо категории-группы, поэтому группа не генерируется
 и вывод не зависит от режима подписок. Некорректное значение таргета отклоняется
-движком при сборке.
+движком при сборке. Таргет `DIRECT` **запрещён** политикой no-DIRECT (#284):
+движок отвергает его fail-closed, UI больше не предлагает его, а legacy-карточки
+с `DIRECT` блокируют Build до явного обновления таргета.
 
 ### Импорт MagiTrickle (.mtrickle)
 
@@ -102,9 +103,9 @@ rules:
 
 | Режим | Группы категории |
 |---|---|
-| URL-подписки | `NAME-AUTO` (url-test над общим provider) + `NAME` (select `[NAME-AUTO, ⚡ Fastest, GLOBAL, DIRECT]`) |
-| Только proxy-ссылки | `NAME` = select `[⚡ Fastest, GLOBAL, DIRECT]` — AUTO-групп без подписок нет (честное ограничение UI) |
-| Автоматический режим белых списков | `NAME` = select `[GLOBAL, DIRECT]` — политика указывает на существующий плоский fallback; вложенность `fallback → url-test` не создаётся (контракт #2588) |
+| URL-подписки | `NAME-AUTO` (url-test над общим provider) + `NAME` (select `[NAME-AUTO, ⚡ Fastest, GLOBAL, REJECT]`) |
+| Только proxy-ссылки | `NAME` = select `[⚡ Fastest, GLOBAL, REJECT]` — AUTO-групп без подписок нет (честное ограничение UI) |
+| Автоматический режим белых списков | `NAME` = select `[GLOBAL, REJECT]` — политика указывает на существующий плоский fallback; вложенность `fallback → url-test` не создаётся (контракт #2588) |
 | «На каждый прокси» (per-proxy) | несовместимо: чекбокс блокируется в UI и отклоняется движком |
 
 ### Разбор пользовательских строк
@@ -135,13 +136,19 @@ rules:
 (отклоняется ядром), пустой фильтр (`empty-fallback: REJECT`) — во всех
 случаях `rules` не менялись.
 
-## Контракт провайдера: `proxy: DIRECT`
+## Служебный транспорт провайдера: `proxy: DIRECT` (service plane)
 
-Каждый HTTP-провайдер подписки обязан сохранять `proxy: DIRECT` (скачивание
-подписки напрямую). Без него фетч подписки идёт через собственные правила
-инстанса (`[TCP] mihomo --> <provider-host> match Match using GLOBAL[…]`),
-и на холодном старте возникает deadlock: группа пуста → REJECT → провайдер
-не может загрузиться. Зафиксировано regression-тестами движка и consumer-набора.
+Каждый HTTP-провайдер подписки сохраняет `proxy: DIRECT` — скачивание подписки
+напрямую. Это **service/control plane** (no-DIRECT #284 revised): загрузка и
+обновление подписок не является пользовательским egress и не нарушает
+поведенческую политику. Без явного прямого транспорта фетч подписки идёт через
+собственные правила инстанса (`[TCP] mihomo --> <provider-host> match Match
+using GLOBAL[…]`), и на холодном старте возникает deadlock: группа пуста →
+REJECT → провайдер не может загрузиться (проверено на mihomo v1.19.31:
+`proxy: DIRECT` → загрузка есть; поле удалено + `MATCH,GLOBAL` по пустой
+группе → немедленный EOF). Зафиксировано regression-тестами движка и
+consumer-набора. Поле download-only: никогда не referenced из
+пользовательских групп/правил.
 
 ## Ограничения (честно)
 
@@ -232,4 +239,4 @@ promotion в том репозитории. Неизвестные ключи (`
 
 ## AWL в UX 2.1
 
-DPR не блокируется при AWL. SELECT карточки дают независимые группы с GLOBAL/DIRECT, без AUTO-групп категорий. Конфликт Tiered/Per-Proxy разрешается отдельно, сохраняя карточки политик. UX18 проверяет RULE-SET и SELECT при AWL с URL-подписками ON/OFF.
+DPR не блокируется при AWL. SELECT карточки дают независимые группы с GLOBAL/REJECT, без AUTO-групп категорий. Конфликт Tiered/Per-Proxy разрешается отдельно, сохраняя карточки политик. UX18 проверяет RULE-SET и SELECT при AWL с URL-подписками ON/OFF.

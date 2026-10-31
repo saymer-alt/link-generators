@@ -55,6 +55,8 @@ const root = path.resolve(__dirname, '..');
     cases += 1;
 
     // 4. Сборка с политикой: YAML содержит rule-providers и RULE-SET
+    // (provider-режим DPR: URL-подписки работают как раньше — no-DIRECT #284
+    // регулирует пользовательские маршруты, а не служебный транспорт)
     await page.locator('#mihomoInput').fill('https://subs.example.invalid/token');
     await page.evaluate(() => buildMihomo());
     await page.waitForFunction(() => (document.getElementById('mihomoOutput').value || '').length > 0);
@@ -191,7 +193,7 @@ const root = path.resolve(__dirname, '..');
     // Пресет «🚀 Proxy (свои домены через прокси)» — симметрия с Direct.
     // Карточка PROXY-LIST, target GLOBAL (строгий «через прокси»: GLOBAL не содержит
     // DIRECT ни в одном режиме), домены заполняет пользователь.
-    await page.locator('#policyPresetSelect').selectOption('direct');
+    await page.locator('#policyPresetSelect').selectOption('reject'); // no-DIRECT #284: пресет direct заменён на reject
     await page.locator('#btnPolicyAdd').click();
     await page.locator('#policyPresetSelect').selectOption('proxy');
     await page.locator('#btnPolicyAdd').click();
@@ -219,18 +221,20 @@ const root = path.resolve(__dirname, '..');
       const global = (d['proxy-groups'] || []).find(g2 => g2.name === 'GLOBAL');
       return { rules, globalProxies: global && global.proxies };
     });
-    const proxyPresetPair = proxyPreset.rules.filter(r2 => r2.includes('policy-direct-list') || r2.includes('policy-proxy-list'));
+    const proxyPresetPair = proxyPreset.rules.filter(r2 => r2.includes('policy-reject-list') || r2.includes('policy-proxy-list'));
     assert.deepEqual(proxyPresetPair, [
-      'RULE-SET,policy-direct-list,DIRECT',
+      'RULE-SET,policy-reject-list,REJECT',
       'RULE-SET,policy-proxy-list,GLOBAL',
-    ], 'порядок правил по карточкам: DIRECT-карточка раньше PROXY-карточки');
+    ], 'порядок правил по карточкам: REJECT-карточка раньше PROXY-карточки (no-DIRECT #284: пресет reject)');
     assert.ok(proxyPreset.rules.some(r2 => r2.endsWith(',GLOBAL')), 'proxy-политика → GLOBAL');
-    assert.ok(proxyPreset.rules.some(r2 => r2.endsWith(',DIRECT')), 'direct-политика → DIRECT');
+    assert.ok(proxyPreset.rules.some(r2 => r2.endsWith(',REJECT')), 'reject-политика → REJECT');
     assert.ok(!proxyPreset.globalProxies.includes('DIRECT'), 'GLOBAL не содержит DIRECT (strict proxy)');
+    assert.ok(!/\bDIRECT\b/.test(JSON.stringify(proxyPresetPair)), 'no-DIRECT: правила пресетов без DIRECT');
     cases += 4;
 
     // Редактируемость: пользователь меняет target пресетной карточки штатно
-    await proxyCard.locator('.policy-target').selectOption('DIRECT');
+    // (no-DIRECT #284: таргет DIRECT недоступен — переключение на REJECT)
+    await proxyCard.locator('.policy-target').selectOption('REJECT');
     await page.locator('button[onclick="buildMihomo()"]').click();
     await page.waitForFunction(() => {
       try { return validateMihomoYaml(document.getElementById('mihomoOutput').value).status === 'VALID'; } catch { return false; }
@@ -239,7 +243,7 @@ const root = path.resolve(__dirname, '..');
       const d = jsyaml.load(document.getElementById('mihomoOutput').value);
       return (d.rules || []).filter(r2 => typeof r2 === 'string' && r2.includes('policy-proxy')).pop();
     });
-    assert.equal(flipped, 'RULE-SET,policy-proxy-list,DIRECT', 'пользователь может штатно сменить таргет');
+    assert.equal(flipped, 'RULE-SET,policy-proxy-list,REJECT', 'пользователь может штатно сменить таргет');
     // вернуть обратно GLOBAL для чистоты состояния
     await proxyCard.locator('.policy-target').selectOption('GLOBAL');
     cases += 1;
