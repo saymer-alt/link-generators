@@ -5092,6 +5092,11 @@
         if (value) requestHeaders[name] = value;
       }
     }
+    const externalSignal = options && options.signal && typeof options.signal.addEventListener === "function" ? options.signal : null;
+    const makeAbortError = () => typeof DOMException === "function" ? new DOMException("Subscription fetch aborted by caller", "AbortError") : Object.assign(new Error("Subscription fetch aborted by caller"), { name: "AbortError" });
+    function throwIfCallerAborted() {
+      if (externalSignal && externalSignal.aborted) throw makeAbortError();
+    }
     function hasRealSubscriptionLinks(text) {
       const lines2 = splitLines2(text);
       if (!lines2.length) return false;
@@ -5101,8 +5106,11 @@
       });
     }
     async function tryFetch(u, attempt) {
+      throwIfCallerAborted();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
+      const onCallerAbort = () => controller.abort();
+      if (externalSignal) externalSignal.addEventListener("abort", onCallerAbort, { once: true });
       try {
         const headers = new Headers(FETCH_INIT && FETCH_INIT.headers ? FETCH_INIT.headers : {});
         if (!headers.has("Accept")) headers.set("Accept", "text/plain, */*");
@@ -5128,6 +5136,7 @@
         return { error: e };
       } finally {
         clearTimeout(timeoutId);
+        if (externalSignal) externalSignal.removeEventListener("abort", onCallerAbort);
       }
     }
     function classifyError(err) {
@@ -5139,6 +5148,9 @@
         if (code === 403) return "403 Forbidden (upstream blocked subscription fetch; retry usually helps)";
         if (code === 429) return "429 Too Many Requests (rate-limited; retry later)";
         return String(code) + (reason ? " " + reason : "");
+      }
+      if (err && err.name === "AbortError" && msg.includes("Subscription fetch aborted by caller")) {
+        return "cancelled by caller";
       }
       if (msg.includes("aborted") || msg.includes("abort") || msg.includes("timeout")) {
         return "Request timeout (15s)";
@@ -5153,6 +5165,7 @@
     }
     async function fetchWithFallback(u, depth) {
       if (depth > MAX_SUB_REDIRECTS) throw new Error("Too many redirects");
+      throwIfCallerAborted();
       const handleResponse = async (text) => {
         if (!text || typeof text !== "string") return null;
         let probe = text;
@@ -5203,6 +5216,7 @@
       if (direct.error) {
         if (/^HTTP\s+(403|429|5\d\d)/.test(String(direct.error.message || ""))) {
           await sleep(350);
+          throwIfCallerAborted();
           const retry = await tryFetch(u);
           const retryResolved = await consumeFetchResult(retry);
           if (retryResolved) return retryResolved;
@@ -5225,6 +5239,7 @@
           fallbackAttempts.push({ kind: "get", attemptFor: () => ({ deviceHeaders: false }) });
           for (const attempt of fallbackAttempts) {
             for (let retry = 0; retry <= maxRetries; retry++) {
+              throwIfCallerAborted();
               const result = await tryFetch(makeUrl(u), attempt.attemptFor(u));
               const resolved = await consumeFetchResult(result);
               if (resolved) return resolved;
@@ -5232,11 +5247,13 @@
               if (attempt.kind === "post" && result.error && /^HTTP\s+4(0[05])\b/.test(String(result.error.message || ""))) break;
               if (result.error && retry < maxRetries) {
                 await sleep(500);
+                throwIfCallerAborted();
               }
             }
           }
         }
       }
+      throwIfCallerAborted();
       const directLabel = classifyError(direct.error);
       const fallbackLabel = lastFallbackError ? classifyError(lastFallbackError) : null;
       throw new Error(fallbackLabel && fallbackLabel !== directLabel ? "Direct: " + directLabel + "; Fallback: " + fallbackLabel : directLabel);
