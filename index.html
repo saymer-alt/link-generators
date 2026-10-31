@@ -3911,8 +3911,16 @@ function renderDeviceIdentityHeader() {
   const sel = document.getElementById('headerDeviceIdentitySelect');
   const mask = document.getElementById('headerDeviceHwidMask');
   if (!sel && !mask) return;
+  const bar = document.getElementById('deviceIdentityBar');
   const reg = loadDeviceIdentityRegistry();
   const active = reg.devices.find(d => d.id === reg.activeId) || reg.devices[0];
+  // Коррекция #326/#280: активный portable project v2 использует
+  // rbPortableProjectState (переносимые HWID, индивидуальные привязки,
+  // источники без HWID) — browser-local идентичность на Preview/Build v2
+  // НЕ влияет. Шапка обязана это показывать, иначе пользователь считает,
+  // что смена устройства меняет HWID проекта v2.
+  const v2 = !!rbPortableProjectState;
+  if (bar) bar.dataset.mode = v2 ? 'v2' : 'v1';
   if (sel) {
     sel.textContent = '';
     for (const d of reg.devices) {
@@ -3922,14 +3930,42 @@ function renderDeviceIdentityHeader() {
       sel.appendChild(opt);
     }
     sel.value = active.id;
+    sel.title = v2
+      ? 'Проект v2: подписки используют переносимые HWID проекта. Смена локального устройства НЕ меняет назначения проекта.'
+      : 'Preview и все proxy-providers конфига используют HWID выбранной идентичности';
   }
   if (mask) {
-    // Маскированный хвост 6 символов — устойчивый fingerprint, не сам HWID.
-    mask.textContent = headerDeviceHwidRevealed
-      ? 'HWID: ' + active.hwid
-      : 'HWID: ••••••••' + String(active.hwid).slice(-6);
+    if (v2) {
+      // Только символические счётчики: никаких raw HWID/URL/меток (контракт
+      // #280). M — число РАЗЛИЧНЫХ переносимых HWID, фактически назначенных
+      // подпискам; K — источники с явным «без HWID» (identityId: null).
+      const bindings = (rbPortableProjectState.identities.providerBindings || []);
+      const entries = (rbPortableProjectState.identities.entries || []);
+      const noHwid = bindings.filter(b => b.identityId === null).length;
+      const usedHwids = new Set();
+      for (const b of bindings) {
+        if (b.identityId === null) continue;
+        const entry = entries.find(e => e.id === b.identityId);
+        if (entry && typeof entry.hwid === 'string') usedHwids.add(entry.hwid);
+      }
+      headerDeviceHwidRevealed = false; // локальный reveal неактуален в v2-контексте
+      mask.textContent = 'Проект v2 · подписок: ' + rbPortableProjectState.subscriptionSources.length +
+        ' · переносимых HWID: ' + usedHwids.size +
+        ' · без HWID: ' + noHwid +
+        ' · локальное устройство не используется сборкой';
+    } else {
+      // Маскированный хвост 6 символов — устойчивый fingerprint, не сам HWID.
+      mask.textContent = headerDeviceHwidRevealed
+        ? 'HWID: ' + active.hwid
+        : 'HWID: ••••••••' + String(active.hwid).slice(-6);
+    }
   }
   const reveal = document.getElementById('btnHeaderDeviceHwidReveal');
+  const copy = document.getElementById('btnHeaderDeviceHwidCopy');
+  // Reveal/copy раскрывают ЛОКАЛЬНЫЙ HWID; в проекте v2 он не участвует
+  // в Preview/Build — скрываем, чтобы не создавать ложную связь.
+  const localActions = document.querySelectorAll('.device-identity-actions');
+  for (const box of localActions) box.style.display = v2 ? 'none' : '';
   if (reveal) {
     reveal.textContent = headerDeviceHwidRevealed ? '🙈 Скрыть HWID' : '👁 Показать HWID';
     reveal.setAttribute('aria-pressed', String(headerDeviceHwidRevealed));
@@ -11705,6 +11741,9 @@ function rbPortableContextFromProject(project) {
   };
 }
 function rbRenderPortableMode() {
+  // Шапка отражает фактический режим (v1 локальный / v2 переносимый) —
+  // единственная точка синхронизации для всех переходов v1↔v2.
+  if (typeof renderDeviceIdentityHeader === 'function') renderDeviceIdentityHeader();
   const active = !!rbPortableProjectState;
   const notice = document.getElementById('rbPortableModeNotice');
   if (notice) notice.textContent = active
@@ -12359,7 +12398,13 @@ document.getElementById('btnDeviceIdentityRegenerate').addEventListener('click',
 document.getElementById('btnDeviceIdentityDelete').addEventListener('click', deleteActiveDeviceIdentity);
 // Шапка (#326): те же операции, что и в расширенном менеджере — второй модели нет.
 document.getElementById('headerDeviceIdentitySelect').addEventListener('change', (e) => {
+  const wasHwid = getActiveDeviceIdentity().hwid;
   setActiveDeviceIdentity(e.target.value);
+  // Коррекция: в проекте v2 смена браузерного устройства НЕ меняет HWID
+  // подписок — запрещаем ошибочное впечатление явно.
+  if (rbPortableProjectState && getActiveDeviceIdentity().hwid !== wasHwid) {
+    showToast('Выбрано другое локальное устройство. Проект v2 продолжает использовать переносимые HWID подписок — назначения не изменены. Вернуться к локальному HWID можно кнопкой «Вернуться к локальному HWID (v1)».');
+  }
 });
 document.getElementById('btnHeaderDeviceHwidReveal').addEventListener('click', () => {
   headerDeviceHwidRevealed = !headerDeviceHwidRevealed;
