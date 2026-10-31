@@ -559,6 +559,7 @@
           <div class="hint" style="margin-bottom:8px"><strong>🚫 Серверы для исключения из подписки.</strong> Галочка <strong>ЗАПРЕЩАЕТ</strong> выбранное имя узла, а не разрешает его. Чтобы оставить сервер — не отмечайте его. Отмеченное имя становится буквальным фрагментом регулярного выражения: оно может совпасть и внутри более длинного имени. Например, «🇩🇪 ⚡ Германия» не совпадёт с «🇩🇪 Hysteria 2 | Германия», а короткий фрагмент «Германия» — совпадёт с обоими.</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button type="button" class="btn btn-gray" id="subListFetchBtn">📋 Получить список</button>
+            <button type="button" class="btn btn-gray" id="subListSkipBtn" style="display:none" title="Остановить текущий запрос списка (сеть обрывается сразу)">⏹ Пропустить</button>
             <span id="subListStats" class="hint" style="margin:0">Список ещё не получен.</span>
           </div>
           <div id="subListStatus" class="hint" style="display:none;margin-top:4px" aria-live="polite"></div>
@@ -4197,15 +4198,26 @@ function isSubscriptionEmptyBodyError(reason) {
 // сознательно не ограничен и не смешивается с этим путём.
 let SUBSCRIPTION_PREVIEW_BUDGET_MS = 60000;
 
-function fetchSubscriptionWithBudget(api, url, headers, deadline, strictDeviceHeaders = false) {
+// #322: видимая отмена — caller передаёт AbortSignal; после отмены/бюджета
+// сетевые попытки прекращаются (runtime поддерживает signal, web4core#27),
+// а не продолжаются в фоне до собственного таймаута.
+function fetchSubscriptionWithBudget(api, url, headers, deadline, strictDeviceHeaders = false, abortCtl = null) {
   const remaining = deadline - Date.now();
   if (remaining <= 0) {
     return Promise.reject(new Error('превышен общий бюджет preview (' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — сократите число подписок или повторите позже'));
   }
-  const fetchPromise = api.fetchSubscription(url, { headers, ...(strictDeviceHeaders ? { requireDeviceHeaders: true } : {}) });
+  const fetchPromise = api.fetchSubscription(url, {
+    headers,
+    ...(strictDeviceHeaders ? { requireDeviceHeaders: true } : {}),
+    // #322: после отмены/бюджета сеть останавливается честно (runtime
+    // AbortSignal-поддержка, web4core#27), а не доигрывает в фоне.
+    ...(abortCtl ? { signal: abortCtl.signal } : {})
+  });
   let budgetTimer;
   const budgetPromise = new Promise((_, reject) => {
     budgetTimer = setTimeout(() => {
+      // Бюджет исчерпан: не просто бросаем гонку — останавливаем сеть.
+      if (abortCtl && !abortCtl.signal.aborted) abortCtl.abort();
       reject(new Error('превышен общий бюджет preview (' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — запрос остановлен'));
     }, remaining);
   });
@@ -4218,6 +4230,7 @@ function fetchSubscriptionWithBudget(api, url, headers, deadline, strictDeviceHe
   const expand = !!(options && options.expand);
   const filterRegex = options && options.filterRegex ? options.filterRegex : null;
   const deadline = options && options.budgetDeadline ? options.budgetDeadline : null;
+  const abortCtl = options && options.abortCtl ? options.abortCtl : null;
   const entries = splitSubscriptionInputForPreview(raw);
   const portablePlan = options && options.portablePlan;
   const previewSeq = options && options.previewSeq;
@@ -4237,9 +4250,10 @@ function fetchSubscriptionWithBudget(api, url, headers, deadline, strictDeviceHe
       throw new Error('v2 preview state changed');
     const headers = subscriptionPreviewHeaders(entry.url, portablePlan);
     try {
+      const strictDeviceHeaders = !!portablePlan && !!headers['x-hwid'];
       const body = await (deadline
-        ? fetchSubscriptionWithBudget(api, entry.url, headers, deadline, !!portablePlan && !!headers['x-hwid'])
-        : api.fetchSubscription(entry.url, { headers, ...(portablePlan && headers['x-hwid'] ? { requireDeviceHeaders: true } : {}) }));
+        ? fetchSubscriptionWithBudget(api, entry.url, headers, deadline, strictDeviceHeaders, abortCtl)
+        : api.fetchSubscription(entry.url, { headers, ...(strictDeviceHeaders ? { requireDeviceHeaders: true } : {}), ...(abortCtl ? { signal: abortCtl.signal } : {}) }));
       const links = String(body || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if (!links.length) throw new Error('подписка не вернула поддерживаемых proxy-ссылок');
       // #158 (честный preview): маркер preview-partial от runtime — часть payload
@@ -4314,6 +4328,8 @@ let subscriptionSelection = new Set();     // выбранные для искл
 // ВСЕГДА завершают loading-state — кнопка никогда не остаётся в «Загрузка…»
 // без активного запроса, stale-результат никогда не пишет данные.
 const SERVER_LIST_STATE = { IDLE: 'idle', LOADING: 'loading', STALE: 'stale', SUCCESS: 'success', PARTIAL: 'partial', FAILED: 'failed' };
+// #322: владелец текущей операции получения списка — для честной отмены сети.
+let serverListAbortCtl = null;
 let serverListState = SERVER_LIST_STATE.IDLE;
 let serverListLoadSeq = 0;                 // seq запроса, владеющего кнопкой
 let lastPreviewSummary = null;             // последняя применённая сводка (live-пересчёт)
@@ -4524,6 +4540,10 @@ function resetServerListButton() {
 // STALE. Автоматический повторный запрос не выполняется (no hidden refetch).
 function invalidateServerListFetch() {
   if (serverListState === SERVER_LIST_STATE.LOADING) {
+    // #322: инвалидация вводом — тоже отмена: сеть останавливается сразу.
+    if (serverListAbortCtl) { try { serverListAbortCtl.abort(); } catch (_) {} }
+    const skip = document.getElementById('subListSkipBtn');
+    if (skip) skip.style.display = 'none';
     resetServerListButton();
     serverListState = SERVER_LIST_STATE.STALE;
     setSubListStatus('Список устарел — нажмите «Обновить список».');
@@ -4577,17 +4597,25 @@ function fetchServerList() {
   serverListLoadSeq = previewSeq;
   serverListState = SERVER_LIST_STATE.LOADING;
   btn.textContent = 'Загрузка…';
+  // #322: видимая отмена — операция останавливается по кнопке «Пропустить»
+  // или при изменении ввода; сеть обрывается через AbortController, а не
+  // продолжает скрытые попытки до собственного таймаута.
+  if (serverListAbortCtl) { try { serverListAbortCtl.abort(); } catch (_) {} }
+  serverListAbortCtl = new AbortController();
+  const abortCtl = serverListAbortCtl;
+  const skipBtn = document.getElementById('subListSkipBtn');
+  if (skipBtn) skipBtn.style.display = '';
   setSubListStatus('');
   // Общий бюджет на ВСЮ операцию (обе подписки, все попытки), а не на
   // отдельную попытку — см. SUBSCRIPTION_PREVIEW_BUDGET_MS.
   const deadline = Date.now() + SUBSCRIPTION_PREVIEW_BUDGET_MS;
   const task = (async () => {
     const summary = emptySubscriptionPreviewSummary();
-    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: false, filterRegex: null, budgetDeadline: deadline, portablePlan, previewSeq });
+    const mainInspected = await inspectSubscriptionInput(api, raw, { expand: false, filterRegex: null, budgetDeadline: deadline, portablePlan, previewSeq, abortCtl });
     if (previewSeq !== subscriptionPreviewSeq) return;
     mergeSubscriptionPreviewSummary(summary, mainInspected.summary);
     if (whitelistRaw !== null) {
-      const fallbackInspected = await inspectSubscriptionInput(api, whitelistRaw, { expand: false, filterRegex: null, budgetDeadline: deadline, portablePlan, previewSeq });
+      const fallbackInspected = await inspectSubscriptionInput(api, whitelistRaw, { expand: false, filterRegex: null, budgetDeadline: deadline, portablePlan, previewSeq, abortCtl });
       if (previewSeq !== subscriptionPreviewSeq) return;
       mergeSubscriptionPreviewSummary(summary, fallbackInspected.summary);
     }
@@ -4597,15 +4625,25 @@ function fetchServerList() {
       : (summary.subscriptionsSucceeded > 0 ? SERVER_LIST_STATE.PARTIAL : SERVER_LIST_STATE.FAILED);
     applyServerListFromSummary(summary);
     renderSubscriptionPreview(summary);
+    const opAborted = abortCtl.signal.aborted;
     setSubListStatus(serverListState === SERVER_LIST_STATE.PARTIAL
       ? 'Часть подписок недоступна — итог по узлам неполный.'
-      : (serverListState === SERVER_LIST_STATE.FAILED ? 'Получить список не удалось — нажмите «Обновить список» для повтора. Имена можно взять из работающего Mihomo: раскройте «📡 Импорт узлов из работающего Mihomo» → «🌐 Открыть JSON Mihomo» → скопируйте JSON → «📋 Вставить JSON».' : ''));
+      : (serverListState === SERVER_LIST_STATE.FAILED
+        ? (opAborted
+          ? 'Получение списка остановлено (отмена или бюджет ' + Math.round(SUBSCRIPTION_PREVIEW_BUDGET_MS / 1000) + ' с) — количество узлов неизвестно. Повторите «Обновить список», продолжите без preview или возьмите имена из работающего Mihomo: «📡 Импорт узлов» → «🌐 Открыть JSON Mihomo».'
+          : 'Получить список не удалось — нажмите «Обновить список» для повтора. Имена можно взять из работающего Mihomo: раскройте «📡 Импорт узлов из работающего Mihomo» → «🌐 Открыть JSON Mihomo» → скопируйте JSON → «📋 Вставить JSON».')
+        : ''));
   })();
-  task.catch(() => {
+  task.catch((e) => {
     if (previewSeq !== subscriptionPreviewSeq) return;
+    const aborted = abortCtl.signal.aborted || (e && e.name === 'AbortError');
     serverListState = SERVER_LIST_STATE.FAILED;
-    setSubListStatus('Не удалось проверить привязки подписок. Запросы остановлены; значения скрыты.');
+    setSubListStatus(aborted
+      ? 'Получение списка остановлено (отмена или бюджет) — количество узлов неизвестно. Повторите «Обновить список» или продолжите без preview: сборка provider YAML работает и без списка.'
+      : 'Не удалось проверить привязки подписок. Запросы остановлены; значения скрыты.');
   }).finally(() => {
+    const skip = document.getElementById('subListSkipBtn');
+    if (skip && previewSeq === serverListLoadSeq) skip.style.display = 'none';
     // Кнопку в idle возвращает только владелец загрузки: его операция
     // завершилась и не была инвалидирована (инвалидация уже вернула кнопку).
     if (previewSeq === serverListLoadSeq) resetServerListButton();
@@ -4623,6 +4661,17 @@ function initServerList() {
     updateServerListVisibility();
   });
   btn.addEventListener('click', fetchServerList);
+  // #322: явная отмена — seq инвалидирует результаты, AbortController
+  // обрывает сеть (включая fallback-цепочку), статус честно сообщает,
+  // что количество узлов неизвестно. Автоматических повторов нет.
+  document.getElementById('subListSkipBtn').addEventListener('click', () => {
+    subscriptionPreviewSeq++;
+    if (serverListAbortCtl) { try { serverListAbortCtl.abort(); } catch (_) {} }
+    serverListState = SERVER_LIST_STATE.FAILED;
+    document.getElementById('subListSkipBtn').style.display = 'none';
+    resetServerListButton();
+    setSubListStatus('Получение списка прервано — количество узлов неизвестно. Можно повторить «Обновить список» или продолжить без preview: сборка provider YAML работает и без списка.');
+  });
   document.getElementById('subListSearch').addEventListener('input', renderServerList);
   document.getElementById('subListAll').addEventListener('click', () => {
     // «Выбрать все» действует на видимый (отфильтрованный поиском) набор
