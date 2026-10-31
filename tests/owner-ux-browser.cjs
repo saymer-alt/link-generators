@@ -199,7 +199,8 @@ async function check(name, fn) {
     await c.route('**/providers/proxies', r => r.abort());
     await c.locator('#rtFetchBtn').click();
     await c.waitForFunction(() => /причина не установлена/.test(document.getElementById('rtStatus').textContent));
-    assert.match(await c.locator('#rtStatus').textContent(), /Console.*JSON/);
+    // #322: ручной путь теперь главный совет (JSON перед Console), но оба упоминания сохранены.
+    assert.match(await c.locator('#rtStatus').textContent(), /(Console.*JSON|JSON.*Console)/);
   });
   await check('UX06 timeout uses existing eight second abort', async () => {
     await c.locator('#rtControllerInput').fill('http://192.168.1.1:9090');
