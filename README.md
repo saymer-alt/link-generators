@@ -79,14 +79,19 @@
 - внутренний IP туннеля `ip` (опционально `ipv6`);
 - `sni` и `dns`.
 
-Источник не важен — бот, WARPSCOUT или другой совместимый экспорт; важно наличие этих полей. Из них собираются `masque://`-ссылки; порты и распределение H3/QUIC и H2/TCP подбираются anti-DPI стратегией автоматически.
+Для **обычного WARP YAML без явного `type: masque`** генератор импортирует
+identity (ключи, адреса, SNI, DNS), а порты и транспорт подбирает встроенная
+anti-DPI стратегия. Источник такого файла может быть любым совместимым ботом.
 
-**WARPSCOUT тоже подходит как источник MASQUE identity.** Его вывод
-`-conf - -conf-type mihomo` содержит совместимый `proxies:` блок с ключами, SNI,
-внутренним IP и DNS. Текущий импорт намеренно не переносит найденные WARPSCOUT
-`server` / `port` / `network` в transport-стратегию генератора: H2 / TCP продолжает
-использовать Safe Ports по умолчанию. Практические сценарии:
-[Windows](docs/WARPSCOUT-WINDOWS.md), [Keenetic / Entware](docs/WARPSCOUT-KEENETIC.md) и [VPS](docs/WARPSCOUT-VPS.md).
+**Для WARPSCOUT/Mihomo MASQUE YAML с `proxies:` и `type: masque` применяется
+другой, более точный сценарий.** Генератор распознаёт H3/QUIC и H2/TCP,
+импортирует identity, per-transport SNI и конкретные найденные `server:port`.
+Импортированный endpoint имеет приоритет над встроенным выбором портов,
+включая H2 Safe Ports Only; если транспорт не найден, используется встроенная
+стратегия. Сравните и проверьте конечный результат, а не предполагайте, что
+найденные WARPSCOUT узел/порт автоматически останутся рабочими. Практические сценарии:
+[Windows](docs/WARPSCOUT-WINDOWS.md), [Keenetic / Entware: AWG с Cloudflare NODE за пределами РФ](docs/WARPSCOUT-KEENETIC.md) и [VPS](docs/WARPSCOUT-VPS.md).
+Для Keenetic основной сценарий — **сразу AWG** с `-exclude-country RU` для поиска non-RU Cloudflare NODE. **Обычный WG не сканируем:** он может обнаруживать доступные порты, но не устанавливать рабочий туннель (полевой тест 18.10.2026). MASQUE H2/H3 — факультативные проверки. Фильтр выбирает **страну узла Cloudflare**, не гарантируя смену `SEEN AS` / выходного GeoIP. Для точечного исключения только московского узла есть альтернатива `-exclude-node DME` (она **не исключает** другие российские colo). В полевом тесте фильтр страны сохранил RIX (Riga, LV) при `SEEN AS RU`.
 
 ## Поддерживаемые протоколы
 
@@ -199,8 +204,8 @@ Owner Acceptance Round 2: понятный Reset с отменой по умол
 | [VALIDATION](docs/VALIDATION.md) | pre-copy валидатор подробно |
 | [VPS-GATEWAY](docs/VPS-GATEWAY.md) | опциональный профиль для amnezia-mihomo-gateway |
 | [WARPSCOUT-WINDOWS](docs/WARPSCOUT-WINDOWS.md) | WARP / MASQUE H3 / H2 на Windows и подготовка данных для генератора |
-| [WARPSCOUT-KEENETIC](docs/WARPSCOUT-KEENETIC.md) | установка и полевые WARP / AWG / MASQUE H3 / H2 проверки на Keenetic / Entware |
-| [WARPSCOUT-VPS](docs/WARPSCOUT-VPS.md) | установка на Ubuntu/Debian, сканы с VPS и диагностика H3/H2 через Mihomo |
+| [WARPSCOUT-KEENETIC](docs/WARPSCOUT-KEENETIC.md) | пошаговый подбор рабочего **AWG с non-RU Cloudflare NODE** на Keenetic/Entware; WG и MASQUE факультативно |
+| [WARPSCOUT-VPS](docs/WARPSCOUT-VPS.md) | пошаговая установка на VPS и **три независимых скана WG → MASQUE H3 → MASQUE H2** с отчётами, конфигами и Cloudflare NODE; диагностика Mihomo отдельно |
 | [WEB4CORE-FORK](docs/WEB4CORE-FORK.md) | source-level fork, ветка `link-generators` и сборка runtime |
 | [UPDATES](docs/UPDATES.md) | жизненный цикл `web4core.runtime.js` |
 | [DEVELOPMENT](docs/DEVELOPMENT.md) | разработка и проверки |

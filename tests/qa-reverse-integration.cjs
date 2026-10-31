@@ -45,8 +45,9 @@ function makeWgFiles() {
   return files;
 }
 
+let browser;
 (async () => {
-  const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
+  browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
   const ctx = await browser.newContext({ acceptDownloads: true });
   const page = await ctx.newPage();
   page.setDefaultTimeout(25000);
@@ -78,8 +79,17 @@ function makeWgFiles() {
   const stateA = await page.evaluate(() => MIHOMO_VALIDATION_STATE.state);
   assert.equal(stateA, 'VALID', 'QA-01 исправлен: DPR+Tiered вместе → VALID');
   const yamlA0 = await output();
-  assert.ok(yamlA0.includes('MATCH,🪜 TIERED-AUTO') && yamlA0.includes('RULE-SET,policy-ai'), 'финальный tiered-дефолт и DPR-правила на месте');
-  ok('ФАЗА A: QA-01 исправлен (DAY-01 #211) — DPR+Tiered собираются, дефолт 🪜 TIERED-AUTO');
+  assert.ok(yamlA0.includes('MATCH,GLOBAL') && yamlA0.includes('RULE-SET,policy-ai'), 'DPR правила и ручной MATCH,GLOBAL на месте');
+  const routeA0 = await page.evaluate(() => {
+    const d = jsyaml.load(document.getElementById('mihomoOutput').value);
+    const global = (d['proxy-groups'] || []).find(g => g.name === 'GLOBAL');
+    return { match: d.rules.at(-1), globalType: global && global.type,
+      first: global && global.proxies && global.proxies[0] };
+  });
+  assert.deepEqual(routeA0, { match: 'MATCH,GLOBAL', globalType: 'select', first: '🪜 TIERED-AUTO' },
+    'DPR+Tiered must preserve manual GLOBAL with automatic root first (#279)');
+  assert.ok(!yamlA0.includes('MATCH,🪜 TIERED-AUTO'), 'manual GLOBAL must not be bypassed');
+  ok('ФАЗА A: QA-01 DPR+Tiered → MATCH,GLOBAL → Tiered root первым выбором');
 
   // ================= ФАЗА B: полный сценарий (Tiered OFF, DPR ON) =================
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
@@ -198,4 +208,13 @@ function makeWgFiles() {
   assert.deepEqual(errors, [], 'нет pageerror: ' + errors.join(' | '));
   console.log('PASS qa-reverse-integration: ' + passed + ' checks');
   await browser.close();
-})().catch(e => { console.error(e); process.exitCode = 1; });
+})().catch(async e => {
+  console.error(e);
+  process.exitCode = 1;
+  // Failing assertions must not hold the CI runner open until job timeout.
+  if (browser) {
+    try { await browser.close(); } catch (closeError) {
+      console.error('Browser cleanup failed:', closeError.message);
+    }
+  }
+});

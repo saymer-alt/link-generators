@@ -1,6 +1,6 @@
 // Tiered Failover (#148, v1.10) — browser regression.
 // Контракт: DEFAULT OFF = ALL PARITY; ON = tier-группы (🪜 N name), root
-// «🪜 TIERED-AUTO» (fallback) первым участником GLOBAL + MATCH,<root>;
+// «🪜 TIERED-AUTO» (fallback) первым участником GLOBAL + MATCH,GLOBAL;
 // детерминированные имена; валидация (пустое имя/эшелон, неизвестный выход,
 // дубликаты); trace без секретов; stale-контракт; graph/coverage видят эшелоны.
 const assert = require('node:assert/strict');
@@ -106,11 +106,12 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.deepEqual(rootG.proxies, ['🪜 1 WARP', '🪜 2 Commercial'], 'root обходит эшелоны по порядку');
   const global = d1['proxy-groups'].find(g => g.name === 'GLOBAL');
   assert.equal(global.proxies[0], '🪜 TIERED-AUTO', 'GLOBAL получает root первым участником');
-  assert.ok(d1.rules.includes('MATCH,🪜 TIERED-AUTO'), 'MATCH уходит в root');
-  assert.ok(!d1.rules.includes('MATCH,GLOBAL'), 'старого MATCH,GLOBAL больше нет');
+  assert.equal(d1.rules[d1.rules.length - 1], 'MATCH,GLOBAL', 'MATCH обязательно проходит через ручной GLOBAL в mode: rule');
+  assert.ok(!d1.rules.includes('MATCH,🪜 TIERED-AUTO'), 'автоматика не должна обходить GLOBAL напрямую');
+  assert.ok(!global.proxies.includes('DIRECT'), 'Tiered не добавляет пользовательский DIRECT при переходе на GLOBAL');
   const trace = await page.evaluate(() => document.getElementById('tieredTrace').textContent);
   assert.match(trace, /Приоритетные группы серверов: 2 группы, строгий порядок → WARP.*Самый быстрый.*Commercial/, 'trace объясняет конфигурацию');
-  ok('ON: tier-группы + root + GLOBAL/MATCH переписаны + trace');
+  ok('ON: tier-группы + root внутри GLOBAL + ручной MATCH,GLOBAL + trace');
 
   // 3. Детерминизм: rebuild → тот же YAML
   const yamlOnce = r.yaml;
@@ -183,16 +184,25 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.deepEqual(graphCheck.problems, [], 'graph: referential integrity сохранена');
   ok('Config Dependency Graph: эшелоны попадают в граф с integrity');
 
-  // 10. Inspector semantic path через root
+  // 10. Inspector must show the real first routing decision: manual GLOBAL.
+  // The current member of GLOBAL is runtime/controller selection, so a static
+  // Inspector must not claim that every request necessarily enters Tiered.
   await page.locator('#cfgPolicyRouting').check();
   await page.locator('#policyPresetSelect').selectOption('ai');
   await page.locator('#btnPolicyAdd').click();
   await build();
   await page.evaluate(() => { document.getElementById('routingDiagnostics').open = true; });
   const preview = await page.locator('#rdPreview').textContent();
-  assert.match(preview, /Приоритетные группы серверов/, 'Inspector: readable semantic path through the unchanged YAML tier root');
-  assert.match(preview, /Фактически выбранный участник определяется Mihomo во время работы/, 'runtime-selected честность');
-  ok('Inspector: semantic path показывает tier root без ложного runtime-claim');
+  assert.match(preview, /GLOBAL/, 'Inspector reports manual GLOBAL as first routing decision');
+  const inspectorGraph = await page.evaluate(() => {
+    const d = jsyaml.load(document.getElementById('mihomoOutput').value);
+    const global = (d['proxy-groups'] || []).find(g => g.name === 'GLOBAL');
+    return { match: d.rules.at(-1), type: global && global.type, first: global && global.proxies && global.proxies[0] };
+  });
+  assert.deepEqual(inspectorGraph, { match: 'MATCH,GLOBAL', type: 'select', first: '🪜 TIERED-AUTO' },
+    'source YAML places Tiered root first INSIDE manual GLOBAL selector');
+  assert.doesNotMatch(preview, /MATCH\s*→\s*Приоритетные группы серверов/, 'Inspector must not bypass GLOBAL');
+  ok('Inspector: manual GLOBAL shown; Tiered remains first eligible choice, not claimed selected');
 
   // 11. Privacy: имена эшелонов/участников — без секретов (ключи только в proxies)
   const privacyProbe = await page.evaluate(() => {

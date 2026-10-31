@@ -513,6 +513,7 @@
 <div id="excludeFilterRow" style="margin-top:10px">
         <div class="hint" id="serverListOffHint" style="display:none">Список серверов нужен только для просмотра узлов и удобного выбора исключений. По умолчанию подписка браузером не запрашивается.</div>
         <div id="serverListPanel" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)">
+          <div class="hint" style="margin-bottom:8px"><strong>🚫 Серверы для исключения из подписки.</strong> Галочка <strong>ЗАПРЕЩАЕТ</strong> выбранное имя узла, а не разрешает его. Чтобы оставить сервер — не отмечайте его. Отмеченное имя становится буквальным фрагментом регулярного выражения: оно может совпасть и внутри более длинного имени. Например, «🇩🇪 ⚡ Германия» не совпадёт с «🇩🇪 Hysteria 2 | Германия», а короткий фрагмент «Германия» — совпадёт с обоими.</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button type="button" class="btn btn-gray" id="subListFetchBtn">📋 Получить список</button>
             <span id="subListStats" class="hint" style="margin:0">Список ещё не получен.</span>
@@ -536,7 +537,14 @@
               </div>
               <div class="hint">Если адрес не указан, используется 192.168.1.1:9090. Запрос выполняется только по нажатию кнопки.</div>
               <div class="hint" id="rtPresetHint">Выберите готовый адрес или введите свой: host:port либо http(s)://host:port[/prefix]. Выбор адреса не отправляет запрос. Отправку API secret на новый адрес нужно подтвердить отдельно.</div>
-              <div class="hint">Адрес и secret не сохраняются (только память вкладки, до перезагрузки страницы). Запрос идёт из браузера напрямую в контроллер — через проектный воркер он не передаётся никогда. Если браузер не пускает (CORS / разрешение локальной сети / listen-адрес) — используйте «Вставить JSON» или «Загрузить .json» ниже: откройте <code>http://&lt;контроллер&gt;/providers/proxies</code> в соседней вкладке и скопируйте ответ.</div>
+              <div class="hint">Адрес и secret не сохраняются (только память вкладки, до перезагрузки страницы). Запрос идёт из браузера напрямую в контроллер — через проектный воркер он не передаётся никогда.</div>
+              <div id="rtManualBox" style="margin-top:6px;border:1px dashed var(--border);padding:8px;background:rgba(255,255,255,.45)">
+                <div class="hint" style="margin:0"><strong>Если браузер не пускает прямой запрос</strong> (CORS / Mixed Content HTTPS→HTTP / разрешение локальной сети / listen-адрес) — ручной путь без DevTools:</div>
+                <div class="tier-add-row" style="margin-top:6px">
+                  <button type="button" class="btn btn-gray" id="rtOpenJsonBtn">🌐 Открыть JSON Mihomo</button>
+                </div>
+                <div class="hint" id="rtManualSteps" style="margin-top:6px">① Откроется вкладка с JSON списка узлов (<code>/providers/proxies</code>). ② Выделите весь текст (Ctrl+A) и скопируйте (Ctrl+C); на телефоне — удерживайте текст → «Выделить всё» → «Копировать». ③ Вернитесь и нажмите «📋 Вставить JSON» ниже: список распознается, узлы можно отмечать галочками для Exclude Filter. API secret в адрес вкладки не вставляется и не нужен.</div>
+              </div>
               <div class="tier-add-row">
                 <button type="button" class="btn btn-gray" id="rtPasteBtn">📋 Вставить JSON</button>
                 <button type="button" class="btn btn-gray" id="rtUploadBtn">📄 Загрузить .json</button>
@@ -553,11 +561,13 @@
           </details>
           <div id="subListControls" style="display:none;margin-top:6px">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <input type="text" id="subListSearch" placeholder="поиск по имени…" style="flex:1;min-width:160px;padding:4px 8px">
-              <button type="button" class="btn btn-gray" id="subListAll" style="padding:2px 10px">Выбрать все</button>
-              <button type="button" class="btn btn-gray" id="subListNone" style="padding:2px 10px">Снять все</button>
+              <input type="text" id="subListSearch" placeholder="поиск по имени…" aria-label="Поиск серверов для исключения" style="flex:1;min-width:160px;padding:4px 8px">
+              <button type="button" class="btn btn-gray" id="subListAll" style="padding:2px 10px" title="Исключить все имена, видимые с учётом поиска">Исключить все показанные</button>
+              <button type="button" class="btn btn-gray" id="subListNone" style="padding:2px 10px" title="Снять галочки со всех имён, не меняя ручной Exclude Filter">Снять все галочки</button>
             </div>
             <div id="subscriptionPreviewNames" class="resizable-node-list" style="height:220px;margin-top:5px"></div>
+            <div id="subListExclusionBreakdown" class="hint" style="margin-top:6px" aria-live="polite"></div>
+            <div id="subListExclusionWarning" class="hint" style="display:none;color:var(--warn);margin-top:6px" role="status" aria-live="polite"></div>
           </div>
         </div>
         <div id="subscriptionPreviewBox" class="hint" style="display:none;margin-top:8px;border:1px solid var(--border);padding:8px;background:rgba(255,255,255,.45)" aria-live="polite">
@@ -568,10 +578,10 @@
             <div id="subscriptionPreviewNamesLegacy" class="resizable-node-list" style="height:220px;margin-top:5px;white-space:pre-wrap;font-family:monospace"></div>
           </details>
         </div>
-        <div class="hint" id="subSelectionNote" style="display:none;color:var(--warn)">Выбранные для исключения серверы продолжают действовать (объединяются с ручным фильтром через ИЛИ). Очистить — кнопкой «Снять все» в списке серверов.</div>
+        <div class="hint" id="subSelectionNote" style="display:none;color:var(--warn)">Галочки продолжают исключать серверы даже при скрытом списке. Чтобы снять их, откройте список и нажмите «Снять все галочки». Ручной Exclude Filter работает отдельно и не очищается этой кнопкой.</div>
         <label for="excludeFilterInput">🚫 Exclude Filter (по именам узлов подписок)</label>
         <input type="text" id="excludeFilterInput" placeholder="например: (?i)ru|russia|россия">
-        <div class="hint">Фильтр по фактическим именам узлов. При включённых URL-подписках передаётся Mihomo как <code>exclude-filter</code>; при выключенных применяется браузером к развёрнутым узлам до сборки YAML. Например, <code>(?i)ru|russia|россия</code>. Применяется ко всем подпискам. Пусто — фильтрации нет.</div>
+        <div class="hint">Ручное регулярное выражение по именам узлов. Оно <strong>добавляется</strong> к исключениям галочками, а не заменяет их. Например, <code>(?i)германия|germany</code> может исключить несколько немецких узлов с разными именами; проверьте счётчик «останется». При включённых URL-подписках передаётся Mihomo как <code>exclude-filter</code>; при выключенных применяется браузером до сборки YAML. Применяется ко всем подпискам. Пусто — ручного фильтра нет.</div>
       </div>
 </div>
 </div>
@@ -3067,11 +3077,10 @@ function validateMihomoYaml(yaml) {
       }
     });
     // DPR-контракт: последнее правило — дефолт в GLOBAL-достижимую группу.
-    // QA-01: с активным Tiered Failover финальное правило — MATCH,🪜 TIERED-AUTO
-    // (пост-патч), а сам корень входит в GLOBAL.proxies — контракт «дефолт
-    // завершается GLOBAL-веткой» сохранён. Принимаем tiered-дефолт только
-    // когда группа-корень реально существует в конфиге (структурная проверка,
-    // не подавление ошибки).
+    // QA-01: новый Tiered сохраняет MATCH,GLOBAL, чтобы ручной GLOBAL
+    // реально участвовал в mode: rule. Старый MATCH,TIERED-AUTO допускаем
+    // только для импортированных/legacy YAML с существующей root-группой:
+    // этот путь обходит ручной GLOBAL и не должен генерироваться Builder.
     if (ruleProviderNames.size) {
       const lastRule = doc.rules[doc.rules.length - 1];
       const tieredRootExists = (Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : []).some(g => g && g.name === '🪜 TIERED-AUTO');
@@ -4184,17 +4193,34 @@ function compileCombinedExcludeFilter(combinedFilter) {
   return new RegExp(body, flags);
 }
 
-function serverListCountExcluded(uniqueNames) {
+function serverListExclusionBreakdown(uniqueNames) {
   const { flags, body } = splitManualExcludeFilter(document.getElementById('excludeFilterInput').value);
   let manualRx = null;
   if (body) {
     try { manualRx = new RegExp(body, flags); } catch (_) { manualRx = null; }
   }
-  let excluded = 0;
-  for (const name of uniqueNames) {
-    if (subscriptionSelection.has(name) || (manualRx && manualRx.test(name))) excluded++;
+  const names = new Set(uniqueNames || []);
+  // Галочки эмитятся как экранированные REGEXP-подстроки, не как ^name$.
+  // Поэтому сводка обязана учитывать побочные совпадения с более длинными именами.
+  // Одна объединённая регулярка вместо O(names × selections) отдельных test().
+  // Сохраняется прежняя literal-substring семантика выбранных имён.
+  const selectedRx = subscriptionSelection.size
+    ? new RegExp(Array.from(subscriptionSelection, name => '(?:' + escapeRegExpText(name) + ')').join('|'), flags)
+    : null;
+  let total = 0, selected = 0, manual = 0, overlap = 0;
+  for (const name of names) {
+    const checked = Boolean(selectedRx && selectedRx.test(name));
+    const matched = Boolean(manualRx && manualRx.test(name));
+    if (checked) selected++;
+    if (matched) manual++;
+    if (checked && matched) overlap++;
+    if (checked || matched) total++;
   }
-  return excluded;
+  return { total, selected, manual, overlap, unique: names.size };
+}
+
+function serverListCountExcluded(uniqueNames) {
+  return serverListExclusionBreakdown(uniqueNames).total;
 }
 
 function renderServerList() {
@@ -4209,6 +4235,7 @@ function renderServerList() {
     const box = document.createElement('input');
     box.type = 'checkbox';
     box.className = 'sub-list-check';
+    box.setAttribute('aria-label', 'Исключить сервер: ' + name);
     box.dataset.name = name;
     box.checked = subscriptionSelection.has(name);
     box.addEventListener('change', () => {
@@ -4242,13 +4269,28 @@ function renderServerList() {
 }
 
 function updateServerListStats() {
-  const unique = subscriptionListNames.length;
-  const excluded = serverListCountExcluded(subscriptionListNames);
-  const remaining = Math.max(0, unique - excluded);
+  const counts = serverListExclusionBreakdown(subscriptionListNames);
+  const unique = counts.unique;
+  const remaining = Math.max(0, unique - counts.total);
   const bits = ['Уникальных имён: ' + unique];
   if (subscriptionListNodes && subscriptionListNodes !== unique) bits.unshift('Узлов: ' + subscriptionListNodes);
-  bits.push('исключается: ' + excluded, 'останется: ' + remaining);
+  bits.push('исключается: ' + counts.total, 'останется: ' + remaining);
   document.getElementById('subListStats').textContent = bits.join(' · ');
+  const breakdown = document.getElementById('subListExclusionBreakdown');
+  if (breakdown) breakdown.textContent = 'Исключено галочками: ' + counts.selected +
+    ' · ручным фильтром: ' + counts.manual + ' · совпадений: ' + counts.overlap +
+    '. Это совпадения уникальных имён по regex-подстроке; ручной фильтр не сбрасывается снятием галочек.';
+  const warning = document.getElementById('subListExclusionWarning');
+  if (warning) {
+    const all = unique > 0 && remaining === 0;
+    const almostAll = unique >= 10 && counts.total / unique >= 0.9;
+    warning.textContent = all
+      ? '⚠ Исключены все имена в доступном списке. Проверьте галочки и ручной фильтр перед Build; preview может быть неполным.'
+      : almostAll
+        ? '⚠ Исключены почти все известные имена (' + counts.total + '/' + unique + '). Проверьте, что галочки не перепутаны с разрешением серверов.'
+        : '';
+    warning.style.display = warning.textContent ? '' : 'none';
+  }
 }
 
 function updateSubSelectionNote() {
@@ -4366,7 +4408,7 @@ function fetchServerList() {
     renderSubscriptionPreview(summary);
     setSubListStatus(serverListState === SERVER_LIST_STATE.PARTIAL
       ? 'Часть подписок недоступна — итог по узлам неполный.'
-      : (serverListState === SERVER_LIST_STATE.FAILED ? 'Получить список не удалось — нажмите «Обновить список» для повтора.' : ''));
+      : (serverListState === SERVER_LIST_STATE.FAILED ? 'Получить список не удалось — нажмите «Обновить список» для повтора. Имена можно взять из работающего Mihomo: раскройте «📡 Импорт узлов из работающего Mihomo» → «🌐 Открыть JSON Mihomo» → скопируйте JSON → «📋 Вставить JSON».' : ''));
   })();
   task.catch(() => {}).finally(() => {
     // Кнопку в idle возвращает только владелец загрузки: его операция
@@ -4544,6 +4586,12 @@ function normalizeRuntimeController(input) {
   return u.origin + (path === '/ui' ? '' : path);
 }
 
+// Адрес вкладки с JSON списка узлов (#322): тот же normalize, что у fetch,
+// плюс путь API. Без secret и query; открывается только по явному клику.
+function buildRuntimeJsonUrl(raw) {
+  return normalizeRuntimeController(raw) + '/providers/proxies';
+}
+
 let rtImportSeq = 0, rtImportAbort = null;
 let rtSecretApprovedEndpoint = null;
 let resetRuntimeImportPreferences = () => { rtSecretApprovedEndpoint = null; };
@@ -4584,8 +4632,8 @@ async function fetchRuntimeProviders() {
     if (seq !== rtImportSeq) return;
     if (!resp.ok) {
       // HTTP-ответ — можно утверждать точно.
-      const label = resp.status === 401 ? 'HTTP 401: секрет не принят (auth failed)'
-        : resp.status === 403 ? 'HTTP 403: доступ запрещён (forbidden)'
+      const label = resp.status === 401 ? 'HTTP 401: секрет не принят (auth failed). Контроллер закрыт API secret: введите его в поле выше и повторите запрос; в адрес вкладки JSON его вставлять не нужно.'
+        : resp.status === 403 ? 'HTTP 403: доступ запрещён (forbidden). Если контроллер закрыт API secret — введите его в поле выше и повторите; в адрес вкладки JSON secret не вставляется.'
         : resp.status === 404 ? 'HTTP 404: API /providers/proxies не найден. Проверьте адрес и API-префикс.'
         : 'HTTP ' + resp.status;
       say('❌ ' + label);
@@ -4599,7 +4647,7 @@ async function fetchRuntimeProviders() {
     if (controller.signal.aborted) { say('❌ Время ожидания Mihomo controller истекло. Повторите запрос или загрузите JSON локально.'); return; }
     // Generic TypeError браузера не раскрывает причину: не выдумываем
     // «CORS_DENIED»/«LOCAL_NETWORK_PERMISSION_DENIED» без доказательств.
-    say('❌ Сетевой отказ: причина не установлена. Проверьте адрес/listen, CORS, разрешение локальной сети и mixed content (HTTPS-страница → HTTP-controller). Подробности: F12 → Console (или Ctrl+Shift+J). Безопасный ручной путь: «Вставить JSON»/«Загрузить .json» из GET /providers/proxies; secret никуда через прокси не передаётся.');
+    say('❌ Сетевой отказ: причина не установлена — браузер или сеть блокируют прямой запрос (возможны CORS, Mixed Content HTTPS→HTTP, разрешение локальной сети, недоступность listen-адреса). Без DevTools: нажмите «🌐 Открыть JSON Mihomo» ниже, скопируйте JSON во вкладке и нажмите «Вставить JSON». Подробности: F12 → Console (или Ctrl+Shift+J). Secret через прокси не передаётся.');
   } finally {
     clearTimeout(deadline);
     if (rtImportAbort === controller) rtImportAbort = null;
@@ -4677,6 +4725,17 @@ function initRuntimeImport() {
     if (preset.value === 'custom') input.focus();
   });
   fetchBtn.addEventListener('click', fetchRuntimeProviders);
+  document.getElementById('rtOpenJsonBtn').addEventListener('click', () => {
+    const status = document.getElementById('rtStatus');
+    const say = (text) => { status.textContent = text; status.style.display = text ? '' : 'none'; };
+    let url;
+    try { url = buildRuntimeJsonUrl(document.getElementById('rtControllerInput').value); }
+    catch (e) { say('❌ ' + e.message); return; }
+    // Только явный клик → top-level открытие новой вкладки; secret и query
+    // в URL не добавляются (контракт #159/#322).
+    window.open(url, '_blank', 'noopener');
+    say('Открыта вкладка с JSON списка узлов: выделите всё (Ctrl+A), скопируйте (Ctrl+C) и нажмите «Вставить JSON». На телефоне: удерживайте текст → «Выделить всё» → «Копировать».');
+  });
   document.getElementById('rtPasteBtn').addEventListener('click', async () => {
     cancelRuntimeImport();
     const seq = rtImportSeq;
@@ -4717,18 +4776,19 @@ function renderSubscriptionPreview(summary) {
   // UNKNOWN ≠ 0: при непрочитанных подписках количество узлов неизвестно,
   // доказанный ноль — только когда все подписки успешно прочитаны и пусты.
   if (succeeded === total) {
+    const unique = new Set(summary.names || []).size;
     const excluded = serverListCountExcluded(summary.names);
-    const remaining = Math.max(0, summary.found - excluded);
+    const remaining = Math.max(0, unique - excluded);
     statsEl.textContent = 'Подписок: ' + total + ' · preview: ' + succeeded + '/' + total +
       ' · найдено узлов: ' + summary.found +
-      ' · после фильтра: ' + remaining + ' · исключено: ' + excluded;
+      ' · после фильтра: ' + remaining + ' уник. имён · исключено: ' + excluded + ' уник. имён';
   } else if (succeeded === 0) {
     statsEl.textContent = 'Подписок: ' + total + ' · preview: 0/' + total + ' · количество узлов: неизвестно';
   } else {
     const excluded = serverListCountExcluded(summary.names);
     statsEl.textContent = 'Подписок: ' + total + ' · preview: ' + succeeded + '/' + total +
       ' · найдено в доступных подписках: ' + summary.found +
-      ' · исключено (доступные): ' + excluded + ' · общий итог неизвестен';
+      ' · исключено (доступные): ' + excluded + ' уник. имён · общий итог неизвестен';
   }
   const warning = document.getElementById('subscriptionPreviewWarning');
   warning.textContent = summary.warnings.join(' ');
@@ -8391,9 +8451,9 @@ function buildTieredGroups(tiers, existingNames) {
   return { groups: out, rootName, tiers };
 }
 
-// Post-build патч: doc → +tier groups, GLOBAL получает root первым участником,
-// MATCH,GLOBAL → MATCH,<root>. Только при включённой настройке; выключена —
-// yaml возвращается без изменений (ALL PARITY).
+// Post-build патч: doc → +tier groups, GLOBAL получает root первым участником.
+// MATCH,GLOBAL сохраняется: ручной селектор GLOBAL управляет route в mode: rule.
+// Только при включённой настройке; выключена — yaml без изменений (ALL PARITY).
 function applyTieredFailover(yaml, tiersOverride) {
   if (!tieredEnabled() && !tiersOverride) return yaml;
   if (document.getElementById('cfgAutoWhitelist').checked) throw Error('Автоматические белые списки несовместимы с приоритетными группами серверов. Выберите один режим.');
@@ -8412,7 +8472,7 @@ function applyTieredFailover(yaml, tiersOverride) {
   const global = doc['proxy-groups'].find(g => g.name === 'GLOBAL');
   if (!global || !Array.isArray(global.proxies)) throw Error('Приоритетные группы серверов: группа GLOBAL не найдена в сборке');
   global.proxies.unshift(rootName);
-  doc.rules = (Array.isArray(doc.rules) ? doc.rules : []).map(r => (r === 'MATCH,GLOBAL' ? 'MATCH,' + rootName : r));
+  // Do not rewrite MATCH to root: that bypasses manual GLOBAL in rule mode (#279).
   const summary = 'Приоритетные группы серверов: ' + tierGroupCount(tiers.length) + ', строгий порядок → ' +
     tiers.map(t => t.name.trim() + ' [' + tierStrategyLabel(t.strategy) + '; участников: ' + t.members.length + ']').join(' → ');
   const traceEl = document.getElementById('tieredTrace');
