@@ -19,17 +19,21 @@ UI передаёт опциональный `fallbackInput`; engine строи�
 ## Что это
 
 «WARP & Mihomo Unified Generator» — статический одностраничный веб-инструмент на GitHub
-Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки; по умолчанию открывается
-**⚙️ Mihomo Config Builder**:
+Pages: https://saymer-alt.github.io/link-generators/ . Три вкладки;
+по умолчанию открывается **⚙️ Mihomo Config Builder**:
 
 1. **⚙️ Mihomo Config Builder** — сборка `config.yaml` для Mihomo (Clash Meta) из ссылок,
    подписок и WireGuard/AmneziaWG-файлов + pre-copy базовая валидация результата.
 2. **⚡ WARP MASQUE Links** — генератор пар `masque://`-ссылок (QUIC + HTTP/2) из ключей
    WARP с анти-DPI стратегией портов/IP.
+3. **🔎 Config Studio** — source-preserving анализ и редактирование рабочей копии
+   YAML, diff/Undo/Reset, экспорт без управления работающим Mihomo.
 
 ## Чего в проекте нет (принципиально)
 
-- Бэкенда. Всё исполняется в браузере.
+- Обязательного серверного backend для **сборки**: YAML формируется в браузере.
+  Для явно запрошенного Preview подписки существует необязательный сетевой
+  fallback через проектный Cloudflare Worker — это отдельная граница доверия.
 - package.json / npm-зависимостей / build step у приложения. Бандл собирается из
   saymer-alt/web4core@link-generators и после проверок коммитится
   готовым файлом (см. [UPDATES.md](UPDATES.md)).
@@ -39,9 +43,12 @@ Pages: https://saymer-alt.github.io/link-generators/ . Две вкладки; п
 состояние попадает туда только через явный promotion `main → stable` после CI и требуемых
 functional/field checks. Язык проекта — русский.
 
-В `tests/` есть Node/browser regression tests и fixtures. Единственный workflow —
-автообновление runtime; он запускает source tests, build, `node --check` и runtime test перед
-сравнением/заменой бандла. Browser test использует внешний Playwright, см. [TESTING.md](TESTING.md).
+В `tests/` находятся Node/browser regression tests и fixtures.
+Отдельные workflow выполняют Generator CI (включая браузерные проверки и
+реальную совместимость Mihomo), main preview, runtime build/provenance,
+production Pages smoke и смежные проверки.
+Автообновление runtime может записывать bundle **только в main**, не в
+`stable`. Подробнее: [TESTING.md](TESTING.md), [UPDATES.md](UPDATES.md).
 
 ## Состав репозитория
 
@@ -57,9 +64,15 @@ functional/field checks. Язык проекта — русский.
 | `.nojekyll` | служебный | Отключает Jekyll на Pages |
 | `LICENSE` | BSD-3-Clause | Унаследована от web4core |
 
-Внешняя сетевая зависимость страницы: `js-yaml@4.1.0` с jsdelivr CDN. Всё остальное —
-локальные файлы. Сама страница `fetch` не использует; исключение по сети внутри рантайма
-одного — `fetchSubscription` (см. [DATAFLOW.md](DATAFLOW.md), в текущем UI не задействован).
+При открытии страницы есть загрузка `js-yaml@4.1.0` с jsdelivr CDN.
+Генерация/разбор YAML выполняются локально; **по явному действию** Builder
+может читать подписки через `web4core.fetchSubscription` (direct или
+fallback Worker) и обращаться напрямую к пользовательскому Mihomo
+Controller для runtime-списка/диагностики. При `Sub Mode ON` Build
+provider-YAML не требует удалённого Preview; при `Sub Mode OFF` Build
+скачивает подписку, чтобы получить статические узлы.
+Секреты, хранилище, отмена и пределы Worker — [DATAFLOW.md](DATAFLOW.md)
+и [SUBSCRIPTIONS-AND-HWID.md](SUBSCRIPTIONS-AND-HWID.md).
 
 ## Где какая логика
 

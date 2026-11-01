@@ -50,7 +50,7 @@ select `[⚡ Fastest, GLOBAL, DIRECT]`; в БС-режиме — select `[GLOBAL
 | 🌐 Modern REALITY | `realityModernInput` | `mihomoRealityModernHosts` | пусто | multiline `host` / `host:port` / `[ipv6]:port`: только REALITY-узлы этих серверов получают `support-x25519mlkem768: true` + chrome fp (если не задан) и override-expr у провайдеров; пусто — legacy; только для совместимых серверов: X25519MLKEM768 появился в Xray v25.5.16, но сама версия не гарантирует совместимость (решение владельца A2) |
 | 🚫 Exclude Filter | `excludeFilterInput` | `excludeFilter` | пусто | regexp/keyword `exclude-filter` в КАЖДЫЙ http-provider (upstream-паритет); только режим URL-подписок; пусто — поле не добавляется; сериализация цитирования покрыта source-тестами |
 | 📱 Device Model | `deviceModelInput` | `deviceModel` | пусто | понятное имя устройства для панели подписки; уходит как `x-device-model` в preview-запросы списка серверов; пусто — служебный fallback `Saymer Link Generators Preview`; на provider-заголовки не влияет, HWID не меняет |
-| 📋 Показать серверы подписки | `cfgServerList` | — (опция страницы) | ☐ | opt-in: OFF = ноль подписочных fetch из браузера при Build; ON = список имён по явной кнопке, выбранные узлы = OR-union с `excludeFilter` |
+| 📋 Показать серверы подписки | `cfgServerList` | — (опция страницы) | ☐ | opt-in в Sub Mode ON: OFF = нет запроса имён при Build; ON = список по явной кнопке, выбранные узлы = OR-union с `excludeFilter`. Sub Mode OFF при Build отдельно загружает подписку для static `proxies` независимо от toggle |
 | Промежуточный proxy / dialer-proxy (Legacy глобальный) | `wgDialerInput` | `wgDialerProxy` | пусто | основной путь — per-profile селектор в карточке WG/AWG (см. секцию ниже); эти глобальные поля — ручной/Legacy override для общей группы; пусто — поле не добавляется (byte-parity) |
 | Транзитные узлы dialer-группы | `wgDialerMembers` | `wgDialerGroupMembers` | пусто | авторская select-группа (имя из `wgDialerInput` или `WARP-DIALER`) перед остальными группами; узлы-участники сами не получают `dialer-proxy` |
 | URL-подписки для dialer-группы | `wgDialerProviders` | `wgDialerProviders` | пусто | группа получает `use:` на СУЩЕСТВУЮЩИЕ proxy-providers (URL должен совпадать с одной из URL-подписок); узлы не разворачиваются; режим C ниже |
@@ -66,6 +66,42 @@ select `[⚡ Fastest, GLOBAL, DIRECT]`; в БС-режиме — select `[GLOBAL
 Для Selective Modern REALITY реальная handshake-матрица (Xray + Mihomo + ML-KEM-capable TLS target)
 описана в [TESTING.md](TESTING.md#selective-modern-reality-реальный-handshake-e2e--2026-09-18).
 Версия Xray сама по себе не считается гарантией совместимости.
+
+### Подписки и заголовки в v1.12 (локальный v1 / переносимый v2)
+
+- **Локальный проект v1 (основной путь):** `#deviceIdentityBar` над вкладками
+  показывает выбранное логическое устройство и скрытый HWID. Reveal/copy —
+  только по явному действию; изменение устройства инвалидацирует старый Build.
+  В `Sub Mode ON` `deviceHwid` передаёт движку HWID выбранного устройства:
+  **один стабильный HWID для всех subscription providers**, не случайный
+  `generateSecretHex32()` при каждой сборке.
+- **Проект v2 (опционально):** кнопка `#rbPortableActivateBtn` переводит
+  настройки в переносимую форму `schemaVersion: 2`. `sources.subscriptionSources`
+  имеют устойчивые `sourceId`, `identities.providerBindings` и
+  `identities.entries` содержат идентичности. `buildMihomo()` валидирует
+  `portableBuildPlan`, передаёт в `web4core.buildFromRequest`
+  `providerOverrides`, затем проверяет фактически выданные per-provider
+  `x-hwid`. Для «Без HWID» заголовок отсутствует; неподдерживаемый
+  runtime или некорректные назначения приводят к ошибке, не к подмене HWID.
+  Проектный реестр не перезаписывает `localStorage` устройства.
+- **Имена провайдеров:** директива `# provider-name: Имя`
+  непосредственно перед HTTP(S) URL в `Sub Mode ON`. Пустые имена,
+  повторная директива и директива без следующего URL — ошибка; без
+  директивы используется автоматически полученное имя.
+- **Preview — не Build:** `#cfgServerList` (OFF по умолчанию) разрешает
+  пользовательское получение имён кнопкой `#subListFetchBtn`. `#subListSkipBtn`
+  отменяет цепочку direct/Worker через AbortController, оставляя число
+  узлов **unknown**, не zero. `Sub Mode ON` Build provider-YAML от этого
+  независим. `Sub Mode OFF` Build скачивает подписку для статического
+  разворачивания — исключение, требующее сетевого запроса.
+- **Worker:** строгий удалённый Preview v2 до отдельного деплоя
+  `strict-same-origin-v1` может отказывать fail-closed. Успешная генерация
+  per-provider YAML не служит доказательством доступности remote Preview.
+
+Примеры для пользователя: [SUBSCRIPTIONS-AND-HWID.md](SUBSCRIPTIONS-AND-HWID.md).
+Сетевой контракт и секреты: [DATAFLOW.md](DATAFLOW.md). Открытый
+`proxy: DIRECT` при загрузке provider — **служебный bootstrap**, не
+доказательство fail-closed user-egress на VPS (отдельный проект #286).
 
 ### Web UI / external-controller
 
