@@ -4,6 +4,26 @@
 
 # AGENTS.md — link-generators
 
+## Owner decision — WORKING-FIRST, bounded licensing review (11.10.2026)
+
+- Keep approved functional releases, security/CI gates, and tested workflows
+  moving when an unrelated, routine third-party license/NOTICE audit remains
+  incomplete (especially the historical experimental WDTT review, tracked at
+  [KAS #126](https://github.com/saymer-alt/keenetic-auto-setup/issues/126)).
+  **Do not reopen a generic licensing questionnaire** in every unrelated task.
+- This is **not** an exemption from software licenses: personal/non-commercial
+  work and public GitHub do not grant redistribution rights. Preserve applicable
+  copyright, license and NOTICE obligations. If a *specific verified*
+  distribution conflicts with them, block or fix **that affected distribution**,
+  surface exact evidence and owner decision, not a blanket freeze on independent
+  components.
+- Existing supply-chain integrity, credential-safety, fail-closed, regression,
+  explicit Owner GO and immutable-release safeguards remain mandatory.
+- Revisit broad attribution/license research on owner request or new concrete
+  evidence. The original dated [PR #256](https://github.com/saymer-alt/link-generators/pull/256)
+  is historical context, not a branch to merge over later AGENTS changes.
+
+
 > **Стандарт проверки ИИ-изменений (30.10.2026):** [CONSTITUTION.md §11](CONSTITUTION.md) и [общий стандарт (PR #11)](https://github.com/saymer-alt/saymer-alt/pull/11): реальный пользовательский путь, blast radius, подтверждённые измерения и регрессионные доказательства. Не отменяет release invariant и owner GO.
 
 ## Owner-wide design gate — SIMPLICITY-FIRST (2026-10-24)
