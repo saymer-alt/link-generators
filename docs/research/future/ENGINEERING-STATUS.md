@@ -1,5 +1,15 @@
 # Engineering Status — handoff for the next agent (NIGHT-MEGA-01)
 
+> **АРХИВ / HISTORICAL SNAPSHOT (08.10.2026):** этот отчёт описывает состояние
+> подготовки v1.11 и лабораторные PoC на дату исследования. Его фразы о
+> «production (main)», ожидающем выпуске v1.11 и owner field-test **устарели**.
+> Не использовать как инструкцию для текущего релиза или состояние веток.
+> Фактический production v1.12.0: [GitHub Release](https://github.com/saymer-alt/link-generators/releases/tag/v1.12.0);
+> актуальные ветки и проверки — GitHub Actions/`stable`; пользовательские инструкции
+> — [GENERATOR-GUIDE](../../GENERATOR-GUIDE.md) и
+> [SUBSCRIPTIONS-AND-HWID](../../SUBSCRIPTIONS-AND-HWID.md).
+> Оригинальный исследовательский текст ниже сохранён без переписывания.
+
 Дата: 2026-10-08. Назначение: самодостаточная точка входа в инженерное состояние v1.11-complete + future-research. Читай вместе с [../../V1.11-FINAL-INTEGRATION-REPORT.md](../V1.11-FINAL-INTEGRATION-REPORT.md) и [V1.11-CANDIDATE-READINESS.md](V1.11-CANDIDATE-READINESS.md).
 
 ## 1. Где что лежит
