@@ -45,13 +45,40 @@ opkg update && opkg install curl ca-bundle && curl -fSsL https://raw.githubuserc
 В конце успешной установки должны появиться сообщения вида:
 
 ~~~text
-WARPSCOUT 0.16.0 is ready
+WARPSCOUT <версия> is ready
 WARPSCOUT installation complete.
 ~~~
 
 Версия может быть новее. Промежуточное `Unknown package 'warpscout'` допускается, **если** установщик затем успешно загрузил IPK из GitHub и сообщил об окончании установки.
 
 Установщик может зарегистрировать WARP-аккаунт сам. Даже если `API unreachable directly` или relay не ответил, не делайте вывод об ошибке до **финального сообщения**. `Registered fresh WARP account` означает, что регистрация состоялась.
+
+## 1.1. Как обновлять WARPSCOUT
+
+**Удалять программу, заново регистрировать WARP-аккаунт или стирать `/opt/etc/warpscout` не надо.** Обновление заменяет пакет, а файл `/opt/etc/warpscout/warpscout-account.json` остаётся на постоянном накопителе Entware. Перед работами с накопителем разумно сделать его приватную резервную копию.
+
+**Способ 1 — через настроенный пакетный репозиторий Entware (предпочтительный, если новая версия уже есть в feed):**
+
+~~~sh
+warpscout version
+opkg update && opkg upgrade warpscout
+warpscout version
+~~~
+
+Если `opkg` сообщает `up to date`, это означает только, что в **подключённых на роутере feed** нет более новой версии. Сверьте результат `warpscout version` с [оригинальным релизом WARPSCOUT](https://github.com/vernette/warpscout/releases/latest) и [нашим Entware-пакетом в GitHub Releases](https://github.com/saymer-alt/entware-go/releases/tag/latest): между публикацией IPK на GitHub и обновлением сторонних feed возможна задержка.
+
+**Способ 2 — обновить напрямую из нашего GitHub Release, если feed отстаёт.** Команды сами находят актуальный ARM64 IPK из релиза `latest`; указывать номер версии вручную не нужно:
+
+~~~sh
+IPK_URL="$(curl -fSsL https://api.github.com/repos/saymer-alt/entware-go/releases/tags/latest | grep -o 'https://[^"]*warpscout_[^"]*_aarch64-3\.10\.ipk' | head -n 1)"
+[ -n "$IPK_URL" ] && curl -fL --retry 3 -o "/tmp/${IPK_URL##*/}" "$IPK_URL" && opkg install "/tmp/${IPK_URL##*/}" && warpscout version
+~~~
+
+Если первая команда не нашла IPK, **не продолжайте установку**: проверьте доступность GitHub и наличие файла `warpscout_*_aarch64-3.10.ipk` в релизе. При ручной установке файла желательно проверить его SHA-256 по `digest` соответствующего asset в GitHub API.
+
+**Важно:** текущий установщик из шага 1 **не гарантирует обновление до свежего GitHub IPK**, если `opkg install warpscout` успешно находит старую версию в feed. Для такого случая используйте способ 2, а не повторяйте установочную команду с ожиданием обновления. Не используйте `--force-reinstall` для этой задачи: он может переустановить ту же старую версию из feed.
+
+После любого способа проверьте `warpscout version` и существование `/opt/etc/warpscout/warpscout-account.json`. Новую регистрацию выполняют **только при отсутствии аккаунта**. WARPSCOUT не запускается как служба, перезагрузка роутера для обновления CLI обычно не требуется.
 
 ## 2. Подготавливаем каталог и проверяем аккаунт
 
