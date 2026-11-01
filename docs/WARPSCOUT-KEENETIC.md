@@ -71,9 +71,11 @@ warpscout version
 
 ~~~sh
 update_file="$(mktemp /tmp/warpscout-update.XXXXXX)" &&
-curl -fSsL --retry 3 -o "$update_file" https://raw.githubusercontent.com/saymer-alt/entware-go/gh-action-build/warpscout/update.sh &&
-sh "$update_file"
-rm -f "$update_file"
+(
+  trap 'rm -f "$update_file"' EXIT
+  curl -fSsL --retry 3 -o "$update_file" https://raw.githubusercontent.com/saymer-alt/entware-go/gh-action-build/warpscout/update.sh &&
+  sh "$update_file"
+) &&
 warpscout version
 ~~~
 
