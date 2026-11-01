@@ -47,9 +47,18 @@ AWG 3.1 проверен по всему UI pipeline: семь строковы�
 - **Sub Mode** (по умолчанию включён): URL **без** user:password → подписка →
   `proxy-providers` (скачивает Mihomo, не браузер); URL **с** кредами и все не-URL строки →
   обычные ссылки. Без хотя бы одного URL — ошибка «Provide one or more HTTP(S) URLs…».
-- **обычный режим**: http(s)-URL парсится как ссылка на http-прокси (проверено:
-  `https://sub.example.com/list` → `type: http, name: proxy`) — т.е. мусор. Подписки
-  имеет смысл вставлять только в Sub Mode.
+- **обычный режим / Sub Mode OFF (после subscription inspection)**:
+  HTTP(S) URL подписки без embedded username/password при Build **скачивается
+  браузером один раз**, затем его узлы попадают в статический `proxies:`.
+  При CORS/сетевом отказе сборка блокируется — URL не превращается молча в
+  фиктивный HTTP-proxy. URL с учётными данными в authority и обычные
+  proxy-схемы разбираются как ссылки, а не как подписка.
+
+В Sub Mode ON перед URL можно поместить `# provider-name: Имя` — директива
+назовёт следующий provider. По умолчанию генерируется автоимя. HWID для каждого
+provider берётся из активного локального устройства (v1) либо из явных
+назначений переносимого проекта v2; пустой/«без HWID» источник не получает
+заголовок `x-hwid`. Подробности — [SUBSCRIPTIONS-AND-HWID.md](SUBSCRIPTIONS-AND-HWID.md).
 
 ## WireGuard / AmneziaWG
 
