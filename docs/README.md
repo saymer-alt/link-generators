@@ -17,6 +17,7 @@ README.md в корне репозитория — пользовательск�
 | Короткая инструкция по генератору | [GENERATOR-GUIDE.md](GENERATOR-GUIDE.md) |
 | Своя URL-подписка через Secret GitHub Gist | [GIST-SUBSCRIPTION.md](GIST-SUBSCRIPTION.md) |
 | Фильтр узлов подписки (в т.ч. кириллица) | [EXCLUDE-FILTER.md](EXCLUDE-FILTER.md) |
+| Подписки v1.12+: HWID для одного/нескольких устройств, переносимый проект v2, имена провайдеров, отмена Preview | [SUBSCRIPTIONS-AND-HWID.md](SUBSCRIPTIONS-AND-HWID.md) |
 | WARPSCOUT: Windows / Keenetic / VPS | [WARPSCOUT-WINDOWS.md](WARPSCOUT-WINDOWS.md), [WARPSCOUT-KEENETIC.md](WARPSCOUT-KEENETIC.md), [WARPSCOUT-VPS.md](WARPSCOUT-VPS.md) |
 
 ### Для разработчика / агента
@@ -29,7 +30,7 @@ README.md в корне репозитория — пользовательск�
 | Протоколы: форматы ссылок и поддержка | [PROTOCOLS.md](PROTOCOLS.md) |
 | Валидатор: что проверяется | [VALIDATION.md](VALIDATION.md) |
 | Тесты: как запускать и что покрыто | [TESTING.md](TESTING.md) |
-| Backlog после v1.8.0 (только документация, без обязательств) | [ROADMAP.md](ROADMAP.md) |
+| Дорожная карта и исторические идеи (не список текущих обещаний) | [ROADMAP.md](ROADMAP.md) |
 | Owner field-test перед promotion (v1.8+) | [RELEASE-FIELD-TEST.md](RELEASE-FIELD-TEST.md) |
 | Автообновление рантайма из fork | [UPDATES.md](UPDATES.md), [WEB4CORE-FORK.md](WEB4CORE-FORK.md) |
 | Auto-Whitelist (резерв БС) | [AUTO-WHITELIST.md](AUTO-WHITELIST.md) |
