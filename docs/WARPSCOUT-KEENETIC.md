@@ -67,16 +67,19 @@ warpscout version
 
 Если `opkg` сообщает `up to date`, это означает только, что в **подключённых на роутере feed** нет более новой версии. Сверьте результат `warpscout version` с [оригинальным релизом WARPSCOUT](https://github.com/vernette/warpscout/releases/latest) и [нашим Entware-пакетом в GitHub Releases](https://github.com/saymer-alt/entware-go/releases/tag/latest): между публикацией IPK на GitHub и обновлением сторонних feed возможна задержка.
 
-**Способ 2 — обновить напрямую из нашего GitHub Release, если feed отстаёт.** Команды сами находят актуальный ARM64 IPK из релиза `latest`; указывать номер версии вручную не нужно:
+**Способ 2 — специальный скрипт обновления из GitHub, если Entware feed отстаёт.** Он проверяет текущую и опубликованную версии, скачивает только подходящий ARM64 IPK, сверяет SHA-256 с `digest` из GitHub Releases и лишь затем вызывает `opkg install`. Скрипт не устанавливает повторно ту же версию и не понижает более новую.
 
 ~~~sh
-IPK_URL="$(curl -fSsL https://api.github.com/repos/saymer-alt/entware-go/releases/tags/latest | grep -o 'https://[^"]*warpscout_[^"]*_aarch64-3\.10\.ipk' | head -n 1)"
-[ -n "$IPK_URL" ] && curl -fL --retry 3 -o "/tmp/${IPK_URL##*/}" "$IPK_URL" && opkg install "/tmp/${IPK_URL##*/}" && warpscout version
+update_file="$(mktemp /tmp/warpscout-update.XXXXXX)" &&
+curl -fSsL --retry 3 -o "$update_file" https://raw.githubusercontent.com/saymer-alt/entware-go/gh-action-build/warpscout/update.sh &&
+sh "$update_file"
+rm -f "$update_file"
+warpscout version
 ~~~
 
-Если первая команда не нашла IPK, **не продолжайте установку**: проверьте доступность GitHub и наличие файла `warpscout_*_aarch64-3.10.ipk` в релизе. При ручной установке файла желательно проверить его SHA-256 по `digest` соответствующего asset в GitHub API.
+Если загрузка скрипта завершилась неудачно, **не выполняйте оставшийся файл**. Скрипт будет доступен по указанному адресу после принятия [PR entware-go #22](https://github.com/saymer-alt/entware-go/pull/22); до его слияния используйте штатный `opkg upgrade` либо вручную устанавливайте IPK из [нашего latest release](https://github.com/saymer-alt/entware-go/releases/tag/latest) **с предварительной сверкой SHA-256**, как при первоначальном ручном обновлении.
 
-**Важно:** текущий установщик из шага 1 **не гарантирует обновление до свежего GitHub IPK**, если `opkg install warpscout` успешно находит старую версию в feed. Для такого случая используйте способ 2, а не повторяйте установочную команду с ожиданием обновления. Не используйте `--force-reinstall` для этой задачи: он может переустановить ту же старую версию из feed.
+**Важно:** существующий `install.sh` из шага 1 **не гарантирует обновление до свежего GitHub IPK**, если `opkg install warpscout` успешно находит старую версию в feed. Это зафиксировано в [entware-go #21](https://github.com/saymer-alt/entware-go/issues/21). Не используйте `--force-reinstall` старого пакета в надежде получить новую версию.
 
 После любого способа проверьте `warpscout version` и существование `/opt/etc/warpscout/warpscout-account.json`. Новую регистрацию выполняют **только при отсутствии аккаунта**. WARPSCOUT не запускается как служба, перезагрузка роутера для обновления CLI обычно не требуется.
 
