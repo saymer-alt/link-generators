@@ -67,7 +67,7 @@ warpscout version
 
 Если `opkg` сообщает `up to date`, это означает только, что в **подключённых на роутере feed** нет более новой версии. Сверьте результат `warpscout version` с [оригинальным релизом WARPSCOUT](https://github.com/vernette/warpscout/releases/latest) и [нашим Entware-пакетом в GitHub Releases](https://github.com/saymer-alt/entware-go/releases/tag/latest): между публикацией IPK на GitHub и обновлением сторонних feed возможна задержка.
 
-**Способ 2 — специальный скрипт обновления из GitHub, если Entware feed отстаёт.** Он проверяет текущую и опубликованную версии, скачивает только подходящий ARM64 IPK, сверяет SHA-256 с `digest` из GitHub Releases и лишь затем вызывает `opkg install`. Скрипт не устанавливает повторно ту же версию и не понижает более новую.
+**Способ 2 — специальный скрипт обновления из GitHub, если Entware feed отстаёт.** Перед первым использованием установите JSON-парсер: `opkg update && opkg install jq`. Он проверяет текущую и опубликованную версии, скачивает только подходящий ARM64 IPK, сверяет SHA-256 с `digest` из GitHub Releases и лишь затем вызывает `opkg install`. Скрипт не устанавливает повторно ту же версию и не понижает более новую.
 
 ~~~sh
 update_file="$(mktemp /tmp/warpscout-update.XXXXXX)" &&
