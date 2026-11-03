@@ -59,7 +59,15 @@ const root = path.resolve(__dirname, '..');
       assert.ok(logicalRule.errors.some(e => e.field === 'direct-egress'), 'flagged: ' + JSON.stringify(logicalRule.errors));
       const noResolvePositive = await page.evaluate(() => validateMihomoYaml('proxies:\n  - name: a\n    type: ss\n    server: 192.0.2.1\n    port: 443\nrules:\n  - "GEOIP,RU,a,no-resolve"\n  - "MATCH,a"'));
       assert.equal(noResolvePositive.status, 'VALID', 'no-resolve with a proxy target stays VALID: ' + JSON.stringify(noResolvePositive.errors));
-      cases += 3;
+      // CI review fix (UX54 root cause, 2026-11-03): a dialer TRANSPORT group
+      // (referenced by dialer-proxy, never a routing-rule target) keeps its
+      // DIRECT member — WG handshake bootstrap is service plane per the #284
+      // owner decision; a rule targeting that same group re-disables it.
+      const dialerTransport = await page.evaluate(() => validateMihomoYaml('proxies:\n  - name: wg\n    type: wireguard\n    server: 192.0.2.73\n    port: 51820\n    private-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n    public-key: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=\n    ip: 10.66.1.2\n    allowed-ips: [0.0.0.0/0]\n    dialer-proxy: SHARED-DIALER\nproxy-groups:\n  - name: SHARED-DIALER\n    type: select\n    proxies: [DIRECT]\nrules:\n  - "MATCH,GLOBAL"'));
+      assert.equal(dialerTransport.status, 'VALID', 'dialer transport group keeps DIRECT: ' + JSON.stringify(dialerTransport.errors));
+      const maskedTransport = await page.evaluate(() => validateMihomoYaml('proxies:\n  - name: wg\n    type: wireguard\n    server: 192.0.2.73\n    port: 51820\n    private-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n    public-key: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=\n    ip: 10.66.1.2\n    allowed-ips: [0.0.0.0/0]\n    dialer-proxy: SHARED-DIALER\nproxy-groups:\n  - name: SHARED-DIALER\n    type: select\n    proxies: [DIRECT]\nrules:\n  - "DOMAIN-SUFFIX,x.example,SHARED-DIALER"\n  - "MATCH,GLOBAL"'));
+      assert.equal(maskedTransport.status, 'INVALID', 'a rule targeting the transport group re-disables DIRECT: ' + JSON.stringify(maskedTransport.errors));
+      cases += 2;
     }
 
     // 2. DPR UI: новая карточка — опций DIRECT нет.

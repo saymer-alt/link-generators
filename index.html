@@ -3309,13 +3309,41 @@ function validateMihomoYaml(yaml) {
   // Запрещён DIRECT как ЦЕЛЬ пользовательской маршрутизации: участник
   // proxy-groups или таргет правила. Служебные ключи (proxy: DIRECT у
   // провайдеров, dialer-proxy) проверкой не затрагиваются — это service plane.
+  // Transport-plane группы: группа, на которую ссылается dialer-proxy хотя бы
+  // одного proxy (WG handshake bootstrap), тоже служебная — её DIRECT-участник
+  // не является пользовательским egress. НО: имя такой группы при этом не
+  // должно встречаться как цель правил пользовательской маршрутизации —
+  // транспортная группа, замаскированная под правило, остаётся нарушением.
   // Проверка структурная (по разобранному документу), не лексическая.
+  const noDirectDialerGroups = new Set();
+  if (Array.isArray(doc.proxies)) {
+    for (const p of doc.proxies) {
+      if (p && typeof p === 'object' && typeof p['dialer-proxy'] === 'string' && p['dialer-proxy'].trim()) {
+        noDirectDialerGroups.add(p['dialer-proxy'].trim());
+      }
+    }
+  }
+  const noDirectRuleTargets = new Set();
+  if (Array.isArray(doc.rules)) {
+    for (const r of doc.rules) {
+      if (typeof r !== 'string') continue;
+      const tokens = r.trim().split(',').map(t => t.trim()).filter(t => t !== '');
+      while (tokens.length && tokens[tokens.length - 1].toLowerCase() === 'no-resolve') tokens.pop();
+      if (tokens.length >= 2) noDirectRuleTargets.add(tokens[tokens.length - 1]);
+    }
+  }
   if (Array.isArray(doc['proxy-groups'])) {
     doc['proxy-groups'].forEach((g) => {
       if (!g || typeof g !== 'object') return;
       if (Array.isArray(g.proxies) && g.proxies.includes('DIRECT')) {
+        // Transport-plane escape (issue #284 owner decision: WG handshake
+        // bootstrap stays service plane): a group referenced by dialer-proxy
+        // AND never referenced by user routing rules keeps its DIRECT member.
+        if (noDirectDialerGroups.has(g.name) && !noDirectRuleTargets.has(g.name)) return;
         err((typeof g.name === 'string' && g.name) || 'proxy-groups', 'direct-egress', 'DIRECT',
-          'группа содержит DIRECT как участника — пользовательский прямой выход запрещён политикой no-DIRECT (#284). Финальный участник групп — REJECT.');
+          noDirectDialerGroups.has(g.name)
+            ? 'группа содержит DIRECT как участника и при этом используется как цель пользовательского правила — пользовательский трафик получит прямой выход (#284). Для транспорта уберите правило на эту группу; финальный участник пользовательских групп — REJECT.'
+            : 'группа содержит DIRECT как участника — пользовательский прямой выход запрещён политикой no-DIRECT (#284). Финальный участник групп — REJECT.');
       }
     });
   }
