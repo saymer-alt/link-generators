@@ -3321,8 +3321,18 @@ function validateMihomoYaml(yaml) {
   }
   if (Array.isArray(doc.rules)) {
     doc.rules.forEach((r, i) => {
-      const m = typeof r === 'string' ? r.trim().match(/^[^,]+(?:,[^,]*)?,\s*DIRECT\s*$/i) : null;
-      if (m) err('rules[' + i + ']', 'direct-egress', String(r).slice(0, 60),
+      if (typeof r !== 'string') return;
+      // Таргет правила — последний значимый токен; трейлинг-флаги Mihomo
+      // (no-resolve и т.п.) перед сравнением отбрасываются, а логические
+      // правила (AND/OR/NOT, выражение содержит запятые внутри скобок)
+      // всё равно заканчиваются запятой перед таргетом, поэтому разбор
+      // «с конца» устойчив к их внутренним запятым. Сравнение
+      // регистрозависимое: real-Mihomo ground truth (v1.19.12) —
+      // built-in политики регистрозависимы, «direct» в нижнем регистре
+      // отбрасывается как несуществующий proxy ещё на `mihomo -t`.
+      const tokens = r.trim().split(',').map(t => t.trim()).filter(t => t !== '');
+      while (tokens.length && tokens[tokens.length - 1].toLowerCase() === 'no-resolve') tokens.pop();
+      if (tokens[tokens.length - 1] === 'DIRECT') err('rules[' + i + ']', 'direct-egress', String(r).slice(0, 60),
         'правило ведёт пользовательский трафик напрямую в DIRECT — запрещено политикой no-DIRECT (#284). Используйте GLOBAL / SELECT / REJECT.');
     });
   }

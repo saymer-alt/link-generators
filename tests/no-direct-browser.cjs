@@ -46,6 +46,22 @@ const root = path.resolve(__dirname, '..');
       cases += 3;
     }
 
+    // 1b. Обходы таргета DIRECT через формы правил, которые принимает
+    //     реальный Mihomo (ground truth v1.19.12, `mihomo -t` successful):
+    //     трейлинг-флаг no-resolve и логические AND/OR/NOT-правила.
+    //     Регрессия к ревью ночной сессии 03.11.2026 (issue #284/#324).
+    {
+      const noResolveFlag = await page.evaluate(() => validateMihomoYaml('proxies:\n  - name: a\n    type: ss\n    server: 192.0.2.1\n    port: 443\nrules:\n  - "GEOIP,RU,DIRECT,no-resolve"\n  - "MATCH,a"'));
+      assert.equal(noResolveFlag.status, 'INVALID', 'no-resolve trailing flag must not hide the DIRECT target');
+      assert.ok(noResolveFlag.errors.some(e => e.field === 'direct-egress'), 'flagged: ' + JSON.stringify(noResolveFlag.errors));
+      const logicalRule = await page.evaluate(() => validateMihomoYaml('proxies:\n  - name: a\n    type: ss\n    server: 192.0.2.1\n    port: 443\nrules:\n  - "AND,((DOMAIN,b.example),(NETWORK,UDP)),DIRECT"\n  - "MATCH,a"'));
+      assert.equal(logicalRule.status, 'INVALID', 'logical AND/OR/NOT rule with DIRECT target must be flagged');
+      assert.ok(logicalRule.errors.some(e => e.field === 'direct-egress'), 'flagged: ' + JSON.stringify(logicalRule.errors));
+      const noResolvePositive = await page.evaluate(() => validateMihomoYaml('proxies:\n  - name: a\n    type: ss\n    server: 192.0.2.1\n    port: 443\nrules:\n  - "GEOIP,RU,a,no-resolve"\n  - "MATCH,a"'));
+      assert.equal(noResolvePositive.status, 'VALID', 'no-resolve with a proxy target stays VALID: ' + JSON.stringify(noResolvePositive.errors));
+      cases += 3;
+    }
+
     // 2. DPR UI: новая карточка — опций DIRECT нет.
     {
       await page.evaluate(() => {
