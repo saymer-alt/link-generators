@@ -1,5 +1,28 @@
 # TESTING — реальная тестовая стратегия
 
+## No-DIRECT egress policy (behavioral, revised) — 2026-10-18
+
+Политика #284 (revised): генератор не создаёт маршрутов, по которым
+**пользовательский трафик** уходит напрямую с публичного IP хоста; DIRECT не
+является пользовательским выходом/фолбэком. Service plane (bootstrap
+провайдеров `proxy: DIRECT`, dialer-proxy, DNS) работает как раньше —
+Sub Mode ON (динамические подписки) сохранён. Доказательство cold-start
+deadlock провайдеров (локальный A/B-эксперимент на mihomo v1.19.31:
+`proxy: DIRECT` → загрузка есть; поле удалено → fetch идёт по правилам
+конфига → пустой GLOBAL → REJECT → immediate EOF), реестр путей, границы
+гарантий и открытый вопрос по PT exit-артефактам —
+[NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md).
+
+- Движок: `wc tools/tests/mihomo-no-direct.test.mjs` (семантика user data
+  plane + service-plane parity) + обновлённые `mihomo-policy-routing` /
+  `mihomo-policy-targets`.
+- Consumer-реестр по вендоренному рантайму: `node tests/no-direct-egress.cjs`
+  (семантика + положительная регрессия Sub-ON провайдеров).
+- Страница (семантический валидатор, DPR UI, legacy-гейт, Sub-ON положительная
+  регрессия, PT-блокер): `node tests/no-direct-browser.cjs` (Playwright).
+- PT: `tests/per-node-generation.cjs` — exit без исходящего ребра не
+  генерирует `MATCH,DIRECT` (блокер `PT-GEN-DIRECT-BAN`).
+
 ## MASQUE/DPI генератор: детерминированная регрессия — 2026-09-18
 
 `tests/masque-dpi-regression.cjs` (Playwright, env как у `browser.cjs`): `Math.random`

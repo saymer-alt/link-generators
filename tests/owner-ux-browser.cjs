@@ -233,12 +233,12 @@ async function check(name, fn) {
   });
   await check('UX08 stale coverage offers rebuild and retains chosen domains', async () => {
     await d.locator('#dcInput').fill('chat.openai.com\nowner.example');
-    await d.locator('#policyCards .policy-target').first().selectOption('DIRECT');
+    await d.locator('#policyCards .policy-target').first().selectOption('REJECT'); // no-DIRECT #284: таргет DIRECT недоступен
     await d.locator('#dcRunBtn').click();
     assert.equal(await d.locator('#dcBuildCheckBtn').isVisible(), true);
     assert.ok(!(await d.locator('#dcResults').textContent()).includes('SELECT-группа'));
     await d.locator('#dcBuildCheckBtn').click();
-    await d.waitForFunction(() => document.getElementById('dcResults').textContent.includes('Маршрут: DIRECT'));
+    await d.waitForFunction(() => document.getElementById('dcResults').textContent.includes('Маршрут: REJECT'));
     assert.equal(await d.locator('#dcInput').inputValue(), 'chat.openai.com\nowner.example');
   });
   await check('UX07 network Build cancel does not send or mutate project', async () => {
@@ -712,12 +712,12 @@ async function check(name, fn) {
       await n.route('https://primary.example.invalid/sub',r=>r.fulfill({body:link}));await n.route('https://reserve.example.invalid/sub',r=>r.fulfill({body:link.replace('192.0.2.1','192.0.2.2').replace('#Owner-A','#Reserve')}));
       await n.locator('#mihomoInput').fill('https://primary.example.invalid/sub');await n.locator('#whitelistInput').fill('https://reserve.example.invalid/sub');
       await n.locator('#btnPolicyAdd').click();const c=n.locator('#policyCards .policy-card').last();await c.locator('.policy-name').fill('AI');await c.locator('.policy-domains').fill('ai.example');await build(n);
-      const d=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));const group=d['proxy-groups'].find(g=>g.name==='AI');assert.equal(group.type,'select');assert.deepEqual(group.proxies,['GLOBAL','DIRECT']);assert.ok(d.rules.some(r=>r.startsWith('RULE-SET,')&&r.endsWith(',AI')));assert.equal(d.rules.at(-1),'MATCH,GLOBAL');
+      const d=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));const group=d['proxy-groups'].find(g=>g.name==='AI');assert.equal(group.type,'select');assert.deepEqual(group.proxies,['GLOBAL','REJECT']);/* no-DIRECT #284: the DPR escape slot is REJECT (user-plane direct egress is banned; provider fetch/transport bootstrap stay service-plane) */assert.ok(d.rules.some(r=>r.startsWith('RULE-SET,')&&r.endsWith(',AI')));assert.equal(d.rules.at(-1),'MATCH,GLOBAL');
     }
     const n=await fresh();await n.locator('#cfgAutoWhitelist').check();await n.locator('#mihomoInput').fill(link);await n.locator('#whitelistInput').fill(link.replace('#Owner-A','#Reserve'));
-    await n.locator('#mtImportBtn').click();await n.locator('#mtImportFile').setInputFiles(path.join(root,'tests/fixtures/magitrickle-basic.mtrickle'));await n.waitForFunction(()=>mtPending!==null);await n.locator('.mt-iface-map[data-iface=blackhole]').selectOption('DIRECT');await n.locator('#mtImportApply').click();
+    await n.locator('#mtImportBtn').click();await n.locator('#mtImportFile').setInputFiles(path.join(root,'tests/fixtures/magitrickle-basic.mtrickle'));await n.waitForFunction(()=>mtPending!==null);await n.locator('.mt-iface-map[data-iface=blackhole]').selectOption('REJECT');/* no-DIRECT #284: the MT map UI no longer offers DIRECT; blackhole is REJECT */await n.locator('#mtImportApply').click();
     const cards=n.locator('#policyCards .policy-card');assert.equal(await cards.count(),2);for(let i=0;i<2;i++){await cards.nth(i).locator('.policy-target').selectOption('SELECT');await cards.nth(i).locator('.policy-name').fill(i?'Imported Video':'Imported AI');}
-    await build(n);let imported=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));for(const name of ['Imported AI','Imported Video'])assert.deepEqual(imported['proxy-groups'].find(g=>g.name===name).proxies,['GLOBAL','DIRECT']);
+    await build(n);let imported=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));for(const name of ['Imported AI','Imported Video'])assert.deepEqual(imported['proxy-groups'].find(g=>g.name===name).proxies,['GLOBAL','REJECT']);/* no-DIRECT #284: imported legacy cards keep the same REJECT escape slot */
     await cards.first().locator('.policy-name').fill('Renamed AI');await build(n);imported=await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value));assert.equal(imported['proxy-groups'].some(g=>g.name==='Imported AI'),false);assert.ok(imported.rules.some(r=>r.startsWith('RULE-SET,')&&r.endsWith(',Renamed AI')));
     const p=await ownerProject(n);await n.evaluate(p=>rbApplyProject(p),p);await build(n);assert.deepEqual(await n.evaluate(()=>jsyaml.load(document.getElementById('mihomoOutput').value)),imported);
   });

@@ -29,12 +29,15 @@ false`). Включение автоматическое — без нового
 в inline `rule-providers` (`policy-<slug>`), категории-группы и `RULE-SET`-правила
 перед неизменным `MATCH,GLOBAL`. В режиме URL-подписок категория получает
 `NAME-AUTO` (url-test, `use:` на общий provider — несколько групп на один
-провайдер) и select `[NAME-AUTO, ⚡ Fastest, GLOBAL, DIRECT]`; без подписок —
-select `[⚡ Fastest, GLOBAL, DIRECT]`; в БС-режиме — select `[GLOBAL, DIRECT]`
-(плоский fallback не вкладывается, #2588). `proxy: DIRECT` у провайдеров —
-обязательный контракт (без него холодный старт дедлочит фетч подписки).
-Выключенный режим — byte-parity. Полное описание, ограничения (ECH/DoH/hardcoded IP,
-домен-детект для TUN) и PoC-доказательства — [POLICY-ROUTING.md](POLICY-ROUTING.md).
+провайдер) и select `[NAME-AUTO, ⚡ Fastest, GLOBAL, REJECT]`; без подписок —
+select `[⚡ Fastest, GLOBAL, REJECT]`; в БС-режиме — select `[GLOBAL, REJECT]`
+(плоский fallback не вкладывается, #2588). Финальный участник категорийных
+групп — REJECT, никогда DIRECT: DIRECT не является пользовательским выходом
+(no-DIRECT #284 revised), таргет `DIRECT` отвергается движком fail-closed.
+`proxy: DIRECT` у провайдеров — служебный транспорт скачивания (service plane),
+не пользовательский egress. Выключенный режим — byte-parity. Полное описание,
+ограничения (ECH/DoH/hardcoded IP, домен-детект для TUN) и PoC-доказательства —
+[POLICY-ROUTING.md](POLICY-ROUTING.md).
 
 ## Настройки вкладки «⚙️ Mihomo Config Builder»
 

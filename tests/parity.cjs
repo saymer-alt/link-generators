@@ -22,6 +22,12 @@ const { chromium } = require('playwright');
 // (снова эмитится persistent-keepalive) — parity при этом осталась бы зелёной.
 // Поэтому сырый вывод ключевых сценариев пиннится напрямую, узко, по сценарию.
 const RAW_CONTRACTS = {
+  // no-DIRECT #284 (revised): escape-слот DPR/AWL-групп в candidate-выводе —
+  // REJECT; пользовательский прямой egress через DIRECT запрещён контрактом.
+  'dpr-on': raw => {
+    assert.ok(raw.includes('- REJECT'), 'dpr-on: candidate потерял REJECT escape-слот DPR-группы — регрессия no-DIRECT #284');
+    assert.ok(!/^[ \t]+- DIRECT$/m.test(raw), 'dpr-on: candidate содержит DIRECT как участника группы — нарушение no-DIRECT #284');
+  },
   'wg-single': raw => {
     assert.ok(raw.includes('ip-version: ipv4'), 'wg-single: сырой вывод потерял ip-version: ipv4 — регрессия IPv4-only контракта');
     // #137 (DEFAULT ON 🛡 NAT keepalive): PK range теперь ЛЕГАЛЬНО сводится к 25
@@ -70,10 +76,17 @@ async function runScenario(browser, root, candRoot, name, actions, checkContract
   // ОБЕИХ сторонах (в base её давал старый consumer collapse) и снимается;
   // сам контракт 25--only закреплён RAW_CONTRACTS, strict-OFF — в
   // tests/awg-stability.cjs.
+  // EXPECTED no-DIRECT contract change (#284, revised): escape-слот
+  // DPR/AWL-групп сменился DIRECT -> REJECT (user data plane). Base-сторона
+  // даёт '- DIRECT', candidate — '- REJECT'; нормализуем ОБЕ строки, чтобы
+  // сравнивать остальную структуру. Любое ДРУГОЕ появление '- DIRECT'
+  // (участник в середине списка, правило с таргетом DIRECT) по-прежнему
+  // даёт PARITY-DIFF, а контракт candidate закреплён в RAW_CONTRACTS.dpr-on.
   return yaml
     .replace(/^[ \t]*persistent-keepalive: 25\n/gm, '')
     .replace(/^[ \t]*ip-version: ipv4\n/gm, '')
-    .replace(/^[ \t]+- "?[0-9a-f]{32}"?\s*$/gm, 'XHWID');
+    .replace(/^[ \t]+- "?[0-9a-f]{32}"?\s*$/gm, 'XHWID')
+    .replace(/^[ \t]+- (?:DIRECT|REJECT)\n/gm, '  - ESCAPE-SLOT\n');
 }
 
 (async () => {

@@ -74,19 +74,20 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.match(previewAfterChange, /SELECT-группа «AI»/, 'старый diagnostic output сохранён как previous Build');
   ok('4B: AI → GLOBAL без Build → STALE баннер, снапшот помечен как предыдущая сборка');
 
-  // 2/3/4: дальнейшие изменения держат STALE
-  await card.locator('.policy-target').selectOption('DIRECT');
-  assert.equal(await staleVisible(), true, '2: → DIRECT → STALE');
+  // 2/3/4: дальнейшие изменения держат STALE (значения должны отличаться от
+  // собранного состояния, иначе фингерпринт совпадает и STALE честно снимается)
   await card.locator('.policy-target').selectOption('REJECT');
-  assert.equal(await staleVisible(), true, '3: → REJECT → STALE');
-  ok('4B: DIRECT/REJECT изменения держат STALE');
+  assert.equal(await staleVisible(), true, '2: → REJECT → STALE');
+  await card.locator('.policy-target').selectOption('GLOBAL');
+  assert.equal(await staleVisible(), true, '3: → GLOBAL → STALE');
+  ok('4B: REJECT/GLOBAL изменения держат STALE');
 
   // 5: новый Build → stale исчезает, Inspector показывает новый target
   await build();
   assert.equal(await staleVisible(), false, '4: новый Build → current');
   const preview2 = await page.locator('#rdPreview').textContent();
-  assert.match(preview2, /AI → REJECT/, 'Inspector показывает новый target');
-  ok('4B: после Build — current, виден новый target (REJECT)');
+  assert.match(preview2, /AI → GLOBAL/, 'Inspector показывает новый target');
+  ok('4B: после Build — current, виден новый target (GLOBAL)');
 
   // 6: чисто визуальный контрол (rdTestInput) не даёт ложный STALE
   await page.fill('#rdTestInput', 'example.org');
@@ -94,8 +95,9 @@ const ok = name => { passed++; console.log('  ok —', name); };
   assert.equal(await staleVisible(), false, '5: rdTestInput не влияет на Build → не STALE');
   ok('4B: purely-visual контрол не dirtyтит Build');
 
-  // Обратный возврат таргета снова делает STALE (контракт живой, не одноразовый)
-  await card.locator('.policy-target').selectOption('GLOBAL');
+  // Обратный возврат таргета снова делает STALE (контракт живой, не одноразовый);
+  // значение должно отличаться от собранного (GLOBAL), иначе STALE честно снимается
+  await card.locator('.policy-target').selectOption('REJECT');
   assert.equal(await staleVisible(), true, '6: повторное изменение → STALE снова');
   ok('4B: контракт живой — любое изменение input снова помечает STALE');
 

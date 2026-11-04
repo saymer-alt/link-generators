@@ -1,5 +1,15 @@
 # VALIDATION — pre-copy валидатор Mihomo YAML
 
+## No-DIRECT egress policy (#284, revised 2026-10-18) — семантическая проверка
+
+Структурная проверка user data plane по разобранному документу: DIRECT как
+участник любой `proxy-groups[].proxies` или как таргет любого правила →
+`INVALID` (правило `direct-egress`). Служебные ключи не затрагиваются:
+`proxy-providers.*.proxy` (bootstrap скачивания подписок) и `dialer-proxy`
+(установление WG-соединения) остаются VALID — service plane. Политика
+поведенческая, не лексическая: сканирование текста заменено семантикой + end-to-end
+outage-тестом ([NO-DIRECT-INVARIANT.md](NO-DIRECT-INVARIANT.md)).
+
 ## YAML 1.1 scalar safety
 
 Пользовательские строковые значения (имена прокси/политик, SNI, endpoint, AWG string-поля)
