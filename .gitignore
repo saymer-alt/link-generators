@@ -2,3 +2,5 @@
 /rb-restore-v2.txt
 /secret-toggle.txt
 /diff-wg-single.txt
+tools/no-direct-egress-lab/run/
+tools/no-direct-egress-lab/certs/
