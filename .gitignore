@@ -4,3 +4,4 @@
 /diff-wg-single.txt
 tools/no-direct-egress-lab/run/
 tools/no-direct-egress-lab/certs/
+tools/no-direct-egress-lab/wd*/
