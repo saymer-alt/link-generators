@@ -1,71 +1,57 @@
 #!/usr/bin/env bash
-# Synthetic field test for issue #284 (no-direct user egress), lab in WSL netns.
-# Topology:
-#   root ns  : dest.mjs (dest :8099 "internet", sub :8098, dns stub :5300)
-#   vps ns   : 10.210.0.3 = simulated VPS public IP, mihomo A (Builder YAML)
-#   egress ns: 10.211.0.2 = allowed external egress node, mihomo B
-#   root ns  : client C mihomo (mixed :7897) = Joe Doe's phone stand-in
-# Leak = dest.jsonl hit with source 10.210.0.3 (user-plane direct egress).
+# No-DIRECT egress field test (#284) — fully contained netns lab.
+#
+# Containment: the FIRST side effect re-executes this script inside a private
+# network namespace (lib/netns.sh:require_lab_isolation). Every sysctl,
+# iptables rule, interface and namespace created afterwards lives in that
+# private namespace and disappears when it does — the shared host network
+# state is never modified. If unshare is unavailable the run refuses (no
+# fallback to the host namespace).
+#
+# Ownership: every started process is registered with a run-unique marker;
+# cleanup (trap) kills only registered PIDs whose /proc cmdline still carries
+# the marker, and removes only this run's directory. No pattern-based process killing, no named
+# netns (nothing under /run/netns), no certificate or system-state changes.
+#
+# Fail-closed verdict (lib/verdict.sh): any unmet mandatory condition —
+# failed positive scenario, unexpectedly succeeding failure scenario, API
+# status mismatch, liveness failure, GLOBAL selection error, or a direct
+# user-plane egress hit on the controlled endpoint — makes the run exit 1.
 set -u
 LAB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONF=$LAB/run/configs
-LOGS=$LAB/run/logs
+LAB_RUN_DIR="$LAB/run"
 MIHOMO="${MIHOMO_BIN:?set MIHOMO_BIN to the pinned mihomo binary (>= 1.19.31)}"
-VPS_IP=10.210.0.3
-EGRESS_IP=10.211.0.2
-DEST_IP=10.210.0.1
-RESULTS=$LAB/run/results.txt
+
+# shellcheck source=lib/netns.sh
+source "$LAB/lib/netns.sh"
+# shellcheck source=lib/verdict.sh
+source "$LAB/lib/verdict.sh"
+
+require_lab_isolation "$@"
+lab_run_lock
+# Namespace-local forwarding for the egress→destination transit (the outer
+# lab namespace routes between the two child links); contained state only.
+sysctl -w net.ipv4.ip_forward=1 >/dev/null
+trap lab_cleanup EXIT INT TERM
+
+LAB_WD_DIR="$LAB_RUN_DIR/$LAB_RUN_ID"
+LOGS="$LAB_RUN_DIR/logs"
+RESULTS="$LOGS/results.txt"
+mkdir -p "$LAB_WD_DIR" "$LOGS"
+: > "$LOGS/dest.jsonl"
 : > "$RESULTS"
 say() { echo "$@" | tee -a "$RESULTS"; }
 
-# Cleanup trap: this script owns ONLY the processes it starts (dest server,
-# mihomo instances under the lab wd dirs) and the lab netns/veths created
-# below. Nothing outside this lab is touched.
-cleanup() {
-  pkill -f 'dest\.mjs' 2>/dev/null
-  pkill -f 'wd-run\|wdB\|wdC\|wdA' 2>/dev/null
-  ip netns del vps 2>/dev/null; ip netns del egress 2>/dev/null
-}
-trap cleanup EXIT
+VPS_V4=10.210.0.3; VPS_V6=fd00:2010::3
+EGRESS_V4=10.211.0.2; EGRESS_V6=fd00:2011::2
+EGRESS_GW_V4=10.211.0.1; EGRESS_GW_V6=fd00:2011::1
+DEST_V4=10.210.0.1; DEST_V6=fd00:2010::1
+API="http://$VPS_V4:9090"
+CLIENT="http://127.0.0.1:7897"
+MIXED_IN_VPS="http://127.0.0.1:7890"
+DEST_LOG="$LOGS/dest.jsonl"
 
-mkdir -p "$LOGS"; : > "$LOGS/dest.jsonl"; : > "$LOGS/sub.jsonl"; : > "$LOGS/dns.jsonl"
-
-# ---------- cleanup previous run ----------
-pkill -f 'dest.mjs' 2>/dev/null; pkill -x A_our_unpacked_ 2>/dev/null
-pkill -f 'configA\|configB\|configC' 2>/dev/null
-ip netns del vps 2>/dev/null; ip netns del egress 2>/dev/null
-sleep 1
-
-# ---------- namespace / link setup ----------
-ip netns add vps
-ip netns add egress
-ip link add vps-v1 type veth peer name vps-v0
-ip link add eg-v1 type veth peer name eg-v0
-ip link set vps-v0 netns vps
-ip link set eg-v0 netns egress
-ip addr add 10.210.0.1/24 dev vps-v1
-ip addr add 10.211.0.1/24 dev eg-v1
-ip link set vps-v1 up; ip link set eg-v1 up
-ip -n vps addr add $VPS_IP/24 dev vps-v0
-ip -n egress addr add $EGRESS_IP/24 dev eg-v0
-ip -n vps link set vps-v0 up; ip -n egress link set eg-v0 up
-ip -n vps link set lo up; ip -n egress link set lo up
-ip -n vps route add default via 10.210.0.1
-ip -n egress route add default via 10.211.0.1
-sysctl -w net.ipv4.ip_forward=1 >/dev/null
-if command -v iptables >/dev/null 2>&1; then
-  iptables -C FORWARD -s 10.210.0.0/24 -d 10.211.0.0/24 -j ACCEPT 2>/dev/null || \
-    iptables -I FORWARD 1 -s 10.210.0.0/24 -d 10.211.0.0/24 -j ACCEPT
-  iptables -C FORWARD -s 10.211.0.0/24 -d 10.210.0.0/24 -j ACCEPT 2>/dev/null || \
-    iptables -I FORWARD 1 -s 10.211.0.0/24 -d 10.210.0.0/24 -j ACCEPT
-fi
-say "== topology: vps=$VPS_IP egress=$EGRESS_IP dest=$DEST_IP =="
-ip netns exec vps ping -c1 -W2 $DEST_IP >/dev/null && say "topology: vps->dest OK" || { say "FATAL: vps->dest unreachable"; exit 1; }
-
-# ---------- lab cert + configs ----------
-# The lab CA lives ONLY in $LAB/certs and is trusted ONLY through the
-# SSL_CERT_FILE environment of the processes that need it (the provider-fetch
-# verification in mihomo A) — the system trust store is never modified.
+# ---------- configs (generated by the vendored Builder runtime) ----------
 mkdir -p "$LAB/certs"
 if [ ! -f "$LAB/certs/server-cert.pem" ]; then
   openssl req -x509 -newkey rsa:2048 -keyout "$LAB/certs/server-key.pem" \
@@ -75,169 +61,198 @@ if [ ! -f "$LAB/certs/server-cert.pem" ]; then
 fi
 export SSL_CERT_FILE="$LAB/certs/server-cert.pem"
 node "$LAB/gen.mjs" >"$LOGS/gen.out" 2>&1 || { say "FATAL: gen.mjs failed"; cat "$LOGS/gen.out"; exit 1; }
-
-# ---------- configs: validate then start lab services ----------
-for f in configA configA-outage configA-sub configA-sub-dead configA-dns-observe configB configC; do
-  $MIHOMO -t -d "$LAB/wd-$f" -f "$CONF/$f.yaml" >/dev/null 2>"$LOGS/t-$f.err" \
-    && say "mihomo -t $f: ACCEPT" || { say "FATAL: mihomo -t $f FAILED"; cat "$LOGS/t-$f.err"; exit 1; }
+for f in configA configA-outage configA-sub configA-sub-dead configB configC; do
+  "$MIHOMO" -t -d "$LAB_WD_DIR/t-$f" -f "$LAB/run/configs/$f.yaml" >/dev/null 2>&1 \
+    && say "mihomo -t $f: ACCEPT" || { say "FATAL: mihomo -t $f FAILED"; exit 1; }
 done
 
-node "$LAB/dest.mjs" >"$LOGS/dest.stdout" 2>&1 &
-# egress node B (allowed external egress) — in the egress namespace
-rm -rf "$LAB/run/wdB"; mkdir -p "$LAB/run/wdB"
-ip netns exec egress sh -c "exec $MIHOMO -d $LAB/wdB -f $CONF/configB.yaml" >"$LOGS/mihomo-B.out" 2>&1 &
-# client C (Joe Doe stand-in) — in the root namespace
-rm -rf "$LAB/run/wdC"; mkdir -p "$LAB/run/wdC"
-$MIHOMO -d "$LAB/run/wdC" -f "$CONF/configC.yaml" >"$LOGS/mihomo-C.out" 2>&1 &
-sleep 2
-curl -s --max-time 3 http://$DEST_IP:8099/selftest >/dev/null && say "dest server: reachable" || { say "FATAL: dest server down"; exit 1; }
-ip netns exec egress curl -s --max-time 3 http://$DEST_IP:8099/b-reachability >/dev/null \
-  && say "egress ns -> dest reachable" || { say "FATAL: egress ns cannot reach dest"; exit 1; }
-(echo > /dev/tcp/127.0.0.1/7897) 2>/dev/null \
-  && say "client C port up" || { say "FATAL: client C not listening"; tail -3 "$LOGS/mihomo-C.out"; exit 1; }
+# ---------- lab processes (all registered; cleanup kills only these) ----------
+node "$LAB/dest.mjs" --run "$LAB_RUN_ID" >"$LOGS/dest.stdout" 2>&1 &
+DEST_PID=$!
+lab_own "$DEST_PID" "$LAB_RUN_ID"
 
-# selftest: prove leak detection works — direct connection from vps ns
-ip netns exec vps curl -s --max-time 3 http://$DEST_IP:8099/selftest-direct >/dev/null
-grep -q '"remote":"'$VPS_IP'".*selftest-direct' "$LOGS/dest.jsonl" \
-  && say "leak-detection selftest: source $VPS_IP logged on dest OK" \
-  || { say "FATAL: leak detection selftest failed"; exit 1; }
-SUB_LINES=$(wc -l < "$LOGS/dest.jsonl")
-
-start_a() { # $1=config name
-  rm -rf "$LAB/run/wd-run"; mkdir -p "$LAB/run/wd-run"
-  ip netns exec vps sh -c "exec $MIHOMO -d $LAB/wd-run -f $CONF/$1.yaml" >"$LOGS/mihomo-A.out" 2>&1 &
-  for i in $(seq 1 30); do
-    curl -s --max-time 1 http://$VPS_IP:9090/version >/dev/null 2>&1 && return 0
-    sleep 0.5
-  done
-  say "FATAL: mihomo A ($1) API not reachable"; cat "$LOGS/mihomo-A.out"; exit 1
+lab_start_mihomo() { # <name> <config-name> → sets LAB_LAST_PID (parent-shell
+  # side effect on purpose: lab_own MUST register in the parent shell, never
+  # inside a command substitution, or cleanup ownership would be lost)
+  local name=$1 conf marker pid
+  conf="$LAB/run/configs/$2.yaml"
+  marker="$LAB_WD_DIR/$name.ready"   # touched only AFTER the veth wiring
+  mkdir -p "$LAB_WD_DIR/$name"
+  case "$name" in
+    client)
+      "$MIHOMO" -d "$LAB_WD_DIR/$name" -f "$conf" >"$LOGS/mihomo-$name.out" 2>&1 &
+      pid=$!
+      ;;
+    *)
+      pid=$(lab_start_vns "$marker" "$LAB_WD_DIR/$name" "$conf" "$LOGS/mihomo-$name.out")
+      ;;
+  esac
+  lab_own "$pid" "$LAB_WD_DIR/$name"
+  LAB_LAST_PID=$pid
 }
-api_groups_audit() { # assert: no DIRECT member in ANY group; REJECT present in GLOBAL
-  node -e '
-    const http=require("http");
-    http.get("http://10.210.0.3:9090/proxies",(r)=>{let b="";r.on("data",c=>b+=c);r.on("end",()=>{
-      const p=JSON.parse(b).proxies; let bad=[],g=p["GLOBAL"];
-      for(const [n,v] of Object.entries(p)) if(Array.isArray(v.all)&&v.all.includes("DIRECT")) bad.push(n);
-      const ok = bad.length===0 && g && g.all.includes("REJECT") && !g.all.includes("DIRECT");
-      console.log(ok?"AUDIT-OK":"AUDIT-FAIL direct_members="+JSON.stringify(bad)+" global="+(g?g.all.join("|"):"absent"));
-    });}).on("error",(e)=>console.log("AUDIT-FAIL "+e.message));'
+
+lab_wire_vps() { # wire (or rewire after a restart) ONLY the vps child and release it
+  lab_wire_veth "$VPS_PID" vps-v0 "$VPS_V4/24" "$DEST_V4/24" "$VPS_V6/64" "$DEST_V6/64" \
+    || { say "FATAL: vps veth wiring failed"; exit 1; }
+  touch "$LAB_WD_DIR/vps.ready"
 }
-api_select() { curl -s -X PUT -d '{"name":"'"$1"'"}' http://$VPS_IP:9090/proxies/GLOBAL -o /dev/null -w '%{http_code}'; }
-dest_hits_since() { tail -n +$(( $1 + 1 )) "$LOGS/dest.jsonl" | grep -c '"kind":"dest"' || true; }
-dest_vps_hits() { grep -c '"remote":"'$VPS_IP'"' "$LOGS/dest.jsonl" || true; }
 
-client_curl() { # $1=url $2=timeout  → via client C (VLESS ingress, root ns)
+lab_wire_all() { # initial wiring: vps + egress children
+  lab_wire_vps
+  lab_wire_veth "$EGRESS_PID" eg-v0 "$EGRESS_V4/24" "$EGRESS_GW_V4/24" "$EGRESS_V6/64" "$EGRESS_GW_V6/64" \
+    || { say "FATAL: egress veth wiring failed"; exit 1; }
+  touch "$LAB_WD_DIR/egress.ready"
+}
+
+restart_vps() { # restart the vps child with a new scenario config
+  if [ -n "${VPS_PID:-}" ]; then
+    kill "$VPS_PID" 2>/dev/null
+    # wait until the old child is really gone AND its API port is released —
+    # selecting a GLOBAL on the dying instance would silently mis-apply
+    local i
+    for i in $(seq 1 40); do [ -d "/proc/$VPS_PID" ] || break; sleep 0.25; done
+    for i in $(seq 1 40); do curl -s --max-time 1 "$API/version" >/dev/null 2>&1 || break; sleep 0.25; done
+  fi
+  sleep 0.5
+  # Fresh core state for every scenario: the generated configs carry
+  # profile.store-selected, so a reused -d directory would silently restore
+  # the PREVIOUS scenario's GLOBAL selection (e.g. B's REJECT leaking into C)
+  # instead of starting from the config's own default. Also reset the wiring
+  # marker so the new child waits for THIS restart's veth wiring.
+  rm -rf "$LAB_WD_DIR/vps"
+  rm -f "$LAB_WD_DIR/vps.ready"
+  lab_start_mihomo vps "$1"
+  VPS_PID=$LAB_LAST_PID
+  lab_wire_vps
+  lab_wait_api_ready "$API" 60 || { say "FATAL: A API not ready after restart"; exit 1; }
+}
+
+# liveness of the controlled endpoint from every lab vantage point (mandatory)
+lab_hop_checks() {
+  lab_curl 200 "http://127.0.0.1:8099/self-outer" >/dev/null \
+    || { say "FATAL: dest not reachable in the lab root namespace"; exit 1; }
+  nsenter -t "$VPS_PID" -n curl -s -o /dev/null --max-time 3 "http://$DEST_V4:8099/self-vps" \
+    || { say "FATAL: dest not reachable from the vps namespace"; exit 1; }
+  nsenter -t "$EGRESS_PID" -n curl -s -o /dev/null --max-time 3 "http://$DEST_V4:8099/self-egress" \
+    || { say "FATAL: dest not reachable from the egress namespace"; exit 1; }
+}
+
+# leak-detector selftest: prove the criterion works before trusting it (mandatory)
+leak_detector_selftest() {
+  nsenter -t "$VPS_PID" -n curl -s -o /dev/null --max-time 3 "http://$DEST_V4:8099/selftest-direct"
+  grep -q '"remote":"'$VPS_V4'".*selftest-direct' "$DEST_LOG" \
+    || { say "FATAL: leak-detection selftest failed — the criterion is not observable"; exit 1; }
+  say "leak-detection selftest: source $VPS_V4 logged on dest OK"
+}
+
+# GLOBAL audit via the API: no DIRECT member in ANY group, REJECT in GLOBAL
+global_audit() {
+  local out code
+  code=$(curl -s --max-time 5 -o "$LOGS/proxies-audit.json" -w '%{http_code}' "$API/proxies")
+  if [ "$code" != "200" ]; then
+    lab_fail "API /proxies returned $code (audit skipped)"
+    return 1
+  fi
+  out=$(cat "$LOGS/proxies-audit.json")
+  if printf '%s' "$out" | node -e '
+    let b = "";
+    process.stdin.on("data", c => b += c).on("end", () => {
+      const p = JSON.parse(b).proxies; let bad = [];
+      for (const [n, v] of Object.entries(p)) if (Array.isArray(v.all) && v.all.includes("DIRECT")) bad.push(n);
+      const g = p["GLOBAL"];
+      if (bad.length === 0 && g && g.all.includes("REJECT") && !g.all.includes("DIRECT")) process.exit(0);
+      process.exit(1);
+    });'; then
+    say "GLOBAL members audit: AUDIT-OK (no DIRECT member in any group)"
+  else
+    lab_fail "GLOBAL/runtime audit: DIRECT reachable or REJECT missing"
+  fi
+}
+
+# client request helpers — mandatory positive/negative semantics
+expect_success() { # url expect_ip label
+  local body ip
+  if body=$(lab_curl 200 -x "$CLIENT" "$1") \
+    && ip=$(printf '%s' "$body" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{try{process.stdout.write(JSON.parse(b).egress_ip||"")}catch(e){}})') \
+    && [ "$ip" = "$2" ]; then
+    say "$3 -> PASS (endpoint saw $ip)"
+  else
+    lab_fail "$3 -> expected egress $2, got: ${body:0:160}"
+  fi
+}
+expect_failure() { # url label — the client MUST NOT get HTTP 200
   local body code
-  body=$(curl -sS --max-time "${2:-15}" -x http://127.0.0.1:7897 -w $'\n%{http_code}' "$1" 2>&1); local rc=$?
-  code=$(echo "$body" | tail -n1); echo "rc=$rc http=$code body=${body%$'\n'*}" | head -c 300; }
-xray_curl() { # via A mixed-port loopback inside vps ns (Xray stand-in position)
-  local body code
-  body=$(ip netns exec vps curl -sS --max-time "${2:-15}" -x http://127.0.0.1:7890 -w $'\n%{http_code}' "$1" 2>&1); local rc=$?
-  code=$(echo "$body" | tail -n1); echo "rc=$rc http=$code body=${body%$'\n'*}" | head -c 300; }
-client_curl_ok() { # PASS iff rc=0 AND http=200 AND body has egress_ip=$1
-  local out; out=$(client_curl "$2" "${3:-15}")
-  echo "$out" | grep -q "rc=0 http=200" && echo "$out" | grep -q "\"egress_ip\":\"$1\""; }
-client_curl_fail() { # PASS iff network-level failure or HTTP-level failure (rc!=0 or http!=200)
-  local out; out=$(client_curl "$1" "${2:-20}")
-  echo "$out" | grep -qv "rc=0 http=200"; }
+  body=$(curl -sS --max-time "${LAB_CURL_TIMEOUT:-20}" -x "$CLIENT" -w $'\n%{http_code}' "$1" 2>&1)
+  code=$(printf '%s' "$body" | tail -n1)
+  if [ "$code" = "200" ]; then
+    lab_fail "$2 -> UNEXPECTED SUCCESS (http 200) during fail-closed scenario"
+  else
+    say "$2 -> client failed closed (http=$code)"
+  fi
+}
 
-# ============ Scenario A: live upstream ============
-say "== Scenario A: live upstream (VLESS ingress + Xray-standin ingress) =="
-start_a configA
-say "GLOBAL members audit: $(api_groups_audit)"
-say "select GLOBAL=egress-live -> http $(api_select egress-live)"
-sleep 1
-R1=$(client_curl "http://$DEST_IP:8099/ipcheck-a1")
-echo "$R1" | grep -q "rc=0 http=200" && echo "$R1" | grep -q "\"egress_ip\":\"$EGRESS_IP\"" \
-  && say "A1 VLESS ingress  -> PASS (endpoint saw egress IP $EGRESS_IP)" \
-  || say "A1 VLESS ingress  -> FAIL: $R1"
-R2=$(xray_curl "http://$DEST_IP:8099/ipcheck-a2")
-echo "$R2" | grep -q "rc=0 http=200" && echo "$R2" | grep -q "\"egress_ip\":\"$EGRESS_IP\"" \
-  && say "A2 loopback mixed -> PASS (endpoint saw egress IP $EGRESS_IP)" \
-  || say "A2 loopback mixed -> FAIL: $R2"
-H1=$(dest_hits_since $SUB_LINES); V1=$(dest_vps_hits)
-say "A dest hits since start: $H1 (expect 2), hits from VPS IP ever: $V1 (expect 1 = selftest only)"
-pkill -f 'configA.yaml' 2>/dev/null; sleep 1
+# ---------- start the lab ----------
+say "== no-direct egress lab: run $LAB_RUN_ID (contained netns) =="
+lab_start_mihomo vps configA;      VPS_PID=$LAB_LAST_PID
+lab_start_mihomo egress configB;   EGRESS_PID=$LAB_LAST_PID
+lab_start_mihomo client configC;   CLIENT_PID=$LAB_LAST_PID
+lab_wire_all
+lab_wait_port "$CLIENT" 60 || { say "FATAL: client C not listening"; exit 1; }
+lab_wait_api_ready "$API" 60 || { say "FATAL: A API not ready"; exit 1; }
+lab_hop_checks
+leak_detector_selftest
 
-# ============ Scenario B: full outage ============
-say "== Scenario B: full upstream outage (fail-closed) =="
-B0=$(wc -l < "$LOGS/dest.jsonl")
-start_a configA-outage
-say "GLOBAL members audit: $(api_groups_audit)"
-say "GLOBAL default = first member (⚡ Fastest, url-test over all-dead nodes)"
+# ---------- Scenario A: live upstream (VLESS ingress + Xray-standin ingress) ----------
+say "== Scenario A: live upstream =="
+global_audit
+api_select "$API" egress-live || lab_fail "GLOBAL select egress-live did not return 204"
 sleep 1
-RB=$(client_curl "http://$DEST_IP:8099/ipcheck-b-fastest" 20)
-echo "$RB" | grep -q "rc=0 http=200" && say "B1 Fastest/all-dead -> UNEXPECTED SUCCESS: $RB" || say "B1 Fastest/all-dead -> client failed closed: $RB"
-RB2=$(xray_curl "http://$DEST_IP:8099/ipcheck-b-fastest2" 20)
-echo "$RB2" | grep -q "rc=0 http=200" && say "B2 loopback all-dead -> UNEXPECTED SUCCESS: $RB2" || say "B2 loopback all-dead -> client failed closed: $RB2"
-say "select GLOBAL=dead-upstream-1 -> http $(api_select dead-upstream-1)"
-sleep 1
-RB3=$(client_curl "http://$DEST_IP:8099/ipcheck-b-dead" 20)
-echo "$RB3" | grep -q "rc=0 http=200" && say "B3 manual dead node -> UNEXPECTED SUCCESS: $RB3" || say "B3 manual dead node -> client failed closed: $RB3"
-say "select GLOBAL=REJECT -> http $(api_select REJECT)"
-sleep 1
-RB4=$(client_curl "http://$DEST_IP:8099/ipcheck-b-reject" 10)
-echo "$RB4" | grep -q "rc=0 http=200" && say "B4 GLOBAL=REJECT -> UNEXPECTED SUCCESS: $RB4" || say "B4 GLOBAL=REJECT -> client failed closed: $RB4"
-HB=$(dest_hits_since $B0); VB=$(dest_vps_hits)
-say "B dest hits during outage: $HB (MUST be 0), hits from VPS IP ever: $VB (MUST be 1 = selftest only)"
-pkill -f 'configA' 2>/dev/null; sleep 1
-
-# ============ Scenario C: GLOBAL switching — positive control back ============
-say "== Scenario C: GLOBAL manual switching back to allowed egress =="
-start_a configA
-C0=$(wc -l < "$LOGS/dest.jsonl")
-say "select GLOBAL=egress-live -> http $(api_select egress-live)"
-sleep 1
-RC=$(client_curl "http://$DEST_IP:8099/ipcheck-c")
-echo "$RC" | grep -q "rc=0 http=200" && echo "$RC" | grep -q "\"egress_ip\":\"$EGRESS_IP\"" \
-  && say "C manual re-select -> PASS (egress IP $EGRESS_IP)" || say "C manual re-select -> FAIL: $RC"
-HC=$(dest_hits_since $C0)
-say "C dest hits: $HC (expect 1)"
-pkill -f 'configA' 2>/dev/null; sleep 1
-
-# ============ Scenario D: Sub Mode ON (provider fetch = service plane) ============
-say "== Scenario D: Sub Mode ON provider fetch + user plane =="
-D0=$(wc -l < "$LOGS/dest.jsonl"); DS0=$(wc -l < "$LOGS/sub.jsonl")
-start_a configA-sub
-sleep 2
-DS1=$(wc -l < "$LOGS/sub.jsonl")
-grep -q '"remote":"'$VPS_IP'"' <(tail -n +$((DS0+1)) "$LOGS/sub.jsonl") \
-  && say "D provider fetch: sub server saw source $VPS_IP -> OK (service plane bootstrap, expected)" \
-  || say "D provider fetch: no fetch logged from VPS (FAIL — Sub Mode broken?)"
-say "GLOBAL members audit: $(api_groups_audit)"
-say "GLOBAL.all/now: $(curl -s http://$VPS_IP:9090/proxies/GLOBAL | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const g=JSON.parse(b);process.stdout.write(JSON.stringify(g.all)+" now="+g.now)})')"
-# Select the provider-fed node directly: the lab has no internet, so the
-# url-test group (health URL gstatic) refuses to route regardless — selecting
-# the node via GLOBAL exercises the same user-plane path as scenario A.
-say "select GLOBAL=sub-egress-live -> http $(api_select sub-egress-live)"
-sleep 1
-RD=$(client_curl "http://$DEST_IP:8099/ipcheck-d")
-echo "$RD" | grep -q "rc=0 http=200" && echo "$RD" | grep -q "\"egress_ip\":\"$EGRESS_IP\"" \
-  && say "D user plane via provider node -> PASS (egress IP $EGRESS_IP)" || say "D user plane via provider node -> FAIL: $RD"
-pkill -f 'configA' 2>/dev/null; sleep 1
-
-# ---- D2: provider fetch works while upstream dead (service plane independent) ----
-say "== Scenario D2: provider fetch with dead node in subscription =="
-DS2=$(wc -l < "$LOGS/sub.jsonl")
-start_a configA-sub-dead
-sleep 3
-grep -q '"remote":"'$VPS_IP'"' <(tail -n +$((DS2+1)) "$LOGS/sub.jsonl") \
-  && say "D2 provider fetch with dead node: fetch OK from $VPS_IP (service plane unaffected by upstream health)" \
-  || say "D2 provider fetch FAILED (unexpected)"
-RB5=$(client_curl "http://$DEST_IP:8099/ipcheck-d2" 15)
-echo "$RB5" | grep -q "rc=0 http=200" && say "D2 user plane via dead provider node -> UNEXPECTED SUCCESS: $RB5" || say "D2 user plane via dead provider node -> client failed closed: $RB5"
-pkill -f 'configA' 2>/dev/null; sleep 1
-# Final verdict: any destination hit whose source is the simulated VPS IP and
-# whose URL is not the deliberate leak-detection selftest is a direct user
-# egress — the run FAILS, not just "connection failed".
-LEAKS=$(grep '"remote":"'$VPS_IP'"' "$LOGS/dest.jsonl" | grep -vc 'selftest-direct' || true)
-VB=$(dest_vps_hits)
-say "== FINAL: dest hits from VPS IP total: $VB, non-selftest (user-plane direct egress): $LEAKS =="
-if [ "$LEAKS" != "0" ]; then
-  say "VERDICT: FAIL — direct user egress with the VPS IP detected:"
-  grep '"remote":"'$VPS_IP'"' "$LOGS/dest.jsonl" | grep -v 'selftest-direct' | tee -a "$RESULTS"
-  exit 1
+expect_success "http://$DEST_V4:8099/ipcheck-a1" "$EGRESS_V4" "A1 VLESS ingress"
+if body=$(nsenter -t "$VPS_PID" -n curl -sS --max-time 15 -x "$MIXED_IN_VPS" -w $'\n%{http_code}' "http://$DEST_V4:8099/ipcheck-a2" 2>&1); then :; fi
+code=$(printf '%s' "$body" | tail -n1)
+if [ "$code" = "200" ] && printf '%s' "$body" | grep -q "\"egress_ip\":\"$EGRESS_V4\""; then
+  say "A2 loopback mixed -> PASS (endpoint saw $EGRESS_V4)"
+else
+  lab_fail "A2 loopback mixed -> expected egress $EGRESS_V4, got: $(printf '%s' "$body" | head -c 160)"
 fi
-say "VERDICT: PASS — zero user-plane direct egress in the entire matrix"
-tail -5 "$LOGS/dest.jsonl" >> "$RESULTS" 2>/dev/null || true
-say "== done =="
+
+# ---------- Scenario B: full outage (fail-closed) ----------
+say "== Scenario B: full upstream outage =="
+restart_vps configA-outage
+lab_hop_checks
+global_audit
+expect_failure "http://$DEST_V4:8099/ipcheck-b1" "B1 Fastest/all-dead"
+# configA-outage's dead members are named dead-upstream-1/2 (two dead links)
+api_select "$API" dead-upstream-1 || lab_fail "GLOBAL select dead-upstream-1 did not return 204"
+sleep 1
+expect_failure "http://$DEST_V4:8099/ipcheck-b2" "B2 manual dead node"
+api_select "$API" REJECT || lab_fail "GLOBAL select REJECT did not return 204"
+sleep 1
+expect_failure "http://$DEST_V4:8099/ipcheck-b3" "B3 GLOBAL=REJECT"
+
+# ---------- Scenario C: manual switching back to the allowed egress ----------
+say "== Scenario C: GLOBAL manual re-select =="
+restart_vps configA
+lab_hop_checks
+api_select "$API" egress-live || lab_fail "GLOBAL select egress-live did not return 204"
+sleep 1
+expect_success "http://$DEST_V4:8099/ipcheck-c" "$EGRESS_V4" "C manual re-select"
+
+# ---------- Scenario D: Sub Mode ON (provider fetch = service plane) ----------
+say "== Scenario D: Sub Mode ON =="
+restart_vps configA-sub
+sleep 2
+grep -q '"remote":"'$VPS_V4'"' "$DEST_LOG" || lab_fail "D: provider fetch was not observed from the VPS IP (service-plane bootstrap expected)"
+global_audit
+api_select "$API" sub-egress-live || lab_fail "GLOBAL select sub-egress-live did not return 204"
+sleep 1
+expect_success "http://$DEST_V4:8099/ipcheck-d" "$EGRESS_V4" "D user plane via provider node"
+
+# ---------- Scenario D2: provider fetch with a dead node ----------
+say "== Scenario D2: provider fetch with dead node =="
+restart_vps configA-sub-dead
+sleep 3
+grep -q '"remote":"'$VPS_V4'"' "$DEST_LOG" || lab_fail "D2: provider fetch did not run despite a dead node in the subscription"
+expect_failure "http://$DEST_V4:8099/ipcheck-d2" "D2 user plane via dead provider node"
+
+lab_verdict "$DEST_LOG" "$VPS_V4" "$VPS_V6"
