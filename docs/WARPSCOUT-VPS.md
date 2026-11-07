@@ -296,6 +296,6 @@ warpscout find-sni -p masque-h2 -jt 10
 ## Дополнительные материалы
 
 - [WARPSCOUT upstream: README_RU](https://github.com/vernette/warpscout/blob/master/README_RU.md), [MASQUE](https://github.com/vernette/warpscout/blob/master/docs/ru/masque.md), [конфиги/фильтры](https://github.com/vernette/warpscout/blob/master/docs/ru/configs.md).
-- [Полевые результаты 06.11.2026: Saymer2, hungry-boyd и Saymer3](research/WARPSCOUT-VPS-FIELD-NOTES-2026-11-06.md) — сравнение WG/H2/H3, резервные endpoint'ы, H2/TCP на порту 500, несколько файлов WARP-аккаунтов и московский AWG с исключением DME.
+- [Полевые результаты 06–07.11.2026: три VPS и повторный AWG-скан Москвы](research/WARPSCOUT-VPS-FIELD-NOTES-2026-11-06.md) — сравнение WG/H2/H3, резервные endpoint'ы, H2/TCP на порту 500, несколько файлов WARP-аккаунтов и московский AWG с исключением DME, смена endpoint после отказа на следующий день и свежие резервные кандидаты.
 - [Архив предыдущих исследований на VPS](research/WARPSCOUT-VPS-FIELD-NOTES-2026-09-10.md) — исторические SE/EE/RU измерения, routing drift, более глубокая диагностика.
 - [WARPSCOUT на Keenetic](WARPSCOUT-KEENETIC.md) — другой сценарий: в фильтрованной домашней сети обычно нужен AWG, не копируйте эти требования на VPS.
