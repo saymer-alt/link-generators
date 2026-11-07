@@ -50,6 +50,9 @@ jobs:
             exit 1
           fi
 
+      - name: Agent context contract (bounded startup + scoped docs)
+        run: node tests/agent-context-contract.cjs
+
       - name: Owner Experience Gate — owner UX regression registry
         run: python3 tools/owner-experience-gate.py
 
