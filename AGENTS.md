@@ -3,6 +3,7 @@
 This file is the **small, unconditional** contract for coding agents (ZCode, Codex and others).
 **Do not preload entire `docs/`, old PRs, release reports or the relocated guides on every task.**
 Read the task-scoped guide linked below only when the change touches that area.
+**Read only the relevant guide(s)** for the files and behavior affected by the task; do not read every guide by default.
 Detailed guidance was moved without dropping original sections; see [guidance index below](#read-only-what-the-task-needs).
 
 ## Mission and authoritative sources
