@@ -225,9 +225,10 @@ The `vps-gateway` profile is the Mihomo half of amnezia-mihomo-gateway. Invarian
 
 - **Minimum supported / compatibility floor: Mihomo 1.19.31** (MIPS TUN stack,
   DDP acceptance, combined profile probes);
-- **Recommended / current tested: Mihomo 1.19.32** (combined probes green on both
-  1.19.31 and 1.19.32; the 1.19.32 *Windows* binary segfault is an upstream build
-  anomaly, not a project blocker — Linux builds are fine);
+- **Recommended / current tested: Mihomo 1.19.33** (combined probes green on both
+  1.19.31 and 1.19.33; the 1.19.32 *Windows* binary segfault was an upstream build
+  anomaly of the previous recommended version, not a project blocker — Linux builds
+  are fine);
 - feature floors are separate and historical: AWG 3.1 ≥ 1.19.30, `override-expr` ≥ 1.19.29,
   DPR needs ≥ 1.19.27 (empty-fallback) / ≥ 1.19.1 (inline rule-providers);
 - dated lab/field records (e.g. docs/AUDIT-MIHOMO-1.19.31.md) remain historical

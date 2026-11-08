@@ -42,7 +42,7 @@ Playwright и `js-yaml` ставятся только во временную д
 - `tests/wg-dialer-selector.cjs`;
 - `tests/whitelist.cjs`.
 
-### `mihomo compat / 1.19.31` и `mihomo compat / 1.19.32`
+### `mihomo compat / 1.19.31` и `mihomo compat / 1.19.33`
 
 GitHub Actions скачивает exact pinned official Mihomo binary, проверяет SHA-256 и запускает:
 
@@ -53,7 +53,7 @@ GitHub Actions скачивает exact pinned official Mihomo binary, пров�
 Compatibility versions соответствуют продуктовому контракту проекта:
 
 - minimum supported: `1.19.31`;
-- recommended/current tested: `1.19.32`.
+- recommended/current tested: `1.19.33`.
 
 ## Runtime provenance
 
