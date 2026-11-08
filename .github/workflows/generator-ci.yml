@@ -489,8 +489,8 @@ jobs:
         include:
           - version: 1.19.31
             sha256: 04cf9f09671704f839ddbee2e93069dc831a4123a75281e725d1d96ab9ac1afc
-          - version: 1.19.32
-            sha256: ba3ce607747a07f948fc35780e108a4a7c7f552a38b9bd4d115f313ebcb89c20
+          - version: 1.19.33
+            sha256: 386508bfb1c72c43b6a0eda73708ecdce82546581b0ebcb16366c53757c622b6
     steps:
       - uses: actions/checkout@v4
         with:
