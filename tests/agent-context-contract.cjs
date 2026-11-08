@@ -9,13 +9,16 @@ const root = path.resolve(__dirname, '..');
 const agentPath = path.join(root, 'AGENTS.md');
 const agent = fs.readFileSync(agentPath, 'utf8');
 const size = Buffer.byteLength(agent, 'utf8');
-assert(size <= 20 * 1024, `AGENTS.md startup text is too large: ${size} bytes (limit 20480)`);
+const hardLimit = 12 * 1024;
+const softTarget = 8 * 1024;
+assert(size <= hardLimit, `AGENTS.md startup text is too large: ${size} bytes (limit ${hardLimit})`);
+if (size > softTarget) console.warn(`AGENTS.md above soft target ${softTarget} bytes: ${size}; preserve safety rules`);
 
 for (const anchor of [
   'main', 'stable', 'owner GO', 'fail-closed', 'DIRECT',
   'web4core.runtime.js', 'subscription', 'Privacy',
   'Draft PR', 'Mihomo', 'CONSTITUTION.md', 'Proof Before Build',
-  'read only the relevant',
+  'read only the relevant', 'Loop Guard', 'Evidence Reuse',
 ]) {
   assert(agent.toLowerCase().includes(anchor.toLowerCase()), `AGENTS.md missing required guard: ${anchor}`);
 }
@@ -33,6 +36,18 @@ for (const file of guides) {
   assert(agent.includes('](' + file + ')'), `root index does not link ${file}`);
 }
 
+const economyPath = 'docs/agent-token-efficiency.md';
+const measurementPath = 'docs/agent-token-measurement-protocol.md';
+assert(agent.includes('](' + economyPath + ')'), 'root must link to on-demand economy guide');
+const economy = fs.readFileSync(path.join(root, economyPath), 'utf8');
+const measurement = fs.readFileSync(path.join(root, measurementPath), 'utf8');
+for (const marker of ['## 1. Loop Guard', '## 2. Evidence Reuse', '## 3. Tool Calls', '## 4. Один активный цикл', '## 5. Сессионный бюджет', '## 6. Краткий handoff']) {
+  assert(economy.includes(marker), `economy guide lost required section: ${marker}`);
+}
+for (const marker of ['NO_COMPARABLE_BASELINE', 'CONTAMINATED', 'NOT_AVAILABLE']) {
+  assert(economy.includes(marker) && measurement.includes(marker), `measurement guard missing: ${marker}`);
+}
+assert(economy.includes('](' + measurementPath.split('/').pop() + ')'), 'economy guide must link measurement protocol');
 const scopedSectionAnchors = ["## Owner decision — WORKING-FIRST, bounded licensing review (11.10.2026)","## Owner-wide design gate — SIMPLICITY-FIRST (2026-10-24)","## Owner intent — why four VPS and multiple Mihomo tiers exist (2026-10-25)","## Owner composition principle and agent intent algorithm (18.10, consolidated 31.10)","## Addendum: automatic whitelist mode","## What this is","## Repository contents (all files)","## Architecture: where each piece of logic lives","## web4core.runtime.js — generated file, never edit by hand","## GitHub Actions: runtime auto-update","## README and code: source of truth","## Input formats and contracts","## Change rules","## Deployment profiles test contract","## Checks after changing HTML/JS","## Privacy and security","## Common dangerous regressions","## Technical debt"];
 const corpus = guides.map(file => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
 for (const heading of scopedSectionAnchors) {
@@ -40,7 +55,7 @@ for (const heading of scopedSectionAnchors) {
 }
 
 // Only validate Markdown relative links (not root-relative paths shown in code ticks).
-for (const file of ['AGENTS.md', ...guides]) {
+for (const file of ['AGENTS.md', ...guides, economyPath, measurementPath]) {
   const content = fs.readFileSync(path.join(root, file), 'utf8');
   const linkPattern = /(?<!!)\[[^\]]+\]\(([^)]+)\)/g;
   for (const match of content.matchAll(linkPattern)) {
@@ -51,4 +66,4 @@ for (const file of ['AGENTS.md', ...guides]) {
     assert(fs.existsSync(resolved), `broken link: ${file} -> ${target}`);
   }
 }
-console.log(`agent context contract: PASS (${size} bytes root; ${guides.length} guides; ${scopedSectionAnchors.length} source headings)`);
+console.log(`agent context contract: PASS (${size} bytes root; ${guides.length} scoped guides; economy + measurement; ${scopedSectionAnchors.length} source headings)`);
