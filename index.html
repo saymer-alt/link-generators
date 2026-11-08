@@ -1944,7 +1944,14 @@ function dprProviderOptions() {
     .map(t => ({ value: dprProviderTarget(t.provider), provider: t.provider }));
 }
 function applyDprProviderTargets(yaml, wanted) {
-  const wantedList = (Array.isArray(wanted) ? wanted : [])
+  const policies = Array.isArray(wanted) ? wanted : [];
+  // Never drop a corrupted PROVIDER: target and silently keep pooled SELECT.
+  for (const p of policies) {
+    if (p && isDprProviderTarget(p.target) && !dprProviderName(p.target).trim()) {
+      throw new Error('Provider-цель политики «' + String(p.name || '') + '»: имя подписки пусто — Build отклонён (fail-closed)');
+    }
+  }
+  const wantedList = policies
     .map(p => ({ name: String(p.name || '').trim(), provider: dprProviderName(p.target) }))
     .filter(x => x.name && x.provider);
   if (!wantedList.length) return yaml;
@@ -1962,8 +1969,9 @@ function applyDprProviderTargets(yaml, wanted) {
     const auto = groups.find(g => g && g.name === name + '-AUTO' && g.type === 'url-test');
     if (!auto) throw new Error('Provider-цель политики «' + name + '»: группа ' + name + '-AUTO не найдена — контракт движка изменился, Build отклонён (fail-closed)');
     auto.use = [provider];
-    // Fail-closed контракт no-DIRECT (#284): у выбранной подписки нет живых узлов →
-    // REJECT; никакой тихой маршрутизации через другие подписки или host-IP.
+    // empty-fallback действует при ПУСТОЙ группе (не при всех unhealthy).
+    // Runtime-отказ всех присутствующих узлов и отсутствие egress-утечек
+    // требуют отдельной проверки; не заявлять их по одному YAML-контракту.
     auto['empty-fallback'] = 'REJECT';
     let rewrote = false;
     for (let i = 0; i < rules.length; i++) {
@@ -5509,7 +5517,7 @@ function policyCardDom(card, index) {
     targetSel.appendChild(opt);
   }
   targetSel.value = targetOptions.some(o => o[0] === card.target) ? card.target : 'SELECT';
-  targetLabel.appendChild(makeCtxHelp('Создаёт отдельную proxy-group с именем категории. После запуска Mihomo маршрут этой категории можно переключать между доступными выходами без пересборки конфига. GLOBAL/REJECT ведут RULE-SET напрямую на цель; прямой выход (DIRECT) запрещён политикой no-DIRECT (#284) — у SELECT-групп последним участником теперь REJECT. «🛰 Только …» (#351): правило ведёт строго в url-test-группу одной выбранной подписки — другие подписки и DIRECT не участвуют; если у подписки нет живых узлов, маршрут = REJECT (без тихого fallback на другие подписки). Требуется Sub Mode и несовместимо с белыми списками.', 'Куда направлять'));
+  targetLabel.appendChild(makeCtxHelp('Создаёт отдельную proxy-group с именем категории. После запуска Mihomo маршрут этой категории можно переключать между доступными выходами без пересборки конфига. GLOBAL/REJECT ведут RULE-SET напрямую на цель; прямой выход (DIRECT) запрещён политикой no-DIRECT (#284) — у SELECT-групп последним участником теперь REJECT. «🛰 Только …» (#351): правило ведёт строго в url-test-группу одной выбранной подписки — другие подписки и DIRECT не участвуют; для пустой группы задан empty-fallback: REJECT, но поведение при всех неработающих узлах ещё не доказано runtime-тестом. Требуется Sub Mode и несовместимо с белыми списками.', 'Куда направлять'));
   const targetWrap = document.createElement('div');
   targetWrap.className = 'policy-target-wrap';
   targetSel.setAttribute('aria-label', 'Куда направлять политику');
@@ -5873,10 +5881,13 @@ function collectPolicyRouting() {
     const name = cards[i].querySelector('.policy-name').value.trim();
     const domains = cards[i].querySelector('.policy-domains').value;
     const targetSel = cards[i].querySelector('.policy-target');
-    // #351: PROVIDER:<имя подписки> — opt-in «строго один provider»; всё прочее
-    // неизвестное схлопывается в SELECT как раньше.
+    // #351: повреждённую PROVIDER:-цель нельзя превращать в SELECT,
+    // иначе строгая политика незаметно расширится до ВСЕХ подписок.
     const rawTarget = targetSel ? String(targetSel.value || '') : '';
-    const target = rawTarget === 'GLOBAL' || rawTarget === 'DIRECT' || rawTarget === 'REJECT' || dprProviderName(rawTarget) ? rawTarget : 'SELECT';
+    if (isDprProviderTarget(rawTarget) && !dprProviderName(rawTarget).trim()) {
+      throw new Error('Политика «' + (name || '#' + (i + 1)) + '»: provider-цель без имени подписки — Build отклонён (fail-closed)');
+    }
+    const target = rawTarget === 'GLOBAL' || rawTarget === 'DIRECT' || rawTarget === 'REJECT' || isDprProviderTarget(rawTarget) ? rawTarget : 'SELECT';
     if (!name && !domains.trim()) continue; // пустая карточка — не политика
     if (!name) throw new Error('Политика #' + (i + 1) + ': укажите имя политики');
     if (seen.has(name)) throw new Error('Дублирующееся имя политики: «' + name + '»');

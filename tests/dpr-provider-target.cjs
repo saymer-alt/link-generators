@@ -120,6 +120,15 @@ check('two provider-only policies: independent providers and both unused NAME se
   assert.equal(doc.rules[doc.rules.length - 1], 'MATCH,GLOBAL');
 });
 
+// 3c. Повреждённая цель PROVIDER: не должна тихо превратиться в SELECT.
+check('malformed provider target: bare/whitespace-only PROVIDER: rejected fail-closed', () => {
+  const raw = build([{ name: 'GEMINI', domains: 'gemini.example.invalid', target: 'SELECT' }]);
+  for (const target of ['PROVIDER:', 'PROVIDER:   ']) {
+    assert.throws(() => dpt.applyDprProviderTargets(raw, [{ name: 'GEMINI', target }]),
+      /имя подписки пусто.*Build отклонён/);
+  }
+});
+
 // 4. OFF parity: no wanted → byte-identical
 check('no provider targets: output byte-identical (patch OFF parity)', () => {
   const raw = build([{ name: 'GEMINI', domains: 'gemini.example.invalid', target: 'SELECT' }]);

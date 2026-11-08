@@ -180,6 +180,26 @@ const SUBS = 'https://subs-a.example.invalid/token-a\nhttps://subs-b.example.inv
     expectNoErrors('registry refresh');
   });
 
+  // 8. Повреждённый target из проекта/UI: никогда не расширять strict
+  // provider-only policy до SELECT, который объединяет все подписки.
+  await check('malformed PROVIDER: target: saved raw, Build fails closed instead of pooled SELECT', async () => {
+    await page.evaluate(() => {
+      const sel = document.querySelector('#policyCards .policy-card:last-child .policy-target');
+      const invalid = document.createElement('option');
+      invalid.value = 'PROVIDER:';
+      invalid.textContent = 'Synthetic malformed provider target';
+      sel.appendChild(invalid);
+      sel.value = 'PROVIDER:';
+    });
+    const stored = await page.evaluate(() => rbCollectProject().domainPolicy.cards.find(p => p.name === 'GEMINI').target);
+    assert.equal(stored, 'PROVIDER:', 'corrupt target persists verbatim (not rewritten as SELECT)');
+    const r = await build();
+    assert.equal(r.state, 'NOT_BUILT', 'malformed strict target rejected');
+    assert.match(r.toast, /provider-цель без имени подписки/, 'explicit blocker');
+    assert.equal(await page.locator('#policyCards .policy-card:last-child .policy-target').inputValue(), 'PROVIDER:');
+    expectNoErrors('malformed target');
+  });
+
   await page.close();
   await browser.close();
   console.log('\ndpr-provider-target-browser: ' + passed + ' passed, ' + failed + ' failed');
