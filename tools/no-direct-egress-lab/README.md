@@ -10,8 +10,11 @@ endpoint — локальный логирующий echo-сервер. Крит
 
 - Первый side-effect каждого скрипта — `require_lab_isolation()`
   (`lib/netns.sh`): повторный `exec` внутрь **приватного** `unshare -n`
-  namespace. Все sysctl, ссылки, адреса и forwarding-флаги живут в этом
-  namespace и исчезают вместе с ним; общий host-стек не изменяется.
+  namespace. Даже если `AMG_LAB_INSIDE=1` унаследована ошибочно, gate
+  сверяет фактические inode `self` и `/proc/1/ns/net`, отказывая до любых
+  изменений сети, если приватная изоляция не подтверждена. Все sysctl,
+  ссылки, адреса и forwarding-флаги после gate изолированы; общий
+  host-стек не изменяется.
   Если `unshare` недоступен — запуск **отказывается** работать (нет fallback
   на host-namespace).
 - Вложенные namespace («vps», «egress») — **безымянные**, создаются по PID
@@ -75,9 +78,10 @@ egress-v6, никогда VPS-v6.
 
 ```bash
 MIHOMO_BIN=/absolute/mihomo(>=1.19.31) bash lab.sh
-MIHOMO_BIN=... bash test-guards.sh   # 38 статических/mock-проверок: нет pkill,
+MIHOMO_BIN=... bash test-guards.sh   # 43 статических/mock-проверки: нет pkill,
                                      # нет ip netns add/del, gate до мутаций,
-                                     # строгие статусы, ownership-очистка, вердикт
+                                     # строгие статусы, ownership-очистка, вердикт,
+                                     # negative guard для поддельного inside-маркера
 bash dns-observe.sh; bash ipv6-observe.sh; bash ipv6-live-exit.sh
 ```
 
