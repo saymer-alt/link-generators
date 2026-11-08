@@ -223,8 +223,22 @@ select_control_exit() { # GLOBAL := provider B node; the MATCH,GLOBAL control pa
 }
 
 liveness_and_selftest() { # mandatory hop checks + leak-detector selftest
+  # node services need ~2s cold start (measured); native mihomo is faster —
+  # wait for them explicitly instead of racing their startup.
+  lab_wait_port "http://127.0.0.1:8099/self-outer" 120 \
+    || { say "FATAL: dest :8099 never started listening"; exit 1; }
+  lab_wait_port "http://127.0.0.1:8097/hc204" 120 \
+    || { say "FATAL: dpr-sub :8097 never started listening"; exit 1; }
   lab_curl 200 "http://127.0.0.1:8099/self-outer" >/dev/null \
-    || { say "FATAL: dest not reachable in the lab root namespace"; exit 1; }
+    || {
+      say "FATAL: dest not reachable in the lab root namespace"
+      for p in "$DEST_PID" "$SUB_PID"; do
+        [ -n "$p" ] && ps -o pid=,ppid=,stat=,etime=,cmd= -p "$p" 2>/dev/null | while IFS= read -r l; do say "  proc: $l"; done
+      done
+      say "  dest.stdout: $(tr '\n' '|' <"$LOGS/dest.stdout" 2>/dev/null || echo unreadable)"
+      say "  dpr-sub.stdout: $(tr '\n' '|' <"$LOGS/dpr-sub.stdout" 2>/dev/null || echo unreadable)"
+      exit 1
+    }
   nsenter -t "$VPS_PID" -n curl -s -o /dev/null --max-time 3 "http://$DEST_V4:8099/self-vps" \
     || { say "FATAL: dest not reachable from the vps namespace"; exit 1; }
   nsenter -t "$EGRESS_PID" -n curl -s -o /dev/null --max-time 3 "http://$DEST_V4:8099/self-egress" \
