@@ -36,11 +36,20 @@ const NAMED = '# provider-name: ' + NAME + '\n' + SUB;
         return page.locator('#mihomoOutput').inputValue();
       };
 
+      // Панель резерва скрыта при выключенном БС (контракт UI) — fill/inputValue
+      // требуют видимости, поэтому значение ставим и читаем через evaluate
+      // с тем же input-событием, что и при ручном вводе.
+      const setWhitelist = v => page.evaluate(t => {
+        const el = document.getElementById('whitelistInput');
+        el.value = t;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }, v);
+      const whitelistValue = () => page.evaluate(() => document.getElementById('whitelistInput').value);
       // Сценарий 1 (#340): Sub Mode OFF в Router, URL с ручным именем уже введён;
       // переход на ранее не настроенный VPS-профиль (Sub Mode по умолчанию ON).
       await page.locator('#cfgSubMode').uncheck();
       await page.locator('#mihomoInput').fill(NAMED);
-      await page.locator('#whitelistInput').fill(NAMED);
+      await setWhitelist(NAMED);
       assert.equal(await rows.count(), 0, 'OFF: редакторов имён нет');
       assert.equal(await reserveRows.count(), 0, 'OFF: в резерве редакторов нет');
       await page.locator('#cfgProfile').selectOption('vps-local');
@@ -85,7 +94,7 @@ const NAMED = '# provider-name: ' + NAME + '\n' + SUB;
 
       // Сценарий 4: имена, URL, HWID и ручной ввод не искажаются переключениями.
       assert.equal(await page.locator('#mihomoInput').inputValue(), NAMED, 'URL и директива не изменились');
-      assert.equal(await page.locator('#whitelistInput').inputValue(), NAMED, 'резерв: URL и директива не изменились');
+      assert.equal(await whitelistValue(), NAMED, 'резерв: URL и директива не изменились');
       await rows.first().fill('Имя 2');
       await rows.first().evaluate(el => el.blur()); // blur коммитит change в textarea
       assert.equal(await page.locator('#mihomoInput').inputValue(), '# provider-name: Имя 2\n' + SUB, 'ввод имени попал в текст');
