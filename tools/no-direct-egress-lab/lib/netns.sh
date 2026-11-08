@@ -18,12 +18,28 @@
 # Re-executes the script inside a private network namespace; if unshare is
 # unavailable the exec fails and the script refuses — there is no fallback
 # to running on the shared host network namespace.
+# Pure predicate for rootless guard tests. A marker variable by itself
+# is NOT proof of netns containment; the process must be outside PID 1's netns.
+lab_is_private_netns() {
+  [ -n "${1:-}" ] && [ -n "${2:-}" ] && [ "$1" != "$2" ]
+}
+
 require_lab_isolation() {
   if [ "${AMG_LAB_INSIDE:-}" = "1" ]; then
-    # Fresh private namespace: loopback is down and addressless — bring it up
-    # so lab-local services can bind 127.0.0.1 (namespace-local state only).
-    ip link set lo up
-    ip addr add 127.0.0.1/8 dev lo 2>/dev/null
+    # Fail closed when the env marker is inherited/spoofed on the host.
+    # /proc/1 is in the original PID namespace (unshare -n does NOT unshare
+    # the PID namespace), so a truly private netns must have another inode.
+    local own_ns init_ns
+    own_ns=$(readlink /proc/self/ns/net 2>/dev/null) || { echo "FATAL: cannot inspect own network namespace" >&2; exit 1; }
+    init_ns=$(readlink /proc/1/ns/net 2>/dev/null) || { echo "FATAL: cannot inspect init network namespace" >&2; exit 1; }
+    if ! lab_is_private_netns "$own_ns" "$init_ns"; then
+      echo "FATAL: AMG_LAB_INSIDE without verified private netns; refusing host network changes" >&2
+      exit 1
+    fi
+    # Fresh private namespace: loopback is down and addressless. These
+    # mutations are safe only after verifying the namespace is private.
+    ip link set lo up || { echo "FATAL: cannot initialize private loopback" >&2; exit 1; }
+    ip addr add 127.0.0.1/8 dev lo 2>/dev/null || { echo "FATAL: cannot address private loopback" >&2; exit 1; }
     return 0
   fi
   exec unshare -n env AMG_LAB_INSIDE=1 bash "$0" "$@"

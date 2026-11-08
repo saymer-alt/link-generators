@@ -50,6 +50,9 @@ jobs:
             exit 1
           fi
 
+      - name: Agent context contract (bounded startup + scoped docs)
+        run: node tests/agent-context-contract.cjs
+
       - name: Owner Experience Gate — owner UX regression registry
         run: python3 tools/owner-experience-gate.py
 
@@ -137,6 +140,12 @@ jobs:
       - name: No-DIRECT egress invariant regression (#284)
         run: node tests/no-direct-egress.cjs
 
+      # No root or netns needed: mock verdict and static containment checks only.
+      # The live network lab is intentionally NOT executed by GitHub Actions.
+      - name: No-DIRECT netns lab rootless guard regression (#338)
+        shell: bash
+        run: bash tools/no-direct-egress-lab/test-guards.sh
+
       - name: Routing Diagnostics core regression
         run: node tests/routing-inspector.cjs
 
@@ -175,6 +184,12 @@ jobs:
 
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
+
+      - name: i18n foundation dictionary contract (#349)
+        run: node tests/i18n-foundation.cjs
+
+      - name: Builder i18n slice regression (#353)
+        run: node tests/i18n-builder-2a.cjs
 
       - name: Fieldtest harness offline unit tests
         run: node --test tools/warp-dialer-fieldtest/fieldtest.test.mjs
@@ -239,6 +254,12 @@ jobs:
           TEST_ENGINES: ${{ matrix.browser }}
         run: node tests/submode-clarity.cjs
 
+      - name: Provider name editors sync matrix (#340)
+        env:
+          HOME: /root
+          TEST_ENGINES: ${{ matrix.browser }}
+        run: node tests/provider-name-editors-browser.cjs
+
       - name: Runtime preset matrix (#264)
         env:
           HOME: /root
@@ -252,6 +273,18 @@ jobs:
           HOME: /root
           TEST_ENGINES: ${{ matrix.browser }}
         run: node tests/advanced-stack-choice.cjs
+
+      - name: i18n foundation matrix (#349)
+        env:
+          HOME: /root
+          TEST_ENGINES: ${{ matrix.browser }}
+        run: node tests/i18n-foundation-browser.cjs
+
+      - name: Builder i18n slice matrix (#353)
+        env:
+          HOME: /root
+          TEST_ENGINES: ${{ matrix.browser }}
+        run: node tests/i18n-builder-2a-browser.cjs
 
   browser:
     name: deterministic / browser
@@ -283,6 +316,19 @@ jobs:
 
       - name: Main browser regression
         run: node tests/browser.cjs
+
+      - name: Provider name editors sync regression (#340)
+        run: node tests/provider-name-editors-browser.cjs
+
+      - name: i18n foundation browser regression (#349)
+        env:
+          TEST_ENGINES: chromium
+        run: node tests/i18n-foundation-browser.cjs
+
+      - name: Builder i18n slice browser regression (#353)
+        env:
+          TEST_ENGINES: chromium
+        run: node tests/i18n-builder-2a-browser.cjs
 
       - name: Owner UX acceptance regression
         run: node tests/owner-ux-browser.cjs
@@ -477,8 +523,8 @@ jobs:
         include:
           - version: 1.19.31
             sha256: 04cf9f09671704f839ddbee2e93069dc831a4123a75281e725d1d96ab9ac1afc
-          - version: 1.19.32
-            sha256: ba3ce607747a07f948fc35780e108a4a7c7f552a38b9bd4d115f313ebcb89c20
+          - version: 1.19.33
+            sha256: 386508bfb1c72c43b6a0eda73708ecdce82546581b0ebcb16366c53757c622b6
     steps:
       - uses: actions/checkout@v4
         with:

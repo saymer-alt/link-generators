@@ -80,8 +80,32 @@ if grep -q "AMG_LAB_INSIDE" "$LAB/lib/netns.sh" && grep -q "exec unshare -n" "$L
 check "$r" 0 "isolation gate re-executes into unshare -n with no fallback"
 if grep -q 'grep -qF "\$marker"' "$LAB/lib/netns.sh"; then r=0; else r=1; fi
 check "$r" 0 "cleanup kills only PIDs whose cmdline carries this run's marker"
-if ! grep -qE "sysctl|iptables|netns|ca-cert" "$LAB/lib/netns.sh" | grep -v "^.*#"; then r=0; else r=1; fi
-check "$r" 0 "netns lib itself never mutates host sysctl/iptables/trust (comments aside)"
+# The previous "grep -q | grep -v" pipeline could never inspect any
+# matching lines, because -q suppresses stdout. Check actual command lines,
+# excluding comments, and verify that the checker catches a synthetic violation.
+guard_has_host_mutator() {
+  grep -Eq '^[[:space:]]*(sysctl|iptables|ip6tables|update-ca-certificates)([[:space:]]|$)' "$1"
+}
+if guard_has_host_mutator "$LAB/lib/netns.sh"; then r=1; else r=0; fi
+check "$r" 0 "netns lib has no direct host sysctl/iptables/trust command"
+
+printf '%s\n' '# sysctl -w net.ipv4.ip_forward=1' '  echo "iptables -A FORWARD"' > "$TMP/guard-safe.sh"
+if guard_has_host_mutator "$TMP/guard-safe.sh"; then r=1; else r=0; fi
+check "$r" 0 "host-mutation scanner ignores comments and quoted sample text"
+printf '%s\n' '  sysctl -w net.ipv4.ip_forward=1' > "$TMP/guard-injected.sh"
+if guard_has_host_mutator "$TMP/guard-injected.sh"; then r=0; else r=1; fi
+check "$r" 0 "host-mutation scanner catches injected active sysctl"
+
+# No namespace writes in these tests: mock only the real isolation predicate.
+# AMG_LAB_INSIDE=1 on PID1's original netns must never be accepted.
+# shellcheck source=lib/netns.sh
+source "$LAB/lib/netns.sh"
+if lab_is_private_netns 'net:[1]' 'net:[1]'; then r=1; else r=0; fi
+check "$r" 0 "spoofed AMG_LAB_INSIDE on host netns is rejected"
+if lab_is_private_netns 'net:[2]' 'net:[1]'; then r=0; else r=1; fi
+check "$r" 0 "real distinct private namespace inode is accepted"
+if lab_is_private_netns '' 'net:[1]'; then r=1; else r=0; fi
+check "$r" 0 "unreadable namespace inode is fail-closed"
 
 echo "---"
 if [ "$FAILS" = "0" ]; then echo "GUARDS: ALL PASS"; exit 0; fi

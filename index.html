@@ -307,6 +307,16 @@
 <div class="container">
   <h1 style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>🔗 WARP & Mihomo Unified</span><span id="genVersionBadge" class="gen-version-badge" role="note"></span></h1>
 
+  <!-- #349 i18n foundation: language selector. RU default; stores only the enum
+       'ru'|'en' in link-generators.locale.v1 (memory fallback if storage is off). -->
+  <div style="display:flex;align-items:center;gap:8px;margin:8px 0">
+    <label for="uiLangSelect" data-i18n="ui.lang.label">Язык интерфейса:</label>
+    <select id="uiLangSelect" data-i18n-attr="title:ui.lang.title" title="Выбор языка интерфейса">
+      <option value="ru">Русский</option>
+      <option value="en">English</option>
+    </select>
+  </div>
+
   <!-- #326: текущая логическая идентичность подписки (Mihomo Builder) — видна до вкладок.
        Один канонический реестр (#156/#163); расширенный менеджер остаётся в #deviceIdentityDetails.
        Портативные per-provider HWID (проект v2, #280) в будущем расширят эту полосу контекстом проекта. -->
@@ -321,27 +331,27 @@
     </span>
   </div>
   <div class="tabs">
-    <button class="tab" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
-    <button class="tab active" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
-    <button class="tab" onclick="switchTab(event, 'studio')">🔎 Config Studio</button>
+    <button class="tab" data-i18n="ui.tabs.warp" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
+    <button class="tab active" data-i18n="ui.tabs.builder" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
+    <button class="tab" data-i18n="ui.tabs.studio" onclick="switchTab(event, 'studio')">🔎 Config Studio</button>
   </div>
 
   <!-- TAB 1: WARP GENERATOR -->
   <div id="tab-warp" class="tab-content">
     <div class="card">
-      <div class="card-title">📥 Импорт WARP YAML <span id="parsedBadge" class="parsed-badge" style="display:none">Заполнено</span></div>
-      <textarea id="yamlInput" placeholder="Вставьте WARP YAML-конфиг (бот, WARPSCOUT или другой совместимый источник)…"></textarea>
+      <div class="card-title"><span data-i18n="ui.warp.import.title">📥 Импорт WARP YAML</span> <span id="parsedBadge" class="parsed-badge" data-i18n="ui.warp.parsedBadge" style="display:none">Заполнено</span></div>
+      <textarea id="yamlInput" data-i18n-attr="placeholder:ui.warp.import.placeholder" placeholder="Вставьте WARP YAML-конфиг (бот, WARPSCOUT или другой совместимый источник)…"></textarea>
       <div class="btn-group">
-        <button class="btn btn-purple" onclick="parseYaml()">🔍 Распарсить</button>
-        <button class="btn btn-gray" onclick="document.getElementById('yamlInput').value=''">Очистить</button>
+        <button class="btn btn-purple" data-i18n="ui.warp.import.parse" onclick="parseYaml()">🔍 Распарсить</button>
+        <button class="btn btn-gray" data-i18n="ui.warp.import.clear" onclick="document.getElementById('yamlInput').value=''">Очистить</button>
       </div>
-      <div class="hint">Поддерживается совместимый WARP YAML; источник не важен.</div>
+      <div class="hint" data-i18n="ui.warp.import.hint">Поддерживается совместимый WARP YAML; источник не важен.</div>
       <div id="warpscoutInfo" style="display:none;margin-top:10px"></div>
     </div>
 
     <div class="card">
-      <div class="card-title">🔑 Параметры</div>
-      <label>Имя профиля (база)</label>
+      <div class="card-title" data-i18n="ui.warp.params.title">🔑 Параметры</div>
+      <label data-i18n="ui.warp.params.profileName">Имя профиля (база)</label>
       <input type="text" id="profileName" value="WARP-MASQUE">
 
       <div class="row">
@@ -424,20 +434,20 @@
   <!-- TAB 2: MIHOMO BUILDER -->
   <div id="tab-mihomo" class="tab-content active">
 <div class="hint"><a href="quick-start.html">📖 Короткая инструкция</a> · WARP создаёт ссылки, Builder собирает конфигурацию, Config Studio анализирует готовый YAML.</div>
-<div id="builderActionbar" class="builder-actionbar" role="toolbar" aria-label="Действия Builder">
-        <button class="btn" id="buildConfigBtn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" onclick="buildMihomo()">⚡ Build Config</button>
-        <button class="btn btn-gray" id="downloadYamlBtn" type="button" onclick="downloadMihomo()">💾 Скачать YAML</button>
-        <button type="button" class="btn btn-gray" id="openYamlStudioBtn" onclick="openBuilderYamlInStudio()">🔎 Открыть YAML в Config Studio</button>
-        <button class="btn btn-gray" id="copyYamlBtn" title="Скопировать итоговый YAML (доступно только после успешной проверки)" onclick="copyMihomo()">📋 Copy YAML</button>
-        <button class="btn btn-gray" title="Сохранить проект генератора (все подписки, WG/AWG-профили, настройки) в .lgproject.json. ВНИМАНИЕ: файл содержит приватные ключи и токены" onclick="rbSaveProject()">💾 Сохранить проект</button>
-        <button class="btn btn-gray" title="Загрузить проект генератора (.lgproject.json) и восстановить Builder" onclick="document.getElementById('rbProjectFile').click()">📂 Загрузить проект</button>
-        <button class="btn btn-gray" id="rbUndoBtn" style="display:none" title="Вернуть состояние Builder до загрузки проекта" onclick="rbUndoRestore()">↩︎ Отменить восстановление</button>
+<div id="builderActionbar" class="builder-actionbar" role="toolbar" aria-label="Действия Builder" data-i18n-attr="aria-label:builder.actionbar.aria">
+        <button class="btn" id="buildConfigBtn" title="Собрать YAML из текущих данных и настроек; после сборки выполняется автоматическая проверка структуры" data-i18n-attr="title:builder.build.title" onclick="buildMihomo()">⚡ Build Config</button>
+        <button class="btn btn-gray" id="downloadYamlBtn" type="button" data-i18n="builder.downloadYaml" onclick="downloadMihomo()">💾 Скачать YAML</button>
+        <button type="button" class="btn btn-gray" id="openYamlStudioBtn" data-i18n="builder.openStudio" onclick="openBuilderYamlInStudio()">🔎 Открыть YAML в Config Studio</button>
+        <button class="btn btn-gray" id="copyYamlBtn" title="Скопировать итоговый YAML (доступно только после успешной проверки)" data-i18n-attr="title:builder.copy.title" onclick="copyMihomo()">📋 Copy YAML</button>
+        <button class="btn btn-gray" title="Сохранить проект генератора (все подписки, WG/AWG-профили, настройки) в .lgproject.json. ВНИМАНИЕ: файл содержит приватные ключи и токены" data-i18n="builder.saveProject" data-i18n-attr="title:builder.saveProject.title" onclick="rbSaveProject()">💾 Сохранить проект</button>
+        <button class="btn btn-gray" title="Загрузить проект генератора (.lgproject.json) и восстановить Builder" data-i18n="builder.loadProject" data-i18n-attr="title:builder.loadProject.title" onclick="document.getElementById('rbProjectFile').click()">📂 Загрузить проект</button>
+        <button class="btn btn-gray" id="rbUndoBtn" style="display:none" title="Вернуть состояние Builder до загрузки проекта" data-i18n="builder.undoRestore" data-i18n-attr="title:builder.undoRestore.title" onclick="rbUndoRestore()">↩︎ Отменить восстановление</button>
         <input type="file" id="rbProjectFile" accept=".lgproject.json,.json" hidden>
-      <button type="button" class="btn" id="builderRebuildBtn" hidden>Пересобрать YAML</button><button type="button" class="btn btn-gray" id="builderResetBtn" onclick="rbResetProject()">🧹 Сбросить проект</button><button type="button" class="btn btn-gray" id="builderYamlJump" onclick="builderJump('mihomoOutput')">↓ Перейти к YAML</button><div id="builderActionStatus" role="status" aria-live="polite"></div></div>
-<nav id="builderWorkspaceNav" class="workspace-nav" aria-label="Разделы Mihomo Builder">
- <a href="#ux-start">🏠 Быстрый старт</a><a href="#ux-routing">🌐 Маршрутизация и DNS</a><a href="#ux-diagnostics">🔍 Диагностика</a><a href="#ux-options">⚙️ Дополнительно</a>
+      <button type="button" class="btn" id="builderRebuildBtn" hidden data-i18n="builder.rebuild">Пересобрать YAML</button><button type="button" class="btn btn-gray" id="builderResetBtn" data-i18n="builder.reset" onclick="rbResetProject()">🧹 Сбросить проект</button><button type="button" class="btn btn-gray" id="builderYamlJump" data-i18n="builder.jumpToYaml" onclick="builderJump('mihomoOutput')">↓ Перейти к YAML</button><div id="builderActionStatus" role="status" aria-live="polite"></div></div>
+<nav id="builderWorkspaceNav" class="workspace-nav" aria-label="Разделы Mihomo Builder" data-i18n-attr="aria-label:builder.nav.aria">
+ <a href="#ux-start" data-i18n="builder.section.start">🏠 Быстрый старт</a><a href="#ux-routing" data-i18n="builder.nav.routing">🌐 Маршрутизация и DNS</a><a href="#ux-diagnostics" data-i18n="builder.nav.diagnostics">🔍 Диагностика</a><a href="#ux-options" data-i18n="builder.nav.options">⚙️ Дополнительно</a>
 </nav>
-<details id="workspaceDirectory"><summary>Все инструменты — экспертный доступ</summary>
+<details id="workspaceDirectory"><summary data-i18n="builder.toolsDirectory">Все инструменты — экспертный доступ</summary>
  <div class="workspace-directory">
  <a href="#policyRoutingPanel" data-workspace-target="cfgPolicyRouting">Доменные политики / MagiTrickle</a>
  <a href="#tieredPanel" data-workspace-target="cfgTieredFailover">Приоритетные группы серверов</a>
@@ -449,14 +459,14 @@
  </div>
 </details>
 <section class="builder-workspace" aria-labelledby="ux-start">
-<h2 id="ux-start" tabindex="-1">🏠 Быстрый старт</h2>
-<p class="hint">1. Выберите платформу. 2. Выберите режим маршрутизации. 3. Добавьте серверы и соберите YAML. Инженерные настройки доступны в отдельных разделах ниже.</p>
+<h2 id="ux-start" tabindex="-1" data-i18n="builder.section.start">🏠 Быстрый старт</h2>
+<p class="hint" data-i18n="builder.quickStart.steps">1. Выберите платформу. 2. Выберите режим маршрутизации. 3. Добавьте серверы и соберите YAML. Инженерные настройки доступны в отдельных разделах ниже.</p>
 <div class="card" id="profileRow">
-      <div class="card-title">🎯 Где будет работать Mihomo?</div>
+      <div class="card-title" data-i18n="builder.profile.title">🎯 Где будет работать Mihomo?</div>
       <select id="cfgProfile">
-        <option value="router" selected>Роутер / обычный TUN (Keenetic)</option>
-        <option value="vps-local">VPS — локальный Mihomo / SOCKS для Xray / 3X-UI</option>
-        <option value="vps-gateway">VPS Transparent Gateway (amnezia-mihomo-gateway)</option>
+        <option value="router" selected data-i18n="builder.profile.option.router">Роутер / обычный TUN (Keenetic)</option>
+        <option value="vps-local" data-i18n="builder.profile.option.vpsLocal">VPS — локальный Mihomo / SOCKS для Xray / 3X-UI</option>
+        <option value="vps-gateway" data-i18n="builder.profile.option.vpsGateway">VPS Transparent Gateway (amnezia-mihomo-gateway)</option>
       </select>
       <div id="profileHint" class="hint"></div>
       <div id="vpsPanel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
@@ -485,22 +495,22 @@
       <div class="hint">Профиль задаёт только сценарий развёртывания: вход (TUN/SOCKS), базовые переключатели и gateway-настройки. Прокси, подписки, WireGuard, фильтры и остальные данные не затрагиваются. Подробно: <a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/GENERATOR-GUIDE.md">подробная инструкция</a>, <a href="https://github.com/saymer-alt/link-generators/blob/stable/docs/VPS-GATEWAY.md">VPS Gateway</a>.</div>
     </div>
 <div class="card">
-<div class="card-title">🛡️ 2. Режим маршрутизации</div>
-<div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> 🛡️ Автоматический режим белых списков <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Автоматический режим белых списков">?</button><span class="ctx-help-pop" role="note">Плоский резервный набор (PRIMARY → FALLBACK): GLOBAL сначала использует основной набор выходов, при их недоступности переключается на резервный. Health-check каждые 300 секунд, ускоренный при неудачах. Доступен только в профиле «Роутер / обычный TUN»: на VPS не используется.</span></span></label></div>
-<div class="hint" id="awlRouterHint" style="display:none">Автоматический режим белых списков доступен только для профиля «Роутер / обычный TUN».</div>
+<div class="card-title" data-i18n="builder.routing.title">🛡️ 2. Режим маршрутизации</div>
+<div class="toggle-row"><label><input type="checkbox" id="cfgAutoWhitelist"> <span data-i18n="builder.routing.awlToggle">🛡️ Автоматический режим белых списков</span> <span class="ctx-help-wrap"><button type="button" class="ctx-help" aria-expanded="false" aria-label="Подсказка: Автоматический режим белых списков">?</button><span class="ctx-help-pop" role="note">Плоский резервный набор (PRIMARY → FALLBACK): GLOBAL сначала использует основной набор выходов, при их недоступности переключается на резервный. Health-check каждые 300 секунд, ускоренный при неудачах. Доступен только в профиле «Роутер / обычный TUN»: на VPS не используется.</span></span></label></div>
+<div class="hint" id="awlRouterHint" style="display:none" data-i18n="builder.awl.routerHint">Автоматический режим белых списков доступен только для профиля «Роутер / обычный TUN».</div>
 
 </div>
 <div class="card">
-<div class="card-title">📋 3. Основные серверы и подписки</div>
-<label for="mihomoInput">Основные серверы и подписки</label>
+<div class="card-title" data-i18n="builder.sources.title">📋 3. Основные серверы и подписки</div>
+<label for="mihomoInput" data-i18n="builder.sources.label">Основные серверы и подписки</label>
 <div class="hint" id="subModeInputHint">Обычные proxy-ссылки и HTTP(S) URL-подписки можно смешивать в обоих режимах настройки «Использовать URL-подписки». WG/AWG добавляются отдельно файлами в разделе ниже. <a href="#cfgSubMode" id="subModeJump" onclick="event.preventDefault();builderJump('cfgSubMode')">Перейти к настройке URL-подписок ↓</a> Включено — подписки обновляет Mihomo; выключено — при Build браузер читает их один раз и встраивает узлы.</div>
-<a href="#realityModernInput" id="realityModernJump">Совместимость VLESS / REALITY с X25519MLKEM768</a><textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки, созданные во вкладке «⚡ WARP MASQUE Links»"></textarea>
-<div id="providerNameRows" aria-label="Имена основных подписок"></div>
+<a href="#realityModernInput" id="realityModernJump">Совместимость VLESS / REALITY с X25519MLKEM768</a><textarea id="mihomoInput" placeholder="vless://...&#10;masque://...&#10;https://sub.url/...&#10;Можно вставить ссылки, созданные во вкладке «⚡ WARP MASQUE Links»" data-i18n-attr="placeholder:builder.sources.placeholder"></textarea>
+<div id="providerNameRows" aria-label="Имена основных подписок" data-i18n-attr="aria-label:builder.sources.providerRowsAria"></div>
 <div class="hint" id="providerNameHint">🏷️ Название подписки в MetaCubeXD (необязательно): добавьте строку <code># provider-name: Geodema</code> непосредственно перед URL подписки. Для второй — <code># provider-name: WL</code> перед её URL. Без этой строки название по-прежнему берётся из домена URL. Строка сохраняется вместе с проектом, не изменяет адрес или HWID подписки. Пока не извлекаем название из HTTP-заголовков: это потребовало бы отдельного сетевого запроса.</div>
 <div id="whitelistPanel" style="display:none">
-        <label for="whitelistInput">Резервные серверы и подписки</label>
+        <label for="whitelistInput" data-i18n="builder.sources.reserveLabel">Резервные серверы и подписки</label>
         <textarea id="whitelistInput" placeholder="vless://...&#10;https://sub.url/..."></textarea>
-        <div id="providerNameReserveRows" aria-label="Имена резервных подписок"></div>
+        <div id="providerNameReserveRows" aria-label="Имена резервных подписок" data-i18n-attr="aria-label:builder.sources.reserveRowsAria"></div>
         <div class="hint">Для подписки из резерва также можно указать <code># provider-name: Reserve</code> отдельной строкой перед её URL.</div>
         <div class="hint">Верхний набор — основной, этот — резерв. GLOBAL сначала использует обычные выходы, затем БС. Обе стороны обязательны. Ссылки можно смешивать с подписками при включённом режиме «URL-подписки». Плановая проверка доступности — каждые 300 секунд; при неудачных подключениях (2 за 60 секунд) проверка запускается сразу. Переключение и возврат на основной — не мгновенные. WG-файлы входят в основной набор.</div>
       </div>
@@ -1086,6 +1096,7 @@
 </footer>
 
 <!-- WEB4CORE RUNTIME -->
+<script src="./i18n.js"></script>
 <script src="./web4core.runtime.js"></script>
 
 <dialog id="builderResetDialog" aria-labelledby="builderResetTitle" aria-describedby="builderResetDescription" style="max-width:min(560px,90vw);background:var(--face);color:var(--text);border:2px outset var(--border)">
@@ -3667,6 +3678,23 @@ const PROFILE_HINTS = {
   'vps-local': 'Для VPS, где Xray/3X-UI или другое локальное приложение отправляет трафик в Mihomo через 127.0.0.1:7890. TUN и системная маршрутизация VPS не используются.',
   'vps-gateway': 'Только для transparent-gateway с Linux policy routing / iptables / Docker/AWG. Генератор создаёт Mihomo-часть, но не Linux routing/firewall. Для обычного VPS с Xray/3X-UI используйте профиль «VPS — локальный Mihomo / SOCKS».',
 };
+// === I18N BUILDER PROFILE HINT (#353) — START ===
+// Presentation locale for the profile hint (a dynamic textContent message, not
+// data-i18n markup). RU constant above stays as the fallback: if i18n.js is
+// absent or the key is missing, behavior is byte-identical to pre-#353.
+function profileHintLocalized(target) {
+  var key = 'builder.profile.hint.' + String(target || '');
+  if (window.LGI18N && typeof window.LGI18N.t === 'function') {
+    var s = window.LGI18N.t(key);
+    if (s && s !== key) return s;
+  }
+  return PROFILE_HINTS[target] || '';
+}
+if (window.LGI18N && typeof window.LGI18N.onLangChange === 'function') window.LGI18N.onLangChange(function () {
+  var hint = document.getElementById('profileHint');
+  if (hint) hint.textContent = profileHintLocalized(selectedProfile);
+});
+// === I18N BUILDER PROFILE HINT (#353) — END ===
 const PROFILE_OWNED_IDS = ['cfgTun', 'cfgTunMips', 'cfgTunStackAdvanced', 'cfgTunStackEx', 'cfgSocks', 'cfgLan'];
 const PROFILE_IDS = ['router', 'vps-local', 'vps-gateway'];
 
@@ -3711,7 +3739,7 @@ function applyProfileUiState(target) {
   const panel = document.getElementById('vpsPanel');
   const hint = document.getElementById('profileHint');
   const snap = profileSnapshots[target];
-  hint.textContent = PROFILE_HINTS[target] || '';
+  hint.textContent = profileHintLocalized(target);
   // VPS stack: наблюдение на одном сервере, не универсальная блокировка протокола.
   const stackWarning = document.getElementById('vpsTunStackWarning');
   const stackWarnings = {
@@ -3761,6 +3789,9 @@ function applyProfileUiState(target) {
     lan.checked = false; lan.disabled = true;
   }
   subMode.checked = snap ? snap.subMode : PROFILE_USER_DEFAULTS.subMode;
+  // #340: программный .checked не порождает change — редакторы имён подписок
+  // синхронизируем сразу, иначе после смены профиля поля пропадают/лишние.
+  updateProviderNameEditors();
   updateMihomoOptionStates();
   updateExcludeFilterVisibility();
   updateSubModeHint();
@@ -12120,8 +12151,10 @@ function rbWriteProject(project) {
   applyProfileUiState(o.profile);
   setOpt('mihomoInput', s.mainInput);
   setOpt('whitelistInput', s.fallbackInput);
-  updateProviderNameEditors();
+  // #340: редакторы имён — после финального cfgSubMode и URLs: прежний вызов
+  // стоял до setChk и рендерил по ещё старому состоянию чекбокса.
   setChk('cfgSubMode', s.subMode);
+  updateProviderNameEditors();
   setChk('cfgAutoWhitelist', s.autoWhitelist);
   // WG-профили: полная замена (подтверждение — в rbLoadProject).
   wgProfiles = (project.wgProfiles || []).map(w => ({ id: w.id, filename: w.filename, bean: JSON.parse(JSON.stringify(w.bean)), mode: w.mode, target: w.target }));
