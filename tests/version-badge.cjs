@@ -18,7 +18,9 @@ let cases = 0;
   assert.match(html, /<span id="genVersionBadge"[^>]*><\/span>/, 'бейдж пуст в HTML — текст приходит из GENERATOR_META');
   assert.ok(!/EXPERIMENTAL\s*[·-]\s*v?1\.11-dev/.test(html), 'Physical Topology badge не содержит устаревающий v1.11-dev literal');
   assert.match(html, /PHYSICAL TOPOLOGY/, 'Physical Topology label без version literal');
-  assert.match(html, /id="cfgAutoWhitelist"[^>]*>\s*🛡️ Автоматический режим белых списков/, 'Auto Whitelist uses supported shield icon');
+  // #353: текст AWL-тогла может быть обёрнут в <span data-i18n> (языковой
+  // контракт) — иконка щита обязана остаться рядом с чекбоксом.
+  assert.match(html, /id="cfgAutoWhitelist"[^>]*>\s*(?:<span[^>]*>)?\s*🛡️ Автоматический режим белых списков/, 'Auto Whitelist uses supported shield icon');
   assert.match(html, /id="cfgTieredFailover"[^>]*>\s*🔀 Приоритетные группы серверов/, 'Tiered Failover uses supported decorative icon');
   assert.match(html, /tierGroupName\('🪜 TIERED-AUTO'/, 'canonical generated group identity remains backward compatible');
   assert.match(html, /\.site-footer\{width:min\(1520px,100%\);margin:18px auto 26px/, 'footer центрирован и совпадает с app max-width');
