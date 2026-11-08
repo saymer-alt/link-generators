@@ -14,7 +14,24 @@ const DICT_KEYS = [
   'ui.warp.parsedBadge',
   'ui.warp.import.title', 'ui.warp.import.placeholder', 'ui.warp.import.parse',
   'ui.warp.import.clear', 'ui.warp.import.hint',
-  'ui.warp.params.title', 'ui.warp.params.profileName'
+  'ui.warp.params.title', 'ui.warp.params.profileName',
+  // #353 Phase 2A — Mihomo Builder visible basic working path
+  'builder.actionbar.aria', 'builder.build.title',
+  'builder.downloadYaml', 'builder.openStudio', 'builder.copy.title',
+  'builder.saveProject', 'builder.saveProject.title',
+  'builder.loadProject', 'builder.loadProject.title',
+  'builder.undoRestore', 'builder.undoRestore.title',
+  'builder.rebuild', 'builder.reset', 'builder.jumpToYaml',
+  'builder.nav.aria', 'builder.section.start',
+  'builder.nav.routing', 'builder.nav.diagnostics', 'builder.nav.options',
+  'builder.toolsDirectory', 'builder.quickStart.steps',
+  'builder.profile.title',
+  'builder.profile.option.router', 'builder.profile.option.vpsLocal', 'builder.profile.option.vpsGateway',
+  'builder.profile.hint.router', 'builder.profile.hint.vps-local', 'builder.profile.hint.vps-gateway',
+  'builder.awl.routerHint',
+  'builder.routing.title', 'builder.routing.awlToggle',
+  'builder.sources.title', 'builder.sources.label', 'builder.sources.placeholder',
+  'builder.sources.providerRowsAria', 'builder.sources.reserveLabel', 'builder.sources.reserveRowsAria'
 ];
 
 function makeSandbox({ storage, storedValue } = {}) {
