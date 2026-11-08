@@ -140,6 +140,12 @@ jobs:
       - name: No-DIRECT egress invariant regression (#284)
         run: node tests/no-direct-egress.cjs
 
+      # No root or netns needed: mock verdict and static containment checks only.
+      # The live network lab is intentionally NOT executed by GitHub Actions.
+      - name: No-DIRECT netns lab rootless guard regression (#338)
+        shell: bash
+        run: bash tools/no-direct-egress-lab/test-guards.sh
+
       - name: Routing Diagnostics core regression
         run: node tests/routing-inspector.cjs
 

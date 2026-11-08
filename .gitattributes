@@ -1,0 +1,5 @@
+# The no-direct-egress lab (#338) and the DPR runtime scenario (#355) are
+# bash scripts executed by WSL/Linux bash; CRLF checkouts break them.
+tools/no-direct-egress-lab/*.sh text eol=lf
+tools/no-direct-egress-lab/lib/*.sh text eol=lf
+tools/no-direct-egress-lab/*.mjs text eol=lf
