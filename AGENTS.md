@@ -35,6 +35,10 @@ For new systems or major architecture use [Proof Before Build](https://github.co
 4. Run checks matched to the diff, not the entire expensive test catalog by default. For HTML/JS or generated YAML follow [scoped tests](docs/agent-guidance/04-development-tests-and-debt.md), [TESTING.md](docs/TESTING.md), and [profile test contract](docs/DEPLOYMENT-PROFILES-TEST-CONTRACT.md). Prefer exact-SHA green CI evidence; manual/live tests are not CI PASS.
 5. Before reporting, inspect final diff and exact commit SHA; state PASS / FAIL / BLOCKED / NOT TESTED accurately. No automatic merge, release, Pages production promotion or live infrastructure changes.
 
+## Agent token economy
+
+One bounded task per cycle: TRIAGE → PATCH → REVIEW. Two unchanged futile attempts => change hypothesis or BLOCKED (Loop Guard). Read targeted code/callers/tests, run cheap checks before broad CI, and reuse Evidence Reuse only for matching SHA/scope/environment. Short handoff: `issue/PR | SHA | gates | blocker | next action`; `/compact` is owner-run. Never spend quota just to exhaust it. [Rules, budgets and measurements](docs/agent-token-efficiency.md) are **on demand**, not startup material.
+
 ## Load guides on demand — not every session
 
 - **Owner policy, dated decisions, autonomy, whitelist:** [01 — decisions and scope](docs/agent-guidance/01-owner-decisions-and-scope.md). Read for major behavior/architecture/owner-intent changes, not a small typo.
