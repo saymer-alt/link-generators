@@ -182,6 +182,9 @@ jobs:
       - name: Rule Provider Explorer core regression
         run: node tests/rule-provider-explorer.cjs
 
+      - name: i18n foundation dictionary contract (#349)
+        run: node tests/i18n-foundation.cjs
+
       - name: Fieldtest harness offline unit tests
         run: node --test tools/warp-dialer-fieldtest/fieldtest.test.mjs
 
@@ -245,6 +248,12 @@ jobs:
           TEST_ENGINES: ${{ matrix.browser }}
         run: node tests/submode-clarity.cjs
 
+      - name: Provider name editors sync matrix (#340)
+        env:
+          HOME: /root
+          TEST_ENGINES: ${{ matrix.browser }}
+        run: node tests/provider-name-editors-browser.cjs
+
       - name: Runtime preset matrix (#264)
         env:
           HOME: /root
@@ -258,6 +267,12 @@ jobs:
           HOME: /root
           TEST_ENGINES: ${{ matrix.browser }}
         run: node tests/advanced-stack-choice.cjs
+
+      - name: i18n foundation matrix (#349)
+        env:
+          HOME: /root
+          TEST_ENGINES: ${{ matrix.browser }}
+        run: node tests/i18n-foundation-browser.cjs
 
   browser:
     name: deterministic / browser
@@ -289,6 +304,14 @@ jobs:
 
       - name: Main browser regression
         run: node tests/browser.cjs
+
+      - name: Provider name editors sync regression (#340)
+        run: node tests/provider-name-editors-browser.cjs
+
+      - name: i18n foundation browser regression (#349)
+        env:
+          TEST_ENGINES: chromium
+        run: node tests/i18n-foundation-browser.cjs
 
       - name: Owner UX acceptance regression
         run: node tests/owner-ux-browser.cjs

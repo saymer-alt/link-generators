@@ -307,6 +307,16 @@
 <div class="container">
   <h1 style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>🔗 WARP & Mihomo Unified</span><span id="genVersionBadge" class="gen-version-badge" role="note"></span></h1>
 
+  <!-- #349 i18n foundation: language selector. RU default; stores only the enum
+       'ru'|'en' in link-generators.locale.v1 (memory fallback if storage is off). -->
+  <div style="display:flex;align-items:center;gap:8px;margin:8px 0">
+    <label for="uiLangSelect" data-i18n="ui.lang.label">Язык интерфейса:</label>
+    <select id="uiLangSelect" data-i18n-attr="title:ui.lang.title" title="Выбор языка интерфейса">
+      <option value="ru">Русский</option>
+      <option value="en">English</option>
+    </select>
+  </div>
+
   <!-- #326: текущая логическая идентичность подписки (Mihomo Builder) — видна до вкладок.
        Один канонический реестр (#156/#163); расширенный менеджер остаётся в #deviceIdentityDetails.
        Портативные per-provider HWID (проект v2, #280) в будущем расширят эту полосу контекстом проекта. -->
@@ -321,27 +331,27 @@
     </span>
   </div>
   <div class="tabs">
-    <button class="tab" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
-    <button class="tab active" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
-    <button class="tab" onclick="switchTab(event, 'studio')">🔎 Config Studio</button>
+    <button class="tab" data-i18n="ui.tabs.warp" onclick="switchTab(event, 'warp')">⚡ WARP MASQUE Links</button>
+    <button class="tab active" data-i18n="ui.tabs.builder" onclick="switchTab(event, 'mihomo')">⚙️ Mihomo Config Builder</button>
+    <button class="tab" data-i18n="ui.tabs.studio" onclick="switchTab(event, 'studio')">🔎 Config Studio</button>
   </div>
 
   <!-- TAB 1: WARP GENERATOR -->
   <div id="tab-warp" class="tab-content">
     <div class="card">
-      <div class="card-title">📥 Импорт WARP YAML <span id="parsedBadge" class="parsed-badge" style="display:none">Заполнено</span></div>
-      <textarea id="yamlInput" placeholder="Вставьте WARP YAML-конфиг (бот, WARPSCOUT или другой совместимый источник)…"></textarea>
+      <div class="card-title"><span data-i18n="ui.warp.import.title">📥 Импорт WARP YAML</span> <span id="parsedBadge" class="parsed-badge" data-i18n="ui.warp.parsedBadge" style="display:none">Заполнено</span></div>
+      <textarea id="yamlInput" data-i18n-attr="placeholder:ui.warp.import.placeholder" placeholder="Вставьте WARP YAML-конфиг (бот, WARPSCOUT или другой совместимый источник)…"></textarea>
       <div class="btn-group">
-        <button class="btn btn-purple" onclick="parseYaml()">🔍 Распарсить</button>
-        <button class="btn btn-gray" onclick="document.getElementById('yamlInput').value=''">Очистить</button>
+        <button class="btn btn-purple" data-i18n="ui.warp.import.parse" onclick="parseYaml()">🔍 Распарсить</button>
+        <button class="btn btn-gray" data-i18n="ui.warp.import.clear" onclick="document.getElementById('yamlInput').value=''">Очистить</button>
       </div>
-      <div class="hint">Поддерживается совместимый WARP YAML; источник не важен.</div>
+      <div class="hint" data-i18n="ui.warp.import.hint">Поддерживается совместимый WARP YAML; источник не важен.</div>
       <div id="warpscoutInfo" style="display:none;margin-top:10px"></div>
     </div>
 
     <div class="card">
-      <div class="card-title">🔑 Параметры</div>
-      <label>Имя профиля (база)</label>
+      <div class="card-title" data-i18n="ui.warp.params.title">🔑 Параметры</div>
+      <label data-i18n="ui.warp.params.profileName">Имя профиля (база)</label>
       <input type="text" id="profileName" value="WARP-MASQUE">
 
       <div class="row">
@@ -1086,6 +1096,7 @@
 </footer>
 
 <!-- WEB4CORE RUNTIME -->
+<script src="./i18n.js"></script>
 <script src="./web4core.runtime.js"></script>
 
 <dialog id="builderResetDialog" aria-labelledby="builderResetTitle" aria-describedby="builderResetDescription" style="max-width:min(560px,90vw);background:var(--face);color:var(--text);border:2px outset var(--border)">
@@ -3859,6 +3870,9 @@ function applyProfileUiState(target) {
     lan.checked = false; lan.disabled = true;
   }
   subMode.checked = snap ? snap.subMode : PROFILE_USER_DEFAULTS.subMode;
+  // #340: программный .checked не порождает change — редакторы имён подписок
+  // синхронизируем сразу, иначе после смены профиля поля пропадают/лишние.
+  updateProviderNameEditors();
   updateMihomoOptionStates();
   updateExcludeFilterVisibility();
   updateSubModeHint();
@@ -12257,8 +12271,10 @@ function rbWriteProject(project) {
   applyProfileUiState(o.profile);
   setOpt('mihomoInput', s.mainInput);
   setOpt('whitelistInput', s.fallbackInput);
-  updateProviderNameEditors();
+  // #340: редакторы имён — после финального cfgSubMode и URLs: прежний вызов
+  // стоял до setChk и рендерил по ещё старому состоянию чекбокса.
   setChk('cfgSubMode', s.subMode);
+  updateProviderNameEditors();
   setChk('cfgAutoWhitelist', s.autoWhitelist);
   // WG-профили: полная замена (подтверждение — в rbLoadProject).
   wgProfiles = (project.wgProfiles || []).map(w => ({ id: w.id, filename: w.filename, bean: JSON.parse(JSON.stringify(w.bean)), mode: w.mode, target: w.target }));
