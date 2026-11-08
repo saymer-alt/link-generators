@@ -185,6 +185,9 @@ jobs:
       - name: i18n foundation dictionary contract (#349)
         run: node tests/i18n-foundation.cjs
 
+      - name: Builder i18n slice regression (#353)
+        run: node tests/i18n-builder-2a.cjs
+
       - name: Fieldtest harness offline unit tests
         run: node --test tools/warp-dialer-fieldtest/fieldtest.test.mjs
 
@@ -274,6 +277,12 @@ jobs:
           TEST_ENGINES: ${{ matrix.browser }}
         run: node tests/i18n-foundation-browser.cjs
 
+      - name: Builder i18n slice matrix (#353)
+        env:
+          HOME: /root
+          TEST_ENGINES: ${{ matrix.browser }}
+        run: node tests/i18n-builder-2a-browser.cjs
+
   browser:
     name: deterministic / browser
     runs-on: ubuntu-latest
@@ -312,6 +321,11 @@ jobs:
         env:
           TEST_ENGINES: chromium
         run: node tests/i18n-foundation-browser.cjs
+
+      - name: Builder i18n slice browser regression (#353)
+        env:
+          TEST_ENGINES: chromium
+        run: node tests/i18n-builder-2a-browser.cjs
 
       - name: Owner UX acceptance regression
         run: node tests/owner-ux-browser.cjs
