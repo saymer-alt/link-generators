@@ -98,6 +98,28 @@ check('mixed: SELECT policy keeps pooled AUTO, provider policy strict; both rule
   assert.equal(doc['proxy-groups'].some(g => g.name === 'MEDIA'), true, 'SELECT select-group kept');
 });
 
+// 3b. Две provider-цели: каждый маршрут изолирован, orphan select не
+// воскресает после обработки второй политики (multi-policy regression).
+check('two provider-only policies: independent providers and both unused NAME selects removed', () => {
+  const raw = build([
+    { name: 'GEMINI', domains: 'gemini.example.invalid', target: 'SELECT' },
+    { name: 'VIDEO', domains: 'video.example.invalid', target: 'SELECT' }
+  ]);
+  const out = dpt.applyDprProviderTargets(raw, [
+    { name: 'GEMINI', target: 'PROVIDER:subs-a.example.invalid' },
+    { name: 'VIDEO', target: 'PROVIDER:subs-b.example.invalid' }
+  ]);
+  const doc = yaml.load(out);
+  assert.deepEqual(doc['proxy-groups'].find(g => g.name === 'GEMINI-AUTO').use, ['subs-a.example.invalid']);
+  assert.deepEqual(doc['proxy-groups'].find(g => g.name === 'VIDEO-AUTO').use, ['subs-b.example.invalid']);
+  for (const name of ['GEMINI', 'VIDEO']) {
+    assert.equal(doc['proxy-groups'].some(g => g.name === name && g.type === 'select'), false,
+      'orphan select ' + name + ' must not reappear after next policy');
+    assert.ok(doc.rules.includes('RULE-SET,policy-' + name.toLowerCase() + ',' + name + '-AUTO'));
+  }
+  assert.equal(doc.rules[doc.rules.length - 1], 'MATCH,GLOBAL');
+});
+
 // 4. OFF parity: no wanted → byte-identical
 check('no provider targets: output byte-identical (patch OFF parity)', () => {
   const raw = build([{ name: 'GEMINI', domains: 'gemini.example.invalid', target: 'SELECT' }]);

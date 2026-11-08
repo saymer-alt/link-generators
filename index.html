@@ -1980,7 +1980,12 @@ function applyDprProviderTargets(yaml, wanted) {
     const referenced = rules.some(r => String(r).split(',').slice(1).includes(name)) ||
       groups.some(g => g && g.name !== name && Array.isArray(g.proxies) && g.proxies.includes(name)) ||
       proxies.some(p => p && p['dialer-proxy'] === name);
-    if (!referenced) doc['proxy-groups'] = groups.filter(g => !(g && g.name === name && g.type === 'select'));
+    if (!referenced) {
+      // Применяем удаление к тому же массиву, иначе следующая provider-политика
+      // повторно фильтрует исходный groups и возвращает предыдущий orphan select.
+      const index = groups.findIndex(g => g && g.name === name && g.type === 'select');
+      if (index !== -1) groups.splice(index, 1);
+    }
   }
   return jsyaml.dump(doc, { lineWidth: -1 });
 }
