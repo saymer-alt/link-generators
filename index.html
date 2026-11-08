@@ -3761,6 +3761,9 @@ function applyProfileUiState(target) {
     lan.checked = false; lan.disabled = true;
   }
   subMode.checked = snap ? snap.subMode : PROFILE_USER_DEFAULTS.subMode;
+  // #340: программный .checked не порождает change — редакторы имён подписок
+  // синхронизируем сразу, иначе после смены профиля поля пропадают/лишние.
+  updateProviderNameEditors();
   updateMihomoOptionStates();
   updateExcludeFilterVisibility();
   updateSubModeHint();
@@ -12120,8 +12123,10 @@ function rbWriteProject(project) {
   applyProfileUiState(o.profile);
   setOpt('mihomoInput', s.mainInput);
   setOpt('whitelistInput', s.fallbackInput);
-  updateProviderNameEditors();
+  // #340: редакторы имён — после финального cfgSubMode и URLs: прежний вызов
+  // стоял до setChk и рендерил по ещё старому состоянию чекбокса.
   setChk('cfgSubMode', s.subMode);
+  updateProviderNameEditors();
   setChk('cfgAutoWhitelist', s.autoWhitelist);
   // WG-профили: полная замена (подтверждение — в rbLoadProject).
   wgProfiles = (project.wgProfiles || []).map(w => ({ id: w.id, filename: w.filename, bean: JSON.parse(JSON.stringify(w.bean)), mode: w.mode, target: w.target }));

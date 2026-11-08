@@ -242,6 +242,12 @@ jobs:
           TEST_ENGINES: ${{ matrix.browser }}
         run: node tests/submode-clarity.cjs
 
+      - name: Provider name editors sync matrix (#340)
+        env:
+          HOME: /root
+          TEST_ENGINES: ${{ matrix.browser }}
+        run: node tests/provider-name-editors-browser.cjs
+
       - name: Runtime preset matrix (#264)
         env:
           HOME: /root
@@ -286,6 +292,9 @@ jobs:
 
       - name: Main browser regression
         run: node tests/browser.cjs
+
+      - name: Provider name editors sync regression (#340)
+        run: node tests/provider-name-editors-browser.cjs
 
       - name: Owner UX acceptance regression
         run: node tests/owner-ux-browser.cjs
