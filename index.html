@@ -5484,6 +5484,9 @@ function policyCardDom(card, index) {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = text;
+    // #351: marker обязателен у ВСЕХ provider-опций — refreshPolicyProviderOptions
+    // управляет именно помеченными (перестройка реестра без дублей/хвостов).
+    if (isDprProviderTarget(value)) opt.setAttribute('data-dpr-provider', dprProviderName(value));
     targetSel.appendChild(opt);
   }
   targetSel.value = targetOptions.some(o => o[0] === card.target) ? card.target : 'SELECT';

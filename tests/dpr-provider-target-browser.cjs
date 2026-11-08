@@ -113,9 +113,14 @@ const SUBS = 'https://subs-a.example.invalid/token-a\nhttps://subs-b.example.inv
   // 4. Sub Mode OFF: provider-опции исчезают; сохранённая цель отображается честно
   await check('Sub Mode OFF: provider options removed, stale selection shown honestly as missing', async () => {
     await page.locator('#cfgSubMode').uncheck();
+    // валидные опции реестра уходят; остаётся ровно одна помеченная опция —
+    // честный «missing»-слот выбранной подписки
     await page.waitForFunction(() => {
       const sel = document.querySelector('#policyCards .policy-card:last-child .policy-target');
-      return sel && !Array.from(sel.options).some(o => o.value === 'PROVIDER:subs-a.example.invalid' && o.getAttribute('data-dpr-provider'));
+      const marked = sel ? Array.from(sel.options).filter(o => o.hasAttribute('data-dpr-provider')) : [];
+      return marked.length === 1 &&
+        marked[0].value === 'PROVIDER:subs-a.example.invalid' &&
+        marked[0].textContent.includes('подписка отсутствует');
     });
     const sel = page.locator('#policyCards .policy-card').last().locator('.policy-target');
     const opts = await sel.evaluate(el => Array.from(el.options).map(o => ({ v: o.value, t: o.textContent, m: o.hasAttribute('data-dpr-provider') })));
