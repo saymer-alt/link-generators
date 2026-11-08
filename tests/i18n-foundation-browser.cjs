@@ -162,6 +162,7 @@ async function runEngine(browser, engine) {
   });
 
   await check(engine + ' form state + parsed fixture survive switching (same nodes)', async () => {
+    await page.locator('button.tab', { hasText: 'WARP MASQUE Links' }).click(); // fill() needs visibility
     await page.fill('#yamlInput', SYNTH_YAML);
     await page.fill('#profileName', 'AGENT-TEST');
     await page.click('button[onclick="parseYaml()"]');
@@ -180,23 +181,19 @@ async function runEngine(browser, engine) {
   });
 
   await check(engine + ' build fingerprint + project save/load unchanged across switch', async () => {
-    const before = await page.evaluate(() => ({
-      fp: buildStateFingerprint(),
-      project: normalizeProject(JSON.stringify(rbCollectProject()))
-    }));
+    // Raw reads in page; normalization (meta.created) happens Node-side.
+    const read = () => page.evaluate(() => ({ fp: buildStateFingerprint(), project: JSON.stringify(rbCollectProject()) }));
+    let snap = await read();
+    const before = { fp: snap.fp, project: normalizeProject(snap.project) };
     // Representative synthetic project fixture: roundtrip the pristine collected project.
     await page.evaluate(fixture => { rbApplyProject(JSON.parse(fixture)); }, before.project);
-    const loaded = await page.evaluate(() => ({
-      fp: buildStateFingerprint(),
-      project: normalizeProject(JSON.stringify(rbCollectProject()))
-    }));
+    snap = await read();
+    const loaded = { fp: snap.fp, project: normalizeProject(snap.project) };
     assert.equal(loaded.project, before.project, 'project save→load roundtrip is stable');
     await page.selectOption('#uiLangSelect', 'en');
     await page.selectOption('#uiLangSelect', 'ru');
-    const after = await page.evaluate(() => ({
-      fp: buildStateFingerprint(),
-      project: normalizeProject(JSON.stringify(rbCollectProject()))
-    }));
+    snap = await read();
+    const after = { fp: snap.fp, project: normalizeProject(snap.project) };
     assert.equal(after.fp, loaded.fp, 'buildStateFingerprint changed across language switch');
     assert.equal(after.project, loaded.project, 'rbCollectProject changed across language switch');
     expectNoErrors('fingerprint/project');
@@ -205,13 +202,15 @@ async function runEngine(browser, engine) {
   await check(engine + ' XSS probe: params stay literal text via textContent path', async () => {
     const result = await page.evaluate(() => {
       const api = globalThis.LGI18N;
-      api.DICT.en['__probe.interp'] = 'V {name}';
       const payload = '<img src=x onerror=window.__xss=1>';
+      api.DICT.ru['__probe.interp'] = 'V {name}';
+      api.DICT.en['__probe.interp'] = 'V {name}';
       const div = document.createElement('div');
       document.body.appendChild(div);
       div.textContent = api.t('__probe.interp', { name: payload });
       const out = { text: div.textContent, xss: window.__xss === 1, htmlTagInDom: !!div.querySelector('img') };
       div.remove();
+      delete api.DICT.ru['__probe.interp'];
       delete api.DICT.en['__probe.interp'];
       return out;
     });
