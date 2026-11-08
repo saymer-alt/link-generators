@@ -11734,6 +11734,10 @@ async function buildMihomo() {
       domainPolicy = collectPolicyRouting();
     }
   } catch (e) {
+    // Invalid policy after a previously VALID build must invalidate that
+    // status; otherwise the old YAML misleadingly still displays as VALID.
+    mihomoValidationSeq++;
+    setMihomoValidationState('NOT_BUILT');
     return buildFailure('❌ ' + (e && e.message ? e.message : e), true);
   }
 

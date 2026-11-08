@@ -194,8 +194,10 @@ const SUBS = 'https://subs-a.example.invalid/token-a\nhttps://subs-b.example.inv
     const stored = await page.evaluate(() => rbCollectProject().domainPolicy.cards.find(p => p.name === 'GEMINI').target);
     assert.equal(stored, 'PROVIDER:', 'corrupt target persists verbatim (not rewritten as SELECT)');
     const r = await build();
-    assert.equal(r.state, 'NOT_BUILT', 'malformed strict target rejected');
+    assert.equal(r.state, 'NOT_BUILT', 'malformed strict target rejects build and resets stale VALID status');
     assert.match(r.toast, /provider-цель без имени подписки/, 'explicit blocker');
+    assert.equal(await page.locator('#copyYamlBtn').isDisabled(), true, 'old YAML cannot be copied as verified');
+    assert.equal(await page.locator('#builderActionStatus').getAttribute('data-state'), 'ERROR', 'action status shows error');
     assert.equal(await page.locator('#policyCards .policy-card:last-child .policy-target').inputValue(), 'PROVIDER:');
     expectNoErrors('malformed target');
   });
