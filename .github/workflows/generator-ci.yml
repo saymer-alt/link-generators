@@ -134,6 +134,9 @@ jobs:
       - name: Portable identity conversion and stable mapping (#280)
         run: node tests/project-portable-lifecycle.cjs
 
+      - name: Exclude Filter substring and escaping regression (#356)
+        run: node tests/exclude-filter-substring-356.cjs
+
       - name: Domain Policy Routing regression
         run: node tests/policy-routing.cjs
 
