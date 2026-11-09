@@ -39,7 +39,12 @@ require_lab_isolation() {
     # Fresh private namespace: loopback is down and addressless. These
     # mutations are safe only after verifying the namespace is private.
     ip link set lo up || { echo "FATAL: cannot initialize private loopback" >&2; exit 1; }
-    ip addr add 127.0.0.1/8 dev lo 2>/dev/null || { echo "FATAL: cannot address private loopback" >&2; exit 1; }
+    # 127.0.0.1/8 is pre-assigned on lo in every fresh network namespace and
+    # iproute2 >= 6.x exits nonzero on the idempotent re-add; the add is fatal
+    # only when the address is genuinely absent afterwards (fail-closed).
+    ip addr add 127.0.0.1/8 dev lo 2>/dev/null \
+      || ip addr show dev lo | grep -q 'inet 127\.0\.0\.1/8 ' \
+      || { echo "FATAL: cannot address private loopback" >&2; exit 1; }
     return 0
   fi
   exec unshare -n env AMG_LAB_INSIDE=1 bash "$0" "$@"
