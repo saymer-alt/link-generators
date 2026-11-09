@@ -10,8 +10,9 @@ directly with the VPS IP.
 ## Dependencies (explicit)
 
 - **#338 lab** (`lib/netns.sh`, `lib/verdict.sh`, `dest.mjs`, `test-guards.sh`)
-  at its Draft PR head — this scenario reuses the isolation gate, unnamed
-  child namespaces, ownership-checked cleanup and the fail-closed verdict.
+  was merged into `main` at `cf44e5318f01def5469cccc330240f715213d837`.
+  This scenario reuses its verified namespace-inode isolation gate, unnamed
+  child namespaces, ownership-checked cleanup and fail-closed verdict.
 - **#352 DPR code** in the CURRENT checkout: `gen-dpr.mjs` extracts the exact
   `applyDprProviderTargets` post-patch from `index.html` by its DPT markers
   (same code the browser runs) and applies it to engine output, so the tested
@@ -83,6 +84,15 @@ Requires root, Linux netns (WSL2 works), `unshare`, node. Not run in CI
   its previously chosen (removed, dead) node until the next group test — the
   health-check interval (300s in this config) or an API-triggered re-test
   (`GET /group/<name>/delay`). R1 triggers the re-test to keep the run bounded.
+
+
+Tested network-level evidence in Issue #355 was collected against DPR #352
+head `af8a5f6bb9bda10497447cfd65e16a0bf24923b5` and the older #338
+lab. This branch has now been reconciled with the #338 merge and the newer
+#352 head `3da32d06fee5d570fba27dd133a5d122d588700b`.
+Its CI validates the combined source; **the privileged netns runtime matrix is
+not rerun by GitHub Actions**. Previous runtime evidence and its exact
+tested source SHAs remain explicitly distinguishable from the new CI head.
 
 ## Boundaries
 
