@@ -1920,6 +1920,85 @@ function isDialerProviderTarget(value) { return String(value || '').startsWith(D
 function dialerProviderTarget(name) { return DIALER_PROVIDER_PREFIX + String(name || ''); }
 function dialerProviderName(value) { return isDialerProviderTarget(value) ? String(value).slice(DIALER_PROVIDER_PREFIX.length) : ''; }
 
+// === DPR PROVIDER TARGET (#351) — DPT-START ===
+// Opt-in цель политики «строго один выбранный provider»: правило RULE-SET
+// направляется в provider-only url-test-группу одной выбранной URL-подписки,
+// другие подписки и DIRECT в маршруте не участвуют. Кодировка цели в модели
+// карточки/проекта — строка 'PROVIDER:<provider>'; в движок такая карта уходит
+// как SELECT (движок строит пару NAME-AUTO + NAME), финальный YAML правится
+// пост-патчем applyDprProviderTargets. Fail-closed: отсутствующий provider,
+// пропавшая группа или правило — ошибка Build, никакой тихой маршрутизации
+// через другие подписки; у группы контракт empty-fallback: REJECT (#284).
+const DPR_PROVIDER_PREFIX = 'PROVIDER:';
+function isDprProviderTarget(value) { return String(value || '').startsWith(DPR_PROVIDER_PREFIX); }
+function dprProviderTarget(name) { return DPR_PROVIDER_PREFIX + String(name || ''); }
+function dprProviderName(value) {
+  const s = String(value || '');
+  return isDprProviderTarget(s) && s.length > DPR_PROVIDER_PREFIX.length ? s.slice(DPR_PROVIDER_PREFIX.length) : '';
+}
+// Актуальные provider-цели для select карточек: только существующие URL-подписки
+// из реестра целей (точные имена движка, включая суффиксы дедупликации).
+function dprProviderOptions() {
+  return (dialerTargetsCache || [])
+    .filter(t => t && t.kind === 'provider' && t.provider)
+    .map(t => ({ value: dprProviderTarget(t.provider), provider: t.provider }));
+}
+function applyDprProviderTargets(yaml, wanted) {
+  const policies = Array.isArray(wanted) ? wanted : [];
+  // Never drop a corrupted PROVIDER: target and silently keep pooled SELECT.
+  for (const p of policies) {
+    if (p && isDprProviderTarget(p.target) && !dprProviderName(p.target).trim()) {
+      throw new Error('Provider-цель политики «' + String(p.name || '') + '»: имя подписки пусто — Build отклонён (fail-closed)');
+    }
+  }
+  const wantedList = policies
+    .map(p => ({ name: String(p.name || '').trim(), provider: dprProviderName(p.target) }))
+    .filter(x => x.name && x.provider);
+  if (!wantedList.length) return yaml;
+  const doc = jsyaml.load(String(yaml));
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('Не удалось применить provider-цель политики: YAML не является объектом');
+  const providers = doc['proxy-providers'];
+  if (!providers || typeof providers !== 'object' || Array.isArray(providers)) throw new Error('Provider-цель политики требует proxy-providers (Sub Mode URL-подписки)');
+  const groups = Array.isArray(doc['proxy-groups']) ? doc['proxy-groups'] : [];
+  const rules = Array.isArray(doc.rules) ? doc.rules : [];
+  const proxies = Array.isArray(doc.proxies) ? doc.proxies : [];
+  for (const { name, provider } of wantedList) {
+    if (!Object.prototype.hasOwnProperty.call(providers, provider)) {
+      throw new Error('Provider-цель политики «' + name + '»: подписка «' + provider + '» отсутствует в proxy-providers — измените выбор цели или пересоберите с актуальными подписками');
+    }
+    const auto = groups.find(g => g && g.name === name + '-AUTO' && g.type === 'url-test');
+    if (!auto) throw new Error('Provider-цель политики «' + name + '»: группа ' + name + '-AUTO не найдена — контракт движка изменился, Build отклонён (fail-closed)');
+    auto.use = [provider];
+    // empty-fallback действует при ПУСТОЙ группе (не при всех unhealthy).
+    // Runtime-отказ всех присутствующих узлов и отсутствие egress-утечек
+    // требуют отдельной проверки; не заявлять их по одному YAML-контракту.
+    auto['empty-fallback'] = 'REJECT';
+    let rewrote = false;
+    for (let i = 0; i < rules.length; i++) {
+      const parts = String(rules[i]).split(',');
+      if (parts[0] === 'RULE-SET' && parts[parts.length - 1] === name) {
+        parts[parts.length - 1] = name + '-AUTO';
+        rules[i] = parts.join(',');
+        rewrote = true;
+      }
+    }
+    if (!rewrote) throw new Error('Provider-цель политики «' + name + '»: правило RULE-SET не найдено — Build отклонён (fail-closed)');
+    // NAME select стала недостижимой: убираем только при нулевых оставшихся
+    // ссылках (правила, члены других групп, dialer-proxy) — иначе честно оставляем.
+    const referenced = rules.some(r => String(r).split(',').slice(1).includes(name)) ||
+      groups.some(g => g && g.name !== name && Array.isArray(g.proxies) && g.proxies.includes(name)) ||
+      proxies.some(p => p && p['dialer-proxy'] === name);
+    if (!referenced) {
+      // Применяем удаление к тому же массиву, иначе следующая provider-политика
+      // повторно фильтрует исходный groups и возвращает предыдущий orphan select.
+      const index = groups.findIndex(g => g && g.name === name && g.type === 'select');
+      if (index !== -1) groups.splice(index, 1);
+    }
+  }
+  return jsyaml.dump(doc, { lineWidth: -1 });
+}
+// === DPR PROVIDER TARGET (#351) — DPT-END ===
+
 function dialerKindLabel(entry) {
   if (entry.kind === 'provider') return 'ПОДПИСКА';
   if (entry.kind === 'group') return 'группа';
@@ -2052,6 +2131,7 @@ function computeDialerTargetsSync() {
 function refreshWgTargetSelectors() {
   dialerTargetsCache = computeDialerTargetsSync();
   if (typeof renderTierCards === 'function' && document.getElementById('tieredPanel') && document.getElementById('tieredPanel').style.display !== 'none') renderTierCards();
+  refreshPolicyProviderOptions();
   const valid = new Set(dialerTargetsCache.map(t => t.value));
   wgProfiles.forEach((p, idx) => {
     // Сброс выбора, если цель исчезла из конфигурации ИЛИ стала итоговым именем
@@ -2067,6 +2147,37 @@ function refreshWgTargetSelectors() {
     }
     const sel = document.getElementById('wgTarget' + p.id);
     if (sel) fillWgTargetSelect(sel, p, idx);
+  });
+}
+
+// #351: опции «🛰 Только …» в карточках политик следуют за актуальным реестром
+// подписок. Выбор пользователя не сбрасывается молча: исчезнувшая подписка
+// остаётся честно видимой как «подписка отсутствует» и отклоняется fail-closed
+// на Build (пользователь решает сам, а не теряет маршрут без ведома).
+function refreshPolicyProviderOptions() {
+  document.querySelectorAll('#policyCards .policy-target').forEach(sel => {
+    const current = String(sel.value || '');
+    const wanted = dprProviderOptions();
+    sel.querySelectorAll('option[data-dpr-provider]').forEach(o => o.remove());
+    const frag = document.createDocumentFragment();
+    for (const o of wanted) {
+      const opt = document.createElement('option');
+      opt.value = o.value;
+      opt.textContent = '🛰 Только ' + o.provider + ' (строго одна подписка)';
+      opt.setAttribute('data-dpr-provider', o.provider);
+      frag.appendChild(opt);
+    }
+    if (isDprProviderTarget(current) && !wanted.some(o => o.value === current)) {
+      const opt = document.createElement('option');
+      opt.value = current;
+      opt.textContent = '🛰 Только ' + dprProviderName(current) + ' (подписка отсутствует — Build будет отклонён)';
+      opt.setAttribute('data-dpr-provider', dprProviderName(current));
+      frag.appendChild(opt);
+    }
+    if (frag.childNodes.length) sel.appendChild(frag);
+    // Перевставление опций сбрасывает live-значение select на первый option —
+    // восстанавливаем выбор (валидный, честно-missing или базовый).
+    sel.value = current;
   });
 }
 
@@ -5405,14 +5516,25 @@ function policyCardDom(card, index) {
   // Build с такой картой блокируется до явного обновления таргета.
   const targetOptions = [['SELECT', '🎛 Своя SELECT-группа (переключается в Mihomo)'], ['GLOBAL', '🌐 GLOBAL'], ['REJECT', '🚫 REJECT']];
   if (card.target === 'DIRECT') targetOptions.unshift(['DIRECT', '⬇ DIRECT — запрещено (no-DIRECT #284), выберите другую цель']);
+  // #351: opt-in «строго один provider» — только актуальные URL-подписки из
+  // реестра целей. Сохранённая PROVIDER-цель из проекта отображается честно,
+  // даже если подписка больше не существует — Build отклонит её fail-closed.
+  const providerOptions = dprProviderOptions().map(o => [o.value, '🛰 Только ' + o.provider + ' (строго одна подписка)']);
+  if (isDprProviderTarget(card.target) && !providerOptions.some(o => o[0] === card.target)) {
+    providerOptions.push([card.target, '🛰 Только ' + dprProviderName(card.target) + ' (подписка отсутствует — Build будет отклонён)']);
+  }
+  targetOptions.push(...providerOptions);
   for (const [value, text] of targetOptions) {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = text;
+    // #351: marker обязателен у ВСЕХ provider-опций — refreshPolicyProviderOptions
+    // управляет именно помеченными (перестройка реестра без дублей/хвостов).
+    if (isDprProviderTarget(value)) opt.setAttribute('data-dpr-provider', dprProviderName(value));
     targetSel.appendChild(opt);
   }
-  targetSel.value = card.target === 'GLOBAL' || card.target === 'DIRECT' || card.target === 'REJECT' ? card.target : 'SELECT';
-  targetLabel.appendChild(makeCtxHelp('Создаёт отдельную proxy-group с именем категории. После запуска Mihomo маршрут этой категории можно переключать между доступными выходами без пересборки конфига. GLOBAL/REJECT ведут RULE-SET напрямую на цель; прямой выход (DIRECT) запрещён политикой no-DIRECT (#284) — у SELECT-групп последним участником теперь REJECT.', 'Куда направлять'));
+  targetSel.value = targetOptions.some(o => o[0] === card.target) ? card.target : 'SELECT';
+  targetLabel.appendChild(makeCtxHelp('Создаёт отдельную proxy-group с именем категории. После запуска Mihomo маршрут этой категории можно переключать между доступными выходами без пересборки конфига. GLOBAL/REJECT ведут RULE-SET напрямую на цель; прямой выход (DIRECT) запрещён политикой no-DIRECT (#284) — у SELECT-групп последним участником теперь REJECT. «🛰 Только …» (#351): правило ведёт строго в url-test-группу одной выбранной подписки — другие подписки и DIRECT не участвуют; для пустой группы задан empty-fallback: REJECT, но поведение при всех неработающих узлах ещё не доказано runtime-тестом. Требуется Sub Mode и несовместимо с белыми списками.', 'Куда направлять'));
   const targetWrap = document.createElement('div');
   targetWrap.className = 'policy-target-wrap';
   targetSel.setAttribute('aria-label', 'Куда направлять политику');
@@ -5776,7 +5898,13 @@ function collectPolicyRouting() {
     const name = cards[i].querySelector('.policy-name').value.trim();
     const domains = cards[i].querySelector('.policy-domains').value;
     const targetSel = cards[i].querySelector('.policy-target');
-    const target = targetSel && targetSel.value === 'GLOBAL' || targetSel && targetSel.value === 'DIRECT' || targetSel && targetSel.value === 'REJECT' ? targetSel.value : 'SELECT';
+    // #351: повреждённую PROVIDER:-цель нельзя превращать в SELECT,
+    // иначе строгая политика незаметно расширится до ВСЕХ подписок.
+    const rawTarget = targetSel ? String(targetSel.value || '') : '';
+    if (isDprProviderTarget(rawTarget) && !dprProviderName(rawTarget).trim()) {
+      throw new Error('Политика «' + (name || '#' + (i + 1)) + '»: provider-цель без имени подписки — Build отклонён (fail-closed)');
+    }
+    const target = rawTarget === 'GLOBAL' || rawTarget === 'DIRECT' || rawTarget === 'REJECT' || isDprProviderTarget(rawTarget) ? rawTarget : 'SELECT';
     if (!name && !domains.trim()) continue; // пустая карточка — не политика
     if (!name) throw new Error('Политика #' + (i + 1) + ': укажите имя политики');
     if (seen.has(name)) throw new Error('Дублирующееся имя политики: «' + name + '»');
@@ -11623,7 +11751,26 @@ async function buildMihomo() {
       domainPolicy = collectPolicyRouting();
     }
   } catch (e) {
+    // Invalid policy after a previously VALID build must invalidate that
+    // status; otherwise the old YAML misleadingly still displays as VALID.
+    mihomoValidationSeq++;
+    setMihomoValidationState('NOT_BUILT');
     return buildFailure('❌ ' + (e && e.message ? e.message : e), true);
+  }
+
+  // === DPR provider-цели (#351): pre-check режима ===
+  // «Строго один provider» выражается через url-test-группу с use:[provider] —
+  // она существует только в Sub Mode с URL-подписками; в AWL категории не имеют
+  // AUTO-групп вовсе. Оба состояния — явная ошибка Build (fail-closed), никакой
+  // тихой деградации к обычному SELECT или маршруту через все подписки.
+  const providerPolicies = (domainPolicy || []).filter(p => dprProviderName(p.target));
+  if (providerPolicies.length) {
+    const blockers = [];
+    if (!subMode) blockers.push('Sub Mode (URL-подписки) выключен — provider-цель существует только у подписок');
+    if (autoWhitelist) blockers.push('режим белых списков (AWL) несовместим — в AWL у категорий нет AUTO-групп');
+    if (blockers.length) {
+      return buildFailure('❌ #351: provider-цели политик — ' + providerPolicies.map(p => '«' + p.name + '»').join(', ') + ': ' + blockers.join('; ') + '.', true);
+    }
   }
 
   const webUiEnabled = document.getElementById('cfgWebUI').checked;
@@ -11744,7 +11891,12 @@ async function buildMihomo() {
         mihomoTunStack: tunStack,
         perProxyPort: perProxySocks,
         mihomoRealityModernHosts: realityModern.hosts.length ? realityModern.hosts : undefined,
-        mihomoDomainPolicy: domainPolicy && domainPolicy.length ? domainPolicy : undefined,
+        // #351: provider-цели уходят в движок как SELECT-плейсхолдер (движок
+        // строит NAME-AUTO + NAME и правило на NAME); финальный YAML правит
+        // applyDprProviderTargets — правило строго на provider-only группу.
+        mihomoDomainPolicy: domainPolicy && domainPolicy.length
+          ? domainPolicy.map(p => dprProviderName(p.target) ? { name: p.name, domains: p.domains, target: 'SELECT' } : p)
+          : undefined,
         wgDialerProxy: useDialerGroup ? (wgDialer || undefined) : undefined,
         wgDialerGroupMembers: useDialerGroup ? wgDialerMembers : undefined,
         wgDialerProviders: useDialerGroup ? wgDialerProviders : undefined,
@@ -11756,6 +11908,11 @@ async function buildMihomo() {
 
     let yaml = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
     yaml = applyProviderDialerTargets(yaml);
+
+    // PATCH: DPR provider-цели (#351) — только при явных PROVIDER-картах;
+    // иначе байт-в-байт. До Tiered/профиля: переписывает правило на
+    // provider-only группу, последующие патчи видят финальные цели правил.
+    if (providerPolicies.length) yaml = applyDprProviderTargets(yaml, providerPolicies);
 
     // PATCH: Tiered Failover (#148) — только при явном включении; OFF = байт-в-байт.
     if (tieredEnabled()) yaml = applyTieredFailover(yaml);

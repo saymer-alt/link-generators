@@ -137,6 +137,9 @@ jobs:
       - name: Domain Policy Routing regression
         run: node tests/policy-routing.cjs
 
+      - name: DPR provider-target regression (#351)
+        run: node tests/dpr-provider-target.cjs
+
       - name: No-DIRECT egress invariant regression (#284)
         run: node tests/no-direct-egress.cjs
 
@@ -381,6 +384,9 @@ jobs:
       - name: Domain Policy Routing browser regression
         run: node tests/policy-routing-browser.cjs
 
+      - name: DPR provider-target browser regression (#351)
+        run: node tests/dpr-provider-target-browser.cjs
+
       - name: Explainability UX regression (SELECT semantics + stale build)
         run: node tests/explainability-ux.cjs
 
@@ -572,6 +578,9 @@ jobs:
 
       - name: Deterministic AWL priority integration
         run: node tests/mihomo-awl-priority.cjs
+
+      - name: DPR provider-target Mihomo parse-only contracts (#351)
+        run: node tests/dpr-provider-target-mihomo-compat.cjs
 
       - name: Tiered Failover runtime lab (#148)
         run: node tests/tiered-failover-runtime.cjs
