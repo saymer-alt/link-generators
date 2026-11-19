@@ -7,6 +7,71 @@ endpoint'ы, понять куда выходит трафик и получит
 
 Актуальный upstream: [vernette/warpscout](https://github.com/vernette/warpscout).
 
+## Быстрая памятка: CF WARP AWG 0.16.1, Windows (проверено по CLI релиза)
+
+Это **сценарий полевых перепроверок**, когда вчерашний WARP endpoint перестал работать.
+Примеры для **CMD** из `C:\warpscout` (PowerShell: также используйте `.\warpscout.exe`).
+При каждом новом тесте фиксируйте **провайдера, место/сеть, дату и время**, потому что
+узел `NODE` и доступность endpoint'ов могут меняться. Данные теста не следует выдавать
+за постоянные свойства IP.
+
+```bat
+cd /d C:\warpscout
+warpscout.exe version
+
+REM Все CF WARP / AWG кроме московского узла DME: ping/loss + speed + полный отчет
+warpscout.exe scan -p awg -P -speed -exclude-node DME -o WARP-AWG-NoDME-2026-11-19.txt
+
+REM Предпочтительный ARN (Стокгольм), отчет со всеми найденными
+warpscout.exe scan -p awg -P -speed -node ARN -o WARP-AWG-ARN-2026-11-19.txt
+
+REM Найти один лучший ARN по ping/loss
+warpscout.exe scan -p awg -P -node ARN -best
+
+REM Найти один ARN по скорости среди измеренных кандидатов
+warpscout.exe scan -p awg -P -node ARN -best -best-by speed
+
+REM Если ARN не отвечает: зарубежные альтернативы по узлам
+warpscout.exe scan -p awg -P -speed -node HEL,FRA,AMS -exclude-node DME -o WARP-AWG-ALT-2026-11-19.txt
+
+REM Конфигурация лучшего по latency/loss AWG endpoint без DME
+warpscout.exe scan -p awg -P -exclude-node DME -conf warp-awg-nodme.conf
+```
+
+**Расшифровка:** `-p awg` = AmneziaWG, `-P` = проверка туннельного ping/loss и
+оборванных соединений; `-exclude-node DME` убирает московский узел,
+`-node ARN` оставляет только Стокгольм; `-speed` добавляет скоростной тест,
+но **не сортирует** таблицу по скорости; `-best-by speed` вместе с `-best`
+выбирает наиболее быстрый из кандидатов, отобранных для замера, **не из каждого
+проверенного IP**; `-o` задаёт имя отчёта. Не используйте одновременно `-node ARN`
+и ожидание, что другие узлы останутся в результате.
+
+Если нужен более плотный скан (проверять больше адресов в каждой подсети):
+```bat
+warpscout.exe scan -p awg -P -n 10 -jt 4 -exclude-node DME -o WARP-AWG-extended.txt
+```
+У `-n` значение по умолчанию 5, `-jt` по умолчанию 10. Для проблемной сети
+уменьшение параллельности помогает отделить потери от перегрузки, но не гарантирует успех.
+
+Если AWG связывается, но туннель быстро обрывается, сравните `torn down` и
+попробуйте другой профиль первого пакета:
+```bat
+warpscout.exe scan -p awg -P -gen-i1 quic -exclude-node DME -o WARP-AWG-QUIC.txt
+warpscout.exe scan -p awg -P -gen-i1 stun -exclude-node DME -o WARP-AWG-STUN.txt
+```
+`warpscout-account.json` — приватные ключи/регистрация. **Не публиковать в GitHub.**
+Повторная `register` не нужна, если уже есть рабочий кэш аккаунта.
+Файлы `*.conf` также могут содержать приватные ключи и не должны
+попадать в публичные отчёты.
+
+> Примечание: `-node ARN` фильтрует **пограничный узел Cloudflare**, но не гарантирует
+> шведскую страну выхода (`SEEN AS`). Если после замены endpoint'а сайты зависают,
+> проверяйте реальную передачу HTTP/HTTPS и MTU маршрута отдельно: подключённый
+> туннель ещё не подтверждает работоспособность полного каскада.
+
+Источник флагов и поведения: [warpscout v0.16.1 — configs.md](https://github.com/vernette/warpscout/blob/v0.16.1/docs/en/configs.md).
+
+
 ## Что мы хотим получить
 
 Три прикладные задачи:
