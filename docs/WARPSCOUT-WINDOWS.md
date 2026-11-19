@@ -93,13 +93,13 @@ warpscout.exe scan -p awg -P -gen-i1 stun -exclude-node DME -o WARP-AWG-STUN.txt
 [Releases](https://github.com/vernette/warpscout/releases) и распакуйте его, например:
 
 ```text
-C:\DPI\warpscout
+C:\warpscout
 ```
 
 Откройте CMD или PowerShell и перейдите в папку:
 
 ```bat
-cd /d C:\DPI\warpscout
+cd /d C:\warpscout
 ```
 
 Проверьте запуск:
