@@ -48,3 +48,11 @@ One bounded task per cycle: TRIAGE → PATCH → REVIEW. Two unchanged futile at
 - **Privacy, subscription-proxy boundaries, controller access and regression traps:** [05 — security and regressions](docs/agent-guidance/05-privacy-and-regressions.md). Read for user-data, input, identity, routing or security-sensitive changes.
 
 Past experiments, removed tabs, previous runtime versions, dated PR/issue decisions and measured outcomes are **historical evidence**, not assumed current HEAD or live server state. They remain in the scoped guides and existing `docs/research/` and release documents; load only when directly relevant.
+
+## Public research privacy gate
+
+- Public documentation, issue descriptions, PRs, reviews and CI output must not disclose names or precise labels of real user sites, operators, home/work networks, or actual per-provider WARPSCOUT/WARP results.
+- Field matrices and observations with identifiable ISP × location/date × protocol × endpoint/NODE/SEEN AS × measured availability, latency or speed are restricted internal operational research, even if no cryptographic keys are present.
+- Existing historical field report paths in this public repository are compatibility stubs only. Authorized agents must use separately authenticated internal context, not public history; no public links or repo/path hints to restricted storage.
+- Keep general commands, documented tools, synthetic examples and user tutorials public. Before creating public content, perform privacy review for identifying combinations and source report attachments. Never include raw key-bearing YAML/TXT.
+- If older public history still exposes material, report that as a separate residual risk instead of claiming a normal commit erases it.
