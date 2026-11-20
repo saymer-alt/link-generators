@@ -17,7 +17,7 @@ concurrency:
 jobs:
   static-and-node:
     name: deterministic / static + node
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -214,7 +214,7 @@ jobs:
 
   owner-ux-matrix:
     name: owner UX / ${{ matrix.browser }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Match the package below; browsers/system deps are already in this image.
     # Avoid per-job apt downloads exhausting the bounded UX job before tests.
     container: mcr.microsoft.com/playwright:v1.55.0-noble
@@ -291,7 +291,7 @@ jobs:
 
   browser:
     name: deterministic / browser
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       # fetch-depth: 0 — tests/parity.cjs строит merge-base с main как
@@ -521,7 +521,7 @@ jobs:
 
   mihomo-compat:
     name: mihomo compat / ${{ matrix.version }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
